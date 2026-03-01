@@ -11,10 +11,10 @@ services:
     environment:
       - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://arrmada:${POSTGRES_PASSWORD:-arrmada}@arrmada-db:5432/arrmada}
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3420}
-      - ARRMADA_AUTH_SECRET=${ARRMADA_AUTH_SECRET}
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
-      - TMDB_API_KEY=${TMDB_API_KEY}
+      - ARRMADA_AUTH_SECRET=${ARRMADA_AUTH_SECRET:-changeme}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+      - TMDB_API_KEY=${TMDB_API_KEY:-}
     depends_on:
       arrmada-db:
         condition: service_healthy
@@ -23,6 +23,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 15s
     deploy:
       resources:
         limits:
@@ -30,14 +31,20 @@ services:
           cpus: "1.0"
 
   # ── Frontend (Next.js) ──────────────────────────────────────
+  # NEXT_PUBLIC_API_URL must be the URL the USER's BROWSER uses to
+  # reach the backend — NOT the Docker-internal hostname.
+  # Default: http://localhost:8420 (same machine, default port)
   arrmada-frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8420}
     container_name: arrmada-frontend
     restart: unless-stopped
     ports:
       - "${FRONTEND_PORT:-3420}:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://arrmada-backend:8000
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8420}
     depends_on:
       arrmada-backend:
         condition: service_healthy
@@ -50,7 +57,6 @@ services:
   # ── PostgreSQL ──────────────────────────────────────────────
   # Integrated by default. To use an EXTERNAL PostgreSQL instead,
   # remove this service and set DATABASE_URL in the backend env.
-  # Example: DATABASE_URL=postgresql+asyncpg://user:pass@your-host:5432/arrmada
   arrmada-db:
     image: postgres:16-alpine
     container_name: arrmada-db
@@ -71,8 +77,8 @@ services:
         limits:
           memory: 256M
           cpus: "0.5"
-    # NOTE: no port exposed by default (only accessible inside Docker network)
-    # Uncomment to access from host:
+    # Port NOT exposed by default (only accessible inside Docker network)
+    # Uncomment to access from host tools (pgAdmin, DBeaver, etc.):
     # ports:
     #   - "5432:5432"
 
