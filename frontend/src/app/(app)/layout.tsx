@@ -16,13 +16,13 @@ export default function AppLayout({
 }) {
     const router = useRouter();
     const [ready, setReady] = useState(false);
-    const { data: setupStatus, isLoading: setupLoading } = useSetupStatus();
+    const { data: setupStatus, isLoading: setupLoading, isError } = useSetupStatus();
 
     useEffect(() => {
         if (setupLoading) return;
 
-        // If not configured, redirect to setup wizard
-        if (setupStatus && !setupStatus.is_configured) {
+        // If setup status check failed OR app is not configured → redirect to wizard
+        if (isError || (setupStatus && !setupStatus.is_configured)) {
             router.replace("/setup");
             return;
         }
@@ -33,7 +33,7 @@ export default function AppLayout({
         } else {
             setReady(true);
         }
-    }, [router, setupStatus, setupLoading]);
+    }, [router, setupStatus, setupLoading, isError]);
 
     if (setupLoading || !ready) {
         return (
