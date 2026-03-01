@@ -1,0 +1,276 @@
+{
+  "rootfolders": [
+    {
+      "path": "/mangas"
+    },
+    {
+      "path": "/media/seriesTV"
+    }
+  ],
+  "godfather": {
+    "id": 25,
+    "title": "Godfather of Harlem",
+    "path": "/media/seriesTV/Godfather of Harlem (2019)",
+    "seasons": [
+      {
+        "seasonNumber": 1,
+        "monitored": true,
+        "statistics": {
+          "previousAiring": "2019-12-02T02:00:00Z",
+          "episodeFileCount": 0,
+          "episodeCount": 10,
+          "totalEpisodeCount": 10,
+          "sizeOnDisk": 0,
+          "releaseGroups": [],
+          "percentOfEpisodes": 0
+        }
+      },
+      {
+        "seasonNumber": 2,
+        "monitored": true,
+        "statistics": {
+          "previousAiring": "2021-08-30T01:00:00Z",
+          "episodeFileCount": 0,
+          "episodeCount": 10,
+          "totalEpisodeCount": 10,
+          "sizeOnDisk": 0,
+          "releaseGroups": [],
+          "percentOfEpisodes": 0
+        }
+      },
+      {
+        "seasonNumber": 3,
+        "monitored": true,
+        "statistics": {
+          "previousAiring": "2023-03-27T01:00:00Z",
+          "episodeFileCount": 8,
+          "episodeCount": 10,
+          "totalEpisodeCount": 10,
+          "sizeOnDisk": 5575711802,
+          "releaseGroups": [
+            "ELiTE"
+          ],
+          "percentOfEpisodes": 80.0
+        }
+      },
+      {
+        "seasonNumber": 4,
+        "monitored": true,
+        "statistics": {
+          "previousAiring": "2025-06-23T01:00:00Z",
+          "episodeFileCount": 10,
+          "episodeCount": 10,
+          "totalEpisodeCount": 10,
+          "sizeOnDisk": 60101710393,
+          "releaseGroups": [
+            "FLUX",
+            "Kitsune",
+            "RAWR",
+            "successfulcrab",
+            "SuccessfulCrab"
+          ],
+          "percentOfEpisodes": 100
+        }
+      }
+    ]
+  },
+  "manualimport": {
+    "/data/sonarr/Godfather.of.Harlem.S03E01.1080p.x265-ELiTE": {
+      "count": 0,
+      "first": null
+    },
+    "/data/sonarr": {
+      "count": 98,
+      "first": {
+        "path": "/data/sonarr/Ironheart.S01E01.Take.Me.Home.2160p.DSNP.WEB-DL.DDP5.1.Atmos.DV.H.265-FLUX/Ironheart.S01E01.Take.Me.Home.2160p.DSNP.WEB-DL.DDP5.1.Atmos.DV.H.265-FLUX.mkv",
+        "relativePath": "Ironheart.S01E01.Take.Me.Home.2160p.DSNP.WEB-DL.DDP5.1.Atmos.DV.H.265-FLUX/Ironheart.S01E01.Take.Me.Home.2160p.DSNP.WEB-DL.DDP5.1.Atmos.DV.H.265-FLUX.mkv",
+        "folderName": "Ironheart.S01E01.Take.Me.Home.2160p.DSNP.WEB-DL.DDP5.1.Atmos.DV.H.265-FLUX",
+        "name": "Ironheart.S01E01.Take.Me.Home.2160p.DSNP.WEB-DL.DDP5.1.Atmos.DV.H.265-FLUX",
+        "size": 4928187211,
+        "series": {
+          "title": "Ironheart",
+          "sortTitle": "ironheart",
+          "status": "ended",
+          "ended": true,
+          "overview": "Set after the events of \"Black Panther: Wakanda Forever\", technology is pitted against magic when Riri Williams\u2014a young, genius inventor determined to make her mark on the world\u2014returns to her hometown of Chicago. Her unique take on building iron suits is brilliant, but in pursuit of her ambitions, she finds herself wrapped up with the mysterious yet charming Parker Robbins, a.k.a. \"The Hood.\"",
+          "network": "Disney+",
+          "airTime": "21:00",
+          "images": [
+            {
+              "coverType": "banner",
+              "remoteUrl": "https://artworks.thetvdb.com/banners/v4/series/393204/banners/685ef5c1df612.jpg"
+            },
+            {
+              "coverType": "poster",
+              "remoteUrl": "https://artworks.thetvdb.com/banners/v4/series/393204/posters/686653e2cb54e.jpg"
+            },
+            {
+              "coverType": "fanart",
+              "remoteUrl": "https://artworks.thetvdb.com/banners/v4/series/393204/backgrounds/68286297c39f3.jpg"
+            },
+            {
+              "coverType": "clearlogo",
+              "remoteUrl": "https://artworks.thetvdb.com/banners/v4/series/393204/clearlogo/618f54ea3818c.png"
+            }
+          ],
+          "originalLanguage": {
+            "id": 1,
+            "name": "English"
+          },
+          "seasons": [
+            {
+              "seasonNumber": 1,
+              "monitored": true
+            }
+          ],
+          "year": 2025,
+          "path": "/media/seriesTV/Ironheart (2025)",
+          "qualityProfileId": 5,
+          "seasonFolder": true,
+          "monitored": true,
+          "monitorNewItems": "all",
+          "useSceneNumbering": false,
+          "runtime": 48,
+          "tvdbId": 393204,
+          "tvRageId": 0,
+          "tvMazeId": 47859,
+          "tmdbId": 114471,
+          "firstAired": "2025-06-24T00:00:00Z",
+          "lastAired": "2025-07-01T00:00:00Z",
+          "seriesType": "standard",
+          "cleanTitle": "ironheart",
+          "imdbId": "tt13623126",
+          "titleSlug": "ironheart",
+          "genres": [
+            "Action",
+            "Adventure",
+            "Drama",
+            "Fantasy",
+            "Science Fiction"
+          ],
+          "tags": [],
+          "added": "2025-02-11T19:19:50Z",
+          "ratings": {
+            "votes": 65295,
+            "value": 4.5
+          },
+          "languageProfileId": 1,
+          "id": 22
+        },
+        "seasonNumber": 1,
+        "episodes": [
+          {
+            "seriesId": 22,
+            "tvdbId": 9200704,
+            "episodeFileId": 0,
+            "seasonNumber": 1,
+            "episodeNumber": 1,
+            "title": "Take Me Home",
+            "airDate": "2025-06-24",
+            "airDateUtc": "2025-06-25T01:00:00Z",
+            "lastSearchTime": "2025-06-29T14:45:43Z",
+            "runtime": 41,
+            "overview": "Determined to complete her newest armored suit, Riri Williams teams up with Parker Robbins.",
+            "hasFile": false,
+            "monitored": true,
+            "unverifiedSceneNumbering": false,
+            "id": 1489
+          }
+        ],
+        "releaseGroup": "FLUX",
+        "quality": {
+          "quality": {
+            "id": 18,
+            "name": "WEBDL-2160p",
+            "source": "web",
+            "resolution": 2160
+          },
+          "revision": {
+            "version": 1,
+            "real": 0,
+            "isRepack": false
+          }
+        },
+        "languages": [
+          {
+            "id": 1,
+            "name": "English"
+          }
+        ],
+        "qualityWeight": 17,
+        "customFormats": [
+          {
+            "id": 6,
+            "name": "DSNP"
+          }
+        ],
+        "customFormatScore": 1000,
+        "indexerFlags": 0,
+        "releaseType": "singleEpisode",
+        "rejections": [],
+        "id": 1287873002
+      }
+    },
+    "/data": {
+      "count": 104,
+      "first": {
+        "path": "/data/The.Patriot.2000.THEATRICAL.PROPER.2160p.BluRay.REMUX.HEVC.DTS-HD.MA.TrueHD.7.1.Atmos-FGT/The.Patriot.2000.THEATRICAL.PROPER.2160p.BluRay.REMUX.HEVC.DTS-HD.MA.TrueHD.7.1.Atmos-FGT.mkv",
+        "relativePath": "The.Patriot.2000.THEATRICAL.PROPER.2160p.BluRay.REMUX.HEVC.DTS-HD.MA.TrueHD.7.1.Atmos-FGT/The.Patriot.2000.THEATRICAL.PROPER.2160p.BluRay.REMUX.HEVC.DTS-HD.MA.TrueHD.7.1.Atmos-FGT.mkv",
+        "name": "The.Patriot.2000.THEATRICAL.PROPER.2160p.BluRay.REMUX.HEVC.DTS-HD.MA.TrueHD.7.1.Atmos-FGT",
+        "size": 81141954772,
+        "releaseGroup": "FGT",
+        "quality": {
+          "quality": {
+            "id": 21,
+            "name": "Bluray-2160p Remux",
+            "source": "blurayRaw",
+            "resolution": 2160
+          },
+          "revision": {
+            "version": 2,
+            "real": 0,
+            "isRepack": false
+          }
+        },
+        "languages": [
+          {
+            "id": 0,
+            "name": "Unknown"
+          }
+        ],
+        "qualityWeight": 20,
+        "customFormats": [],
+        "customFormatScore": 0,
+        "indexerFlags": 0,
+        "releaseType": "unknown",
+        "rejections": [
+          {
+            "reason": "Unknown Series",
+            "type": "permanent"
+          }
+        ],
+        "id": 206343405
+      }
+    },
+    "/downloads/complete": {
+      "count": 0,
+      "first": null
+    },
+    "/media/seriesTV/Godfather of Harlem (2019)": {
+      "count": 18,
+      "first": {
+        "path": "/media/seriesTV/Godfather of Harlem (2019)/Season 4/Godfather of Harlem - S04E02 - Country Boy WEBDL-2160p.mkv",
+        "relativePath": "Season 4/Godfather of Harlem - S04E02 - Country Boy WEBDL-2160p.mkv",
+        "name": "Godfather of Harlem - S04E02 - Country Boy WEBDL-2160p",
+        "size": 5438458778,
+        "qualityWeight": 0,
+        "customFormats": [],
+        "customFormatScore": 0,
+        "indexerFlags": 0,
+        "releaseType": "unknown",
+        "rejections": [],
+        "id": 72432199
+      }
+    }
+  }
+}

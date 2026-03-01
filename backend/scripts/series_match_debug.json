@@ -1,0 +1,14 @@
+{
+  "series_matching": [
+    {
+      "title": "Godfather of Harlem",
+      "cleanTitle": "godfatherharlem",
+      "clean_lower": "godfatherharlem",
+      "download_clean": "godfatherofharlem",
+      "match_1": false,
+      "match_2": false,
+      "id": 25
+    }
+  ],
+  "download_clean": "godfatherofharlem"
+}

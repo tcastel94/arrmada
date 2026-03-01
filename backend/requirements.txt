@@ -1,0 +1,41 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+
+# Database
+sqlalchemy[asyncio]==2.0.36
+aiosqlite==0.20.0
+asyncpg==0.30.0
+alembic==1.14.1
+
+# Validation & Settings
+pydantic==2.10.4
+pydantic-settings==2.7.1
+
+# HTTP client
+httpx==0.28.1
+
+# Auth
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# Encryption
+cryptography==44.0.0
+
+# Scheduler
+apscheduler==3.10.4
+
+# Notifications
+python-telegram-bot==21.9
+
+# ML (for recommendations)
+scikit-learn==1.6.1
+
+# Rate limiting
+slowapi==0.1.9
+
+# Testing
+pytest==8.3.4
+pytest-asyncio==0.25.2
+pytest-cov==6.0.0
+httpx==0.28.1

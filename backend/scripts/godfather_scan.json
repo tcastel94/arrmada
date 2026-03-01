@@ -1,0 +1,21 @@
+[
+  {
+    "name": "Godfather.of.Harlem.S04E10.2160p.WEB.h265-EDITH",
+    "folderName": "Godfather.of.Harlem.S04E10.2160p.WEB.h265-EDITH",
+    "path": "/data/Godfather.of.Harlem.S04E10.2160p.WEB.h265-EDITH/Godfather.of.Harlem.S04E10.2160p.WEB.h265-EDITH.mkv",
+    "seriesId": 25,
+    "seasonNumber": 4,
+    "episodes": [
+      [
+        4,
+        10
+      ]
+    ],
+    "rejections": [
+      "Not a Custom Format upgrade for existing episode file(s). New: [] (0) do not improve on Existing: [AMZN] (1000)"
+    ],
+    "rejectionTypes": [
+      "permanent"
+    ]
+  }
+]

@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+env/
+
+# Node
+node_modules/
+.next/
+out/
+.turbo/
+
+# Environment — NEVER commit these
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+
+# Data & Database
+data/
+*.db
+*.sqlite3
+
+# Scripts output (may contain sensitive data)
+backend/scripts/*.txt
+backend/scripts/mounts.*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test / Coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Docker
+*.tar
+
+# Misc
+*.log
