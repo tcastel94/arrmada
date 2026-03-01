@@ -4,7 +4,7 @@ These endpoints are partially accessible WITHOUT authentication
 to allow initial setup of the application.
 """
 
-from __future__ import annotations
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -104,7 +104,7 @@ async def setup_status(db: AsyncSession = Depends(get_db)) -> SetupStatus:
     "This endpoint does NOT require authentication (for first setup).",
 )
 async def discover(
-    hosts: list[str] | None = None,
+    hosts: Optional[list[str]] = None,
 ) -> list[DiscoveredService]:
     """Scan the network for *arr services."""
     discovered = await discover_services(

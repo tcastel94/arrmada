@@ -1,6 +1,5 @@
 """Auth endpoints and JWT utilities."""
 
-from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
@@ -15,7 +14,7 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 # ── JWT helpers ───────────────────────────────────────────────
-def create_access_token(expires_delta: timedelta | None = None) -> str:
+def create_access_token(expires_delta: "timedelta | None" = None) -> str:
     """Create a signed JWT token."""
     expire = datetime.now(timezone.utc) + (
         expires_delta or timedelta(hours=settings.JWT_EXPIRATION_HOURS)
