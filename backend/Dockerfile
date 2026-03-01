@@ -18,17 +18,12 @@ COPY --from=builder /install /usr/local
 # Copy application code
 COPY . .
 
-# Create data directory
-RUN mkdir -p /app/data
-
-# Non-root user for security
-RUN adduser --disabled-password --gecos "" arrmada \
-    && chown -R arrmada:arrmada /app
-USER arrmada
+# Create data directory with open permissions
+# (will be overridden by volume mount, but ensures it exists)
+RUN mkdir -p /app/data && chmod 777 /app/data
 
 EXPOSE 8000
 
-# Health check without curl (uses Python stdlib)
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"
 
