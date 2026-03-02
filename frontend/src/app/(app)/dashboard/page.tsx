@@ -1,10 +1,9 @@
 "use client";
 
 import { Header } from "@/components/layout/header";
-import { StatsCard } from "@/components/shared/stats-card";
 import { PageSkeleton } from "@/components/shared/loading-skeleton";
 import { EmptyState } from "@/components/shared/empty-state";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -12,10 +11,12 @@ import {
     Tv,
     HardDrive,
     Server,
-    Activity,
     Download,
-    TrendingUp,
     ShieldCheck,
+    Zap,
+    ArrowUpRight,
+    TrendingUp,
+    ChevronRight,
 } from "lucide-react";
 import { useServices, useGlobalHealth } from "@/hooks/use-services";
 import { useDashboardStats } from "@/hooks/use-dashboard";
@@ -25,6 +26,7 @@ import { cn } from "@/lib/utils";
 import { STATUS_COLORS, SERVICE_META } from "@/lib/constants";
 import { motion } from "framer-motion";
 import { ActivityFeedCard } from "@/components/dashboard/activity-feed";
+import Link from "next/link";
 
 function formatBytes(bytes: number): string {
     if (bytes === 0) return "0 B";
@@ -33,6 +35,60 @@ function formatBytes(bytes: number): string {
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
 }
+
+const container = {
+    hidden: { opacity: 0 },
+    show: {
+        opacity: 1,
+        transition: { staggerChildren: 0.06 },
+    },
+};
+
+const fadeUp = {
+    hidden: { opacity: 0, y: 16 },
+    show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" } },
+};
+
+// ── Stat Card Gradients ─────────────────────────────────────
+
+const STAT_CONFIGS = [
+    {
+        key: "movies",
+        label: "Films",
+        icon: Film,
+        gradient: "from-violet-600/20 via-purple-600/10 to-transparent",
+        iconBg: "bg-violet-500/20",
+        iconColor: "text-violet-400",
+        ring: "ring-violet-500/20",
+    },
+    {
+        key: "series",
+        label: "Séries",
+        icon: Tv,
+        gradient: "from-blue-600/20 via-cyan-600/10 to-transparent",
+        iconBg: "bg-blue-500/20",
+        iconColor: "text-blue-400",
+        ring: "ring-blue-500/20",
+    },
+    {
+        key: "storage",
+        label: "Stockage",
+        icon: HardDrive,
+        gradient: "from-emerald-600/20 via-green-600/10 to-transparent",
+        iconBg: "bg-emerald-500/20",
+        iconColor: "text-emerald-400",
+        ring: "ring-emerald-500/20",
+    },
+    {
+        key: "downloads",
+        label: "Downloads",
+        icon: Download,
+        gradient: "from-amber-600/20 via-yellow-600/10 to-transparent",
+        iconBg: "bg-amber-500/20",
+        iconColor: "text-amber-400",
+        ring: "ring-amber-500/20",
+    },
+];
 
 export default function DashboardPage() {
     const { data: services, isLoading: servicesLoading } = useServices();
@@ -57,281 +113,393 @@ export default function DashboardPage() {
     const totalServices = services?.length ?? 0;
     const activeDownloads = downloads?.items?.length ?? 0;
 
+    const statValues = [
+        {
+            value: stats?.movies?.total ?? "—",
+            sub: stats?.movies ? `${stats.movies.with_files} sur disque` : undefined,
+        },
+        {
+            value: stats?.series?.total ?? "—",
+            sub: stats?.series
+                ? `${stats.series.have_episodes} / ${stats.series.total_episodes} épisodes`
+                : undefined,
+        },
+        {
+            value: stats?.total_size_human ?? "—",
+            sub: stats ? `${stats.total_items} fichiers` : undefined,
+        },
+        {
+            value: activeDownloads,
+            sub: activeDownloads > 0 ? "en cours" : "file vide",
+        },
+    ];
+
     return (
         <>
             <Header title="Dashboard" />
-            <div className="p-6 space-y-6">
-                {/* Stats Row */}
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    <StatsCard
-                        title="Films"
-                        value={stats?.movies?.total ?? "—"}
-                        icon={Film}
-                        trend={
-                            stats?.movies
-                                ? {
-                                    value: stats.movies.with_files,
-                                    label: `sur disque`,
-                                }
-                                : undefined
-                        }
-                    />
-                    <StatsCard
-                        title="Séries"
-                        value={stats?.series?.total ?? "—"}
-                        icon={Tv}
-                        trend={
-                            stats?.series
-                                ? {
-                                    value: stats.series.have_episodes,
-                                    label: `/ ${stats.series.total_episodes} épisodes`,
-                                }
-                                : undefined
-                        }
-                    />
-                    <StatsCard
-                        title="Stockage"
-                        value={stats?.total_size_human ?? "—"}
-                        icon={HardDrive}
-                        trend={
-                            stats
-                                ? {
-                                    value: stats.total_items,
-                                    label: "items total",
-                                }
-                                : undefined
-                        }
-                    />
-                    <StatsCard
-                        title="Downloads"
-                        value={activeDownloads}
-                        icon={Download}
-                        trend={
-                            activeDownloads > 0
-                                ? { value: activeDownloads, label: "en cours" }
-                                : undefined
-                        }
-                    />
+            <motion.div
+                className="p-4 md:p-6 space-y-5 max-w-[1400px] mx-auto"
+                variants={container}
+                initial="hidden"
+                animate="show"
+            >
+                {/* ── Hero Stats ────────────────────────────────── */}
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    {STAT_CONFIGS.map((cfg, idx) => {
+                        const sv = statValues[idx];
+                        const Icon = cfg.icon;
+                        return (
+                            <motion.div key={cfg.key} variants={fadeUp}>
+                                <Card
+                                    className={cn(
+                                        "relative overflow-hidden border-0",
+                                        "bg-gradient-to-br",
+                                        cfg.gradient,
+                                        "backdrop-blur-sm",
+                                        "ring-1",
+                                        cfg.ring,
+                                        "hover:scale-[1.02] transition-transform duration-300"
+                                    )}
+                                >
+                                    <CardContent className="p-5">
+                                        <div className="flex items-start justify-between">
+                                            <div>
+                                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                                                    {cfg.label}
+                                                </p>
+                                                <p className="text-3xl font-bold mt-1 tabular-nums tracking-tight">
+                                                    {sv.value}
+                                                </p>
+                                                {sv.sub && (
+                                                    <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
+                                                        <TrendingUp className="h-3 w-3" />
+                                                        {sv.sub}
+                                                    </p>
+                                                )}
+                                            </div>
+                                            <div
+                                                className={cn(
+                                                    "rounded-xl p-2.5",
+                                                    cfg.iconBg
+                                                )}
+                                            >
+                                                <Icon
+                                                    className={cn(
+                                                        "h-5 w-5",
+                                                        cfg.iconColor
+                                                    )}
+                                                />
+                                            </div>
+                                        </div>
+                                    </CardContent>
+                                    {/* Decorative glow */}
+                                    <div
+                                        className={cn(
+                                            "absolute -top-12 -right-12 w-32 h-32 rounded-full blur-3xl opacity-20",
+                                            cfg.iconBg
+                                        )}
+                                    />
+                                </Card>
+                            </motion.div>
+                        );
+                    })}
                 </div>
 
-                {/* Health & Activity Row */}
-                <div className="grid gap-6 lg:grid-cols-3">
-                    {/* Service Health */}
-                    <Card className="lg:col-span-1">
-                        <CardHeader className="pb-3">
-                            <div className="flex items-center justify-between">
-                                <CardTitle className="text-base font-semibold flex items-center gap-2">
-                                    <Server className="h-4 w-4" />
-                                    Services
-                                </CardTitle>
-                                <Badge variant="outline" className="text-xs">
+                {/* ── Services Health Strip ──────────────────────── */}
+                <motion.div variants={fadeUp}>
+                    <Card className="border-0 ring-1 ring-white/5 bg-card/40 backdrop-blur-sm overflow-hidden">
+                        <CardContent className="p-0">
+                            <div className="flex items-center justify-between px-5 py-3 border-b border-white/5">
+                                <div className="flex items-center gap-2">
+                                    <Server className="h-4 w-4 text-muted-foreground" />
+                                    <span className="text-sm font-semibold">
+                                        Services
+                                    </span>
+                                </div>
+                                <Badge
+                                    variant="outline"
+                                    className={cn(
+                                        "text-xs tabular-nums",
+                                        onlineCount === totalServices
+                                            ? "border-emerald-500/30 text-emerald-400"
+                                            : "border-amber-500/30 text-amber-400"
+                                    )}
+                                >
                                     {onlineCount}/{totalServices} en ligne
                                 </Badge>
                             </div>
-                        </CardHeader>
-                        <CardContent className="space-y-1">
                             {!services || services.length === 0 ? (
-                                <EmptyState
-                                    icon={Server}
-                                    title="Aucun service"
-                                    description="Ajoutez vos services *arr dans la section Services"
-                                />
+                                <div className="p-6">
+                                    <EmptyState
+                                        icon={Server}
+                                        title="Aucun service"
+                                        description="Ajoutez vos services *arr"
+                                    />
+                                </div>
                             ) : (
-                                services.map((svc) => {
-                                    const meta = SERVICE_META[svc.type];
-                                    const health = healthResults?.find(
-                                        (h) => h.service_id === svc.id
-                                    );
-                                    const status = health?.status ?? svc.last_status;
+                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-0 divide-x divide-white/5">
+                                    {services.map((svc) => {
+                                        const meta = SERVICE_META[svc.type];
+                                        const health = healthResults?.find(
+                                            (h) => h.service_id === svc.id
+                                        );
+                                        const status =
+                                            health?.status ?? svc.last_status;
+                                        const isOnline = status === "online";
 
-                                    return (
-                                        <motion.div
-                                            key={svc.id}
-                                            initial={{ opacity: 0 }}
-                                            animate={{ opacity: 1 }}
-                                            className="flex items-center justify-between py-2.5 px-3 rounded-md hover:bg-muted/50 transition-colors"
-                                        >
-                                            <div className="flex items-center gap-3">
-                                                <span
-                                                    className={cn(
-                                                        "h-2.5 w-2.5 rounded-full",
-                                                        STATUS_COLORS[status] ?? STATUS_COLORS.unknown
+                                        return (
+                                            <div
+                                                key={svc.id}
+                                                className="flex flex-col items-center gap-1.5 py-4 px-3 group hover:bg-white/[0.02] transition-colors relative"
+                                            >
+                                                {/* Pulse for online */}
+                                                <div className="relative">
+                                                    <span
+                                                        className={cn(
+                                                            "block h-3 w-3 rounded-full",
+                                                            STATUS_COLORS[status] ??
+                                                            STATUS_COLORS.unknown
+                                                        )}
+                                                    />
+                                                    {isOnline && (
+                                                        <span
+                                                            className={cn(
+                                                                "absolute inset-0 rounded-full animate-ping opacity-40",
+                                                                STATUS_COLORS[status]
+                                                            )}
+                                                        />
                                                     )}
-                                                />
-                                                <div>
-                                                    <span className="text-sm font-medium">
-                                                        {svc.name}
-                                                    </span>
-                                                    <span className="text-xs text-muted-foreground ml-2">
-                                                        {meta?.label}
-                                                    </span>
                                                 </div>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                {health?.latency_ms != null && (
-                                                    <span className="text-xs text-muted-foreground tabular-nums">
-                                                        {health.latency_ms}ms
-                                                    </span>
-                                                )}
-                                                {svc.version && (
-                                                    <Badge
-                                                        variant="outline"
-                                                        className="text-xs font-mono"
-                                                    >
-                                                        v{svc.version}
-                                                    </Badge>
-                                                )}
-                                            </div>
-                                        </motion.div>
-                                    );
-                                })
-                            )}
-                        </CardContent>
-                    </Card>
-
-                    {/* Downloads Queue */}
-                    <Card className="lg:col-span-2">
-                        <CardHeader className="pb-3">
-                            <CardTitle className="text-base font-semibold flex items-center gap-2">
-                                <Activity className="h-4 w-4" />
-                                Téléchargements en cours
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            {!downloads?.items || downloads.items.length === 0 ? (
-                                <EmptyState
-                                    icon={Download}
-                                    title="Aucun téléchargement"
-                                    description="La queue est vide — rien à télécharger pour l'instant"
-                                />
-                            ) : (
-                                <div className="space-y-3">
-                                    {downloads.items.slice(0, 8).map((dl) => (
-                                        <div
-                                            key={dl.id}
-                                            className="flex items-center gap-4 py-2 px-3 rounded-md hover:bg-muted/50 transition-colors"
-                                        >
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-sm font-medium truncate">
-                                                    {dl.title}
-                                                </p>
-                                                <div className="flex items-center gap-2 mt-1">
-                                                    <span className="text-xs text-muted-foreground">
-                                                        {dl.source_service}
-                                                    </span>
-                                                    {dl.quality && (
-                                                        <Badge variant="outline" className="text-xs">
-                                                            {dl.quality}
-                                                        </Badge>
+                                                <span className="text-sm font-medium">
+                                                    {svc.name}
+                                                </span>
+                                                <div className="flex items-center gap-1.5">
+                                                    {health?.latency_ms != null && (
+                                                        <span className="text-[10px] text-muted-foreground tabular-nums">
+                                                            {health.latency_ms}ms
+                                                        </span>
                                                     )}
-                                                    {dl.time_left && (
-                                                        <span className="text-xs text-muted-foreground">
-                                                            {dl.time_left}
+                                                    {svc.version && (
+                                                        <span className="text-[10px] text-muted-foreground/60 font-mono">
+                                                            v{svc.version}
                                                         </span>
                                                     )}
                                                 </div>
                                             </div>
-                                            <div className="w-24 flex flex-col items-end gap-1">
-                                                <span className="text-xs font-medium tabular-nums">
-                                                    {dl.progress.toFixed(0)}%
-                                                </span>
-                                                <Progress value={dl.progress} className="h-1.5" />
-                                            </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             )}
                         </CardContent>
                     </Card>
-                </div>
+                </motion.div>
 
-                {/* Activity Feed */}
-                <ActivityFeedCard />
+                {/* ── Main Content: Activity + Downloads ──────── */}
+                <div className="grid gap-5 lg:grid-cols-5">
+                    {/* Activity Feed — takes 3 cols */}
+                    <motion.div
+                        variants={fadeUp}
+                        className="lg:col-span-3"
+                    >
+                        <ActivityFeedCard />
+                    </motion.div>
 
-                {/* TRaSH Compliance Row */}
-                {compliance && compliance.length > 0 && (
-                    <Card>
-                        <CardHeader className="pb-3">
-                            <div className="flex items-center justify-between">
-                                <CardTitle className="text-base font-semibold flex items-center gap-2">
-                                    <ShieldCheck className="h-4 w-4" />
-                                    Conformité TRaSH Guides
-                                </CardTitle>
-                                <a href="/trash-guides" className="text-xs text-primary hover:underline">
-                                    Voir détails →
-                                </a>
-                            </div>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="grid gap-4 sm:grid-cols-2">
-                                {compliance.map((item) => {
-                                    const color =
-                                        item.compliance_pct >= 80
-                                            ? "text-emerald-500"
-                                            : item.compliance_pct >= 50
-                                                ? "text-yellow-500"
-                                                : "text-red-500";
-                                    const bgColor =
-                                        item.compliance_pct >= 80
-                                            ? "bg-emerald-500"
-                                            : item.compliance_pct >= 50
-                                                ? "bg-yellow-500"
-                                                : "bg-red-500";
+                    {/* Right sidebar — Downloads + Quick Actions */}
+                    <motion.div
+                        variants={fadeUp}
+                        className="lg:col-span-2 space-y-5"
+                    >
+                        {/* Downloads Queue */}
+                        <Card className="border-0 ring-1 ring-white/5 bg-card/40 backdrop-blur-sm">
+                            <CardContent className="p-0">
+                                <div className="flex items-center justify-between px-5 py-3 border-b border-white/5">
+                                    <div className="flex items-center gap-2">
+                                        <Download className="h-4 w-4 text-amber-400" />
+                                        <span className="text-sm font-semibold">
+                                            Téléchargements
+                                        </span>
+                                    </div>
+                                    {activeDownloads > 0 && (
+                                        <Badge className="bg-amber-500/20 text-amber-400 border-0 text-[10px]">
+                                            {activeDownloads} actifs
+                                        </Badge>
+                                    )}
+                                </div>
+                                <div className="p-4">
+                                    {!downloads?.items ||
+                                        downloads.items.length === 0 ? (
+                                        <div className="flex flex-col items-center py-8 text-muted-foreground">
+                                            <Download className="h-8 w-8 mb-2 opacity-20" />
+                                            <p className="text-xs">
+                                                Aucun téléchargement en cours
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {downloads.items
+                                                .slice(0, 6)
+                                                .map((dl) => (
+                                                    <div
+                                                        key={dl.id}
+                                                        className="space-y-1.5"
+                                                    >
+                                                        <div className="flex items-center justify-between">
+                                                            <p className="text-sm font-medium truncate max-w-[70%]">
+                                                                {dl.title}
+                                                            </p>
+                                                            <span className="text-xs font-bold tabular-nums">
+                                                                {dl.progress.toFixed(
+                                                                    0
+                                                                )}
+                                                                %
+                                                            </span>
+                                                        </div>
+                                                        <div className="relative">
+                                                            <Progress
+                                                                value={
+                                                                    dl.progress
+                                                                }
+                                                                className="h-1.5 bg-muted/30"
+                                                            />
+                                                            {/* Gradient overlay */}
+                                                            <div
+                                                                className="absolute inset-0 h-1.5 rounded-full bg-gradient-to-r from-blue-500 via-cyan-400 to-emerald-400 opacity-80"
+                                                                style={{
+                                                                    width: `${dl.progress}%`,
+                                                                }}
+                                                            />
+                                                        </div>
+                                                        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                                                            <span>
+                                                                {
+                                                                    dl.source_service
+                                                                }
+                                                            </span>
+                                                            {dl.quality && (
+                                                                <Badge
+                                                                    variant="outline"
+                                                                    className="text-[9px] px-1 py-0 h-3.5"
+                                                                >
+                                                                    {dl.quality}
+                                                                </Badge>
+                                                            )}
+                                                            {dl.time_left && (
+                                                                <span className="ml-auto tabular-nums">
+                                                                    ⏱{" "}
+                                                                    {
+                                                                        dl.time_left
+                                                                    }
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </CardContent>
+                        </Card>
 
-                                    return (
-                                        <motion.div
-                                            key={item.service_id}
-                                            initial={{ opacity: 0, y: 10 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            className="p-4 rounded-lg border bg-card"
-                                        >
-                                            <div className="flex items-center justify-between mb-3">
-                                                <div>
-                                                    <p className="text-sm font-medium">
-                                                        {item.service_name}
-                                                    </p>
-                                                    <p className="text-xs text-muted-foreground">
-                                                        {item.applied_profiles.length > 0
-                                                            ? (() => {
-                                                                const names = item.applied_profiles.map(p => p.replace(/-/g, ' '));
-                                                                const shown = names.slice(0, 2).join(', ');
-                                                                return names.length > 2 ? `${shown} +${names.length - 2}` : shown;
-                                                            })()
-                                                            : "Aucun profil détecté"}
-                                                    </p>
-                                                </div>
-                                                <span
-                                                    className={cn(
-                                                        "text-2xl font-bold tabular-nums",
-                                                        color
-                                                    )}
-                                                >
-                                                    {item.trash_total > 0 ? `${item.compliance_pct}%` : "—"}
+                        {/* TRaSH Compliance */}
+                        {compliance && compliance.length > 0 && (
+                            <Card className="border-0 ring-1 ring-white/5 bg-card/40 backdrop-blur-sm">
+                                <CardContent className="p-0">
+                                    <Link href="/trash-guides">
+                                        <div className="flex items-center justify-between px-5 py-3 border-b border-white/5 group cursor-pointer">
+                                            <div className="flex items-center gap-2">
+                                                <ShieldCheck className="h-4 w-4 text-emerald-400" />
+                                                <span className="text-sm font-semibold">
+                                                    TRaSH Guides
                                                 </span>
                                             </div>
-                                            {item.trash_total > 0 ? (
-                                                <>
-                                                    <Progress
-                                                        value={item.compliance_pct}
-                                                        className={cn("h-2 [&>div]:" + bgColor)}
-                                                    />
-                                                    <p className="text-xs text-muted-foreground mt-2">
-                                                        {item.trash_found} / {item.trash_total} CFs conformes
-                                                    </p>
-                                                </>
-                                            ) : (
-                                                <p className="text-xs text-muted-foreground">
-                                                    Appliquez un profil TRaSH pour voir la conformité
-                                                </p>
-                                            )}
-                                        </motion.div>
-                                    );
-                                })}
-                            </div>
-                        </CardContent>
-                    </Card>
-                )}
-            </div>
+                                            <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+                                        </div>
+                                    </Link>
+                                    <div className="p-4 space-y-3">
+                                        {compliance.map((item) => {
+                                            const pct = item.compliance_pct;
+                                            const color =
+                                                pct >= 80
+                                                    ? "text-emerald-400"
+                                                    : pct >= 50
+                                                        ? "text-amber-400"
+                                                        : "text-red-400";
+                                            const barColor =
+                                                pct >= 80
+                                                    ? "from-emerald-500 to-emerald-400"
+                                                    : pct >= 50
+                                                        ? "from-amber-500 to-yellow-400"
+                                                        : "from-red-500 to-red-400";
+
+                                            return (
+                                                <div
+                                                    key={item.service_id}
+                                                    className="space-y-1.5"
+                                                >
+                                                    <div className="flex items-center justify-between">
+                                                        <p className="text-sm font-medium">
+                                                            {item.service_name}
+                                                        </p>
+                                                        <span
+                                                            className={cn(
+                                                                "text-lg font-bold tabular-nums",
+                                                                color
+                                                            )}
+                                                        >
+                                                            {item.trash_total >
+                                                                0
+                                                                ? `${pct}%`
+                                                                : "—"}
+                                                        </span>
+                                                    </div>
+                                                    {item.trash_total > 0 && (
+                                                        <>
+                                                            <div className="relative">
+                                                                <Progress
+                                                                    value={pct}
+                                                                    className="h-1.5 bg-muted/30"
+                                                                />
+                                                                <div
+                                                                    className={cn(
+                                                                        "absolute inset-0 h-1.5 rounded-full bg-gradient-to-r opacity-80",
+                                                                        barColor
+                                                                    )}
+                                                                    style={{
+                                                                        width: `${pct}%`,
+                                                                    }}
+                                                                />
+                                                            </div>
+                                                            <p className="text-[10px] text-muted-foreground">
+                                                                {
+                                                                    item.trash_found
+                                                                }{" "}
+                                                                /{" "}
+                                                                {
+                                                                    item.trash_total
+                                                                }{" "}
+                                                                CFs ·{" "}
+                                                                {item.applied_profiles
+                                                                    .slice(0, 2)
+                                                                    .map((p) =>
+                                                                        p.replace(
+                                                                            /-/g,
+                                                                            " "
+                                                                        )
+                                                                    )
+                                                                    .join(", ")}
+                                                            </p>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        )}
+                    </motion.div>
+                </div>
+            </motion.div>
         </>
     );
 }
