@@ -294,6 +294,30 @@ export default function SettingsPage() {
                     </a>
                 </motion.div>
 
+                {/* SABnzbd TRaSH Config */}
+                <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 }}
+                >
+                    <a href="/settings/sabnzbd-config">
+                        <Card className="hover:bg-muted/50 transition-colors cursor-pointer">
+                            <CardContent className="flex items-center gap-4 p-4">
+                                <div className="rounded-full p-2.5 bg-orange-500/10">
+                                    <Shield className="h-5 w-5 text-orange-400" />
+                                </div>
+                                <div className="flex-1">
+                                    <p className="text-sm font-semibold">SABnzbd — TRaSH Config</p>
+                                    <p className="text-xs text-muted-foreground">
+                                        Audit et optimisation SABnzbd selon les recommandations TRaSH Guides
+                                    </p>
+                                </div>
+                                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                            </CardContent>
+                        </Card>
+                    </a>
+                </motion.div>
+
                 {/* App Info */}
                 <motion.div
                     initial={{ opacity: 0, y: 10 }}
