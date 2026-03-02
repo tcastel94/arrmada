@@ -213,18 +213,23 @@ async def audit_sabnzbd(db=Depends(get_db)):
                     current_bool = bool(current)
                 elif isinstance(current, str):
                     current_bool = current.lower() in ("1", "true", "yes")
+                elif current is None:
+                    # Key not in SABnzbd config — treat as False (disabled)
+                    current_bool = False
                 else:
-                    current_bool = bool(current) if current is not None else None
+                    current_bool = bool(current)
                 is_ok = current_bool == recommended
                 display_current = current_bool
             else:
+                if current is None:
+                    current = 0  # default for numeric settings
                 is_ok = current == recommended
                 display_current = current
 
             checks.append(ConfigCheck(
                 key=f"switch_{key}",
                 label=switch_labels.get(key, key),
-                current_value=display_current if display_current is not None else "Non défini",
+                current_value=display_current,
                 recommended_value=recommended,
                 is_compliant=is_ok,
                 category="switches",
@@ -243,13 +248,16 @@ async def audit_sabnzbd(db=Depends(get_db)):
                 current = bool(current)
             elif isinstance(current, str):
                 current = current.lower() in ("1", "true", "yes")
+            elif current is None:
+                # Key not in SABnzbd config → sorting not enabled = False
+                current = False
             else:
-                current = bool(current) if current is not None else None
+                current = bool(current)
 
             checks.append(ConfigCheck(
                 key=f"sorting_{key}",
                 label=sorting_labels.get(key, key),
-                current_value=current if current is not None else "Non défini",
+                current_value=current,
                 recommended_value=recommended,
                 is_compliant=current == recommended,
                 category="sorting",

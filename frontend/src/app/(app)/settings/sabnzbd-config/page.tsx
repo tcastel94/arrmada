@@ -20,8 +20,18 @@ import { motion } from "framer-motion";
 import { useSabnzbdAudit, useSabnzbdApply, type ConfigCheck } from "@/hooks/use-sabnzbd-config";
 
 export default function SabnzbdConfigPage() {
-    const { data: audit, isLoading, error, refetch } = useSabnzbdAudit();
+    const { data: audit, isLoading, isFetching, error, refetch } = useSabnzbdAudit();
     const applyConfig = useSabnzbdApply();
+
+    // Auto-refetch after successful apply
+    const handleApply = () => {
+        applyConfig.mutate(undefined, {
+            onSuccess: () => {
+                // Wait a bit for SABnzbd to process, then refetch
+                setTimeout(() => refetch(), 1500);
+            },
+        });
+    };
 
     const categoryIcons: Record<string, any> = {
         categories: FolderOpen,
@@ -73,9 +83,9 @@ export default function SabnzbdConfigPage() {
                         variant="outline"
                         size="sm"
                         onClick={() => refetch()}
-                        disabled={isLoading}
+                        disabled={isFetching}
                     >
-                        <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+                        <RefreshCw className={`h-4 w-4 mr-2 ${isFetching ? "animate-spin" : ""}`} />
                         Rafraîchir
                     </Button>
                 </div>
@@ -147,7 +157,7 @@ export default function SabnzbdConfigPage() {
                                     </div>
                                     <Button
                                         className="gap-2"
-                                        onClick={() => applyConfig.mutate()}
+                                        onClick={handleApply}
                                         disabled={applyConfig.isPending || audit.compliance_pct === 100}
                                     >
                                         {applyConfig.isPending ? (
@@ -215,8 +225,8 @@ export default function SabnzbdConfigPage() {
                                                 <div
                                                     key={check.key}
                                                     className={`flex items-center justify-between p-3 rounded-lg border ${check.is_compliant
-                                                            ? "border-emerald-500/20 bg-emerald-500/5"
-                                                            : "border-red-500/20 bg-red-500/5"
+                                                        ? "border-emerald-500/20 bg-emerald-500/5"
+                                                        : "border-red-500/20 bg-red-500/5"
                                                         }`}
                                                 >
                                                     <div className="flex items-center gap-3">
