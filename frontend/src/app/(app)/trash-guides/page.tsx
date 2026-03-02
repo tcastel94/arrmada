@@ -739,7 +739,7 @@ export default function TrashGuidesPage() {
                                                                 ) : (
                                                                     <Button
                                                                         size="sm"
-                                                                        disabled={applyMutation.isPending || serviceRecs.length === 0 || svc.last_status !== "online"}
+                                                                        disabled={applyMutation.isPending || serviceRecs.length === 0}
                                                                         onClick={async () => {
                                                                             try {
                                                                                 const profileIds = serviceRecs.map(r => r.profile_id);
