@@ -288,7 +288,11 @@ export default function DashboardPage() {
                                                     </p>
                                                     <p className="text-xs text-muted-foreground">
                                                         {item.applied_profiles.length > 0
-                                                            ? item.applied_profiles.map(p => p.replace(/-/g, ' ')).join(', ')
+                                                            ? (() => {
+                                                                const names = item.applied_profiles.map(p => p.replace(/-/g, ' '));
+                                                                const shown = names.slice(0, 2).join(', ');
+                                                                return names.length > 2 ? `${shown} +${names.length - 2}` : shown;
+                                                            })()
                                                             : "Aucun profil détecté"}
                                                     </p>
                                                 </div>

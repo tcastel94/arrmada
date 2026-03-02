@@ -487,7 +487,7 @@ async def get_compliance(
             present = len(qp_cf_names & current_names)
             coverage = present / len(qp_cf_names)
 
-            if coverage > 0.5:  # >50% CFs present → consider applied
+            if coverage > 0.8:  # >80% CFs present → consider applied
                 source = qp.get("_source_file", "").replace(".json", "")
                 applied_profiles.append(source or qp.get("name", "?"))
                 target_cf_ids |= qp_cf_ids
