@@ -8,9 +8,19 @@ and apply recommended Custom Formats / Quality Profiles.
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
-from app.api.deps import get_current_user
+# Lazy auth dependency to avoid circular import:
+# trash_guides → deps → auth → main → router → trash_guides
+_security = HTTPBearer()
+
+
+async def _get_user(credentials: HTTPAuthorizationCredentials = Depends(_security)) -> str:
+    """Verify JWT token — lazy import to break circular dependency."""
+    from app.api.auth import verify_token
+    payload = verify_token(credentials.credentials)
+    return payload.get("sub", "arrmada_user")
 from app.schemas.trash_guides import (
     ApplyResult,
     AuditResult,
@@ -55,7 +65,7 @@ class AuditRequest(BaseModel):
     response_model=TrashSyncStatus,
     summary="Get TRaSH Guides cache status",
 )
-async def get_status(_auth: str = Depends(get_current_user)):
+async def get_status(_auth: str = Depends(_get_user)):
     """Return current cache status: last sync, counts, staleness."""
     cache = get_trash_cache()
     s = cache.status
@@ -68,7 +78,7 @@ async def get_status(_auth: str = Depends(get_current_user)):
 )
 async def sync_data(
     body: Optional[SyncRequest] = None,
-    _auth: str = Depends(get_current_user),
+    _auth: str = Depends(_get_user),
 ):
     """Fetch or refresh all TRaSH Guides data from GitHub.
 
@@ -101,7 +111,7 @@ async def list_custom_formats(
     service: str = "sonarr",
     search: Optional[str] = None,
     category: Optional[str] = None,
-    _auth: str = Depends(get_current_user),
+    _auth: str = Depends(_get_user),
 ):
     """List all TRaSH Custom Formats, optionally filtered.
 
@@ -139,7 +149,7 @@ async def list_custom_formats(
 )
 async def get_recommendations(
     prefs: MediaPreferences,
-    _auth: str = Depends(get_current_user),
+    _auth: str = Depends(_get_user),
 ):
     """Generate TRaSH Guides recommendations based on user media preferences.
 
@@ -176,7 +186,7 @@ async def get_recommendations(
 )
 async def audit_config(
     body: AuditRequest,
-    _auth: str = Depends(get_current_user),
+    _auth: str = Depends(_get_user),
 ):
     """Compare current Sonarr/Radarr configuration against TRaSH recommendations.
 
@@ -270,7 +280,7 @@ async def audit_config(
 )
 async def apply_recommendations(
     body: ApplyRequest,
-    _auth: str = Depends(get_current_user),
+    _auth: str = Depends(_get_user),
 ):
     """Push recommended Custom Formats and Quality Profiles to a service.
 
