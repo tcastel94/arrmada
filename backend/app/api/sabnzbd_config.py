@@ -327,29 +327,32 @@ async def apply_trash_config(db=Depends(get_db)):
         # ── Apply switch settings ─────────────────────────
         for key, value in TRASH_RECOMMENDED["switches"].items():
             try:
-                # SABnzbd API: set_config section=misc keyword=key value=val
                 sab_value = 1 if value is True else (0 if value is False else value)
-                await client._call("set_config_default", {
+                result = await client._call("set_config", {
                     "section": "misc",
                     "keyword": key,
                     "value": sab_value,
                 })
+                logger.info("SABnzbd set_config misc.%s = %s → %s", key, sab_value, result)
                 settings_updated += 1
             except Exception as e:
                 errors.append(f"Switch '{key}': {e}")
+                logger.error("Failed to set misc.%s: %s", key, e)
 
         # ── Disable sorting ───────────────────────────────
         for key, value in TRASH_RECOMMENDED["sorting"].items():
             try:
                 sab_value = 1 if value is True else 0
-                await client._call("set_config_default", {
+                result = await client._call("set_config", {
                     "section": "misc",
                     "keyword": key,
                     "value": sab_value,
                 })
+                logger.info("SABnzbd set_config misc.%s = %s → %s", key, sab_value, result)
                 settings_updated += 1
             except Exception as e:
                 errors.append(f"Sorting '{key}': {e}")
+                logger.error("Failed to set misc.%s: %s", key, e)
 
         # Create notification
         try:
