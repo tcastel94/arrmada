@@ -6,10 +6,12 @@ import { apiFetch } from "@/lib/api-client";
 export interface ActivityItem {
     id: string;
     event_type: string;
+    event_label: string;
     source: "sonarr" | "radarr";
     title: string;
     subtitle: string;
     quality: string | null;
+    languages: string | null;
     date: string;
     timestamp: number;
     icon_type: string;
@@ -17,6 +19,7 @@ export interface ActivityItem {
     size_bytes: number | null;
     indexer: string | null;
     download_client: string | null;
+    poster_url: string | null;
 }
 
 export interface ActivityFeed {
@@ -29,6 +32,6 @@ export function useActivityFeed(limit: number = 30) {
     return useQuery<ActivityFeed>({
         queryKey: ["dashboard", "activity", limit],
         queryFn: () => apiFetch(`/api/dashboard/activity?limit=${limit}`),
-        refetchInterval: 30_000, // Auto-refresh every 30s
+        refetchInterval: 30_000,
     });
 }

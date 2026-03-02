@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any
 
@@ -30,24 +31,25 @@ router = APIRouter(
 # ── Schemas ──────────────────────────────────────────────────
 
 class ActivityItem(BaseModel):
-    """One event in the activity timeline."""
     id: str
-    event_type: str        # grabbed, downloaded, imported, upgraded, failed, deleted
-    source: str            # sonarr, radarr
-    title: str             # Series/Movie name
-    subtitle: str          # Episode/Quality info
+    event_type: str
+    event_label: str
+    source: str
+    title: str
+    subtitle: str
     quality: str | None = None
-    date: str              # ISO format
-    timestamp: int         # Unix ms for sorting
-    icon_type: str         # grab, download, upgrade, fail, delete, import
-    status: str            # success, warning, error, info
+    languages: str | None = None
+    date: str
+    timestamp: int
+    icon_type: str
+    status: str
     size_bytes: int | None = None
     indexer: str | None = None
     download_client: str | None = None
+    poster_url: str | None = None
 
 
 class ActivityFeed(BaseModel):
-    """Paginated activity feed."""
     items: list[ActivityItem]
     total: int
     has_more: bool
@@ -56,136 +58,206 @@ class ActivityFeed(BaseModel):
 # ── Event Mapping ────────────────────────────────────────────
 
 EVENT_MAP = {
-    # Sonarr event types
-    "grabbed": {"icon_type": "grab", "status": "info"},
-    "downloadFolderImported": {"icon_type": "import", "status": "success"},
-    "downloadFailed": {"icon_type": "fail", "status": "error"},
-    "episodeFileDeleted": {"icon_type": "delete", "status": "warning"},
-    "episodeFileRenamed": {"icon_type": "import", "status": "info"},
-    "seriesDeleted": {"icon_type": "delete", "status": "warning"},
-    # Radarr event types
-    "movieFileDeleted": {"icon_type": "delete", "status": "warning"},
-    "movieFileRenamed": {"icon_type": "import", "status": "info"},
-    "movieDeleted": {"icon_type": "delete", "status": "warning"},
-}
-
-EVENT_LABELS = {
-    "grabbed": "Téléchargement lancé",
-    "downloadFolderImported": "Importé",
-    "downloadFailed": "Échec du téléchargement",
-    "episodeFileDeleted": "Fichier supprimé",
-    "episodeFileRenamed": "Fichier renommé",
-    "seriesDeleted": "Série supprimée",
-    "movieFileDeleted": "Fichier supprimé",
-    "movieFileRenamed": "Fichier renommé",
-    "movieDeleted": "Film supprimé",
+    "grabbed":               {"icon": "grab",    "status": "info",    "label": "Téléchargement lancé"},
+    "downloadFolderImported": {"icon": "import",  "status": "success", "label": "Importé"},
+    "downloadFailed":        {"icon": "fail",    "status": "error",   "label": "Échec"},
+    "episodeFileDeleted":    {"icon": "delete",  "status": "warning", "label": "Supprimé"},
+    "episodeFileRenamed":    {"icon": "rename",  "status": "info",    "label": "Renommé"},
+    "seriesDeleted":         {"icon": "delete",  "status": "warning", "label": "Série supprimée"},
+    "movieFileDeleted":      {"icon": "delete",  "status": "warning", "label": "Supprimé"},
+    "movieFileRenamed":      {"icon": "rename",  "status": "info",    "label": "Renommé"},
+    "movieDeleted":          {"icon": "delete",  "status": "warning", "label": "Film supprimé"},
 }
 
 
-def _parse_sonarr_history(records: list[dict], service_name: str) -> list[ActivityItem]:
-    """Parse Sonarr history records into ActivityItems."""
+def _extract_title_from_source(source_title: str) -> tuple[str, str]:
+    """Try to extract a clean title and episode info from the NZB/torrent source title."""
+    if not source_title:
+        return "Unknown", ""
+
+    # Try to extract series: "Show.Name.S01E02..." or "Show.Name.2024.S01E02..."
+    m = re.match(r'^(.+?)\.(S\d{2}E\d{2})', source_title, re.IGNORECASE)
+    if m:
+        title = m.group(1).replace(".", " ").strip()
+        ep = m.group(2).upper()
+        return title, ep
+
+    # Movie: "Movie.Name.2024.1080p..."
+    m = re.match(r'^(.+?)\.(\d{4})\.', source_title)
+    if m:
+        title = m.group(1).replace(".", " ").strip()
+        year = m.group(2)
+        return title, f"({year})"
+
+    # Fallback
+    clean = source_title.split(".")[0:4]
+    return " ".join(clean).replace(".", " "), ""
+
+
+def _parse_timestamp(date_str: str) -> int:
+    try:
+        dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+        return int(dt.timestamp() * 1000)
+    except (ValueError, AttributeError):
+        return 0
+
+
+def _parse_size(data: dict) -> int | None:
+    """Extract size from history data, trying multiple fields."""
+    for key in ("size", "fileSize", "nzbSize"):
+        val = data.get(key)
+        if val:
+            try:
+                return int(val)
+            except (ValueError, TypeError):
+                pass
+    return None
+
+
+def _parse_sonarr_history(records: list[dict], base_url: str) -> list[ActivityItem]:
     items = []
     for rec in records:
         event_type = rec.get("eventType", "unknown")
-        meta = EVENT_MAP.get(event_type, {"icon_type": "download", "status": "info"})
-
-        series = rec.get("series", {})
-        episode = rec.get("episode", {})
-        quality_obj = rec.get("quality", {}).get("quality", {})
+        meta = EVENT_MAP.get(event_type, {"icon": "download", "status": "info", "label": event_type})
         data = rec.get("data", {})
 
-        series_title = series.get("title", "Unknown")
-        ep_num = f"S{episode.get('seasonNumber', 0):02d}E{episode.get('episodeNumber', 0):02d}"
-        ep_title = episode.get("title", "")
-        subtitle = f"{ep_num} — {ep_title}" if ep_title else ep_num
+        # Series info — use embedded objects if available
+        series = rec.get("series", {}) or {}
+        episode = rec.get("episode", {}) or {}
 
-        # Check if upgrade
-        is_upgrade = rec.get("qualityCutoffNotMet", False) is False and event_type == "downloadFolderImported"
-        if is_upgrade and data.get("droppedPath"):
-            meta = {"icon_type": "upgrade", "status": "success"}
+        series_title = series.get("title", "")
+        ep_season = episode.get("seasonNumber")
+        ep_number = episode.get("episodeNumber")
+        ep_title = episode.get("title", "")
+
+        # Fallback: parse from sourceTitle
+        source_title = rec.get("sourceTitle", "") or data.get("nzbName", "") or ""
+        if not series_title or series_title == "Unknown":
+            fallback_title, _ = _extract_title_from_source(source_title)
+            series_title = fallback_title
+
+        # Build subtitle
+        if ep_season is not None and ep_number is not None and (ep_season > 0 or ep_number > 0):
+            ep_code = f"S{ep_season:02d}E{ep_number:02d}"
+            subtitle = f"{ep_code} — {ep_title}" if ep_title else ep_code
+        else:
+            _, ep_info = _extract_title_from_source(source_title)
+            subtitle = ep_info or source_title[:60]
+
+        # Quality
+        quality_name = rec.get("quality", {}).get("quality", {}).get("name", "")
+
+        # Languages
+        langs = rec.get("languages", [])
+        lang_str = ", ".join(l.get("name", "") for l in langs if l.get("name")) if langs else None
+
+        # Poster
+        poster = None
+        images = series.get("images", [])
+        for img in images:
+            if img.get("coverType") == "poster":
+                remote = img.get("remoteUrl") or img.get("url", "")
+                if remote:
+                    poster = remote
+                break
+
+        # Upgrade detection
+        icon = meta["icon"]
+        status = meta["status"]
+        if event_type == "downloadFolderImported" and data.get("droppedPath"):
+            icon = "upgrade"
 
         date_str = rec.get("date", "")
-        try:
-            dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-            timestamp = int(dt.timestamp() * 1000)
-        except (ValueError, AttributeError):
-            timestamp = 0
 
         items.append(ActivityItem(
             id=f"sonarr-{rec.get('id', 0)}",
             event_type=event_type,
+            event_label=meta["label"],
             source="sonarr",
             title=series_title,
             subtitle=subtitle,
-            quality=quality_obj.get("name"),
+            quality=quality_name or None,
+            languages=lang_str,
             date=date_str,
-            timestamp=timestamp,
-            icon_type=meta["icon_type"],
-            status=meta["status"],
-            size_bytes=data.get("size"),
+            timestamp=_parse_timestamp(date_str),
+            icon_type=icon,
+            status=status,
+            size_bytes=_parse_size(data),
             indexer=data.get("indexer"),
-            download_client=data.get("downloadClient"),
+            download_client=data.get("downloadClient") or data.get("downloadClientName"),
+            poster_url=poster,
         ))
     return items
 
 
-def _parse_radarr_history(records: list[dict], service_name: str) -> list[ActivityItem]:
-    """Parse Radarr history records into ActivityItems."""
+def _parse_radarr_history(records: list[dict], base_url: str) -> list[ActivityItem]:
     items = []
     for rec in records:
         event_type = rec.get("eventType", "unknown")
-        meta = EVENT_MAP.get(event_type, {"icon_type": "download", "status": "info"})
-
-        movie = rec.get("movie", {})
-        quality_obj = rec.get("quality", {}).get("quality", {})
+        meta = EVENT_MAP.get(event_type, {"icon": "download", "status": "info", "label": event_type})
         data = rec.get("data", {})
 
-        movie_title = movie.get("title", "Unknown")
+        movie = rec.get("movie", {}) or {}
+        movie_title = movie.get("title", "")
         year = movie.get("year", "")
+
+        source_title = rec.get("sourceTitle", "") or data.get("nzbName", "") or ""
+        if not movie_title:
+            movie_title, _ = _extract_title_from_source(source_title)
+
         subtitle = f"({year})" if year else ""
 
-        # Upgrade detection
-        is_upgrade = rec.get("qualityCutoffNotMet", False) is False and event_type == "downloadFolderImported"
-        if is_upgrade and data.get("droppedPath"):
-            meta = {"icon_type": "upgrade", "status": "success"}
+        quality_name = rec.get("quality", {}).get("quality", {}).get("name", "")
+
+        langs = rec.get("languages", [])
+        lang_str = ", ".join(l.get("name", "") for l in langs if l.get("name")) if langs else None
+
+        # Poster
+        poster = None
+        images = movie.get("images", [])
+        for img in images:
+            if img.get("coverType") == "poster":
+                remote = img.get("remoteUrl") or img.get("url", "")
+                if remote:
+                    poster = remote
+                break
+
+        icon = meta["icon"]
+        status = meta["status"]
+        if event_type == "downloadFolderImported" and data.get("droppedPath"):
+            icon = "upgrade"
 
         date_str = rec.get("date", "")
-        try:
-            dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-            timestamp = int(dt.timestamp() * 1000)
-        except (ValueError, AttributeError):
-            timestamp = 0
 
         items.append(ActivityItem(
             id=f"radarr-{rec.get('id', 0)}",
             event_type=event_type,
+            event_label=meta["label"],
             source="radarr",
             title=movie_title,
             subtitle=subtitle,
-            quality=quality_obj.get("name"),
+            quality=quality_name or None,
+            languages=lang_str,
             date=date_str,
-            timestamp=timestamp,
-            icon_type=meta["icon_type"],
-            status=meta["status"],
-            size_bytes=data.get("size"),
+            timestamp=_parse_timestamp(date_str),
+            icon_type=icon,
+            status=status,
+            size_bytes=_parse_size(data),
             indexer=data.get("indexer"),
-            download_client=data.get("downloadClient"),
+            download_client=data.get("downloadClient") or data.get("downloadClientName"),
+            poster_url=poster,
         ))
     return items
 
 
 # ── Endpoint ─────────────────────────────────────────────────
 
-@router.get(
-    "/activity",
-    response_model=ActivityFeed,
-    summary="Unified activity feed from Sonarr & Radarr",
-)
+@router.get("/activity", response_model=ActivityFeed)
 async def get_activity(
     limit: int = Query(default=30, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
 ):
-    """Fetch and merge recent activity from all Sonarr and Radarr instances."""
+    """Unified activity feed from all Sonarr and Radarr instances."""
 
     async def _fetch():
         stmt = (
@@ -208,34 +280,36 @@ async def get_activity(
                 if svc_type == "sonarr":
                     client = SonarrClient(url=service.url, api_key=api_key)
                     try:
-                        data = await client.get(
-                            "/history",
-                            params={"pageSize": limit, "sortKey": "date", "sortDirection": "descending"},
-                        )
+                        data = await client.get("/history", params={
+                            "pageSize": limit,
+                            "sortKey": "date",
+                            "sortDirection": "descending",
+                            "includeSeries": "true",
+                            "includeEpisode": "true",
+                        })
                         records = data.get("records", []) if isinstance(data, dict) else []
-                        all_items.extend(_parse_sonarr_history(records, service.name))
+                        all_items.extend(_parse_sonarr_history(records, service.url))
                     finally:
                         await client.close()
 
                 elif svc_type == "radarr":
                     client = RadarrClient(url=service.url, api_key=api_key)
                     try:
-                        data = await client.get(
-                            "/history",
-                            params={"pageSize": limit, "sortKey": "date", "sortDirection": "descending"},
-                        )
+                        data = await client.get("/history", params={
+                            "pageSize": limit,
+                            "sortKey": "date",
+                            "sortDirection": "descending",
+                            "includeMovie": "true",
+                        })
                         records = data.get("records", []) if isinstance(data, dict) else []
-                        all_items.extend(_parse_radarr_history(records, service.name))
+                        all_items.extend(_parse_radarr_history(records, service.url))
                     finally:
                         await client.close()
 
             except Exception as e:
                 logger.warning("Failed to fetch activity from %s: %s", service.name, e)
 
-        # Sort by timestamp descending
         all_items.sort(key=lambda x: x.timestamp, reverse=True)
-
-        # Limit
         trimmed = all_items[:limit]
 
         return ActivityFeed(
