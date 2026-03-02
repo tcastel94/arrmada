@@ -39,7 +39,7 @@ import {
     type EpisodeDetail,
     type CastMember,
 } from "@/hooks/use-media";
-import { useProfileOverrides, useAvailableProfiles, useCreateOverride, useDeleteOverride } from "@/hooks/use-profile-overrides";
+import { useProfileOverrides, useAvailableProfiles, useCreateOverride, useDeleteOverride, useApplyOverride } from "@/hooks/use-profile-overrides";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { useState } from "react";
@@ -628,6 +628,7 @@ function QualityTab({ media }: { media: MediaDetail }) {
     const { data: profiles } = useAvailableProfiles(serviceType);
     const createOverride = useCreateOverride();
     const deleteOverride = useDeleteOverride();
+    const applyOverride = useApplyOverride();
     const [selectedProfile, setSelectedProfile] = useState("");
 
     // Find current override for this media
@@ -690,28 +691,54 @@ function QualityTab({ media }: { media: MediaDetail }) {
                 </CardHeader>
                 <CardContent className="space-y-4">
                     {currentOverride ? (
-                        <div className="flex items-center justify-between p-3 rounded-lg border bg-primary/5">
-                            <div>
-                                <p className="text-sm font-medium">
-                                    {currentOverride.profile_name.replace(/-/g, " ")}
-                                </p>
-                                <p className="text-xs text-muted-foreground mt-0.5">
-                                    Override actif — ce média utilise un profil personnalisé
-                                </p>
-                                {currentOverride.note && (
-                                    <p className="text-xs text-muted-foreground mt-1 italic">
-                                        {currentOverride.note}
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between p-3 rounded-lg border bg-primary/5">
+                                <div>
+                                    <p className="text-sm font-medium">
+                                        {currentOverride.profile_name.replace(/-/g, " ")}
                                     </p>
-                                )}
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                        Override actif — ce média utilise un profil personnalisé
+                                    </p>
+                                    {currentOverride.note && (
+                                        <p className="text-xs text-muted-foreground mt-1 italic">
+                                            {currentOverride.note}
+                                        </p>
+                                    )}
+                                </div>
+                                <div className="flex gap-1">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="text-red-400 hover:text-red-300"
+                                        onClick={() => deleteOverride.mutate(currentOverride.id)}
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                </div>
                             </div>
                             <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-red-400 hover:text-red-300"
-                                onClick={() => deleteOverride.mutate(currentOverride.id)}
+                                className="w-full gap-2"
+                                onClick={() => applyOverride.mutate(currentOverride.id)}
+                                disabled={applyOverride.isPending}
                             >
-                                <Trash2 className="h-4 w-4" />
+                                {applyOverride.isPending ? (
+                                    <><Download className="h-4 w-4 animate-spin" /> Application en cours...</>
+                                ) : (
+                                    <><Download className="h-4 w-4" /> Appliquer à {isMovie ? 'Radarr' : 'Sonarr'}</>
+                                )}
                             </Button>
+                            {applyOverride.isSuccess && (
+                                <div className="p-3 rounded-lg border bg-emerald-500/10 text-emerald-400 text-sm">
+                                    ✅ Profil appliqué ! {applyOverride.data.cfs_created} CFs créés, {applyOverride.data.cfs_updated} mis à jour.
+                                    {applyOverride.data.media_updated && " Série mise à jour."}
+                                </div>
+                            )}
+                            {applyOverride.isError && (
+                                <div className="p-3 rounded-lg border bg-red-500/10 text-red-400 text-sm">
+                                    ❌ Erreur : {applyOverride.error.message}
+                                </div>
+                            )}
                         </div>
                     ) : (
                         <p className="text-sm text-muted-foreground">

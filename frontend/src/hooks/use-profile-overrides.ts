@@ -70,3 +70,25 @@ export function useDeleteOverride() {
         },
     });
 }
+
+export interface ApplyOverrideResult {
+    success: boolean;
+    cfs_created: number;
+    cfs_updated: number;
+    profile_name: string;
+    profile_id: number | null;
+    media_updated: boolean;
+    errors: string[];
+}
+
+export function useApplyOverride() {
+    const qc = useQueryClient();
+    return useMutation<ApplyOverrideResult, Error, number>({
+        mutationFn: (id: number) =>
+            apiFetch(`/api/profile-overrides/${id}/apply`, { method: "POST" }),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ["profile-overrides"] });
+            qc.invalidateQueries({ queryKey: ["notifications"] });
+        },
+    });
+}
