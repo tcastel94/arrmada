@@ -220,13 +220,36 @@ async def apply_override(
     if not override:
         raise HTTPException(status_code=404, detail="Override not found")
 
-    # 2. Get the service
-    stmt = select(Service).where(Service.id == override.service_id)
-    result = await db.execute(stmt)
-    service = result.scalar_one_or_none()
+    # 2. Get the service — if service_id is 0 or invalid, find by type
+    service = None
+    if override.service_id and override.service_id > 0:
+        stmt = select(Service).where(Service.id == override.service_id)
+        result = await db.execute(stmt)
+        service = result.scalar_one_or_none()
 
     if not service:
-        raise HTTPException(status_code=404, detail="Service not found")
+        # Fallback: find first enabled Sonarr or Radarr service by media type
+        expected_type = "sonarr" if override.media_type == "series" else "radarr"
+        stmt = (
+            select(Service)
+            .where(
+                Service.type.ilike(expected_type),
+                Service.is_enabled == True,  # noqa: E712
+            )
+            .limit(1)
+        )
+        result = await db.execute(stmt)
+        service = result.scalar_one_or_none()
+
+        if service:
+            # Update override with the found service_id for next time
+            override.service_id = service.id
+
+    if not service:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No {override.media_type == 'series' and 'Sonarr' or 'Radarr'} service found",
+        )
 
     service_type = service.type.lower()
     if service_type not in ("sonarr", "radarr"):
