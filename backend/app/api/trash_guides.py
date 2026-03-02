@@ -192,16 +192,16 @@ async def audit_config(
 
     Returns compliance percentage, missing CFs, and outdated CFs.
     """
-    from app.db.session import get_db_session
-    from app.db.models import Service
+    from sqlalchemy import select
+    from app.database import async_session_factory
+    from app.models.service import Service
 
     cache = get_trash_cache()
     if cache.is_stale:
         await cache.sync()
 
     # Get service from DB
-    async with get_db_session() as session:
-        from sqlalchemy import select
+    async with async_session_factory() as session:
         result = await session.execute(
             select(Service).where(Service.id == body.service_id)
         )
@@ -222,11 +222,11 @@ async def audit_config(
 
     # Get current CFs from the service
     from app.services.arr_client import ArrBaseClient
-    from app.services.encryption import decrypt
+    from app.services.encryption import decrypt_api_key
 
     client = ArrBaseClient(
         url=service.url,
-        api_key=decrypt(service.api_key),
+        api_key=decrypt_api_key(service.api_key),
     )
     client.API_PREFIX = "/api/v3"
 
@@ -286,16 +286,16 @@ async def apply_recommendations(
 
     Use dry_run=true to preview changes without modifying anything.
     """
-    from app.db.session import get_db_session
-    from app.db.models import Service
+    from sqlalchemy import select
+    from app.database import async_session_factory
+    from app.models.service import Service
 
     cache = get_trash_cache()
     if cache.is_stale:
         await cache.sync()
 
     # Get service from DB
-    async with get_db_session() as session:
-        from sqlalchemy import select
+    async with async_session_factory() as session:
         result = await session.execute(
             select(Service).where(Service.id == body.service_id)
         )
@@ -315,11 +315,11 @@ async def apply_recommendations(
         )
 
     from app.services.arr_client import ArrBaseClient
-    from app.services.encryption import decrypt
+    from app.services.encryption import decrypt_api_key
 
     client = ArrBaseClient(
         url=service.url,
-        api_key=decrypt(service.api_key),
+        api_key=decrypt_api_key(service.api_key),
     )
     client.API_PREFIX = "/api/v3"
 
