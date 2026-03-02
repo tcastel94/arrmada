@@ -56,6 +56,8 @@ export function useTrashStatus() {
         queryKey: ["trash-guides", "status"],
         queryFn: () => apiFetch("/api/trash-guides/status"),
         staleTime: 60_000,
+        retry: 1,
+        retryDelay: 1000,
     });
 }
 

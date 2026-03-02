@@ -253,7 +253,7 @@ function ToggleCard({
 // ── Main page ────────────────────────────────────────────────
 
 export default function TrashGuidesPage() {
-    const { data: status, isLoading: statusLoading } = useTrashStatus();
+    const { data: status, isLoading: statusLoading, isError: statusError } = useTrashStatus();
     const syncMutation = useTrashSync();
     const recommendMutation = useTrashRecommend();
     const { toast } = useToast();
@@ -304,7 +304,7 @@ export default function TrashGuidesPage() {
 
     const currentStep = STEPS[step];
 
-    if (statusLoading) {
+    if (statusLoading && !statusError) {
         return (
             <>
                 <Header title="TRaSH Guides" />
