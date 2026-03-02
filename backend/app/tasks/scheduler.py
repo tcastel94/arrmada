@@ -14,16 +14,10 @@ scheduler = AsyncIOScheduler()
 def start_scheduler() -> None:
     """Start the scheduler with all registered jobs."""
     from app.tasks.health_check_task import register as register_health_check
+    from app.tasks.trash_sync_task import register as register_trash_sync
 
     register_health_check(scheduler)
-
-    # Phase 4 will add:
-    # from app.tasks.sync_media_task import register as register_sync
-    # from app.tasks.analytics_snapshot import register as register_analytics
-    # from app.tasks.recommendation_refresh import register as register_reco
-    # register_sync(scheduler)
-    # register_analytics(scheduler)
-    # register_reco(scheduler)
+    register_trash_sync(scheduler)
 
     scheduler.start()
     logger.info("Scheduler started with %d jobs", len(scheduler.get_jobs()))
