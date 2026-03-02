@@ -122,46 +122,71 @@ STREAMING_CFS = [
 ]
 
 # ── Quality Profile mapping ──────────────────────────────────
-# Maps (quality, language, anime) → TRaSH quality profile filename
+# Maps (quality, language, anime, service) → TRaSH quality profile filename
+# Sonarr uses resolution suffix (e.g. bluray-web-2160p)
+# Radarr uses quality prefix (e.g. uhd-bluray-web)
 
-QP_MAP: dict[tuple[str, str, bool], str] = {
-    # Standard English profiles
-    ("1080p", "vo", False): "web-1080p",
-    ("2160p", "vo", False): "web-2160p",
-    ("best", "vo", False): "web-2160p",
-    ("720p", "vo", False): "web-1080p",  # fallback
-    # French VOSTFR profiles
-    ("1080p", "vostfr", False): "french-vostfr-bluray-web-1080p",
-    ("2160p", "vostfr", False): "french-vostfr-bluray-web-2160p",
-    ("best", "vostfr", False): "french-vostfr-bluray-web-2160p",
-    ("720p", "vostfr", False): "french-vostfr-bluray-web-1080p",
-    # French Multi VF profiles
-    ("1080p", "vf", False): "french-multi-vf-bluray-web-1080p",
-    ("2160p", "vf", False): "french-multi-vf-bluray-web-2160p",
-    ("best", "vf", False): "french-multi-vf-bluray-web-2160p",
-    ("720p", "vf", False): "french-multi-vf-bluray-web-1080p",
-    # French Multi VO profiles
-    ("1080p", "multi", False): "french-multi-vo-bluray-web-1080p",
-    ("2160p", "multi", False): "french-multi-vo-bluray-web-2160p",
-    ("best", "multi", False): "french-multi-vo-bluray-web-2160p",
-    ("720p", "multi", False): "french-multi-vo-bluray-web-1080p",
-    # Anime profiles (language doesn't matter much, anime has its own)
-    ("1080p", "vo", True): "anime-remux-1080p",
-    ("2160p", "vo", True): "anime-remux-1080p",  # no 4K anime profile
-    ("best", "vo", True): "anime-remux-1080p",
-    ("720p", "vo", True): "anime-remux-1080p",
-    ("1080p", "vostfr", True): "anime-remux-1080p",
-    ("2160p", "vostfr", True): "anime-remux-1080p",
-    ("best", "vostfr", True): "anime-remux-1080p",
-    ("720p", "vostfr", True): "anime-remux-1080p",
-    ("1080p", "multi", True): "anime-remux-1080p",
-    ("2160p", "multi", True): "anime-remux-1080p",
-    ("best", "multi", True): "anime-remux-1080p",
-    ("720p", "multi", True): "anime-remux-1080p",
-    ("1080p", "vf", True): "anime-remux-1080p",
-    ("2160p", "vf", True): "anime-remux-1080p",
-    ("best", "vf", True): "anime-remux-1080p",
-    ("720p", "vf", True): "anime-remux-1080p",
+QP_MAP: dict[tuple[str, str, bool, str], str] = {
+    # ── SONARR profiles ──────────────────────────────────────
+    # Standard English
+    ("1080p", "vo", False, "sonarr"): "web-1080p",
+    ("2160p", "vo", False, "sonarr"): "web-2160p",
+    ("best", "vo", False, "sonarr"): "web-2160p",
+    ("720p", "vo", False, "sonarr"): "web-1080p",
+    # French VOSTFR
+    ("1080p", "vostfr", False, "sonarr"): "french-vostfr-bluray-web-1080p",
+    ("2160p", "vostfr", False, "sonarr"): "french-vostfr-bluray-web-2160p",
+    ("best", "vostfr", False, "sonarr"): "french-vostfr-bluray-web-2160p",
+    ("720p", "vostfr", False, "sonarr"): "french-vostfr-bluray-web-1080p",
+    # French Multi VF
+    ("1080p", "vf", False, "sonarr"): "french-multi-vf-bluray-web-1080p",
+    ("2160p", "vf", False, "sonarr"): "french-multi-vf-bluray-web-2160p",
+    ("best", "vf", False, "sonarr"): "french-multi-vf-bluray-web-2160p",
+    ("720p", "vf", False, "sonarr"): "french-multi-vf-bluray-web-1080p",
+    # French Multi VO
+    ("1080p", "multi", False, "sonarr"): "french-multi-vo-bluray-web-1080p",
+    ("2160p", "multi", False, "sonarr"): "french-multi-vo-bluray-web-2160p",
+    ("best", "multi", False, "sonarr"): "french-multi-vo-bluray-web-2160p",
+    ("720p", "multi", False, "sonarr"): "french-multi-vo-bluray-web-1080p",
+    # Anime (Sonarr only)
+    ("1080p", "vo", True, "sonarr"): "anime-remux-1080p",
+    ("2160p", "vo", True, "sonarr"): "anime-remux-1080p",
+    ("best", "vo", True, "sonarr"): "anime-remux-1080p",
+    ("720p", "vo", True, "sonarr"): "anime-remux-1080p",
+    ("1080p", "vostfr", True, "sonarr"): "anime-remux-1080p",
+    ("2160p", "vostfr", True, "sonarr"): "anime-remux-1080p",
+    ("best", "vostfr", True, "sonarr"): "anime-remux-1080p",
+    ("720p", "vostfr", True, "sonarr"): "anime-remux-1080p",
+    ("1080p", "multi", True, "sonarr"): "anime-remux-1080p",
+    ("2160p", "multi", True, "sonarr"): "anime-remux-1080p",
+    ("best", "multi", True, "sonarr"): "anime-remux-1080p",
+    ("720p", "multi", True, "sonarr"): "anime-remux-1080p",
+    ("1080p", "vf", True, "sonarr"): "anime-remux-1080p",
+    ("2160p", "vf", True, "sonarr"): "anime-remux-1080p",
+    ("best", "vf", True, "sonarr"): "anime-remux-1080p",
+    ("720p", "vf", True, "sonarr"): "anime-remux-1080p",
+
+    # ── RADARR profiles ──────────────────────────────────────
+    # Standard English
+    ("1080p", "vo", False, "radarr"): "hd-bluray-web",
+    ("2160p", "vo", False, "radarr"): "uhd-bluray-web",
+    ("best", "vo", False, "radarr"): "uhd-bluray-web",
+    ("720p", "vo", False, "radarr"): "hd-bluray-web",
+    # French VOSTFR
+    ("1080p", "vostfr", False, "radarr"): "french-vostfr-hd-bluray-web",
+    ("2160p", "vostfr", False, "radarr"): "french-vostfr-uhd-bluray-web",
+    ("best", "vostfr", False, "radarr"): "french-vostfr-uhd-bluray-web",
+    ("720p", "vostfr", False, "radarr"): "french-vostfr-hd-bluray-web",
+    # French Multi VF
+    ("1080p", "vf", False, "radarr"): "french-multi-vf-hd-bluray-web",
+    ("2160p", "vf", False, "radarr"): "french-multi-vf-uhd-bluray-web",
+    ("best", "vf", False, "radarr"): "french-multi-vf-uhd-bluray-web",
+    ("720p", "vf", False, "radarr"): "french-multi-vf-hd-bluray-web",
+    # French Multi VO
+    ("1080p", "multi", False, "radarr"): "french-multi-vo-hd-bluray-web",
+    ("2160p", "multi", False, "radarr"): "french-multi-vo-uhd-bluray-web",
+    ("best", "multi", False, "radarr"): "french-multi-vo-uhd-bluray-web",
+    ("720p", "multi", False, "radarr"): "french-multi-vo-hd-bluray-web",
 }
 
 # Score profile names for different use-cases
@@ -280,7 +305,7 @@ def _build_recommendation(
     """Build a single profile recommendation."""
 
     # 1. Determine quality profile
-    qp_key = (prefs.quality, language, is_anime)
+    qp_key = (prefs.quality, language, is_anime, service)
     qp_name = QP_MAP.get(qp_key)
     if not qp_name:
         logger.warning("No QP mapping for %s", qp_key)
