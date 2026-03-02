@@ -26,9 +26,12 @@ import {
     useTrashStatus,
     useTrashSync,
     useTrashRecommend,
+    useTrashApply,
     type MediaPreferences,
     type RecommendedProfile,
+    type ApplyResult,
 } from "@/hooks/use-trash-guides";
+import { useServices } from "@/hooks/use-services";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -256,6 +259,8 @@ export default function TrashGuidesPage() {
     const { data: status, isLoading: statusLoading, isError: statusError } = useTrashStatus();
     const syncMutation = useTrashSync();
     const recommendMutation = useTrashRecommend();
+    const applyMutation = useTrashApply();
+    const { data: services } = useServices();
     const { toast } = useToast();
 
     const [step, setStep] = useState(0);
@@ -268,6 +273,8 @@ export default function TrashGuidesPage() {
         watches_french_series: false,
     });
     const [recommendations, setRecommendations] = useState<RecommendedProfile[] | null>(null);
+    const [showApplyDialog, setShowApplyDialog] = useState(false);
+    const [applyResults, setApplyResults] = useState<Record<number, ApplyResult>>({});
 
     const handleSync = async () => {
         try {
@@ -654,18 +661,146 @@ export default function TrashGuidesPage() {
                         <Button
                             className="gap-2"
                             disabled={!recommendations || recommendations.length === 0}
-                            onClick={() => {
-                                toast({
-                                    title: "Profils prêts !",
-                                    description: "Rendez-vous dans Paramètres > TRaSH Guides pour appliquer à Sonarr/Radarr",
-                                });
-                            }}
+                            onClick={() => setShowApplyDialog(true)}
                         >
                             <Zap className="h-4 w-4" />
                             Appliquer
                         </Button>
                     )}
                 </div>
+
+                {/* Apply Dialog */}
+                <AnimatePresence>
+                    {showApplyDialog && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+                            onClick={() => !applyMutation.isPending && setShowApplyDialog(false)}
+                        >
+                            <motion.div
+                                initial={{ scale: 0.9, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                exit={{ scale: 0.9, opacity: 0 }}
+                                onClick={(e) => e.stopPropagation()}
+                                className="w-full max-w-lg mx-4"
+                            >
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle className="flex items-center gap-2">
+                                            <Zap className="h-5 w-5 text-primary" />
+                                            Appliquer les Custom Formats
+                                        </CardTitle>
+                                        <CardDescription>
+                                            Les CFs recommandés seront créés ou mis à jour dans vos services.
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="space-y-4">
+                                        {/* Service list */}
+                                        {services && services.filter(s =>
+                                            s.type.toLowerCase() === "sonarr" || s.type.toLowerCase() === "radarr"
+                                        ).length > 0 ? (
+                                            <div className="space-y-2">
+                                                {services
+                                                    .filter(s => s.type.toLowerCase() === "sonarr" || s.type.toLowerCase() === "radarr")
+                                                    .map((svc) => {
+                                                        const serviceRecs = recommendations?.filter(
+                                                            r => r.service_type === svc.type.toLowerCase()
+                                                        ) || [];
+                                                        const alreadyApplied = applyResults[svc.id];
+
+                                                        return (
+                                                            <div
+                                                                key={svc.id}
+                                                                className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/30"
+                                                            >
+                                                                <div className="flex items-center gap-3">
+                                                                    <span className={cn(
+                                                                        "h-2.5 w-2.5 rounded-full",
+                                                                        svc.last_status === "online" ? "bg-green-500" : "bg-red-500"
+                                                                    )} />
+                                                                    <div>
+                                                                        <p className="text-sm font-medium">{svc.name}</p>
+                                                                        <p className="text-xs text-muted-foreground">
+                                                                            {svc.type} — {serviceRecs.length} profil(s) à appliquer
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+
+                                                                {alreadyApplied ? (
+                                                                    <Badge
+                                                                        variant={alreadyApplied.success ? "default" : "destructive"}
+                                                                        className="gap-1"
+                                                                    >
+                                                                        <CheckCircle className="h-3 w-3" />
+                                                                        {alreadyApplied.cfs_created} créés, {alreadyApplied.cfs_updated} MàJ
+                                                                    </Badge>
+                                                                ) : (
+                                                                    <Button
+                                                                        size="sm"
+                                                                        disabled={applyMutation.isPending || serviceRecs.length === 0 || svc.last_status !== "online"}
+                                                                        onClick={async () => {
+                                                                            try {
+                                                                                const profileIds = serviceRecs.map(r => r.profile_id);
+                                                                                const result = await applyMutation.mutateAsync({
+                                                                                    service_id: svc.id,
+                                                                                    recommendations: profileIds,
+                                                                                });
+                                                                                setApplyResults(prev => ({ ...prev, [svc.id]: result }));
+                                                                                toast({
+                                                                                    title: `${svc.name} — Appliqué !`,
+                                                                                    description: `${result.cfs_created} CFs créés, ${result.cfs_updated} mis à jour`,
+                                                                                });
+                                                                            } catch {
+                                                                                toast({
+                                                                                    title: "Erreur",
+                                                                                    description: `Impossible d'appliquer à ${svc.name}`,
+                                                                                    variant: "destructive",
+                                                                                });
+                                                                            }
+                                                                        }}
+                                                                        className="gap-1"
+                                                                    >
+                                                                        {applyMutation.isPending ? (
+                                                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                                                        ) : (
+                                                                            <Zap className="h-3 w-3" />
+                                                                        )}
+                                                                        Appliquer
+                                                                    </Button>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
+                                            </div>
+                                        ) : (
+                                            <div className="text-center py-6 text-muted-foreground">
+                                                Aucun service Sonarr/Radarr configuré.
+                                                <br />
+                                                <span className="text-xs">Ajoutez-en via la page Services.</span>
+                                            </div>
+                                        )}
+
+                                        {/* Close button */}
+                                        <div className="flex justify-end pt-2">
+                                            <Button
+                                                variant="outline"
+                                                onClick={() => {
+                                                    setShowApplyDialog(false);
+                                                    setApplyResults({});
+                                                }}
+                                                disabled={applyMutation.isPending}
+                                            >
+                                                Fermer
+                                            </Button>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            </motion.div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </div>
         </>
     );
