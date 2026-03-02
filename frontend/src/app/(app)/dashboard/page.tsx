@@ -24,6 +24,7 @@ import { useTrashCompliance } from "@/hooks/use-trash-guides";
 import { cn } from "@/lib/utils";
 import { STATUS_COLORS, SERVICE_META } from "@/lib/constants";
 import { motion } from "framer-motion";
+import { ActivityFeedCard } from "@/components/dashboard/activity-feed";
 
 function formatBytes(bytes: number): string {
     if (bytes === 0) return "0 B";
@@ -243,6 +244,9 @@ export default function DashboardPage() {
                         </CardContent>
                     </Card>
                 </div>
+
+                {/* Activity Feed */}
+                <ActivityFeedCard />
 
                 {/* TRaSH Compliance Row */}
                 {compliance && compliance.length > 0 && (

@@ -21,6 +21,7 @@ from app.api.trash_guides import router as trash_guides_router
 from app.api.notifications import router as notifications_router
 from app.api.profile_overrides import router as profile_overrides_router
 from app.api.sabnzbd_config import router as sabnzbd_config_router
+from app.api.activity import router as activity_router
 
 # Main router that includes all sub-routers
 api_router = APIRouter()
@@ -45,4 +46,5 @@ api_router.include_router(trash_guides_router)
 api_router.include_router(notifications_router)
 api_router.include_router(profile_overrides_router)
 api_router.include_router(sabnzbd_config_router)
+api_router.include_router(activity_router)
 
