@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -78,7 +78,7 @@ async def check_and_record(service: Service, db: AsyncSession) -> HealthStatus:
     db.add(event)
 
     # Update service status
-    service.last_health_check = datetime.now(timezone.utc)
+    service.last_health_check = datetime.utcnow()
     service.last_status = result.status
     service.last_latency_ms = result.latency_ms
     if result.version:

@@ -10,7 +10,7 @@ services:
       - ./data:/app/data
     environment:
       - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://arrmada:${POSTGRES_PASSWORD:-arrmada}@arrmada-db:5432/arrmada}
-      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3420}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3420,http://192.168.2.3:3420}
       - ARRMADA_AUTH_SECRET=${ARRMADA_AUTH_SECRET:-changeme}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}

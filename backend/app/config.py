@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     FERNET_KEY: str = ""  # auto-generated on first run if empty
 
     # ── CORS ──────────────────────────────────────────────────
-    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:3420"
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:3420,http://192.168.2.3:3420"
 
     # ── Telegram ──────────────────────────────────────────────
     TELEGRAM_BOT_TOKEN: str = ""
