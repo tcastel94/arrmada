@@ -17,6 +17,7 @@ from app.api.settings import router as settings_router
 from app.api.recommendations import router as recommendations_router
 from app.api.files import router as files_router
 from app.api.setup import router as setup_router
+from app.api.trash_guides import router as trash_guides_router
 
 # Main router that includes all sub-routers
 api_router = APIRouter()
@@ -37,3 +38,5 @@ api_router.include_router(requests_router)
 api_router.include_router(settings_router)
 api_router.include_router(recommendations_router)
 api_router.include_router(files_router)
+api_router.include_router(trash_guides_router)
+
