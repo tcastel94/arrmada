@@ -108,3 +108,23 @@ export function useTrashApply() {
             }),
     });
 }
+
+// ── Compliance (dashboard) ──────────────────────────────────
+
+export interface ComplianceItem {
+    service_id: number;
+    service_name: string;
+    service_type: string;
+    trash_total: number;
+    trash_found: number;
+    compliance_pct: number;
+}
+
+export function useTrashCompliance() {
+    return useQuery<ComplianceItem[]>({
+        queryKey: ["trash-guides", "compliance"],
+        queryFn: () => apiFetch("/api/trash-guides/compliance"),
+        staleTime: 300_000, // 5min
+        retry: 1,
+    });
+}

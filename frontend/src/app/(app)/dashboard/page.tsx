@@ -15,10 +15,12 @@ import {
     Activity,
     Download,
     TrendingUp,
+    ShieldCheck,
 } from "lucide-react";
 import { useServices, useGlobalHealth } from "@/hooks/use-services";
 import { useDashboardStats } from "@/hooks/use-dashboard";
 import { useDownloads } from "@/hooks/use-downloads";
+import { useTrashCompliance } from "@/hooks/use-trash-guides";
 import { cn } from "@/lib/utils";
 import { STATUS_COLORS, SERVICE_META } from "@/lib/constants";
 import { motion } from "framer-motion";
@@ -36,6 +38,7 @@ export default function DashboardPage() {
     const { data: healthResults } = useGlobalHealth();
     const { data: stats, isLoading: statsLoading } = useDashboardStats();
     const { data: downloads } = useDownloads();
+    const { data: compliance } = useTrashCompliance();
 
     if (servicesLoading && statsLoading) {
         return (
@@ -240,6 +243,76 @@ export default function DashboardPage() {
                         </CardContent>
                     </Card>
                 </div>
+
+                {/* TRaSH Compliance Row */}
+                {compliance && compliance.length > 0 && (
+                    <Card>
+                        <CardHeader className="pb-3">
+                            <div className="flex items-center justify-between">
+                                <CardTitle className="text-base font-semibold flex items-center gap-2">
+                                    <ShieldCheck className="h-4 w-4" />
+                                    Conformité TRaSH Guides
+                                </CardTitle>
+                                <a href="/trash-guides" className="text-xs text-primary hover:underline">
+                                    Voir détails →
+                                </a>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="grid gap-4 sm:grid-cols-2">
+                                {compliance.map((item) => {
+                                    const color =
+                                        item.compliance_pct >= 80
+                                            ? "text-emerald-500"
+                                            : item.compliance_pct >= 50
+                                                ? "text-yellow-500"
+                                                : "text-red-500";
+                                    const bgColor =
+                                        item.compliance_pct >= 80
+                                            ? "bg-emerald-500"
+                                            : item.compliance_pct >= 50
+                                                ? "bg-yellow-500"
+                                                : "bg-red-500";
+
+                                    return (
+                                        <motion.div
+                                            key={item.service_id}
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            className="p-4 rounded-lg border bg-card"
+                                        >
+                                            <div className="flex items-center justify-between mb-3">
+                                                <div>
+                                                    <p className="text-sm font-medium">
+                                                        {item.service_name}
+                                                    </p>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {item.service_type}
+                                                    </p>
+                                                </div>
+                                                <span
+                                                    className={cn(
+                                                        "text-2xl font-bold tabular-nums",
+                                                        color
+                                                    )}
+                                                >
+                                                    {item.compliance_pct}%
+                                                </span>
+                                            </div>
+                                            <Progress
+                                                value={item.compliance_pct}
+                                                className={cn("h-2 [&>div]:" + bgColor)}
+                                            />
+                                            <p className="text-xs text-muted-foreground mt-2">
+                                                {item.trash_found} / {item.trash_total} CFs TRaSH présents
+                                            </p>
+                                        </motion.div>
+                                    );
+                                })}
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
             </div>
         </>
     );

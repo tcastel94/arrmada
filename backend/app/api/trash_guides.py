@@ -410,6 +410,76 @@ async def apply_recommendations(
     )
 
 
+@router.get(
+    "/compliance",
+    summary="Quick compliance check for all services",
+)
+async def get_compliance(
+    _auth: str = Depends(_get_user),
+):
+    """Return a lightweight compliance summary for each Sonarr/Radarr service.
+
+    Compares the number of TRaSH CFs present in each service
+    vs the total available in the cache. Used by the dashboard widget.
+    """
+    from sqlalchemy import select
+    from app.database import async_session_factory
+    from app.models.service import Service
+    from app.services.arr_client import ArrBaseClient
+    from app.services.encryption import decrypt_api_key
+
+    cache = get_trash_cache()
+    if cache.is_stale:
+        try:
+            await cache.sync()
+        except Exception:
+            pass  # Use whatever we have
+
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(Service).where(
+                Service.type.in_(["Sonarr", "Radarr", "sonarr", "radarr"])
+            )
+        )
+        services = result.scalars().all()
+
+    results = []
+    for svc in services:
+        svc_type = svc.type.lower()
+        trash_cfs = cache.get_custom_formats(svc_type)
+        total_trash = len(trash_cfs)
+        trash_names = {cf["name"].lower() for cf in trash_cfs}
+
+        # Try to get current CFs from service
+        found = 0
+        try:
+            client = ArrBaseClient(
+                url=svc.url,
+                api_key=decrypt_api_key(svc.api_key),
+            )
+            client.API_PREFIX = "/api/v3"
+            current_cfs = await client.get("/customformat")
+            await client.close()
+
+            current_names = {cf["name"].lower() for cf in current_cfs}
+            found = len(trash_names & current_names)
+        except Exception as e:
+            logger.debug("Compliance check failed for %s: %s", svc.name, e)
+
+        pct = round(found / total_trash * 100, 1) if total_trash > 0 else 0
+
+        results.append({
+            "service_id": svc.id,
+            "service_name": svc.name,
+            "service_type": svc_type,
+            "trash_total": total_trash,
+            "trash_found": found,
+            "compliance_pct": pct,
+        })
+
+    return results
+
+
 # ── Helpers ───────────────────────────────────────────────────
 
 def _categorize_cf_name(name: str) -> str:
