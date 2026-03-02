@@ -28,6 +28,8 @@ import {
     CheckCircle2,
     XCircle,
     Volume2,
+    Target,
+    Trash2,
 } from "lucide-react";
 import {
     useMediaDetail,
@@ -37,6 +39,7 @@ import {
     type EpisodeDetail,
     type CastMember,
 } from "@/hooks/use-media";
+import { useProfileOverrides, useAvailableProfiles, useCreateOverride, useDeleteOverride } from "@/hooks/use-profile-overrides";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { useState } from "react";
@@ -505,6 +508,7 @@ export default function MediaDetailPage() {
                             {isMovie ? "Fichier" : "Fichiers"}
                         </TabsTrigger>
                         <TabsTrigger value="cast">Casting</TabsTrigger>
+                        <TabsTrigger value="quality">Qualité</TabsTrigger>
                         <TabsTrigger value="info">Infos</TabsTrigger>
                     </TabsList>
 
@@ -547,6 +551,11 @@ export default function MediaDetailPage() {
                     {/* Cast tab */}
                     <TabsContent value="cast">
                         <CastSection cast={media.cast} crew={media.crew} />
+                    </TabsContent>
+
+                    {/* Quality tab */}
+                    <TabsContent value="quality">
+                        <QualityTab media={media} />
                     </TabsContent>
 
                     {/* Info tab */}
@@ -607,5 +616,142 @@ export default function MediaDetailPage() {
                 </Tabs>
             </div>
         </>
+    );
+}
+
+// ── Quality Tab ─────────────────────────────────────────────
+
+function QualityTab({ media }: { media: MediaDetail }) {
+    const isMovie = media.type === "movie";
+    const serviceType = isMovie ? "radarr" : "sonarr";
+    const { data: overrides } = useProfileOverrides();
+    const { data: profiles } = useAvailableProfiles(serviceType);
+    const createOverride = useCreateOverride();
+    const deleteOverride = useDeleteOverride();
+    const [selectedProfile, setSelectedProfile] = useState("");
+
+    // Find current override for this media
+    const currentOverride = overrides?.find(
+        (o) => o.external_id === media.id
+    );
+
+    // File quality info
+    const file = isMovie ? media.file : media.seasons?.flatMap(s => s.episodes).find(e => e.file)?.file;
+
+    return (
+        <div className="space-y-6">
+            {/* File Quality Summary */}
+            {file && (
+                <Card className="bg-card/50 border-border/50">
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-base flex items-center gap-2">
+                            <HardDrive className="h-4 w-4" />
+                            Qualité du fichier
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            {file.video_codec && (
+                                <div>
+                                    <p className="text-xs text-muted-foreground">Codec vidéo</p>
+                                    <Badge variant="outline" className="mt-1">{file.video_codec}</Badge>
+                                </div>
+                            )}
+                            {file.resolution && (
+                                <div>
+                                    <p className="text-xs text-muted-foreground">Résolution</p>
+                                    <Badge variant="outline" className="mt-1">{file.resolution}</Badge>
+                                </div>
+                            )}
+                            {file.audio_codec && (
+                                <div>
+                                    <p className="text-xs text-muted-foreground">Codec audio</p>
+                                    <Badge variant="outline" className="mt-1">{file.audio_codec}</Badge>
+                                </div>
+                            )}
+                            {file.audio_channels && (
+                                <div>
+                                    <p className="text-xs text-muted-foreground">Canaux audio</p>
+                                    <Badge variant="outline" className="mt-1">{file.audio_channels}</Badge>
+                                </div>
+                            )}
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* TRaSH Profile Override */}
+            <Card className="bg-card/50 border-border/50">
+                <CardHeader className="pb-2">
+                    <CardTitle className="text-base flex items-center gap-2">
+                        <Target className="h-4 w-4" />
+                        Profil TRaSH
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    {currentOverride ? (
+                        <div className="flex items-center justify-between p-3 rounded-lg border bg-primary/5">
+                            <div>
+                                <p className="text-sm font-medium">
+                                    {currentOverride.profile_name.replace(/-/g, " ")}
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                    Override actif — ce média utilise un profil personnalisé
+                                </p>
+                                {currentOverride.note && (
+                                    <p className="text-xs text-muted-foreground mt-1 italic">
+                                        {currentOverride.note}
+                                    </p>
+                                )}
+                            </div>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-red-400 hover:text-red-300"
+                                onClick={() => deleteOverride.mutate(currentOverride.id)}
+                            >
+                                <Trash2 className="h-4 w-4" />
+                            </Button>
+                        </div>
+                    ) : (
+                        <p className="text-sm text-muted-foreground">
+                            Ce média utilise le profil TRaSH par défaut.
+                        </p>
+                    )}
+
+                    {/* Assign form */}
+                    <div className="flex gap-2">
+                        <select
+                            value={selectedProfile}
+                            onChange={(e) => setSelectedProfile(e.target.value)}
+                            className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        >
+                            <option value="">Choisir un profil...</option>
+                            {(profiles ?? []).map((p) => (
+                                <option key={p.filename} value={p.filename}>
+                                    {p.display_name}
+                                </option>
+                            ))}
+                        </select>
+                        <Button
+                            size="sm"
+                            disabled={!selectedProfile || createOverride.isPending}
+                            onClick={() => {
+                                createOverride.mutate({
+                                    media_type: isMovie ? "movie" : "series",
+                                    external_id: media.id,
+                                    title: media.title,
+                                    profile_name: selectedProfile,
+                                    service_id: 0,
+                                });
+                                setSelectedProfile("");
+                            }}
+                        >
+                            Appliquer
+                        </Button>
+                    </div>
+                </CardContent>
+            </Card>
+        </div>
     );
 }
