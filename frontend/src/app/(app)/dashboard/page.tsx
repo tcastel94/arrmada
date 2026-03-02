@@ -287,7 +287,9 @@ export default function DashboardPage() {
                                                         {item.service_name}
                                                     </p>
                                                     <p className="text-xs text-muted-foreground">
-                                                        {item.service_type}
+                                                        {item.applied_profiles.length > 0
+                                                            ? item.applied_profiles.map(p => p.replace(/-/g, ' ')).join(', ')
+                                                            : "Aucun profil détecté"}
                                                     </p>
                                                 </div>
                                                 <span
@@ -296,16 +298,24 @@ export default function DashboardPage() {
                                                         color
                                                     )}
                                                 >
-                                                    {item.compliance_pct}%
+                                                    {item.trash_total > 0 ? `${item.compliance_pct}%` : "—"}
                                                 </span>
                                             </div>
-                                            <Progress
-                                                value={item.compliance_pct}
-                                                className={cn("h-2 [&>div]:" + bgColor)}
-                                            />
-                                            <p className="text-xs text-muted-foreground mt-2">
-                                                {item.trash_found} / {item.trash_total} CFs TRaSH présents
-                                            </p>
+                                            {item.trash_total > 0 ? (
+                                                <>
+                                                    <Progress
+                                                        value={item.compliance_pct}
+                                                        className={cn("h-2 [&>div]:" + bgColor)}
+                                                    />
+                                                    <p className="text-xs text-muted-foreground mt-2">
+                                                        {item.trash_found} / {item.trash_total} CFs conformes
+                                                    </p>
+                                                </>
+                                            ) : (
+                                                <p className="text-xs text-muted-foreground">
+                                                    Appliquez un profil TRaSH pour voir la conformité
+                                                </p>
+                                            )}
                                         </motion.div>
                                     );
                                 })}

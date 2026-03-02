@@ -417,10 +417,11 @@ async def apply_recommendations(
 async def get_compliance(
     _auth: str = Depends(_get_user),
 ):
-    """Return a lightweight compliance summary for each Sonarr/Radarr service.
+    """Return a compliance summary for each Sonarr/Radarr service.
 
-    Compares the number of TRaSH CFs present in each service
-    vs the total available in the cache. Used by the dashboard widget.
+    Detects which TRaSH quality profiles were applied by checking
+    if >50% of a QP's CFs are present. Then measures compliance
+    only against the applied profiles' CFs.
     """
     from sqlalchemy import select
     from app.database import async_session_factory
@@ -433,7 +434,7 @@ async def get_compliance(
         try:
             await cache.sync()
         except Exception:
-            pass  # Use whatever we have
+            pass
 
     async with async_session_factory() as session:
         result = await session.execute(
@@ -446,12 +447,11 @@ async def get_compliance(
     results = []
     for svc in services:
         svc_type = svc.type.lower()
-        trash_cfs = cache.get_custom_formats(svc_type)
-        total_trash = len(trash_cfs)
-        trash_names = {cf["name"].lower() for cf in trash_cfs}
+        all_trash_cfs = cache.get_custom_formats(svc_type)
+        trash_by_id = {cf["trash_id"]: cf for cf in all_trash_cfs}
 
         # Try to get current CFs from service
-        found = 0
+        current_names: set[str] = set()
         try:
             client = ArrBaseClient(
                 url=svc.url,
@@ -460,21 +460,62 @@ async def get_compliance(
             client.API_PREFIX = "/api/v3"
             current_cfs = await client.get("/customformat")
             await client.close()
-
             current_names = {cf["name"].lower() for cf in current_cfs}
-            found = len(trash_names & current_names)
         except Exception as e:
             logger.debug("Compliance check failed for %s: %s", svc.name, e)
 
-        pct = round(found / total_trash * 100, 1) if total_trash > 0 else 0
+        # Detect which QPs were applied
+        applied_profiles: list[str] = []
+        target_cf_ids: set[str] = set()
+
+        for qp in cache.get_quality_profiles(svc_type):
+            format_items = qp.get("formatItems", {})
+            if not isinstance(format_items, dict):
+                continue
+
+            qp_cf_ids = set(format_items.values())
+            qp_cf_names = set()
+            for cf_id in qp_cf_ids:
+                cf = trash_by_id.get(cf_id)
+                if cf:
+                    qp_cf_names.add(cf["name"].lower())
+
+            if not qp_cf_names:
+                continue
+
+            # Check what % of this QP's CFs are present
+            present = len(qp_cf_names & current_names)
+            coverage = present / len(qp_cf_names)
+
+            if coverage > 0.5:  # >50% CFs present → consider applied
+                source = qp.get("_source_file", "").replace(".json", "")
+                applied_profiles.append(source or qp.get("name", "?"))
+                target_cf_ids |= qp_cf_ids
+
+        # Calculate compliance against applied profiles only
+        if target_cf_ids:
+            target_names = set()
+            for cf_id in target_cf_ids:
+                cf = trash_by_id.get(cf_id)
+                if cf:
+                    target_names.add(cf["name"].lower())
+
+            found = len(target_names & current_names)
+            total = len(target_names)
+            pct = round(found / total * 100, 1) if total > 0 else 0
+        else:
+            found = 0
+            total = 0
+            pct = 0
 
         results.append({
             "service_id": svc.id,
             "service_name": svc.name,
             "service_type": svc_type,
-            "trash_total": total_trash,
+            "trash_total": total,
             "trash_found": found,
             "compliance_pct": pct,
+            "applied_profiles": applied_profiles,
         })
 
     return results

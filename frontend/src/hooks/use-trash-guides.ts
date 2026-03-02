@@ -118,6 +118,7 @@ export interface ComplianceItem {
     trash_total: number;
     trash_found: number;
     compliance_pct: number;
+    applied_profiles: string[];
 }
 
 export function useTrashCompliance() {
