@@ -19,6 +19,7 @@ import {
     Skull,
     Container,
     FolderOpen,
+    BookMarked,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -42,6 +43,7 @@ const NAV_ITEMS = [
     { href: "/duplicates", label: "Doublons", icon: Copy },
     { href: "/docker", label: "Docker", icon: Container },
     { href: "/fichiers", label: "Fichiers", icon: FolderOpen },
+    { href: "/trash-guides", label: "TRaSH Guides", icon: BookMarked },
 ];
 
 const BOTTOM_ITEMS = [
