@@ -19,6 +19,8 @@ import {
     Loader2,
     Server,
     Key,
+    Target,
+    ChevronRight,
 } from "lucide-react";
 import { useSettings, useTestTelegram } from "@/hooks/use-settings";
 import { useServices } from "@/hooks/use-services";
@@ -266,6 +268,30 @@ export default function SettingsPage() {
                             />
                         </CardContent>
                     </Card>
+                </motion.div>
+
+                {/* Profile Overrides */}
+                <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.25 }}
+                >
+                    <a href="/settings/profile-overrides">
+                        <Card className="hover:bg-muted/50 transition-colors cursor-pointer">
+                            <CardContent className="flex items-center gap-4 p-4">
+                                <div className="rounded-full p-2.5 bg-primary/10">
+                                    <Target className="h-5 w-5 text-primary" />
+                                </div>
+                                <div className="flex-1">
+                                    <p className="text-sm font-semibold">Profils TRaSH par média</p>
+                                    <p className="text-xs text-muted-foreground">
+                                        Assigner un profil TRaSH spécifique à une série ou un film
+                                    </p>
+                                </div>
+                                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                            </CardContent>
+                        </Card>
+                    </a>
                 </motion.div>
 
                 {/* App Info */}
