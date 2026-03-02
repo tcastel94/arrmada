@@ -677,13 +677,16 @@ export default function TrashGuidesPage() {
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
                             className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-                            onClick={() => !applyMutation.isPending && setShowApplyDialog(false)}
+                            onClick={(e) => {
+                                if (e.target === e.currentTarget && !applyMutation.isPending) {
+                                    setShowApplyDialog(false);
+                                }
+                            }}
                         >
                             <motion.div
                                 initial={{ scale: 0.9, opacity: 0 }}
                                 animate={{ scale: 1, opacity: 1 }}
                                 exit={{ scale: 0.9, opacity: 0 }}
-                                onClick={(e) => e.stopPropagation()}
                                 className="w-full max-w-lg mx-4"
                             >
                                 <Card>
@@ -738,9 +741,13 @@ export default function TrashGuidesPage() {
                                                                     </Badge>
                                                                 ) : (
                                                                     <Button
+                                                                        type="button"
                                                                         size="sm"
                                                                         disabled={applyMutation.isPending || serviceRecs.length === 0}
-                                                                        onClick={async () => {
+                                                                        onClick={async (e) => {
+                                                                            e.preventDefault();
+                                                                            e.stopPropagation();
+                                                                            console.log("[TRaSH] Applying to", svc.name, "profiles:", serviceRecs.map(r => r.profile_id));
                                                                             try {
                                                                                 const profileIds = serviceRecs.map(r => r.profile_id);
                                                                                 const result = await applyMutation.mutateAsync({
