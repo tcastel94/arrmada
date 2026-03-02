@@ -20,6 +20,7 @@ import {
     Container,
     FolderOpen,
     BookMarked,
+    Bell,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -31,6 +32,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useUnreadCount } from "@/hooks/use-notifications";
 
 const NAV_ITEMS = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -44,6 +46,7 @@ const NAV_ITEMS = [
     { href: "/docker", label: "Docker", icon: Container },
     { href: "/fichiers", label: "Fichiers", icon: FolderOpen },
     { href: "/trash-guides", label: "TRaSH Guides", icon: BookMarked },
+    { href: "/notifications", label: "Notifications", icon: Bell },
 ];
 
 const BOTTOM_ITEMS = [
@@ -54,6 +57,8 @@ const BOTTOM_ITEMS = [
 export function Sidebar() {
     const pathname = usePathname();
     const [collapsed, setCollapsed] = useState(false);
+    const { data: unreadData } = useUnreadCount();
+    const unreadCount = unreadData?.unread_count ?? 0;
 
     return (
         <motion.aside
@@ -99,14 +104,21 @@ export function Sidebar() {
                                 <Button
                                     variant={isActive ? "secondary" : "ghost"}
                                     className={cn(
-                                        "w-full justify-start gap-3 h-10",
+                                        "w-full justify-start gap-3 h-10 relative",
                                         isActive &&
                                         "bg-primary/10 text-primary hover:bg-primary/15 font-medium",
                                         collapsed && "justify-center px-0"
                                     )}
                                     id={`nav-${item.href.slice(1)}`}
                                 >
-                                    <Icon className="h-4 w-4 shrink-0" />
+                                    <div className="relative">
+                                        <Icon className="h-4 w-4 shrink-0" />
+                                        {item.href === "/notifications" && unreadCount > 0 && (
+                                            <span className="absolute -top-1.5 -right-1.5 h-4 min-w-4 flex items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white px-1">
+                                                {unreadCount > 99 ? "99+" : unreadCount}
+                                            </span>
+                                        )}
+                                    </div>
                                     {!collapsed && (
                                         <span className="truncate">{item.label}</span>
                                     )}

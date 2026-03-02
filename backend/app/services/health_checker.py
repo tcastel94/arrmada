@@ -84,16 +84,48 @@ async def check_and_record(service: Service, db: AsyncSession) -> HealthStatus:
     if result.version:
         service.version = result.version
 
-    # ── Telegram alerts on status transition ──────────────────
-    try:
-        from app.services.telegram import notify_service_down, notify_service_recovered
-
-        if previous_status == "online" and result.status == "offline":
+    # ── Alerts on status transition ──────────────────────────────
+    if previous_status == "online" and result.status == "offline":
+        # Telegram
+        try:
+            from app.services.telegram import notify_service_down
             await notify_service_down(service.name, result.error or "Unknown")
-        elif previous_status == "offline" and result.status == "online":
+        except Exception as exc:
+            logger.debug("Telegram notification skipped: %s", exc)
+        # In-app notification
+        try:
+            from app.services.notification_service import create_notification
+            await create_notification(
+                db,
+                type="service_down",
+                title=f"{service.name} est hors ligne",
+                message=result.error or "Service inaccessible",
+                severity="error",
+                service_name=service.name,
+            )
+        except Exception:
+            pass
+
+    elif previous_status == "offline" and result.status == "online":
+        # Telegram
+        try:
+            from app.services.telegram import notify_service_recovered
             await notify_service_recovered(service.name, result.latency_ms or 0)
-    except Exception as exc:
-        logger.debug("Telegram notification skipped: %s", exc)
+        except Exception as exc:
+            logger.debug("Telegram notification skipped: %s", exc)
+        # In-app notification
+        try:
+            from app.services.notification_service import create_notification
+            await create_notification(
+                db,
+                type="service_recovered",
+                title=f"{service.name} est de retour en ligne",
+                message=f"Latence : {result.latency_ms}ms",
+                severity="success",
+                service_name=service.name,
+            )
+        except Exception:
+            pass
 
     await db.flush()
     return result

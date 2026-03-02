@@ -16,6 +16,7 @@ from app.models.request import MediaRequest  # noqa: E402, F401
 from app.models.recommendation import Recommendation  # noqa: E402, F401
 from app.models.analytics import AnalyticsSnapshot  # noqa: E402, F401
 from app.models.duplicate import DuplicateGroup  # noqa: E402, F401
+from app.models.notification import Notification  # noqa: E402, F401
 
 __all__ = [
     "Base",
@@ -26,4 +27,5 @@ __all__ = [
     "Recommendation",
     "AnalyticsSnapshot",
     "DuplicateGroup",
+    "Notification",
 ]
