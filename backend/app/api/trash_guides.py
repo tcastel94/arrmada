@@ -34,7 +34,7 @@ from app.services.trash_profiles import generate_recommendations
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
-router = APIRouter(prefix="/trash-guides", tags=["TRaSH Guides"])
+router = APIRouter(prefix="/api/trash-guides", tags=["TRaSH Guides"])
 
 
 # ── Request models ────────────────────────────────────────────
