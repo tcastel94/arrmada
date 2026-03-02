@@ -334,34 +334,47 @@ async def apply_recommendations(
             cf["name"].lower(): cf for cf in current_cfs
         }
 
-        # Get recommended CFs from cache
+        # Get ALL TRaSH CFs for this service
         all_trash_cfs = cache.get_custom_formats(service_type)
+        trash_by_id: dict[str, dict] = {
+            cf["trash_id"]: cf for cf in all_trash_cfs
+        }
 
         for rec_id in body.recommendations:
-            # Find the quality profile recommendation
+            # Find QP by source filename (profile_id IS the filename)
             qp = None
             for qp_data in cache.get_quality_profiles(service_type):
-                if qp_data.get("name", "").replace(" ", "-").lower() == rec_id.lower():
+                source = qp_data.get("_source_file", "").replace(".json", "")
+                if source == rec_id:
                     qp = qp_data
                     break
 
             if not qp:
+                logger.warning("QP '%s' not found in %s cache", rec_id, service_type)
                 continue
 
-            # Get CFs referenced in the QP
-            qp_cf_ids = set()
-            for fmt_item in (qp.get("formatItems") or []):
-                if "trash_id" in fmt_item:
-                    qp_cf_ids.add(fmt_item["trash_id"])
+            # formatItems can be dict {CF_name: trash_id} or list [{trash_id, ...}]
+            format_items = qp.get("formatItems", {})
+            qp_cf_ids: set[str] = set()
+
+            if isinstance(format_items, dict):
+                # Dict format: {"CF Name": "trash_id", ...}
+                qp_cf_ids = set(format_items.values())
+            elif isinstance(format_items, list):
+                # List format: [{"trash_id": "...", ...}, ...]
+                for fmt_item in format_items:
+                    if isinstance(fmt_item, dict) and "trash_id" in fmt_item:
+                        qp_cf_ids.add(fmt_item["trash_id"])
+
+            logger.info("QP '%s': %d CFs to apply", rec_id, len(qp_cf_ids))
 
             # Create/update each referenced CF
-            for cf in all_trash_cfs:
-                if cf["trash_id"] not in qp_cf_ids:
+            for cf_trash_id in qp_cf_ids:
+                cf = trash_by_id.get(cf_trash_id)
+                if not cf:
                     continue
 
-                # Build Sonarr-compatible CF payload
                 payload = _build_cf_payload(cf)
-
                 existing = current_by_name.get(cf["name"].lower())
 
                 if body.dry_run:
@@ -379,13 +392,13 @@ async def apply_recommendations(
                     else:
                         result = await client.post("/customformat", payload)
                         cfs_created += 1
-                        # Update our local map
                         current_by_name[cf["name"].lower()] = result
                 except Exception as e:
                     errors.append(f"CF '{cf['name']}': {e}")
 
     except Exception as e:
         errors.append(f"Connection error: {e}")
+        logger.error("Apply failed: %s", e, exc_info=True)
     finally:
         await client.close()
 
