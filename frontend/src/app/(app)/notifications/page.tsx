@@ -14,6 +14,7 @@ import {
     CheckCircle2,
     Info,
     Server,
+    Inbox,
 } from "lucide-react";
 import {
     useNotifications,
@@ -25,23 +26,31 @@ import { motion } from "framer-motion";
 
 const SEVERITY_CONFIG: Record<
     string,
-    { icon: typeof Info; color: string; bg: string }
+    { icon: typeof Info; color: string; gradient: string; dot: string }
 > = {
-    info: { icon: Info, color: "text-blue-400", bg: "bg-blue-500/10" },
+    info: {
+        icon: Info,
+        color: "text-blue-400",
+        gradient: "from-blue-500/20 to-blue-500/5",
+        dot: "bg-blue-400",
+    },
     success: {
         icon: CheckCircle2,
         color: "text-emerald-400",
-        bg: "bg-emerald-500/10",
+        gradient: "from-emerald-500/20 to-emerald-500/5",
+        dot: "bg-emerald-400",
     },
     warning: {
         icon: AlertTriangle,
-        color: "text-yellow-400",
-        bg: "bg-yellow-500/10",
+        color: "text-amber-400",
+        gradient: "from-amber-500/20 to-amber-500/5",
+        dot: "bg-amber-400",
     },
     error: {
         icon: AlertCircle,
         color: "text-red-400",
-        bg: "bg-red-500/10",
+        gradient: "from-red-500/20 to-red-500/5",
+        dot: "bg-red-400",
     },
 };
 
@@ -53,8 +62,18 @@ function timeAgo(dateStr: string): string {
     if (seconds < 60) return "À l'instant";
     if (seconds < 3600) return `Il y a ${Math.floor(seconds / 60)}min`;
     if (seconds < 86400) return `Il y a ${Math.floor(seconds / 3600)}h`;
-    return `Il y a ${Math.floor(seconds / 86400)}j`;
+    if (seconds < 604800) return `Il y a ${Math.floor(seconds / 86400)}j`;
+    return date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
 }
+
+const container = {
+    hidden: { opacity: 0 },
+    show: { opacity: 1, transition: { staggerChildren: 0.04 } },
+};
+const fadeUp = {
+    hidden: { opacity: 0, y: 12 },
+    show: { opacity: 1, y: 0, transition: { duration: 0.3, ease: "easeOut" } },
+};
 
 export default function NotificationsPage() {
     const { data, isLoading } = useNotifications(100);
@@ -78,57 +97,80 @@ export default function NotificationsPage() {
     return (
         <>
             <Header title="Notifications" />
-            <div className="p-6 max-w-3xl mx-auto space-y-4">
-                {/* Header bar */}
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <Bell className="h-5 w-5 text-muted-foreground" />
-                        <span className="text-sm text-muted-foreground">
-                            {unreadCount > 0
-                                ? `${unreadCount} non lue${unreadCount > 1 ? "s" : ""}`
-                                : "Tout est lu"}
-                        </span>
+            <motion.div
+                className="p-4 md:p-6 max-w-3xl mx-auto space-y-5"
+                variants={container}
+                initial="hidden"
+                animate="show"
+            >
+                {/* Hero Header */}
+                <motion.div variants={fadeUp}>
+                    <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-rose-600/20 via-pink-600/10 to-transparent ring-1 ring-white/5 p-6">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <div className="relative">
+                                    <div className="rounded-xl bg-rose-500/20 p-3">
+                                        <Bell className="h-6 w-6 text-rose-400" />
+                                    </div>
+                                    {unreadCount > 0 && (
+                                        <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-background">
+                                            {unreadCount > 9 ? "9+" : unreadCount}
+                                        </span>
+                                    )}
+                                </div>
+                                <div>
+                                    <h2 className="text-2xl font-bold tracking-tight">
+                                        Notifications
+                                    </h2>
+                                    <p className="text-sm text-muted-foreground mt-0.5">
+                                        {unreadCount > 0
+                                            ? `${unreadCount} non lue${unreadCount > 1 ? "s" : ""}`
+                                            : "Tout est lu ✨"}
+                                    </p>
+                                </div>
+                            </div>
+                            {unreadCount > 0 && (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => markAllRead.mutate()}
+                                    className="gap-1.5 border-white/10 hover:bg-white/5"
+                                >
+                                    <CheckCheck className="h-3.5 w-3.5" />
+                                    Tout marquer lu
+                                </Button>
+                            )}
+                        </div>
+                        <div className="absolute -top-16 -right-16 w-48 h-48 rounded-full bg-rose-500/10 blur-3xl" />
                     </div>
-                    {unreadCount > 0 && (
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => markAllRead.mutate()}
-                            className="text-xs gap-1.5"
-                        >
-                            <CheckCheck className="h-3.5 w-3.5" />
-                            Tout marquer comme lu
-                        </Button>
-                    )}
-                </div>
+                </motion.div>
 
-                {/* List */}
+                {/* Notifications List */}
                 {notifications.length === 0 ? (
-                    <EmptyState
-                        icon={Bell}
-                        title="Aucune notification"
-                        description="Les alertes de services, syncs TRaSH et autres événements apparaîtront ici"
-                    />
+                    <motion.div variants={fadeUp}>
+                        <div className="rounded-xl ring-1 ring-white/5 bg-card/30 p-12">
+                            <EmptyState
+                                icon={Inbox}
+                                title="Aucune notification"
+                                description="Les alertes de services, syncs TRaSH et autres événements apparaîtront ici"
+                            />
+                        </div>
+                    </motion.div>
                 ) : (
-                    <div className="space-y-2">
-                        {notifications.map((notif, i) => {
+                    <motion.div className="space-y-2" variants={container}>
+                        {notifications.map((notif) => {
                             const config =
                                 SEVERITY_CONFIG[notif.severity] ??
                                 SEVERITY_CONFIG.info;
                             const Icon = config.icon;
 
                             return (
-                                <motion.div
-                                    key={notif.id}
-                                    initial={{ opacity: 0, y: 8 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ delay: i * 0.03 }}
-                                >
+                                <motion.div key={notif.id} variants={fadeUp}>
                                     <Card
                                         className={cn(
-                                            "cursor-pointer transition-all hover:bg-muted/50",
-                                            !notif.is_read &&
-                                            "border-l-2 border-l-primary"
+                                            "border-0 ring-1 ring-white/5 bg-card/40 backdrop-blur-sm cursor-pointer overflow-hidden",
+                                            "hover:ring-white/10 transition-all duration-200",
+                                            !notif.is_read && "ring-primary/30"
                                         )}
                                         onClick={() => {
                                             if (!notif.is_read)
@@ -136,10 +178,11 @@ export default function NotificationsPage() {
                                         }}
                                     >
                                         <CardContent className="flex items-start gap-3 p-4">
+                                            {/* Icon */}
                                             <div
                                                 className={cn(
-                                                    "rounded-full p-2 shrink-0",
-                                                    config.bg
+                                                    "rounded-lg p-2 shrink-0 bg-gradient-to-br",
+                                                    config.gradient
                                                 )}
                                             >
                                                 <Icon
@@ -149,11 +192,13 @@ export default function NotificationsPage() {
                                                     )}
                                                 />
                                             </div>
+
+                                            {/* Content */}
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center justify-between gap-2">
                                                     <p
                                                         className={cn(
-                                                            "text-sm",
+                                                            "text-sm truncate",
                                                             !notif.is_read
                                                                 ? "font-semibold"
                                                                 : "font-medium text-muted-foreground"
@@ -161,7 +206,7 @@ export default function NotificationsPage() {
                                                     >
                                                         {notif.title}
                                                     </p>
-                                                    <span className="text-xs text-muted-foreground whitespace-nowrap">
+                                                    <span className="text-[10px] text-muted-foreground/60 whitespace-nowrap tabular-nums">
                                                         {timeAgo(
                                                             notif.created_at
                                                         )}
@@ -172,19 +217,19 @@ export default function NotificationsPage() {
                                                         {notif.message}
                                                     </p>
                                                 )}
-                                                <div className="flex gap-2 mt-1.5">
+                                                <div className="flex gap-1.5 mt-2">
                                                     {notif.service_name && (
                                                         <Badge
                                                             variant="outline"
-                                                            className="text-xs gap-1"
+                                                            className="text-[10px] gap-1 h-4 px-1.5 border-white/10"
                                                         >
-                                                            <Server className="h-3 w-3" />
+                                                            <Server className="h-2.5 w-2.5" />
                                                             {notif.service_name}
                                                         </Badge>
                                                     )}
                                                     <Badge
                                                         variant="outline"
-                                                        className="text-xs"
+                                                        className="text-[10px] h-4 px-1.5 border-white/10"
                                                     >
                                                         {notif.type.replace(
                                                             /_/g,
@@ -193,17 +238,32 @@ export default function NotificationsPage() {
                                                     </Badge>
                                                 </div>
                                             </div>
+
+                                            {/* Unread dot */}
                                             {!notif.is_read && (
-                                                <div className="h-2 w-2 rounded-full bg-primary shrink-0 mt-2" />
+                                                <div className="relative shrink-0 mt-1.5">
+                                                    <div
+                                                        className={cn(
+                                                            "h-2 w-2 rounded-full",
+                                                            config.dot
+                                                        )}
+                                                    />
+                                                    <div
+                                                        className={cn(
+                                                            "absolute inset-0 rounded-full animate-ping opacity-40",
+                                                            config.dot
+                                                        )}
+                                                    />
+                                                </div>
                                             )}
                                         </CardContent>
                                     </Card>
                                 </motion.div>
                             );
                         })}
-                    </div>
+                    </motion.div>
                 )}
-            </div>
+            </motion.div>
         </>
     );
 }

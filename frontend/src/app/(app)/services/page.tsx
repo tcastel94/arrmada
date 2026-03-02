@@ -5,21 +5,33 @@ import { Header } from "@/components/layout/header";
 import { ServiceCard } from "@/components/services/service-card";
 import { ServiceConfigDialog } from "@/components/services/service-config";
 import { EmptyState } from "@/components/shared/empty-state";
-import { CardSkeleton } from "@/components/shared/loading-skeleton";
 import { Button } from "@/components/ui/button";
-import { Plus, Server } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Plus, Server, Zap, Wifi, WifiOff } from "lucide-react";
 import {
     useServices,
     useCreateService,
     useUpdateService,
     useDeleteService,
     useTestConnection,
+    useGlobalHealth,
 } from "@/hooks/use-services";
 import { ArrService, CreateServicePayload } from "@/types/service";
 import { motion } from "framer-motion";
+import { cn } from "@/lib/utils";
+
+const container = {
+    hidden: { opacity: 0 },
+    show: { opacity: 1, transition: { staggerChildren: 0.07 } },
+};
+const fadeUp = {
+    hidden: { opacity: 0, y: 16 },
+    show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" } },
+};
 
 export default function ServicesPage() {
     const { data: services, isLoading } = useServices();
+    const { data: healthResults } = useGlobalHealth();
     const createMutation = useCreateService();
     const updateMutation = useUpdateService();
     const deleteMutation = useDeleteService();
@@ -83,65 +95,112 @@ export default function ServicesPage() {
         }
     };
 
+    const onlineCount = healthResults?.filter((h) => h.status === "online").length ?? 0;
+    const totalServices = services?.length ?? 0;
+
     return (
         <>
             <Header title="Services" />
-            <div className="p-6 space-y-6">
-                {/* Header bar */}
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h2 className="text-2xl font-bold tracking-tight">Services *arr</h2>
-                        <p className="text-sm text-muted-foreground">
-                            Gérez vos connexions aux services Sonarr, Radarr, et autres
-                        </p>
+            <motion.div
+                className="p-4 md:p-6 space-y-6 max-w-[1400px] mx-auto"
+                variants={container}
+                initial="hidden"
+                animate="show"
+            >
+                {/* Hero Header */}
+                <motion.div variants={fadeUp}>
+                    <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-indigo-600/20 via-purple-600/10 to-transparent ring-1 ring-white/5 p-6">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <div className="rounded-xl bg-indigo-500/20 p-3">
+                                    <Server className="h-6 w-6 text-indigo-400" />
+                                </div>
+                                <div>
+                                    <h2 className="text-2xl font-bold tracking-tight">
+                                        Services *arr
+                                    </h2>
+                                    <p className="text-sm text-muted-foreground mt-0.5">
+                                        Gérez vos connexions aux services Sonarr, Radarr, Lidarr et plus
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                {totalServices > 0 && (
+                                    <Badge
+                                        variant="outline"
+                                        className={cn(
+                                            "gap-1.5 px-3 py-1",
+                                            onlineCount === totalServices
+                                                ? "border-emerald-500/30 text-emerald-400"
+                                                : "border-amber-500/30 text-amber-400"
+                                        )}
+                                    >
+                                        {onlineCount === totalServices ? (
+                                            <Wifi className="h-3 w-3" />
+                                        ) : (
+                                            <WifiOff className="h-3 w-3" />
+                                        )}
+                                        {onlineCount}/{totalServices} en ligne
+                                    </Badge>
+                                )}
+                                <Button
+                                    onClick={() => {
+                                        setEditingService(null);
+                                        setDialogOpen(true);
+                                    }}
+                                    id="add-service-btn"
+                                    className="gap-2 bg-indigo-600 hover:bg-indigo-500"
+                                >
+                                    <Plus className="h-4 w-4" />
+                                    Ajouter
+                                </Button>
+                            </div>
+                        </div>
+                        {/* Decorative */}
+                        <div className="absolute -top-16 -right-16 w-48 h-48 rounded-full bg-indigo-500/10 blur-3xl" />
+                        <div className="absolute -bottom-8 -left-8 w-32 h-32 rounded-full bg-purple-500/10 blur-3xl" />
                     </div>
-                    <Button
-                        onClick={() => {
-                            setEditingService(null);
-                            setDialogOpen(true);
-                        }}
-                        id="add-service-btn"
-                    >
-                        <Plus className="h-4 w-4 mr-2" />
-                        Ajouter
-                    </Button>
-                </div>
+                </motion.div>
 
                 {/* Services Grid */}
                 {isLoading ? (
                     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                         {Array.from({ length: 6 }).map((_, i) => (
-                            <CardSkeleton key={i} />
+                            <div
+                                key={i}
+                                className="h-40 rounded-xl bg-muted/20 animate-pulse ring-1 ring-white/5"
+                            />
                         ))}
                     </div>
                 ) : !services || services.length === 0 ? (
-                    <EmptyState
-                        icon={Server}
-                        title="Aucun service configuré"
-                        description="Ajoutez votre premier service *arr pour commencer à utiliser ArrMada"
-                        action={{
-                            label: "Ajouter un service",
-                            onClick: () => setDialogOpen(true),
-                        }}
-                    />
+                    <motion.div variants={fadeUp}>
+                        <div className="rounded-xl ring-1 ring-white/5 bg-card/30 p-12">
+                            <EmptyState
+                                icon={Server}
+                                title="Aucun service configuré"
+                                description="Ajoutez votre premier service *arr pour commencer à utiliser ArrMada"
+                                action={{
+                                    label: "Ajouter un service",
+                                    onClick: () => setDialogOpen(true),
+                                }}
+                            />
+                        </div>
+                    </motion.div>
                 ) : (
                     <motion.div
                         className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
-                        initial="hidden"
-                        animate="visible"
-                        variants={{
-                            visible: { transition: { staggerChildren: 0.05 } },
-                        }}
+                        variants={container}
                     >
                         {services.map((service) => (
-                            <ServiceCard
-                                key={service.id}
-                                service={service}
-                                onTest={handleTest}
-                                onEdit={handleEdit}
-                                onDelete={handleDelete}
-                                isTesting={testMutation.isPending}
-                            />
+                            <motion.div key={service.id} variants={fadeUp}>
+                                <ServiceCard
+                                    service={service}
+                                    onTest={handleTest}
+                                    onEdit={handleEdit}
+                                    onDelete={handleDelete}
+                                    isTesting={testMutation.isPending}
+                                />
+                            </motion.div>
                         ))}
                     </motion.div>
                 )}
@@ -157,7 +216,7 @@ export default function ServicesPage() {
                     service={editingService}
                     isLoading={createMutation.isPending || updateMutation.isPending}
                 />
-            </div>
+            </motion.div>
         </>
     );
 }

@@ -4,7 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import { Header } from "@/components/layout/header";
 import { EmptyState } from "@/components/shared/empty-state";
-import { CardSkeleton } from "@/components/shared/loading-skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,8 +22,10 @@ import {
     Search,
     ChevronLeft,
     ChevronRight,
-    Grid3X3,
-    List,
+    Library,
+    SortAsc,
+    SortDesc,
+    HardDrive,
 } from "lucide-react";
 import { useMedia, type MediaItem } from "@/hooks/use-media";
 import { cn } from "@/lib/utils";
@@ -38,95 +39,117 @@ function formatBytes(bytes: number): string {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
 }
 
+const container = {
+    hidden: { opacity: 0 },
+    show: { opacity: 1, transition: { staggerChildren: 0.03 } },
+};
+const fadeUp = {
+    hidden: { opacity: 0, y: 12, scale: 0.97 },
+    show: {
+        opacity: 1,
+        y: 0,
+        scale: 1,
+        transition: { duration: 0.3, ease: "easeOut" },
+    },
+};
+
 function MediaCard({ item }: { item: MediaItem }) {
     return (
-        <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.2 }}
-        >
+        <motion.div variants={fadeUp}>
             <Link href={`/media/${item.type}/${item.external_id}`}>
-                <Card className="overflow-hidden transition-all duration-200 hover:scale-[1.02] hover:border-primary/20 group cursor-pointer">
+                <Card className="overflow-hidden border-0 ring-1 ring-white/5 bg-card/40 transition-all duration-300 hover:ring-white/15 hover:scale-[1.03] hover:shadow-xl hover:shadow-black/20 group cursor-pointer">
                     {/* Poster */}
-                    <div className="relative aspect-[2/3] bg-muted overflow-hidden">
+                    <div className="relative aspect-[2/3] bg-muted/20 overflow-hidden">
                         {item.poster_url ? (
                             <img
                                 src={item.poster_url}
                                 alt={item.title}
-                                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                                 loading="lazy"
                             />
                         ) : (
-                            <div className="w-full h-full flex items-center justify-center">
+                            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-muted/30 to-muted/10">
                                 {item.type === "movie" ? (
-                                    <Film className="h-12 w-12 text-muted-foreground/30" />
+                                    <Film className="h-12 w-12 text-muted-foreground/20" />
                                 ) : (
-                                    <Tv className="h-12 w-12 text-muted-foreground/30" />
+                                    <Tv className="h-12 w-12 text-muted-foreground/20" />
                                 )}
                             </div>
                         )}
-                        {/* Overlay badges */}
+                        {/* Top badges */}
                         <div className="absolute top-2 left-2 flex flex-col gap-1">
                             {item.quality && (
-                                <Badge className="text-[10px] bg-black/70 border-0">
+                                <Badge className="text-[10px] bg-black/60 backdrop-blur-sm border-0 text-white">
                                     {item.quality}
                                 </Badge>
                             )}
                         </div>
                         <div className="absolute top-2 right-2">
                             {!item.has_file && (
-                                <Badge variant="destructive" className="text-[10px]">
+                                <Badge className="text-[10px] bg-red-500/80 backdrop-blur-sm border-0 text-white">
                                     Manquant
                                 </Badge>
                             )}
                         </div>
-                        {/* Bottom gradient overlay */}
-                        <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-black/80 to-transparent" />
-                        <div className="absolute bottom-2 left-2 right-2">
-                            <p className="text-sm font-semibold text-white truncate">
+                        {/* Bottom gradient */}
+                        <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-black/90 via-black/50 to-transparent" />
+                        <div className="absolute bottom-2.5 left-2.5 right-2.5">
+                            <p className="text-sm font-semibold text-white truncate drop-shadow-lg">
                                 {item.title}
                             </p>
                             <div className="flex items-center gap-2 mt-0.5">
                                 {item.year && (
-                                    <span className="text-xs text-white/70">{item.year}</span>
+                                    <span className="text-[11px] text-white/70">
+                                        {item.year}
+                                    </span>
                                 )}
-                                <span className="text-xs text-white/50">
+                                <span className="text-[10px] text-white/40">
                                     {item.source_service}
                                 </span>
                             </div>
                         </div>
                     </div>
                     {/* Meta */}
-                    <CardContent className="p-3 space-y-1.5">
+                    <CardContent className="p-2.5 space-y-1.5">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-1.5">
                                 {item.type === "movie" ? (
-                                    <Film className="h-3 w-3 text-muted-foreground" />
+                                    <Film className="h-3 w-3 text-violet-400" />
                                 ) : (
-                                    <Tv className="h-3 w-3 text-muted-foreground" />
+                                    <Tv className="h-3 w-3 text-blue-400" />
                                 )}
-                                <span className="text-xs text-muted-foreground capitalize">
+                                <span className="text-[10px] text-muted-foreground">
                                     {item.type === "movie" ? "Film" : "Série"}
                                 </span>
                             </div>
-                            <span className="text-xs text-muted-foreground">
+                            <span className="text-[10px] text-muted-foreground/60 tabular-nums">
                                 {formatBytes(item.size_bytes)}
                             </span>
                         </div>
                         {item.type === "series" &&
                             item.episodes_have !== undefined &&
                             item.episodes_total !== undefined && (
-                                <p className="text-xs text-muted-foreground">
-                                    {item.episodes_have}/{item.episodes_total} épisodes
-                                </p>
+                                <div className="relative h-1 rounded-full bg-muted/30 overflow-hidden">
+                                    <div
+                                        className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-blue-500 to-cyan-400"
+                                        style={{
+                                            width: `${item.episodes_total
+                                                    ? (item.episodes_have /
+                                                        item.episodes_total) *
+                                                    100
+                                                    : 0
+                                                }%`,
+                                        }}
+                                    />
+                                </div>
                             )}
                         {item.genres && item.genres.length > 0 && (
                             <div className="flex flex-wrap gap-1">
-                                {item.genres.slice(0, 3).map((g) => (
+                                {item.genres.slice(0, 2).map((g) => (
                                     <Badge
                                         key={g}
-                                        variant="secondary"
-                                        className="text-[10px] px-1.5 py-0"
+                                        variant="outline"
+                                        className="text-[9px] px-1 py-0 h-3.5 border-white/10"
                                     >
                                         {g}
                                     </Badge>
@@ -159,11 +182,46 @@ export default function MediaPage() {
     return (
         <>
             <Header title="Médiathèque" />
-            <div className="p-6 space-y-6">
-                {/* Filters bar */}
-                <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+            <motion.div
+                className="p-4 md:p-6 space-y-5 max-w-[1600px] mx-auto"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.3 }}
+            >
+                {/* Hero Header */}
+                <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-violet-600/20 via-fuchsia-600/10 to-transparent ring-1 ring-white/5 p-6">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                            <div className="rounded-xl bg-violet-500/20 p-3">
+                                <Library className="h-6 w-6 text-violet-400" />
+                            </div>
+                            <div>
+                                <h2 className="text-2xl font-bold tracking-tight">
+                                    Médiathèque
+                                </h2>
+                                <p className="text-sm text-muted-foreground mt-0.5">
+                                    {data ? (
+                                        <>
+                                            <span className="font-semibold text-foreground tabular-nums">
+                                                {data.pagination.total}
+                                            </span>{" "}
+                                            résultat{data.pagination.total !== 1 ? "s" : ""}
+                                        </>
+                                    ) : (
+                                        "Chargement..."
+                                    )}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="absolute -top-16 -right-16 w-48 h-48 rounded-full bg-violet-500/10 blur-3xl" />
+                    <div className="absolute -bottom-8 -left-8 w-32 h-32 rounded-full bg-fuchsia-500/10 blur-3xl" />
+                </div>
+
+                {/* Filter Bar */}
+                <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center rounded-xl ring-1 ring-white/5 bg-card/30 backdrop-blur-sm p-3">
                     <div className="relative flex-1 max-w-sm">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/50" />
                         <Input
                             placeholder="Rechercher un titre…"
                             value={search}
@@ -171,7 +229,7 @@ export default function MediaPage() {
                                 setSearch(e.target.value);
                                 setPage(1);
                             }}
-                            className="pl-10"
+                            className="pl-10 border-white/10 bg-transparent"
                             id="media-search"
                         />
                     </div>
@@ -183,10 +241,16 @@ export default function MediaPage() {
                             setPage(1);
                         }}
                     >
-                        <TabsList>
+                        <TabsList className="bg-muted/30">
                             <TabsTrigger value="all">Tout</TabsTrigger>
-                            <TabsTrigger value="movie">Films</TabsTrigger>
-                            <TabsTrigger value="series">Séries</TabsTrigger>
+                            <TabsTrigger value="movie">
+                                <Film className="h-3 w-3 mr-1" />
+                                Films
+                            </TabsTrigger>
+                            <TabsTrigger value="series">
+                                <Tv className="h-3 w-3 mr-1" />
+                                Séries
+                            </TabsTrigger>
                         </TabsList>
                     </Tabs>
 
@@ -197,7 +261,7 @@ export default function MediaPage() {
                             setPage(1);
                         }}
                     >
-                        <SelectTrigger className="w-[140px]">
+                        <SelectTrigger className="w-[140px] border-white/10 bg-transparent">
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -211,45 +275,47 @@ export default function MediaPage() {
                     <Button
                         variant="outline"
                         size="icon"
-                        onClick={() => setOrder(order === "asc" ? "desc" : "asc")}
-                        className="shrink-0"
+                        onClick={() =>
+                            setOrder(order === "asc" ? "desc" : "asc")
+                        }
+                        className="shrink-0 border-white/10"
                     >
-                        {order === "asc" ? "↑" : "↓"}
+                        {order === "asc" ? (
+                            <SortAsc className="h-4 w-4" />
+                        ) : (
+                            <SortDesc className="h-4 w-4" />
+                        )}
                     </Button>
                 </div>
 
-                {/* Results count */}
-                {data && (
-                    <p className="text-sm text-muted-foreground">
-                        {data.pagination.total} résultat{data.pagination.total !== 1 ? "s" : ""}
-                    </p>
-                )}
-
                 {/* Grid */}
                 {isLoading ? (
-                    <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-                        {Array.from({ length: 12 }).map((_, i) => (
-                            <CardSkeleton key={i} />
+                    <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8">
+                        {Array.from({ length: 16 }).map((_, i) => (
+                            <div
+                                key={i}
+                                className="aspect-[2/3] rounded-xl bg-muted/15 animate-pulse ring-1 ring-white/5"
+                            />
                         ))}
                     </div>
                 ) : !data || data.items.length === 0 ? (
-                    <EmptyState
-                        icon={Film}
-                        title="Aucun média trouvé"
-                        description={
-                            search
-                                ? `Aucun résultat pour « ${search} »`
-                                : "Connectez vos services *arr pour voir votre médiathèque"
-                        }
-                    />
+                    <div className="rounded-xl ring-1 ring-white/5 bg-card/30 p-12">
+                        <EmptyState
+                            icon={Film}
+                            title="Aucun média trouvé"
+                            description={
+                                search
+                                    ? `Aucun résultat pour « ${search} »`
+                                    : "Connectez vos services *arr pour voir votre médiathèque"
+                            }
+                        />
+                    </div>
                 ) : (
                     <motion.div
-                        className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6"
+                        className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8"
+                        variants={container}
                         initial="hidden"
-                        animate="visible"
-                        variants={{
-                            visible: { transition: { staggerChildren: 0.03 } },
-                        }}
+                        animate="show"
                     >
                         {data.items.map((item) => (
                             <MediaCard
@@ -262,31 +328,57 @@ export default function MediaPage() {
 
                 {/* Pagination */}
                 {data && data.pagination.total_pages > 1 && (
-                    <div className="flex items-center justify-center gap-4">
+                    <div className="flex items-center justify-center gap-3">
                         <Button
                             variant="outline"
                             size="sm"
                             disabled={page <= 1}
                             onClick={() => setPage(page - 1)}
+                            className="gap-1 border-white/10"
                         >
-                            <ChevronLeft className="h-4 w-4 mr-1" />
+                            <ChevronLeft className="h-4 w-4" />
                             Précédent
                         </Button>
-                        <span className="text-sm text-muted-foreground">
-                            Page {page} / {data.pagination.total_pages}
-                        </span>
+                        <div className="flex items-center gap-1">
+                            {Array.from(
+                                { length: Math.min(data.pagination.total_pages, 7) },
+                                (_, i) => {
+                                    const p = i + 1;
+                                    return (
+                                        <Button
+                                            key={p}
+                                            variant={p === page ? "default" : "ghost"}
+                                            size="sm"
+                                            onClick={() => setPage(p)}
+                                            className={cn(
+                                                "w-8 h-8 p-0 tabular-nums",
+                                                p === page && "bg-violet-600 hover:bg-violet-500"
+                                            )}
+                                        >
+                                            {p}
+                                        </Button>
+                                    );
+                                }
+                            )}
+                            {data.pagination.total_pages > 7 && (
+                                <span className="text-xs text-muted-foreground px-1">
+                                    …{data.pagination.total_pages}
+                                </span>
+                            )}
+                        </div>
                         <Button
                             variant="outline"
                             size="sm"
                             disabled={page >= data.pagination.total_pages}
                             onClick={() => setPage(page + 1)}
+                            className="gap-1 border-white/10"
                         >
                             Suivant
-                            <ChevronRight className="h-4 w-4 ml-1" />
+                            <ChevronRight className="h-4 w-4" />
                         </Button>
                     </div>
                 )}
-            </div>
+            </motion.div>
         </>
     );
 }
