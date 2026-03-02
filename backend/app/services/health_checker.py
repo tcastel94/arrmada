@@ -50,7 +50,8 @@ def _build_client(service: Service) -> ArrBaseClient:
     """Instantiate the appropriate client for a service."""
     _init_client_map()
     api_key = decrypt_api_key(service.api_key)
-    client_cls = _CLIENT_MAP.get(service.type, ArrBaseClient)
+    svc_type = service.type.lower()  # Normalize: "Bazarr" → "bazarr"
+    client_cls = _CLIENT_MAP.get(svc_type, ArrBaseClient)
     return client_cls(url=service.url, api_key=api_key)
 
 
