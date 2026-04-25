@@ -52,11 +52,10 @@ async def search_media(
 async def trigger_scrape(
     payload: dict,
     background_tasks: BackgroundTasks,
-    db: AsyncSession = Depends(get_db),
 ):
     """Trigger a background metadata scrape for selected items."""
     items = payload.get("items", [])
-    background_tasks.add_task(scrape_movies, db, items)
+    background_tasks.add_task(scrape_movies, items)
     return {"status": "scraping started", "items_count": len(items)}
 
 

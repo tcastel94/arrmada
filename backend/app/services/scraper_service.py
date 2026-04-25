@@ -9,6 +9,7 @@ import xml.etree.ElementTree as ET
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
+from app.database import async_session_factory
 from app.models.service import Service
 from app.services.encryption import decrypt_api_key
 from app.services.radarr import RadarrClient
@@ -24,15 +25,18 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-async def scrape_movies(db: AsyncSession, movies: List[dict]):
+async def scrape_movies(movies: List[dict]):
     """
     Scrape list of movies: generate NFOs and download posters/fanarts.
     movies = [{"movie_id": 1, "tmdb_id": 1234, "imdb_id": "tt123", "service_id": 1}]
     """
-    # Group by service
-    service_map = {}
-    for svc in await db.execute(select(Service)):
-        service_map[svc.id] = svc
+    # Create our own session since BackgroundTasks run after the route session closes
+    async with async_session_factory() as db:
+        # Group by service
+        service_map = {}
+        result = await db.execute(select(Service))
+        for row in result.scalars().all():
+            service_map[row.id] = row
 
     for m in movies:
         svc_name = m.get("source_service")
