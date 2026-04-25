@@ -13,13 +13,34 @@ from app.database import async_session_factory
 from app.models.service import Service
 from app.services.encryption import decrypt_api_key
 from app.services.radarr import RadarrClient
-def map_path(p: str) -> str:
-    if p.startswith("/media/"):
-        return p.replace("/media/", "/mnt/user/medias/", 1)
-    if p.startswith("/tv/"):
-        return p.replace("/tv/", "/mnt/user/medias/seriesTV/", 1)
+def map_path(p: str, service_type: str = "radarr") -> str:
+    """Map container paths to host paths based on Docker volume binds.
+    
+    Radarr volumes:   /media -> /mnt/user/medias/movies, /data -> /mnt/user/medias/downloads/complete, /mangas -> /mnt/user/medias/mangas/films
+    Sonarr volumes:   /media -> /mnt/user/medias, /data -> /mnt/user/medias/downloads/complete, /mangas -> /mnt/user/medias/mangas/series
+    """
+    if service_type == "radarr":
+        if p.startswith("/media/"):
+            return p.replace("/media/", "/mnt/user/medias/movies/", 1)
+        if p.startswith("/media"):
+            return p.replace("/media", "/mnt/user/medias/movies", 1)
+        if p.startswith("/mangas/"):
+            return p.replace("/mangas/", "/mnt/user/medias/mangas/films/", 1)
+        if p.startswith("/mangas"):
+            return p.replace("/mangas", "/mnt/user/medias/mangas/films", 1)
+    elif service_type == "sonarr":
+        if p.startswith("/media/"):
+            return p.replace("/media/", "/mnt/user/medias/", 1)
+        if p.startswith("/media"):
+            return p.replace("/media", "/mnt/user/medias", 1)
+        if p.startswith("/mangas/"):
+            return p.replace("/mangas/", "/mnt/user/medias/mangas/series/", 1)
+        if p.startswith("/mangas"):
+            return p.replace("/mangas", "/mnt/user/medias/mangas/series", 1)
     if p.startswith("/data/"):
-        return p.replace("/data/", "/mnt/user/downloads/", 1)
+        return p.replace("/data/", "/mnt/user/medias/downloads/complete/", 1)
+    if p.startswith("/data"):
+        return p.replace("/data", "/mnt/user/medias/downloads/complete", 1)
     return p
 from app.utils.logger import get_logger
 
@@ -75,7 +96,7 @@ async def scrape_movies(movies: List[dict]):
             if not movie_data.get("path"):
                 continue
                 
-            mapped_path = map_path(movie_data["path"])
+            mapped_path = map_path(movie_data["path"], svc.type)
             folder_path = Path(mapped_path)
             
             if not folder_path.exists():
