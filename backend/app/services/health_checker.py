@@ -87,6 +87,19 @@ async def check_and_record(service: Service, db: AsyncSession) -> HealthStatus:
 
     # ── Alerts on status transition ──────────────────────────────
     if previous_status == "online" and result.status == "offline":
+        # SSE event
+        try:
+            from app.utils.event_bus import event_bus
+            import asyncio
+            asyncio.ensure_future(event_bus.publish("service_status", {
+                "service": service.name,
+                "type": service.type,
+                "status": "offline",
+                "error": result.error,
+                "previous": previous_status,
+            }))
+        except Exception:
+            pass
         # Telegram
         try:
             from app.services.telegram import notify_service_down
@@ -108,6 +121,19 @@ async def check_and_record(service: Service, db: AsyncSession) -> HealthStatus:
             pass
 
     elif previous_status == "offline" and result.status == "online":
+        # SSE event
+        try:
+            from app.utils.event_bus import event_bus
+            import asyncio
+            asyncio.ensure_future(event_bus.publish("service_status", {
+                "service": service.name,
+                "type": service.type,
+                "status": "online",
+                "latency_ms": result.latency_ms,
+                "previous": previous_status,
+            }))
+        except Exception:
+            pass
         # Telegram
         try:
             from app.services.telegram import notify_service_recovered

@@ -21,6 +21,11 @@ import {
     FolderOpen,
     BookMarked,
     Bell,
+    CalendarDays,
+    HardDrive,
+    Radar,
+    Gauge,
+    Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -37,12 +42,17 @@ import { useUnreadCount } from "@/hooks/use-notifications";
 const NAV_ITEMS = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/media", label: "Médiathèque", icon: Film },
+    { href: "/calendar", label: "Calendrier", icon: CalendarDays },
     { href: "/downloads", label: "Downloads", icon: Download },
     { href: "/search", label: "Recherche", icon: Search },
     { href: "/requests", label: "Requêtes", icon: MessageSquarePlus },
-    { href: "/recommendations", label: "Recommandations", icon: Sparkles },
+    { href: "/recommendations", label: "Découvrir", icon: Sparkles },
     { href: "/analytics", label: "Analytics", icon: BarChart3 },
     { href: "/duplicates", label: "Doublons", icon: Copy },
+    { href: "/quality", label: "Qualité", icon: Gauge },
+    { href: "/cleanup", label: "Nettoyage", icon: Trash2 },
+    { href: "/prowlarr", label: "Indexers", icon: Radar },
+    { href: "/system", label: "Système", icon: HardDrive },
     { href: "/docker", label: "Docker", icon: Container },
     { href: "/fichiers", label: "Fichiers", icon: FolderOpen },
     { href: "/trash-guides", label: "TRaSH Guides", icon: BookMarked },

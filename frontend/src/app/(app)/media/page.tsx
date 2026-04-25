@@ -25,7 +25,11 @@ import {
     Library,
     SortAsc,
     SortDesc,
-    HardDrive,
+    SquareCheck,
+    Square,
+    RefreshCw,
+    CloudDownload,
+    Settings
 } from "lucide-react";
 import { useMedia, type MediaItem } from "@/hooks/use-media";
 import { cn } from "@/lib/utils";
@@ -53,11 +57,27 @@ const fadeUp = {
     },
 };
 
-function MediaCard({ item }: { item: MediaItem }) {
+function MediaCard({ item, selectionMode, isSelected, onToggle }: { item: MediaItem, selectionMode?: boolean, isSelected?: boolean, onToggle?: () => void }) {
     return (
-        <motion.div variants={fadeUp}>
-            <Link href={`/media/${item.type}/${item.external_id}`}>
-                <Card className="overflow-hidden border-0 ring-1 ring-white/5 bg-card/40 transition-all duration-300 hover:ring-white/15 hover:scale-[1.03] hover:shadow-xl hover:shadow-black/20 group cursor-pointer">
+        <motion.div variants={fadeUp} className="relative">
+            {selectionMode && (
+                <div 
+                    className="absolute top-2 right-2 z-20 cursor-pointer p-1" 
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggle?.(); }}
+                >
+                    {isSelected ? <SquareCheck className="h-5 w-5 text-violet-400 drop-shadow-md" /> : <Square className="h-5 w-5 text-white/50 drop-shadow-md" />}
+                </div>
+            )}
+            <Link href={`/media/${item.type}/${item.external_id}`} onClick={(e) => {
+                if (selectionMode) {
+                    e.preventDefault();
+                    onToggle?.();
+                }
+            }}>
+                <Card className={cn(
+                    "overflow-hidden border-0 ring-1 bg-card/40 transition-all duration-300 hover:scale-[1.03] hover:shadow-xl hover:shadow-black/20 group cursor-pointer",
+                    isSelected ? "ring-violet-500 ring-2" : "ring-white/5 hover:ring-white/15"
+                )}>
                     {/* Poster */}
                     <div className="relative aspect-[2/3] bg-muted/20 overflow-hidden">
                         {item.poster_url ? (
@@ -169,6 +189,10 @@ export default function MediaPage() {
     const [sort, setSort] = useState("title");
     const [order, setOrder] = useState("asc");
     const [page, setPage] = useState(1);
+    
+    // Selection state
+    const [selectionMode, setSelectionMode] = useState(false);
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
     const { data, isLoading } = useMedia({
         type: type === "all" ? undefined : type,
@@ -286,6 +310,89 @@ export default function MediaPage() {
                             <SortDesc className="h-4 w-4" />
                         )}
                     </Button>
+                    
+                    {/* Spacer for sm screens */}
+                    <div className="hidden lg:flex flex-1" />
+
+                    {/* Action Buttons */}
+                    <div className="flex flex-wrap items-center gap-2 mt-2 sm:mt-0 ml-auto shrink-0">
+                        {selectionMode ? (
+                            <>
+                                <span className="text-sm text-muted-foreground mr-2 font-medium">{selectedIds.size} sél.</span>
+                                <Button 
+                                    size="sm" 
+                                    variant="default"
+                                    className="bg-violet-600 hover:bg-violet-500"
+                                    onClick={async () => {
+                                        const items = data?.items.filter(i => selectedIds.has(i.external_id));
+                                        if (items?.length) {
+                                            await fetch("/api/media/scrape", { 
+                                                method: "POST", 
+                                                headers: { "Content-Type": "application/json" }, 
+                                                body: JSON.stringify({ items: items.map(i => ({ movie_id: i.external_id, tmdb_id: i.tmdb_id, source_service: i.source_service })) }) 
+                                            });
+                                            alert("Scraping démarré pour la sélection !");
+                                            setSelectionMode(false);
+                                            setSelectedIds(new Set());
+                                        }
+                                    }}
+                                >
+                                    <CloudDownload className="h-4 w-4 mr-1.5" />
+                                    Scraper SR
+                                </Button>
+                                <Button size="sm" variant="ghost" onClick={() => { setSelectionMode(false); setSelectedIds(new Set()); }}>Annuler</Button>
+                            </>
+                        ) : (
+                            <>
+                                <Button size="sm" variant="outline" onClick={() => setSelectionMode(true)} className="border-white/10">
+                                    <SquareCheck className="h-4 w-4 mr-1.5" />
+                                    Sélectionner
+                                </Button>
+                                <Button 
+                                    size="sm" 
+                                    variant="outline" 
+                                    className="border-white/10"
+                                    onClick={async () => {
+                                        if (data?.items) {
+                                            await fetch("/api/media/scrape", { 
+                                                method: "POST", 
+                                                headers: { "Content-Type": "application/json" }, 
+                                                body: JSON.stringify({ items: data.items.map(i => ({ movie_id: i.external_id, tmdb_id: i.tmdb_id, source_service: i.source_service })) }) 
+                                            });
+                                            alert("Scraping de tous les éléments affichés démarré !");
+                                        }
+                                    }}
+                                >
+                                    <CloudDownload className="h-4 w-4 mr-1.5" />
+                                    Scraper Page
+                                </Button>
+                                <div className="flex items-center">
+                                    <Button 
+                                        size="sm"
+                                        variant="default"
+                                        className="bg-sky-600 hover:bg-sky-500 shadow-lg shadow-sky-900/20 rounded-r-none border-r border-sky-400"
+                                        onClick={async () => {
+                                            await fetch("/api/kodi/sync", { method: "POST" });
+                                            alert("Synchronisation Kodi démarrée !");
+                                        }}
+                                    >
+                                        <RefreshCw className="h-4 w-4 mr-1.5" />
+                                        Sync Kodi
+                                    </Button>
+                                    <Button 
+                                        size="icon" 
+                                        variant="default" 
+                                        className="bg-sky-600 hover:bg-sky-500 rounded-l-none h-9 w-9"
+                                        asChild
+                                    >
+                                        <Link href="/settings/kodi" title="Paramètres Kodi">
+                                            <Settings className="h-4 w-4" />
+                                        </Link>
+                                    </Button>
+                                </div>
+                            </>
+                        )}
+                    </div>
                 </div>
 
                 {/* Grid */}
@@ -321,6 +428,14 @@ export default function MediaPage() {
                             <MediaCard
                                 key={`${item.type}-${item.external_id}`}
                                 item={item}
+                                selectionMode={selectionMode}
+                                isSelected={selectedIds.has(item.external_id)}
+                                onToggle={() => {
+                                    const next = new Set(selectedIds);
+                                    if (next.has(item.external_id)) next.delete(item.external_id);
+                                    else next.add(item.external_id);
+                                    setSelectedIds(next);
+                                }}
                             />
                         ))}
                     </motion.div>

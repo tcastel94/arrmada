@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { isAuthenticated } from "@/lib/api-client";
 import { useRouter } from "next/navigation";
 import { useSetupStatus } from "@/hooks/use-setup";
+import { useSSE } from "@/hooks/use-sse";
 import { Loader2 } from "lucide-react";
 
 export default function AppLayout({
@@ -42,6 +43,16 @@ export default function AppLayout({
             </div>
         );
     }
+
+    return (
+        <AppContent>{children}</AppContent>
+    );
+}
+
+/** Inner component that activates SSE after auth */
+function AppContent({ children }: { children: React.ReactNode }) {
+    // Connect to SSE event stream for real-time updates
+    useSSE();
 
     return (
         <div className="min-h-screen">

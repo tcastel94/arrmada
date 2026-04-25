@@ -1,8 +1,9 @@
 import { ServiceType } from "@/types";
 
 /** API base URL */
-export const API_URL =
-    process.env.NEXT_PUBLIC_API_URL || "http://localhost:8420";
+export const API_URL = typeof window !== "undefined"
+    ? `${window.location.protocol}//${window.location.hostname}:8420`
+    : (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8420");
 
 /** Service type metadata */
 export const SERVICE_META: Record<

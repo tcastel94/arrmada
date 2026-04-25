@@ -53,3 +53,8 @@ class SonarrClient(ArrBaseClient):
     async def get_queue(self) -> dict[str, Any]:
         """Fetch the download queue."""
         return await self.get("/queue", params={"pageSize": 50})
+
+    # ── Disk Space ────────────────────────────────────────────
+    async def get_disk_space(self) -> list[dict[str, Any]]:
+        """Fetch disk space info."""
+        return await self.get("/diskspace")

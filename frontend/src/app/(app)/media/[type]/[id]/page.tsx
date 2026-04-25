@@ -12,6 +12,7 @@ import {
     Calendar,
     Clock,
     Download,
+    CloudDownload,
     ExternalLink,
     Film,
     FolderOpen,
@@ -43,6 +44,7 @@ import { useProfileOverrides, useAvailableProfiles, useCreateOverride, useDelete
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { useState } from "react";
+import { toast } from "sonner";
 
 function formatBytes(bytes: number): string {
     if (!bytes) return "—";
@@ -262,6 +264,7 @@ export default function MediaDetailPage() {
     const id = params.id as string;
 
     const { data: media, isLoading, error } = useMediaDetail(type, id);
+    const [isScraping, setIsScraping] = useState(false);
 
     if (isLoading) {
         return (
@@ -460,6 +463,43 @@ export default function MediaDetailPage() {
 
                             {/* Action buttons */}
                             <div className="flex flex-wrap gap-2 pt-2">
+                                <Button 
+                                    variant="default" 
+                                    size="sm" 
+                                    className="bg-indigo-600 hover:bg-indigo-500 text-white"
+                                    disabled={isScraping}
+                                    onClick={async () => {
+                                        setIsScraping(true);
+                                        try {
+                                            const payload = {
+                                                movie_id: media.id,
+                                                tmdb_id: media.tmdb_id,
+                                                imdb_id: media.imdb_id,
+                                                source_service: "radarr"
+                                            };
+                                            const res = await fetch("/api/media/scrape", {
+                                                method: "POST",
+                                                headers: { "Content-Type": "application/json" },
+                                                body: JSON.stringify([payload])
+                                            });
+                                            if (res.ok) {
+                                                toast.success("Scraping terminé avec succès !");
+                                            } else {
+                                                toast.error("Le scraping a échoué.");
+                                            }
+                                        } catch (e) {
+                                            toast.error("Erreur lors du scraping.");
+                                        }
+                                        setIsScraping(false);
+                                    }}
+                                >
+                                    {isScraping ? (
+                                        <CloudDownload className="h-4 w-4 mr-2 animate-bounce" />
+                                    ) : (
+                                        <CloudDownload className="h-4 w-4 mr-2" />
+                                    )}
+                                    Scraper (NFO/Art)
+                                </Button>
                                 {media.youtube_trailer_id && (
                                     <Button variant="outline" size="sm" asChild>
                                         <a

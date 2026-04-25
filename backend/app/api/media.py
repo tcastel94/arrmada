@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
 from app.services import media_aggregator
 from app.services import media_detail
+from app.services.scraper_service import scrape_movies
+from app.utils.cache import cache
 
 router = APIRouter(
     prefix="/api/media",
@@ -46,6 +48,19 @@ async def search_media(
     return {"items": results[:30], "total": len(results)}
 
 
+@router.post("/scrape")
+async def trigger_scrape(
+    payload: dict,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    """Trigger a background metadata scrape for selected items."""
+    items = payload.get("items", [])
+    background_tasks.add_task(scrape_movies, db, items)
+    return {"status": "scraping started", "items_count": len(items)}
+
+
+
 @router.get("")
 async def list_media(
     type: str | None = Query(None, description="Filter by type: movie, series"),
@@ -56,8 +71,12 @@ async def list_media(
     per_page: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
 ):
-    """Fetch unified media library with filters and pagination."""
-    media = await media_aggregator.fetch_all_media(db)
+    """Fetch unified media library with filters and pagination (cached 5min)."""
+    # Cache the full media fetch (expensive API calls to Sonarr/Radarr)
+    async def _fetch():
+        return await media_aggregator.fetch_all_media(db)
+
+    media = list(await cache.get_or_set("media:all", _fetch, ttl_seconds=300))
 
     # Filter by type
     if type:

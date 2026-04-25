@@ -22,6 +22,16 @@ from app.api.notifications import router as notifications_router
 from app.api.profile_overrides import router as profile_overrides_router
 from app.api.sabnzbd_config import router as sabnzbd_config_router
 from app.api.activity import router as activity_router
+from app.api.kodi import router as kodi_router
+
+# New feature routers
+from app.api.events import router as events_router
+from app.api.webhooks import router as webhooks_router
+from app.api.calendar import router as calendar_router
+from app.api.system import router as system_router
+from app.api.prowlarr_stats import router as prowlarr_stats_router
+from app.api.quality import router as quality_router
+from app.api.cleanup import router as cleanup_router
 
 # Main router that includes all sub-routers
 api_router = APIRouter()
@@ -29,6 +39,7 @@ api_router = APIRouter()
 # Public routes (no auth required)
 api_router.include_router(auth_router)
 api_router.include_router(setup_router)
+api_router.include_router(webhooks_router)  # Webhooks are unauthenticated (from internal services)
 
 # Protected routes
 api_router.include_router(services_router)
@@ -47,4 +58,12 @@ api_router.include_router(notifications_router)
 api_router.include_router(profile_overrides_router)
 api_router.include_router(sabnzbd_config_router)
 api_router.include_router(activity_router)
+api_router.include_router(kodi_router)
 
+# New feature routes
+api_router.include_router(events_router)
+api_router.include_router(calendar_router)
+api_router.include_router(system_router)
+api_router.include_router(prowlarr_stats_router)
+api_router.include_router(quality_router)
+api_router.include_router(cleanup_router)
