@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { apiFetch } from "@/lib/api-client";
 import { Header } from "@/components/layout/header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Card, CardContent } from "@/components/ui/card";
@@ -326,7 +327,7 @@ export default function MediaPage() {
                                     onClick={async () => {
                                         const items = data?.items.filter(i => selectedIds.has(i.external_id));
                                         if (items?.length) {
-                                            await fetch("/api/media/scrape", { 
+                                            await apiFetch("/api/media/scrape", { 
                                                 method: "POST", 
                                                 headers: { "Content-Type": "application/json" }, 
                                                 body: JSON.stringify({ items: items.map(i => ({ movie_id: i.external_id, tmdb_id: i.tmdb_id, source_service: i.source_service })) }) 
@@ -354,7 +355,7 @@ export default function MediaPage() {
                                     className="border-white/10"
                                     onClick={async () => {
                                         if (data?.items) {
-                                            await fetch("/api/media/scrape", { 
+                                            await apiFetch("/api/media/scrape", { 
                                                 method: "POST", 
                                                 headers: { "Content-Type": "application/json" }, 
                                                 body: JSON.stringify({ items: data.items.map(i => ({ movie_id: i.external_id, tmdb_id: i.tmdb_id, source_service: i.source_service })) }) 
@@ -372,7 +373,7 @@ export default function MediaPage() {
                                         variant="default"
                                         className="bg-sky-600 hover:bg-sky-500 shadow-lg shadow-sky-900/20 rounded-r-none border-r border-sky-400"
                                         onClick={async () => {
-                                            await fetch("/api/kodi/sync", { method: "POST" });
+                                            await apiFetch("/api/kodi/sync", { method: "POST" });
                                             alert("Synchronisation Kodi démarrée !");
                                         }}
                                     >

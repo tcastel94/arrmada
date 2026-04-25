@@ -53,11 +53,8 @@ export function useSSE(options?: {
       eventSourceRef.current.close();
     }
 
-    const url = `${API_URL}/api/events/stream`;
-    const es = new EventSource(url, {
-      // EventSource doesn't support custom headers, so we'll use query params
-      // The backend should accept token via query param too
-    });
+    const url = `${API_URL}/api/events/stream?token=${encodeURIComponent(token)}`;
+    const es = new EventSource(url);
 
     // Define which query keys to invalidate per event type
     const invalidationMap: Record<string, string[][]> = {

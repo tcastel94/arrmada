@@ -1,6 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
+import { apiFetch } from "@/lib/api-client";
 import { Header } from "@/components/layout/header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -477,7 +478,7 @@ export default function MediaDetailPage() {
                                                 imdb_id: media.imdb_id,
                                                 source_service: "radarr"
                                             };
-                                            const res = await fetch("/api/media/scrape", {
+                                            const res = await apiFetch("/api/media/scrape", {
                                                 method: "POST",
                                                 headers: { "Content-Type": "application/json" },
                                                 body: JSON.stringify([payload])

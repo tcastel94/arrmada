@@ -14,7 +14,7 @@ get_db = _get_db
 
 
 async def get_current_user(request: Request) -> dict:
-    """Verify JWT from Authorization header or cookie.
+    """Verify JWT from Authorization header, cookie, or query param.
 
     Returns the decoded token payload.
     """
@@ -28,6 +28,10 @@ async def get_current_user(request: Request) -> dict:
     # 2. Try cookie
     if not token:
         token = request.cookies.get("arrmada_token")
+
+    # 3. Try query param (needed for SSE EventSource which can't set headers)
+    if not token:
+        token = request.query_params.get("token")
 
     if not token:
         raise HTTPException(

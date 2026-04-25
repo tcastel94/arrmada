@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { apiFetch } from "@/lib/api-client";
 import { Header } from "@/components/layout/header";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MonitorPlay, Search, Trash2, CircleCheckBig } from "lucide-react";
+import { MonitorPlay, Search, Trash2, CheckCircle2 } from "lucide-react";
 import { motion } from "framer-motion";
 
 interface KodiInstance {
@@ -29,7 +30,7 @@ export default function KodiSettingsPage() {
 
     const loadSettings = async () => {
         try {
-            const res = await fetch("/api/kodi/settings");
+            const res = await apiFetch("/api/kodi/settings");
             if (res.ok) setSavedKodis(await res.json());
         } catch (e) {}
     };
@@ -41,7 +42,7 @@ export default function KodiSettingsPage() {
     const handleDiscover = async () => {
         setIsDiscovering(true);
         try {
-            const res = await fetch("/api/kodi/discover");
+            const res = await apiFetch("/api/kodi/discover");
             if (res.ok) setDiscoveredKodis(await res.json());
         } catch (e) {}
         setIsDiscovering(false);
@@ -49,7 +50,7 @@ export default function KodiSettingsPage() {
 
     const handleAdd = async (kodi: KodiInstance) => {
         try {
-            const res = await fetch("/api/kodi/settings", {
+            const res = await apiFetch("/api/kodi/settings", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ ...kodi, is_enabled: true })
@@ -63,7 +64,7 @@ export default function KodiSettingsPage() {
 
     const handleDelete = async (id: number) => {
         try {
-            await fetch(`/api/kodi/settings/${id}`, { method: "DELETE" });
+            await apiFetch(`/api/kodi/settings/${id}`, { method: "DELETE" });
             loadSettings();
         } catch (e) {}
     };
