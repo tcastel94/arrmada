@@ -478,16 +478,11 @@ export default function MediaDetailPage() {
                                                 imdb_id: media.imdb_id,
                                                 source_service: "radarr"
                                             };
-                                            const res = await apiFetch("/api/media/scrape", {
+                                            await apiFetch("/api/media/scrape", {
                                                 method: "POST",
-                                                headers: { "Content-Type": "application/json" },
-                                                body: JSON.stringify([payload])
+                                                body: JSON.stringify({ items: [payload] })
                                             });
-                                            if (res.ok) {
-                                                toast.success("Scraping terminé avec succès !");
-                                            } else {
-                                                toast.error("Le scraping a échoué.");
-                                            }
+                                            toast.success("Scraping terminé avec succès !");
                                         } catch (e) {
                                             toast.error("Erreur lors du scraping.");
                                         }
