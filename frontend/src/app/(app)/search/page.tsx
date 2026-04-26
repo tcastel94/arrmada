@@ -18,8 +18,13 @@ import {
     Library,
     Globe,
     Sparkles,
+    Brain,
+    Filter,
+    Calendar,
+    HardDrive,
+    Tag,
 } from "lucide-react";
-import { useUnifiedSearch } from "@/hooks/use-search";
+import { useUnifiedSearch, useAISearch } from "@/hooks/use-search";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 
@@ -39,7 +44,14 @@ const fadeUp = {
 export default function SearchPage() {
     const [query, setQuery] = useState("");
     const [submitted, setSubmitted] = useState("");
-    const { data, isLoading } = useUnifiedSearch(submitted);
+    const [mode, setMode] = useState<"standard" | "ai">("standard");
+
+    const standardSearch = useUnifiedSearch(mode === "standard" ? submitted : "");
+    const aiSearch = useAISearch(mode === "ai" ? submitted : "");
+
+    const isLoading = mode === "standard" ? standardSearch.isLoading : aiSearch.isLoading;
+    const data = standardSearch.data;
+    const aiData = aiSearch.data;
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
@@ -59,49 +71,254 @@ export default function SearchPage() {
                 {/* Hero + Search */}
                 <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-teal-600/20 via-cyan-600/10 to-transparent ring-1 ring-white/5 p-6">
                     <div className="flex items-center gap-4 mb-5">
-                        <div className="rounded-xl bg-teal-500/20 p-3">
-                            <Sparkles className="h-6 w-6 text-teal-400" />
+                        <div className={cn(
+                            "rounded-xl p-3",
+                            mode === "ai" ? "bg-violet-500/20" : "bg-teal-500/20"
+                        )}>
+                            {mode === "ai" ? (
+                                <Brain className="h-6 w-6 text-violet-400" />
+                            ) : (
+                                <Sparkles className="h-6 w-6 text-teal-400" />
+                            )}
                         </div>
                         <div>
                             <h2 className="text-2xl font-bold tracking-tight">
-                                Recherche unifiée
+                                {mode === "ai" ? "Recherche IA" : "Recherche unifiée"}
                             </h2>
                             <p className="text-sm text-muted-foreground mt-0.5">
-                                Médiathèque et indexeurs Prowlarr simultanément
+                                {mode === "ai"
+                                    ? "Décris ce que tu cherches en langage naturel"
+                                    : "Médiathèque et indexeurs Prowlarr simultanément"
+                                }
                             </p>
                         </div>
                     </div>
 
+                    {/* Mode toggle */}
+                    <div className="flex gap-2 mb-4">
+                        <Button
+                            size="sm"
+                            variant={mode === "standard" ? "default" : "outline"}
+                            onClick={() => { setMode("standard"); setSubmitted(""); }}
+                            className={cn(
+                                "gap-1.5 text-xs h-8",
+                                mode === "standard" ? "bg-teal-600 hover:bg-teal-500" : "border-white/10"
+                            )}
+                        >
+                            <Search className="h-3.5 w-3.5" /> Standard
+                        </Button>
+                        <Button
+                            size="sm"
+                            variant={mode === "ai" ? "default" : "outline"}
+                            onClick={() => { setMode("ai"); setSubmitted(""); }}
+                            className={cn(
+                                "gap-1.5 text-xs h-8",
+                                mode === "ai" ? "bg-violet-600 hover:bg-violet-500" : "border-white/10"
+                            )}
+                        >
+                            <Brain className="h-3.5 w-3.5" /> Recherche IA
+                        </Button>
+                    </div>
+
                     <form onSubmit={handleSearch} className="flex gap-3 max-w-2xl">
                         <div className="relative flex-1">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/50" />
+                            {mode === "ai" ? (
+                                <Brain className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-violet-400/50" />
+                            ) : (
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/50" />
+                            )}
                             <Input
-                                placeholder="Rechercher un film, une série…"
+                                placeholder={mode === "ai"
+                                    ? "Ex: films d'action des années 90 en 4K..."
+                                    : "Rechercher un film, une série…"
+                                }
                                 value={query}
                                 onChange={(e) => setQuery(e.target.value)}
-                                className="pl-10 h-11 border-white/10 bg-black/20 backdrop-blur-sm"
+                                className={cn(
+                                    "pl-10 h-11 backdrop-blur-sm",
+                                    mode === "ai"
+                                        ? "border-violet-500/20 bg-violet-950/20 focus:ring-violet-500/30"
+                                        : "border-white/10 bg-black/20"
+                                )}
                                 id="search-input"
                             />
                         </div>
                         <Button
                             type="submit"
                             disabled={query.length < 2 || isLoading}
-                            className="h-11 gap-2 bg-teal-600 hover:bg-teal-500"
+                            className={cn(
+                                "h-11 gap-2",
+                                mode === "ai" ? "bg-violet-600 hover:bg-violet-500" : "bg-teal-600 hover:bg-teal-500"
+                            )}
                         >
                             {isLoading ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : mode === "ai" ? (
+                                <Brain className="h-4 w-4" />
                             ) : (
                                 <Search className="h-4 w-4" />
                             )}
-                            Rechercher
+                            {mode === "ai" ? "Analyser" : "Rechercher"}
                         </Button>
                     </form>
 
-                    <div className="absolute -top-16 -right-16 w-48 h-48 rounded-full bg-teal-500/10 blur-3xl" />
+                    <div className={cn(
+                        "absolute -top-16 -right-16 w-48 h-48 rounded-full blur-3xl",
+                        mode === "ai" ? "bg-violet-500/10" : "bg-teal-500/10"
+                    )} />
                 </div>
 
-                {/* Results */}
-                {submitted && data && (
+                {/* AI Results */}
+                {mode === "ai" && submitted && aiData && (
+                    <motion.div variants={fadeUp} initial="hidden" animate="show" className="space-y-4">
+                        {/* AI interpretation */}
+                        {aiData.description && (
+                            <div className="rounded-xl ring-1 ring-violet-500/20 bg-violet-500/5 p-4">
+                                <div className="flex items-start gap-3">
+                                    <div className="rounded-lg bg-violet-500/20 p-2 mt-0.5">
+                                        <Brain className="h-4 w-4 text-violet-400" />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium text-violet-300">
+                                            Interprétation IA
+                                        </p>
+                                        <p className="text-sm text-muted-foreground mt-0.5">
+                                            {aiData.description}
+                                        </p>
+                                        {/* Active filters display */}
+                                        <div className="flex flex-wrap gap-1.5 mt-2">
+                                            {aiData.filters?.type && (
+                                                <Badge className="bg-violet-500/15 text-violet-300 border-0 text-[10px] gap-1">
+                                                    <Filter className="h-2.5 w-2.5" />
+                                                    {aiData.filters.type === "movie" ? "Films" : "Séries"}
+                                                </Badge>
+                                            )}
+                                            {(aiData.filters?.genres || []).map((g) => (
+                                                <Badge key={g} className="bg-blue-500/15 text-blue-300 border-0 text-[10px] gap-1">
+                                                    <Tag className="h-2.5 w-2.5" />
+                                                    {g}
+                                                </Badge>
+                                            ))}
+                                            {(aiData.filters?.year_min || aiData.filters?.year_max) && (
+                                                <Badge className="bg-amber-500/15 text-amber-300 border-0 text-[10px] gap-1">
+                                                    <Calendar className="h-2.5 w-2.5" />
+                                                    {aiData.filters.year_min || "…"}–{aiData.filters.year_max || "…"}
+                                                </Badge>
+                                            )}
+                                            {(aiData.filters?.quality_keywords || []).map((q) => (
+                                                <Badge key={q} className="bg-emerald-500/15 text-emerald-300 border-0 text-[10px] gap-1">
+                                                    <HardDrive className="h-2.5 w-2.5" />
+                                                    {q}
+                                                </Badge>
+                                            ))}
+                                            {aiData.filters?.has_file === false && (
+                                                <Badge className="bg-red-500/15 text-red-300 border-0 text-[10px]">
+                                                    Manquants
+                                                </Badge>
+                                            )}
+                                            {aiData.filters?.has_file === true && (
+                                                <Badge className="bg-emerald-500/15 text-emerald-300 border-0 text-[10px]">
+                                                    Disponibles
+                                                </Badge>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {aiData.error && (
+                            <div className="rounded-xl ring-1 ring-red-500/20 bg-red-500/5 p-4 text-sm text-red-400">
+                                {aiData.error}
+                            </div>
+                        )}
+
+                        {/* AI Results list */}
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <span>{aiData.total} résultat{aiData.total !== 1 ? "s" : ""}</span>
+                        </div>
+
+                        <div className="space-y-2">
+                            {aiData.items.length === 0 && !aiData.error ? (
+                                <div className="rounded-xl ring-1 ring-white/5 bg-card/30 p-12">
+                                    <EmptyState
+                                        icon={Brain}
+                                        title="Aucun résultat"
+                                        description="L'IA n'a trouvé aucun média correspondant à ta description"
+                                    />
+                                </div>
+                            ) : (
+                                aiData.items.map((item, i) => (
+                                    <motion.div
+                                        key={`${item.type}-${item.external_id}`}
+                                        initial={{ opacity: 0, y: 8 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ delay: i * 0.03 }}
+                                    >
+                                        <Card className="border-0 ring-1 ring-white/5 bg-card/40 backdrop-blur-sm hover:ring-violet-500/20 transition-all">
+                                            <CardContent className="p-4 flex items-center gap-4">
+                                                <div className="w-12 h-16 rounded-lg overflow-hidden bg-muted/20 shrink-0 ring-1 ring-white/5">
+                                                    {item.poster_url ? (
+                                                        <img src={item.poster_url} alt="" className="w-full h-full object-cover" />
+                                                    ) : (
+                                                        <div className="w-full h-full flex items-center justify-center">
+                                                            {item.type === "movie" ? (
+                                                                <Film className="h-5 w-5 text-muted-foreground/20" />
+                                                            ) : (
+                                                                <Tv className="h-5 w-5 text-muted-foreground/20" />
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="font-semibold truncate">{item.title}</p>
+                                                    <div className="flex items-center gap-2 mt-1">
+                                                        {item.year && (
+                                                            <span className="text-xs text-muted-foreground/60">{item.year}</span>
+                                                        )}
+                                                        <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-white/10 capitalize">
+                                                            {item.type === "movie" ? "Film" : "Série"}
+                                                        </Badge>
+                                                        {item.genres && item.genres.length > 0 && (
+                                                            <span className="text-[10px] text-muted-foreground/40 truncate">
+                                                                {item.genres.slice(0, 2).join(", ")}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-2 shrink-0">
+                                                    {item.quality && (
+                                                        <Badge className="text-[10px] bg-muted/30 border-0">
+                                                            {String(item.quality)}
+                                                        </Badge>
+                                                    )}
+                                                    {item.size_bytes > 0 && (
+                                                        <span className="text-[10px] text-muted-foreground/40 tabular-nums">
+                                                            {formatBytes(item.size_bytes)}
+                                                        </span>
+                                                    )}
+                                                    <Badge
+                                                        className={cn(
+                                                            "text-[10px] border-0",
+                                                            item.has_file
+                                                                ? "bg-emerald-500/20 text-emerald-400"
+                                                                : "bg-red-500/20 text-red-400"
+                                                        )}
+                                                    >
+                                                        {item.has_file ? "Disponible" : "Manquant"}
+                                                    </Badge>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    </motion.div>
+                                ))
+                            )}
+                        </div>
+                    </motion.div>
+                )}
+
+                {/* Standard Results */}
+                {mode === "standard" && submitted && data && (
                     <motion.div variants={fadeUp} initial="hidden" animate="show">
                         <Tabs defaultValue="library">
                             <TabsList className="bg-muted/30">
@@ -137,11 +354,7 @@ export default function SearchPage() {
                                                 <CardContent className="p-4 flex items-center gap-4">
                                                     <div className="w-12 h-16 rounded-lg overflow-hidden bg-muted/20 shrink-0 ring-1 ring-white/5">
                                                         {item.poster_url ? (
-                                                            <img
-                                                                src={item.poster_url}
-                                                                alt=""
-                                                                className="w-full h-full object-cover"
-                                                            />
+                                                            <img src={item.poster_url} alt="" className="w-full h-full object-cover" />
                                                         ) : (
                                                             <div className="w-full h-full flex items-center justify-center">
                                                                 {item.type === "movie" ? (
@@ -152,31 +365,21 @@ export default function SearchPage() {
                                                             </div>
                                                         )}
                                                     </div>
-
                                                     <div className="flex-1 min-w-0">
-                                                        <p className="font-semibold truncate">
-                                                            {item.title}
-                                                        </p>
+                                                        <p className="font-semibold truncate">{item.title}</p>
                                                         <div className="flex items-center gap-2 mt-1">
                                                             {item.year && (
-                                                                <span className="text-xs text-muted-foreground/60">
-                                                                    {item.year}
-                                                                </span>
+                                                                <span className="text-xs text-muted-foreground/60">{item.year}</span>
                                                             )}
                                                             <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-white/10 capitalize">
                                                                 {item.type === "movie" ? "Film" : "Série"}
                                                             </Badge>
-                                                            <span className="text-[10px] text-muted-foreground/50">
-                                                                {item.source_service}
-                                                            </span>
+                                                            <span className="text-[10px] text-muted-foreground/50">{item.source_service}</span>
                                                         </div>
                                                     </div>
-
                                                     <div className="flex items-center gap-2 shrink-0">
                                                         {item.quality && (
-                                                            <Badge className="text-[10px] bg-muted/30 border-0">
-                                                                {String(item.quality)}
-                                                            </Badge>
+                                                            <Badge className="text-[10px] bg-muted/30 border-0">{String(item.quality)}</Badge>
                                                         )}
                                                         <Badge
                                                             className={cn(
@@ -198,7 +401,7 @@ export default function SearchPage() {
 
                             {/* Indexer results */}
                             <TabsContent value="indexers" className="mt-4 space-y-2">
-                                {isLoading ? (
+                                {standardSearch.isLoading ? (
                                     <TableSkeleton rows={5} />
                                 ) : data.indexers.items.length === 0 ? (
                                     <div className="rounded-xl ring-1 ring-white/5 bg-card/30 p-12">
@@ -219,13 +422,9 @@ export default function SearchPage() {
                                             <Card className="border-0 ring-1 ring-white/5 bg-card/40 backdrop-blur-sm hover:ring-white/10 transition-all">
                                                 <CardContent className="p-4 flex items-center gap-4">
                                                     <div className="flex-1 min-w-0">
-                                                        <p className="text-sm font-medium truncate">
-                                                            {item.title}
-                                                        </p>
+                                                        <p className="text-sm font-medium truncate">{item.title}</p>
                                                         <div className="flex items-center gap-2 mt-1">
-                                                            <span className="text-[10px] text-muted-foreground/60">
-                                                                {item.indexer}
-                                                            </span>
+                                                            <span className="text-[10px] text-muted-foreground/60">{item.indexer}</span>
                                                             {item.categories.length > 0 && (
                                                                 <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-white/10">
                                                                     {item.categories[0]}
@@ -236,22 +435,15 @@ export default function SearchPage() {
                                                             </Badge>
                                                         </div>
                                                     </div>
-
                                                     <span className="text-xs text-muted-foreground/60 shrink-0 tabular-nums hidden sm:block">
                                                         {formatBytes(item.size_bytes)}
                                                     </span>
-
                                                     {item.protocol === "torrent" && (
                                                         <div className="flex items-center gap-2 shrink-0">
-                                                            <span className="text-xs text-emerald-400 tabular-nums">
-                                                                ▲{item.seeders}
-                                                            </span>
-                                                            <span className="text-xs text-red-400 tabular-nums">
-                                                                ▼{item.leechers}
-                                                            </span>
+                                                            <span className="text-xs text-emerald-400 tabular-nums">▲{item.seeders}</span>
+                                                            <span className="text-xs text-red-400 tabular-nums">▼{item.leechers}</span>
                                                         </div>
                                                     )}
-
                                                     {item.info_url && (
                                                         <a
                                                             href={item.info_url}
@@ -276,9 +468,12 @@ export default function SearchPage() {
                 {!submitted && (
                     <div className="rounded-xl ring-1 ring-white/5 bg-card/30 p-12">
                         <EmptyState
-                            icon={Search}
-                            title="Recherche unifiée"
-                            description="Tapez au moins 2 caractères pour rechercher dans votre médiathèque et vos indexeurs"
+                            icon={mode === "ai" ? Brain : Search}
+                            title={mode === "ai" ? "Recherche IA" : "Recherche unifiée"}
+                            description={mode === "ai"
+                                ? "Décris ce que tu cherches : \"films d'horreur des années 80 en 4K\", \"séries pas encore téléchargées\"..."
+                                : "Tapez au moins 2 caractères pour rechercher dans votre médiathèque et vos indexeurs"
+                            }
                         />
                     </div>
                 )}

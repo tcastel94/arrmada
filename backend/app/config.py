@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     UNRAID_USERNAME: str = ""
     UNRAID_PASSWORD: str = ""
 
+    # ── AI / OpenRouter ───────────────────────────────────────
+    OPENROUTER_API_KEY: str = ""
+    AI_MODEL: str = "google/gemini-2.0-flash-001"  # cost-effective, fast
+
     # ── Misc ──────────────────────────────────────────────────
     LOG_LEVEL: str = "INFO"
 

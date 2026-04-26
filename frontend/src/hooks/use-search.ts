@@ -36,3 +36,38 @@ export function useUnifiedSearch(query: string) {
         enabled: query.length >= 2,
     });
 }
+
+/* ── AI Search ────────────────────────────────────────────── */
+
+export interface AISearchFilters {
+    type?: "movie" | "series" | null;
+    genres?: string[];
+    year_min?: number | null;
+    year_max?: number | null;
+    quality_keywords?: string[];
+    title_keywords?: string[];
+    size_filter?: string | null;
+    has_file?: boolean | null;
+    sort_by?: string | null;
+    description?: string;
+}
+
+export interface AISearchResponse {
+    query: string;
+    description: string;
+    filters: AISearchFilters;
+    items: MediaItem[];
+    total: number;
+    ai_available: boolean;
+    error?: string;
+}
+
+export function useAISearch(query: string) {
+    return useQuery<AISearchResponse>({
+        queryKey: ["search", "ai", query],
+        queryFn: () => apiFetch(`/api/search/ai?q=${encodeURIComponent(query)}`),
+        enabled: query.length >= 3,
+        staleTime: 60_000,
+        retry: false,
+    });
+}
