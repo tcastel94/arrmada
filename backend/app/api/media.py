@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, Query, BackgroundTasks, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
+from app.models.service import Service
+from app.services.encryption import decrypt_api_key
+from app.services.radarr import RadarrClient
+from app.services.sonarr import SonarrClient
 from app.services import media_aggregator
 from app.services import media_detail
 from app.services.scraper_service import scrape_movies
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 from app.utils.cache import cache
 
 router = APIRouter(
@@ -46,6 +54,121 @@ async def search_media(
     """Quick search across all media."""
     results = await media_aggregator.search_media(q, db)
     return {"items": results[:30], "total": len(results)}
+
+
+@router.delete("/{type}/{id}")
+async def delete_media(
+    type: str,
+    id: int,
+    delete_files: bool = Query(True, description="Delete media files from disk"),
+    delete_downloads: bool = Query(True, description="Delete downloads from client queue and history"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a movie or series from Radarr/Sonarr, optionally deleting files and downloads."""
+    if type not in ("movie", "series"):
+        raise HTTPException(status_code=400, detail="Invalid media type")
+
+    # 1. Fetch SABnzbd client if delete_downloads is True
+    sab_client = None
+    if delete_downloads:
+        stmt = select(Service).where(
+            Service.is_enabled == True,  # noqa: E712
+            Service.type == "sabnzbd",
+        )
+        res = await db.execute(stmt)
+        sab_service = res.scalars().first()
+        if sab_service:
+            from app.services.sabnzbd import SabnzbdClient
+            try:
+                sab_key = decrypt_api_key(sab_service.api_key)
+                sab_client = SabnzbdClient(url=sab_service.url, api_key=sab_key)
+            except Exception as exc:
+                logger.error("Failed to initialize SABnzbd client: %s", exc)
+
+    target_service = "radarr" if type == "movie" else "sonarr"
+    stmt = select(Service).where(
+        Service.is_enabled == True,  # noqa: E712
+        Service.type == target_service,
+    )
+    result = await db.execute(stmt)
+    service = result.scalars().first()
+
+    if not service:
+        raise HTTPException(status_code=400, detail=f"No {target_service} service configured")
+
+    api_key = decrypt_api_key(service.api_key)
+    client = None
+
+    try:
+        if type == "movie":
+            client = RadarrClient(url=service.url, api_key=api_key)
+        else:
+            client = SonarrClient(url=service.url, api_key=api_key)
+
+        # 2. Clean up downloads if requested
+        if delete_downloads:
+            # A. Clean active items in Radarr/Sonarr queue
+            try:
+                queue_data = await client.get_queue()
+                records = queue_data.get("records", []) if isinstance(queue_data, dict) else []
+                for item in records:
+                    match = False
+                    if type == "movie" and item.get("movieId") == id:
+                        match = True
+                    elif type == "series" and item.get("seriesId") == id:
+                        match = True
+                    
+                    if match and item.get("id"):
+                        q_id = item["id"]
+                        # Delete from queue and remove from download client
+                        await client.delete(f"/queue/{q_id}", params={"removeFromClient": "true", "blocklist": "false"})
+            except Exception as exc:
+                logger.error("Failed to clean queue for %s %d: %s", type, id, exc)
+
+            # B. Clean SABnzbd queue & history based on Radarr/Sonarr history records
+            if sab_client:
+                try:
+                    history_data = await client.get("/history", params={"movieId" if type == "movie" else "seriesId": id, "pageSize": 200})
+                    records = history_data.get("records", []) if isinstance(history_data, dict) else []
+                    download_ids = {r.get("downloadId") for r in records if r.get("downloadId")}
+                    for dl_id in download_ids:
+                        try:
+                            await sab_client._call("queue", {"name": "delete", "value": dl_id})
+                        except Exception:
+                            pass
+                        try:
+                            await sab_client._call("history", {"name": "delete", "value": dl_id})
+                        except Exception:
+                            pass
+                except Exception as exc:
+                    logger.error("Failed to clean SABnzbd history for %s %d: %s", type, id, exc)
+
+        # 3. Delete the movie or series itself
+        try:
+            if type == "movie":
+                await client.delete_movie(movie_id=id, delete_files=delete_files)
+            else:
+                await client.delete_series(series_id=id, delete_files=delete_files)
+        except Exception as exc:
+            exc_str = str(exc)
+            if "not found" in exc_str.lower() or "404" in exc_str or "return 1 rows" in exc_str:
+                logger.warning("%s %d already deleted or not found in service: %s", type.capitalize(), id, exc)
+            else:
+                raise exc
+
+    except Exception as exc:
+        logger.error("Failed to delete %s %d: %s", type, id, exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        if client:
+            await client.close()
+        if sab_client:
+            await sab_client.close()
+
+    # Clear cached media list
+    cache.invalidate("media:all")
+
+    return {"status": "deleted"}
 
 
 @router.post("/scrape")
@@ -108,3 +231,231 @@ async def list_media(
             "total_pages": max(1, (total + per_page - 1) // per_page),
         },
     }
+
+
+from pydantic import BaseModel
+
+class MoveMediaPayload(BaseModel):
+    new_path: str
+
+
+@router.get("/{type}/{id}/rootfolders")
+async def get_media_rootfolders(
+    type: str,
+    id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Fetch available root folders in Radarr/Sonarr."""
+    if type not in ("movie", "series"):
+        raise HTTPException(status_code=400, detail="Invalid media type")
+
+    target_service = "radarr" if type == "movie" else "sonarr"
+    stmt = select(Service).where(
+        Service.is_enabled == True,  # noqa: E712
+        Service.type == target_service,
+    )
+    result = await db.execute(stmt)
+    service = result.scalars().first()
+
+    if not service:
+        raise HTTPException(status_code=400, detail=f"No {target_service} service configured")
+
+    api_key = decrypt_api_key(service.api_key)
+    client = None
+    try:
+        if type == "movie":
+            client = RadarrClient(url=service.url, api_key=api_key)
+        else:
+            client = SonarrClient(url=service.url, api_key=api_key)
+
+        return await client.get("/rootfolder")
+    except Exception as exc:
+        logger.error("Failed to fetch root folders for %s: %s", type, exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        if client:
+            await client.close()
+
+
+@router.put("/{type}/{id}/path")
+async def update_media_path(
+    type: str,
+    id: int,
+    payload: MoveMediaPayload,
+    db: AsyncSession = Depends(get_db),
+):
+    """Update path of movie or series in Radarr/Sonarr and trigger file moving."""
+    if type not in ("movie", "series"):
+        raise HTTPException(status_code=400, detail="Invalid media type")
+
+    target_service = "radarr" if type == "movie" else "sonarr"
+    stmt = select(Service).where(
+        Service.is_enabled == True,  # noqa: E712
+        Service.type == target_service,
+    )
+    result = await db.execute(stmt)
+    service = result.scalars().first()
+
+    if not service:
+        raise HTTPException(status_code=400, detail=f"No {target_service} service configured")
+
+    api_key = decrypt_api_key(service.api_key)
+    client = None
+    try:
+        if type == "movie":
+            client = RadarrClient(url=service.url, api_key=api_key)
+            # 1. Fetch current movie
+            movie = await client.get(f"/movie/{id}")
+            # 2. Modify path
+            movie["path"] = payload.new_path
+            # 3. PUT update with moveFiles=true
+            res = await client.put(f"/movie?moveFiles=true", data=movie)
+            logger.info("Updated movie %d path to %s and triggered move", id, payload.new_path)
+            return {"success": True, "path": payload.new_path, "response": res}
+        else:
+            client = SonarrClient(url=service.url, api_key=api_key)
+            # 1. Fetch current series
+            series = await client.get(f"/series/{id}")
+            # 2. Modify path
+            series["path"] = payload.new_path
+            # 3. PUT update with moveFiles=true
+            res = await client.put(f"/series?moveFiles=true", data=series)
+            logger.info("Updated series %d path to %s and triggered move", id, payload.new_path)
+            return {"success": True, "path": payload.new_path, "response": res}
+
+    except Exception as exc:
+        logger.error("Failed to update path for %s %d: %s", type, id, exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        if client:
+            await client.close()
+        # Invalidate cache
+        cache.invalidate("media:all")
+
+
+# ── Search & interactive grab (native *arr) ───────────────────
+
+async def _get_arr_client_for(db: AsyncSession, media_type: str, *, timeout: int = 10):
+    """Resolve the enabled Radarr/Sonarr client for a media type."""
+    if media_type not in ("movie", "series"):
+        raise HTTPException(status_code=400, detail="Invalid media type")
+
+    target_service = "radarr" if media_type == "movie" else "sonarr"
+    stmt = select(Service).where(
+        Service.is_enabled == True,  # noqa: E712
+        Service.type == target_service,
+    )
+    result = await db.execute(stmt)
+    service = result.scalars().first()
+    if not service:
+        raise HTTPException(status_code=400, detail=f"No {target_service} service configured")
+
+    api_key = decrypt_api_key(service.api_key)
+    if media_type == "movie":
+        return RadarrClient(url=service.url, api_key=api_key, timeout=timeout)
+    return SonarrClient(url=service.url, api_key=api_key, timeout=timeout)
+
+
+def _normalise_release(r: dict) -> dict:
+    """Normalise a Radarr/Sonarr release object for the frontend."""
+    quality = (r.get("quality") or {}).get("quality") or {}
+    return {
+        "guid": r.get("guid"),
+        "indexer_id": r.get("indexerId"),
+        "indexer": r.get("indexer", ""),
+        "title": r.get("title", ""),
+        "size_bytes": r.get("size", 0),
+        "seeders": r.get("seeders"),
+        "leechers": r.get("leechers"),
+        "age_days": r.get("age", 0),
+        "quality": quality.get("name", "Unknown"),
+        "custom_format_score": r.get("customFormatScore", 0),
+        "custom_formats": [cf.get("name", "") for cf in r.get("customFormats", []) if isinstance(cf, dict)],
+        "protocol": r.get("protocol", "unknown"),
+        "rejected": r.get("rejected", False),
+        "rejections": r.get("rejections", []) or [],
+        "download_url": r.get("downloadUrl"),
+        "info_url": r.get("infoUrl"),
+    }
+
+
+class GrabReleasePayload(BaseModel):
+    guid: str
+    indexer_id: int
+
+
+@router.post("/{type}/{id}/search")
+async def trigger_media_search(
+    type: str,
+    id: int,
+    season: int | None = Query(None, description="Series only: limit the search to one season"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Trigger a native automatic search in Radarr/Sonarr for this media."""
+    client = await _get_arr_client_for(db, type)
+    try:
+        if type == "movie":
+            result = await client.search_movie(id)
+        elif season is not None:
+            result = await client.search_season(id, season)
+        else:
+            result = await client.search_series(id)
+        return {"status": "search_triggered", "command": result}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Failed to trigger search for %s %d: %s", type, id, exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        await client.close()
+
+
+@router.get("/{type}/{id}/releases")
+async def list_media_releases(
+    type: str,
+    id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Interactive search: list candidate releases sorted best-first."""
+    # Indexer searches can be slow — allow a generous timeout.
+    client = await _get_arr_client_for(db, type, timeout=120)
+    try:
+        raw = await client.get_releases(id)
+        releases = [_normalise_release(r) for r in raw if isinstance(r, dict)]
+        releases.sort(
+            key=lambda x: (
+                x["rejected"],
+                -(x["custom_format_score"] or 0),
+                -(x["seeders"] or 0),
+                x["age_days"] or 0,
+            )
+        )
+        return {"items": releases, "total": len(releases)}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Failed to fetch releases for %s %d: %s", type, id, exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        await client.close()
+
+
+@router.post("/{type}/{id}/grab")
+async def grab_media_release(
+    type: str,
+    id: int,
+    payload: GrabReleasePayload,
+    db: AsyncSession = Depends(get_db),
+):
+    """Grab a specific release via the native *arr release endpoint (managed import)."""
+    client = await _get_arr_client_for(db, type, timeout=60)
+    try:
+        result = await client.grab_release(payload.guid, payload.indexer_id)
+        return {"status": "grabbed", "release": result}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Failed to grab release for %s %d: %s", type, id, exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        await client.close()

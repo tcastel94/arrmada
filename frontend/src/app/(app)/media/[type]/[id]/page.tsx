@@ -9,6 +9,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
+import {
     ArrowLeft,
     Calendar,
     Clock,
@@ -32,6 +40,9 @@ import {
     Volume2,
     Target,
     Trash2,
+    Search,
+    Loader2,
+    Send,
 } from "lucide-react";
 import {
     useMediaDetail,
@@ -40,8 +51,11 @@ import {
     type SeasonDetail,
     type EpisodeDetail,
     type CastMember,
+    useMediaRootFolders,
+    useUpdateMediaPath,
 } from "@/hooks/use-media";
 import { useProfileOverrides, useAvailableProfiles, useCreateOverride, useDeleteOverride, useApplyOverride } from "@/hooks/use-profile-overrides";
+import { useTriggerMediaSearch, useMediaReleases, useGrabRelease, type Release } from "@/hooks/use-media-actions";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { useState } from "react";
@@ -266,6 +280,35 @@ export default function MediaDetailPage() {
 
     const { data: media, isLoading, error } = useMediaDetail(type, id);
     const [isScraping, setIsScraping] = useState(false);
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [deleteFiles, setDeleteFiles] = useState(true);
+    const [deleteDownloads, setDeleteDownloads] = useState(true);
+    const [isDeleting, setIsDeleting] = useState(false);
+
+    const [moveDialogOpen, setMoveDialogOpen] = useState(false);
+    const [selectedRootFolder, setSelectedRootFolder] = useState("");
+    const [customMovePath, setCustomMovePath] = useState("");
+
+    const { data: rootFolders } = useMediaRootFolders(type, id);
+    const updatePathMutation = useUpdateMediaPath();
+    const triggerSearch = useTriggerMediaSearch();
+
+    const handleDelete = async () => {
+        if (!media) return;
+        setIsDeleting(true);
+        try {
+            await apiFetch(`/api/media/${type}/${media.id}?delete_files=${deleteFiles}&delete_downloads=${deleteDownloads}`, {
+                method: "DELETE"
+            });
+            toast.success("Média supprimé avec succès !");
+            setDeleteDialogOpen(false);
+            router.push("/media");
+        } catch (e) {
+            toast.error("Erreur lors de la suppression du média.");
+        } finally {
+            setIsDeleting(false);
+        }
+    };
 
     if (isLoading) {
         return (
@@ -464,6 +507,29 @@ export default function MediaDetailPage() {
 
                             {/* Action buttons */}
                             <div className="flex flex-wrap gap-2 pt-2">
+                                <Button
+                                    variant="default"
+                                    size="sm"
+                                    className="bg-emerald-600 hover:bg-emerald-500 text-white"
+                                    disabled={triggerSearch.isPending}
+                                    onClick={() => {
+                                        triggerSearch.mutate(
+                                            { type, id: media.id },
+                                            {
+                                                onSuccess: () =>
+                                                    toast.success("Recherche automatique lancée dans " + (isMovie ? "Radarr" : "Sonarr") + " !"),
+                                                onError: (e) => toast.error("Erreur : " + e.message),
+                                            },
+                                        );
+                                    }}
+                                >
+                                    {triggerSearch.isPending ? (
+                                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    ) : (
+                                        <Search className="h-4 w-4 mr-2" />
+                                    )}
+                                    Rechercher
+                                </Button>
                                 <Button 
                                     variant="default" 
                                     size="sm" 
@@ -495,6 +561,14 @@ export default function MediaDetailPage() {
                                         <CloudDownload className="h-4 w-4 mr-2" />
                                     )}
                                     Scraper (NFO/Art)
+                                </Button>
+                                <Button 
+                                    variant="destructive" 
+                                    size="sm"
+                                    onClick={() => setDeleteDialogOpen(true)}
+                                >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Supprimer
                                 </Button>
                                 {media.youtube_trailer_id && (
                                     <Button variant="outline" size="sm" asChild>
@@ -546,6 +620,7 @@ export default function MediaDetailPage() {
                         <TabsTrigger value="cast">Casting</TabsTrigger>
                         <TabsTrigger value="quality">Qualité</TabsTrigger>
                         <TabsTrigger value="info">Infos</TabsTrigger>
+                        <TabsTrigger value="search">Recherche</TabsTrigger>
                     </TabsList>
 
                     {/* Seasons tab (series only) */}
@@ -629,9 +704,27 @@ export default function MediaDetailPage() {
                                     )}
                                 </div>
                                 <div className="space-y-3">
-                                    <div>
-                                        <p className="text-xs text-muted-foreground">Chemin</p>
-                                        <p className="font-mono text-xs break-all">{media.path}</p>
+                                    <div className="flex items-center justify-between gap-2 border border-white/5 bg-muted/10 p-2.5 rounded-lg">
+                                        <div className="min-w-0">
+                                            <p className="text-xs text-muted-foreground">Chemin</p>
+                                            <p className="font-mono text-xs break-all text-foreground/80">{media.path}</p>
+                                        </div>
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="h-7 px-2.5 text-xs gap-1 border-white/10 shrink-0"
+                                            onClick={() => {
+                                                setSelectedRootFolder(rootFolders?.[0]?.path || "");
+                                                // Prepopulate with current base name
+                                                const parts = media.path.replace(/\/+$/, "").split("/");
+                                                const folderName = parts[parts.length - 1] || "";
+                                                setCustomMovePath(folderName);
+                                                setMoveDialogOpen(true);
+                                            }}
+                                        >
+                                            <FolderOpen className="h-3.5 w-3.5 text-sky-400" />
+                                            Déplacer
+                                        </Button>
                                     </div>
                                     {media.tmdb_id && (
                                         <div>
@@ -649,8 +742,165 @@ export default function MediaDetailPage() {
                             </CardContent>
                         </Card>
                     </TabsContent>
+
+                    {/* Interactive release search tab */}
+                    <TabsContent value="search">
+                        <InteractiveSearchTab type={type} media={media} />
+                    </TabsContent>
                 </Tabs>
             </div>
+
+            <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Confirmer la suppression</DialogTitle>
+                        <DialogDescription>
+                            Voulez-vous vraiment supprimer « {media.title} » de {isMovie ? "Radarr" : "Sonarr"} ? Cette action est irréversible.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-2 space-y-3">
+                        <label className="flex items-center gap-2.5 text-sm font-medium cursor-pointer">
+                            <input 
+                                type="checkbox" 
+                                checked={deleteFiles} 
+                                onChange={(e) => setDeleteFiles(e.target.checked)}
+                                className="h-4.5 w-4.5 rounded border-white/10 bg-muted text-red-600 focus:ring-red-500 focus:ring-offset-background"
+                            />
+                            <span>Supprimer également les fichiers téléchargés du disque</span>
+                        </label>
+                        <label className="flex items-center gap-2.5 text-sm font-medium cursor-pointer">
+                            <input 
+                                type="checkbox" 
+                                checked={deleteDownloads} 
+                                onChange={(e) => setDeleteDownloads(e.target.checked)}
+                                className="h-4.5 w-4.5 rounded border-white/10 bg-muted text-red-600 focus:ring-red-500 focus:ring-offset-background"
+                            />
+                            <span>Supprimer de la file d&apos;attente et de l&apos;historique (SABnzbd, torrents, etc.)</span>
+                        </label>
+                    </div>
+                    <DialogFooter>
+                        <Button 
+                            variant="outline" 
+                            onClick={() => setDeleteDialogOpen(false)}
+                            disabled={isDeleting}
+                        >
+                            Annuler
+                        </Button>
+                        <Button 
+                            variant="destructive" 
+                            onClick={handleDelete}
+                            disabled={isDeleting}
+                        >
+                            {isDeleting ? "Suppression..." : "Supprimer"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={moveDialogOpen} onOpenChange={setMoveDialogOpen}>
+                <DialogContent className="sm:max-w-[500px]">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <FolderOpen className="h-5 w-5 text-sky-400" />
+                            Déplacer le média
+                        </DialogTitle>
+                        <DialogDescription>
+                            Modifiez le répertoire racine de ce média. Sonarr/Radarr déplacera physiquement tous les fichiers sur le disque.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="py-4 space-y-4">
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                                Dossier Racine Cible
+                            </label>
+                            <select
+                                value={selectedRootFolder}
+                                onChange={(e) => setSelectedRootFolder(e.target.value)}
+                                className="w-full h-10 px-3 rounded-lg border border-white/10 bg-muted text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-sky-500 focus:border-sky-500"
+                            >
+                                {!rootFolders || rootFolders.length === 0 ? (
+                                    <option value="">Aucun dossier racine disponible</option>
+                                ) : (
+                                    rootFolders.map((rf) => (
+                                        <option key={rf.path} value={rf.path}>
+                                            {rf.path} ({formatBytes(rf.freeSpace)} libres)
+                                        </option>
+                                    ))
+                                )}
+                            </select>
+                        </div>
+
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                                Nom du Dossier de Destination
+                            </label>
+                            <input
+                                type="text"
+                                value={customMovePath}
+                                onChange={(e) => setCustomMovePath(e.target.value)}
+                                className="w-full h-10 px-3 rounded-lg border border-white/10 bg-muted text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-sky-500 focus:border-sky-500"
+                                placeholder="Nom du dossier..."
+                            />
+                        </div>
+
+                        <div className="bg-white/[0.02] border border-white/5 rounded-lg p-3 space-y-1.5">
+                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                                Aperçu du Nouveau Chemin Cible
+                            </p>
+                            <code className="text-xs font-mono text-sky-400 block break-all">
+                                {selectedRootFolder ? (
+                                    `${selectedRootFolder.endsWith("/") ? selectedRootFolder : `${selectedRootFolder}/`}${customMovePath}`
+                                ) : (
+                                    "Sélectionnez un dossier racine..."
+                                )}
+                            </code>
+                        </div>
+                    </div>
+
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={() => setMoveDialogOpen(false)}
+                            disabled={updatePathMutation.isPending}
+                        >
+                            Annuler
+                        </Button>
+                        <Button
+                            onClick={() => {
+                                if (!selectedRootFolder) {
+                                    toast.error("Veuillez sélectionner un dossier racine.");
+                                    return;
+                                }
+                                if (!customMovePath.trim()) {
+                                    toast.error("Veuillez spécifier un nom de dossier.");
+                                    return;
+                                }
+                                const fullNewPath = selectedRootFolder.endsWith("/")
+                                    ? `${selectedRootFolder}${customMovePath.trim()}`
+                                    : `${selectedRootFolder}/${customMovePath.trim()}`;
+                                
+                                updatePathMutation.mutate({
+                                    type,
+                                    id,
+                                    new_path: fullNewPath,
+                                }, {
+                                    onSuccess: () => {
+                                        toast.success("Déplacement initié avec succès ! Les fichiers sont en cours de transfert.");
+                                        setMoveDialogOpen(false);
+                                    },
+                                    onError: (err: any) => {
+                                        toast.error(`Erreur lors du déplacement : ${err.message || err}`);
+                                    }
+                                });
+                            }}
+                            disabled={updatePathMutation.isPending || !selectedRootFolder}
+                        >
+                            {updatePathMutation.isPending ? "Déplacement en cours..." : "Déplacer les fichiers"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </>
     );
 }
@@ -815,6 +1065,129 @@ function QualityTab({ media }: { media: MediaDetail }) {
                     </div>
                 </CardContent>
             </Card>
+        </div>
+    );
+}
+
+
+// ── Interactive Search Tab ──────────────────────────────────
+
+function InteractiveSearchTab({ type, media }: { type: "movie" | "series"; media: MediaDetail }) {
+    const [enabled, setEnabled] = useState(false);
+    const { data, isFetching, error, refetch } = useMediaReleases(type, media.id, enabled);
+    const grab = useGrabRelease();
+    const [grabbing, setGrabbing] = useState<string | null>(null);
+
+    const handleGrab = (r: Release) => {
+        setGrabbing(r.guid);
+        grab.mutate(
+            { type, id: media.id, guid: r.guid, indexer_id: r.indexer_id },
+            {
+                onSuccess: () => toast.success("Release envoyée au client de téléchargement !"),
+                onError: (e) => toast.error("Échec du grab : " + e.message),
+                onSettled: () => setGrabbing(null),
+            },
+        );
+    };
+
+    return (
+        <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <p className="text-sm text-muted-foreground">
+                    Recherche interactive sur les indexeurs via {type === "movie" ? "Radarr" : "Sonarr"}.
+                    Choisissez une release à envoyer au client de téléchargement.
+                </p>
+                <Button
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0"
+                    disabled={isFetching}
+                    onClick={() => {
+                        if (!enabled) setEnabled(true);
+                        else refetch();
+                    }}
+                >
+                    {isFetching ? (
+                        <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Recherche…</>
+                    ) : (
+                        <><Search className="h-4 w-4 mr-2" /> {enabled ? "Relancer" : "Lancer la recherche"}</>
+                    )}
+                </Button>
+            </div>
+
+            {error && (
+                <div className="p-3 rounded-lg border bg-red-500/10 text-red-400 text-sm">
+                    Erreur : {error.message}
+                </div>
+            )}
+
+            {isFetching && !data && (
+                <div className="space-y-2">
+                    {[0, 1, 2, 3].map((i) => (
+                        <div key={i} className="h-14 bg-muted/40 rounded-lg animate-pulse" />
+                    ))}
+                </div>
+            )}
+
+            {data && data.items.length === 0 && !isFetching && (
+                <p className="text-sm text-muted-foreground">Aucune release trouvée.</p>
+            )}
+
+            {data && data.items.length > 0 && (
+                <div className="space-y-2">
+                    {data.items.map((r) => (
+                        <Card key={r.guid} className={cn("bg-card/50 border-border/50", r.rejected && "opacity-60")}>
+                            <CardContent className="p-3 flex items-center gap-3">
+                                <div className="min-w-0 flex-1">
+                                    <p className="text-sm font-medium truncate" title={r.title}>{r.title}</p>
+                                    <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                        <Badge variant="outline" className="text-[10px]">{r.quality}</Badge>
+                                        <Badge variant="secondary" className="text-[10px]">{r.indexer}</Badge>
+                                        <Badge variant="secondary" className="text-[10px]">{r.protocol}</Badge>
+                                        <span className="text-[10px] text-muted-foreground">{formatBytes(r.size_bytes)}</span>
+                                        {r.protocol === "torrent" && (
+                                            <span className="text-[10px] text-muted-foreground">↑{r.seeders ?? 0}</span>
+                                        )}
+                                        <span className="text-[10px] text-muted-foreground">{Math.round(r.age_days)}j</span>
+                                        <Badge
+                                            variant="outline"
+                                            className={cn(
+                                                "text-[10px]",
+                                                r.custom_format_score > 0 && "text-emerald-400 border-emerald-500/30",
+                                                r.custom_format_score < 0 && "text-red-400 border-red-500/30",
+                                            )}
+                                        >
+                                            CF {r.custom_format_score}
+                                        </Badge>
+                                        {r.rejected && (
+                                            <Badge
+                                                variant="outline"
+                                                className="text-[10px] text-amber-400 border-amber-500/30"
+                                                title={r.rejections.join("; ")}
+                                            >
+                                                Rejeté
+                                            </Badge>
+                                        )}
+                                    </div>
+                                </div>
+                                <Button
+                                    size="sm"
+                                    variant={r.rejected ? "outline" : "default"}
+                                    className="shrink-0"
+                                    disabled={grabbing === r.guid}
+                                    onClick={() => handleGrab(r)}
+                                >
+                                    {grabbing === r.guid ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <><Send className="h-4 w-4 mr-1" /> Grab</>
+                                    )}
+                                </Button>
+                            </CardContent>
+                        </Card>
+                    ))}
+                </div>
+            )}
         </div>
     );
 }

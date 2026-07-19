@@ -29,6 +29,12 @@ class SonarrClient(ArrBaseClient):
         """Add a new series to Sonarr."""
         return await self.post("/series", data=data)
 
+    async def delete_series(self, series_id: int, delete_files: bool = False) -> None:
+        """Delete a series from Sonarr."""
+        url = f"/series/{series_id}?deleteFiles={str(delete_files).lower()}"
+        resp = await self.client.delete(f"{self.API_PREFIX}{url}")
+        resp.raise_for_status()
+
     # ── Quality Profiles ──────────────────────────────────────
     async def get_quality_profiles(self) -> list[dict[str, Any]]:
         """Fetch available quality profiles."""
@@ -58,3 +64,30 @@ class SonarrClient(ArrBaseClient):
     async def get_disk_space(self) -> list[dict[str, Any]]:
         """Fetch disk space info."""
         return await self.get("/diskspace")
+
+    # ── Commands / Search ─────────────────────────────────────
+    async def command(self, name: str, **kwargs: Any) -> dict[str, Any]:
+        """Trigger a Sonarr command via POST /command."""
+        payload: dict[str, Any] = {"name": name, **kwargs}
+        return await self.post("/command", data=payload)
+
+    async def search_series(self, series_id: int) -> dict[str, Any]:
+        """Trigger a full-series search for all monitored episodes."""
+        return await self.command("SeriesSearch", seriesId=series_id)
+
+    async def search_season(self, series_id: int, season_number: int) -> dict[str, Any]:
+        """Trigger an automatic search for a single season."""
+        return await self.command("SeasonSearch", seriesId=series_id, seasonNumber=season_number)
+
+    async def search_episodes(self, episode_ids: list[int]) -> dict[str, Any]:
+        """Trigger an automatic search for specific episodes."""
+        return await self.command("EpisodeSearch", episodeIds=episode_ids)
+
+    # ── Interactive release search / grab ─────────────────────
+    async def get_releases(self, series_id: int) -> list[dict[str, Any]]:
+        """List candidate releases for a series (interactive search)."""
+        return await self.get("/release", params={"seriesId": series_id})
+
+    async def grab_release(self, guid: str, indexer_id: int) -> dict[str, Any]:
+        """Grab a specific release (native import via download client)."""
+        return await self.post("/release", data={"guid": guid, "indexerId": indexer_id})

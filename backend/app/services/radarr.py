@@ -54,3 +54,22 @@ class RadarrClient(ArrBaseClient):
     async def get_disk_space(self) -> list[dict[str, Any]]:
         """Fetch disk space info."""
         return await self.get("/diskspace")
+
+    # ── Commands / Search ─────────────────────────────────────
+    async def command(self, name: str, **kwargs: Any) -> dict[str, Any]:
+        """Trigger a Radarr command via POST /command."""
+        payload: dict[str, Any] = {"name": name, **kwargs}
+        return await self.post("/command", data=payload)
+
+    async def search_movie(self, movie_id: int) -> dict[str, Any]:
+        """Trigger an automatic search for a movie."""
+        return await self.command("MoviesSearch", movieIds=[movie_id])
+
+    # ── Interactive release search / grab ─────────────────────
+    async def get_releases(self, movie_id: int) -> list[dict[str, Any]]:
+        """List candidate releases for a movie (interactive search)."""
+        return await self.get("/release", params={"movieId": movie_id})
+
+    async def grab_release(self, guid: str, indexer_id: int) -> dict[str, Any]:
+        """Grab a specific release (native import via download client)."""
+        return await self.post("/release", data={"guid": guid, "indexerId": indexer_id})

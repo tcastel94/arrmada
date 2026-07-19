@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +18,20 @@ from app.services.telegram import notify_new_media
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def _resolve_quality_profile_id(profiles: list[dict], name: str | None) -> int:
+    """Return the id of the profile matching ``name`` (case-insensitive).
+
+    Falls back to the first available profile when no name is given or no
+    match is found, mirroring the previous ``profiles[0]`` behaviour.
+    """
+    if name:
+        for p in profiles:
+            if str(p.get("name", "")).strip().lower() == name.strip().lower():
+                return p["id"]
+    return profiles[0]["id"]
+
 
 
 async def create_request(
@@ -116,7 +131,7 @@ async def _send_to_arr(db: AsyncSession, req: MediaRequest) -> None:
                 "title": movie_data.get("title", req.title),
                 "tmdbId": tmdb_id,
                 "year": movie_data.get("year", req.year),
-                "qualityProfileId": quality_profiles[0]["id"],
+                "qualityProfileId": _resolve_quality_profile_id(quality_profiles, req.quality_profile),
                 "rootFolderPath": root_folders[0]["path"],
                 "monitored": True,
                 "addOptions": {"searchForMovie": True},
@@ -155,7 +170,7 @@ async def _send_to_arr(db: AsyncSession, req: MediaRequest) -> None:
                 "title": series_data.get("title", req.title),
                 "tvdbId": series_data.get("tvdbId"),
                 "year": series_data.get("year", req.year),
-                "qualityProfileId": quality_profiles[0]["id"],
+                "qualityProfileId": _resolve_quality_profile_id(quality_profiles, req.quality_profile),
                 "rootFolderPath": root_folders[0]["path"],
                 "monitored": True,
                 "addOptions": {"searchForMissingEpisodes": True},
@@ -188,3 +203,145 @@ async def delete_request(db: AsyncSession, request_id: int) -> bool:
     await db.delete(req)
     await db.commit()
     return True
+
+
+async def sync_active_requests(db: AsyncSession) -> None:
+    """Sync the status of active requests with Radarr/Sonarr."""
+    # Find all requests that are not completed (status is not available/failed)
+    stmt = select(MediaRequest).where(
+        MediaRequest.status.in_(["requested", "searching", "downloading"])
+    )
+    result = await db.execute(stmt)
+    requests = list(result.scalars().all())
+
+    if not requests:
+        return
+
+    # Find services
+    services_stmt = select(Service).where(Service.is_enabled == True)  # noqa: E712
+    services_result = await db.execute(services_stmt)
+    services = {s.type: s for s in services_result.scalars().all()}
+
+    # Group requests by target service
+    radarr_requests = [r for r in requests if r.target_service == "radarr"]
+    sonarr_requests = [r for r in requests if r.target_service == "sonarr"]
+
+    # Sync Radarr requests
+    if radarr_requests and "radarr" in services:
+        svc = services["radarr"]
+        api_key = decrypt_api_key(svc.api_key)
+        client = RadarrClient(url=svc.url, api_key=api_key)
+        try:
+            queue_data = {}
+            try:
+                queue_data = await client.get_queue()
+            except Exception as exc:
+                logger.error("Failed to get Radarr queue: %s", exc)
+
+            queue_items = queue_data.get("records", [])
+            downloading_movie_ids = {
+                item["movieId"] for item in queue_items if "movieId" in item
+            }
+
+            for req in radarr_requests:
+                if not req.arr_id:
+                    # Try to retrieve arr_id via lookup
+                    try:
+                        if req.tmdb_id:
+                            results = await client.lookup_movie(f"tmdb:{req.tmdb_id}")
+                        else:
+                            results = await client.lookup_movie(req.title)
+                        if results:
+                            existing_movies = await client.get_movies()
+                            movie_tmdb = results[0].get("tmdbId", req.tmdb_id)
+                            for existing in existing_movies:
+                                if existing.get("tmdbId") == movie_tmdb:
+                                    req.arr_id = existing.get("id")
+                                    break
+                    except Exception as lookup_exc:
+                        logger.error("Radarr lookup failed during sync for %s: %s", req.title, lookup_exc)
+
+                if req.arr_id:
+                    try:
+                        movie = await client.get_movie_by_id(req.arr_id)
+                        if movie.get("hasFile"):
+                            req.status = "available"
+                            req.completed_at = datetime.now(timezone.utc)
+                        elif req.arr_id in downloading_movie_ids:
+                            req.status = "downloading"
+                        else:
+                            req.status = "searching"
+                    except httpx.HTTPStatusError as exc:
+                        if exc.response.status_code == 404:
+                            req.status = "failed"
+                            logger.warning("Movie %s (arr_id=%s) not found in Radarr, marking as failed", req.title, req.arr_id)
+                        else:
+                            logger.error("Failed to sync Radarr movie %s: %s", req.title, exc)
+                    except Exception as exc:
+                        logger.error("Failed to sync Radarr movie %s: %s", req.title, exc)
+        finally:
+            await client.close()
+
+    # Sync Sonarr requests
+    if sonarr_requests and "sonarr" in services:
+        svc = services["sonarr"]
+        api_key = decrypt_api_key(svc.api_key)
+        client = SonarrClient(url=svc.url, api_key=api_key)
+        try:
+            queue_data = {}
+            try:
+                queue_data = await client.get_queue()
+            except Exception as exc:
+                logger.error("Failed to get Sonarr queue: %s", exc)
+
+            queue_items = queue_data.get("records", [])
+            downloading_series_ids = {
+                item["seriesId"] for item in queue_items if "seriesId" in item
+            }
+
+            for req in sonarr_requests:
+                if not req.arr_id:
+                    try:
+                        if req.tmdb_id:
+                            results = await client.lookup_series(f"tvdb:{req.tmdb_id}")
+                        else:
+                            results = await client.lookup_series(req.title)
+                        if results:
+                            existing_series = await client.get_series()
+                            series_tvdb = results[0].get("tvdbId")
+                            for existing in existing_series:
+                                if existing.get("tvdbId") == series_tvdb:
+                                    req.arr_id = existing.get("id")
+                                    break
+                    except Exception as lookup_exc:
+                        logger.error("Sonarr lookup failed during sync for %s: %s", req.title, lookup_exc)
+
+                if req.arr_id:
+                    try:
+                        series = await client.get_series_by_id(req.arr_id)
+                        stats = series.get("statistics") or {}
+                        episode_file_count = stats.get("episodeFileCount", 0)
+                        episode_count = stats.get("episodeCount", 0)
+
+                        if episode_file_count == episode_count and episode_count > 0:
+                            req.status = "available"
+                            req.completed_at = datetime.now(timezone.utc)
+                        elif req.arr_id in downloading_series_ids:
+                            req.status = "downloading"
+                        elif episode_file_count > 0:
+                            req.status = "available"
+                            req.completed_at = datetime.now(timezone.utc)
+                        else:
+                            req.status = "searching"
+                    except httpx.HTTPStatusError as exc:
+                        if exc.response.status_code == 404:
+                            req.status = "failed"
+                            logger.warning("Series %s (arr_id=%s) not found in Sonarr, marking as failed", req.title, req.arr_id)
+                        else:
+                            logger.error("Failed to sync Sonarr series %s: %s", req.title, exc)
+                    except Exception as exc:
+                        logger.error("Failed to sync Sonarr series %s: %s", req.title, exc)
+        finally:
+            await client.close()
+
+    await db.commit()
