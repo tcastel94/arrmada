@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
@@ -16,7 +17,6 @@ import {
     Settings,
     ChevronLeft,
     ChevronRight,
-    Skull,
     Container,
     FolderOpen,
     BookMarked,
@@ -27,6 +27,7 @@ import {
     Gauge,
     Trash2,
 } from "lucide-react";
+// (icône Skull remplacée par l'emblème ArrMada dans l'en-tête)
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -82,8 +83,15 @@ export function Sidebar() {
         >
             {/* Logo */}
             <div className="flex h-14 items-center gap-2 px-4">
-                <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
-                    <Skull className="h-5 w-5" />
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg ring-1 ring-primary/25 shadow-[0_0_12px_-2px] shadow-primary/30">
+                    <Image
+                        src="/logo-mark.png"
+                        alt="ArrMada"
+                        width={36}
+                        height={36}
+                        priority
+                        className="h-full w-full object-cover"
+                    />
                 </div>
                 <AnimatePresence>
                     {!collapsed && (
@@ -91,7 +99,7 @@ export function Sidebar() {
                             initial={{ opacity: 0, width: 0 }}
                             animate={{ opacity: 1, width: "auto" }}
                             exit={{ opacity: 0, width: 0 }}
-                            className="text-lg font-bold tracking-tight overflow-hidden whitespace-nowrap"
+                            className="text-lg font-bold tracking-tight overflow-hidden whitespace-nowrap bg-gradient-to-r from-primary to-cyan-300 bg-clip-text text-transparent"
                         >
                             ArrMada
                         </motion.span>

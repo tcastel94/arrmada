@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -213,9 +214,16 @@ export default function SetupPage() {
                                         initial={{ scale: 0 }}
                                         animate={{ scale: 1 }}
                                         transition={{ type: "spring", duration: 0.5 }}
-                                        className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl bg-primary text-primary-foreground"
+                                        className="mx-auto flex h-24 w-24 items-center justify-center overflow-hidden rounded-2xl ring-1 ring-primary/25 shadow-[0_0_32px_-4px] shadow-primary/40"
                                     >
-                                        <Skull className="h-10 w-10" />
+                                        <Image
+                                            src="/logo-mark.png"
+                                            alt="ArrMada"
+                                            width={96}
+                                            height={96}
+                                            priority
+                                            className="h-full w-full object-cover"
+                                        />
                                     </motion.div>
                                     <div>
                                         <CardTitle className="text-3xl font-bold tracking-tight">

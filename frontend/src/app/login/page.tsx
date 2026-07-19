@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skull, Lock, Loader2 } from "lucide-react";
+import { Lock, Loader2 } from "lucide-react";
 import { login, isAuthenticated } from "@/lib/api-client";
 import { useSetupStatus } from "@/hooks/use-setup";
 import { motion } from "framer-motion";
@@ -53,10 +54,17 @@ export default function LoginPage() {
             >
                 <Card className="w-full max-w-sm">
                     <CardHeader className="text-center space-y-4">
-                        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-                            <Skull className="h-8 w-8" />
+                        <div className="mx-auto flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl ring-1 ring-primary/25 shadow-[0_0_28px_-4px] shadow-primary/40">
+                            <Image
+                                src="/logo-mark.png"
+                                alt="ArrMada"
+                                width={80}
+                                height={80}
+                                priority
+                                className="h-full w-full object-cover"
+                            />
                         </div>
-                        <CardTitle className="text-2xl font-bold tracking-tight">
+                        <CardTitle className="text-2xl font-bold tracking-tight bg-gradient-to-r from-primary to-cyan-300 bg-clip-text text-transparent">
                             ArrMada
                         </CardTitle>
                         <p className="text-sm text-muted-foreground">
