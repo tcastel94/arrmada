@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api-client";
 
 export interface MediaItem {
@@ -129,6 +129,7 @@ export interface SeasonDetail {
     season_number: number;
     episode_count: number;
     episodes_have: number;
+    monitored?: boolean;
     episodes: EpisodeDetail[];
 }
 
@@ -145,6 +146,9 @@ export interface MediaDetail {
     runtime: number | null;
     status: string;
     monitored: boolean;
+    quality_profile_id?: number | null;
+    series_type?: string;
+    minimum_availability?: string;
     has_file?: boolean;
     size_on_disk: number;
     added: string | null;
@@ -173,5 +177,113 @@ export function useMediaDetail(type: "movie" | "series", id: string) {
         queryKey: ["media", "detail", type, id],
         queryFn: () => apiFetch(`/api/media/${type}/${id}`),
         enabled: !!id,
+    });
+}
+
+export interface RootFolder {
+    path: string;
+    accessible: boolean;
+    freeSpace: number;
+    unmappedFolders: any[];
+}
+
+export function useMediaRootFolders(type: "movie" | "series", id: string) {
+    return useQuery<RootFolder[]>({
+        queryKey: ["media", "rootfolders", type, id],
+        queryFn: () => apiFetch(`/api/media/${type}/${id}/rootfolders`),
+        enabled: !!id,
+    });
+}
+
+export function useUpdateMediaPath() {
+    const queryClient = useQueryClient();
+    return useMutation<any, Error, { type: "movie" | "series"; id: string; new_path: string }>({
+        mutationFn: ({ type, id, new_path }) =>
+            apiFetch(`/api/media/${type}/${id}/path`, {
+                method: "PUT",
+                body: JSON.stringify({ new_path }),
+            }),
+        onSuccess: (data, variables) => {
+            queryClient.invalidateQueries({ queryKey: ["media", "detail", variables.type, variables.id] });
+            queryClient.invalidateQueries({ queryKey: ["media"] });
+        },
+    });
+}
+
+// ── Edit media (monitored / quality profile / tags / …) ──────
+
+export interface QualityProfileOption {
+    id: number;
+    name: string;
+}
+
+export interface TagOption {
+    id: number;
+    label: string;
+}
+
+export interface MediaEditOptions {
+    quality_profiles: QualityProfileOption[];
+    tags: TagOption[];
+}
+
+export function useMediaEditOptions(type: "movie" | "series", enabled: boolean) {
+    return useQuery<MediaEditOptions>({
+        queryKey: ["media", "options", type],
+        queryFn: () => apiFetch(`/api/media/options/${type}`),
+        enabled,
+        staleTime: 300_000,
+    });
+}
+
+export interface MediaEditPayload {
+    monitored?: boolean;
+    quality_profile_id?: number;
+    tags?: number[];
+    minimum_availability?: string;
+    series_type?: string;
+}
+
+export function useUpdateMedia() {
+    const queryClient = useQueryClient();
+    return useMutation<any, Error, { type: "movie" | "series"; id: string | number; data: MediaEditPayload }>({
+        mutationFn: ({ type, id, data }) =>
+            apiFetch(`/api/media/${type}/${id}`, {
+                method: "PATCH",
+                body: JSON.stringify(data),
+            }),
+        onSuccess: (_data, variables) => {
+            queryClient.invalidateQueries({ queryKey: ["media", "detail", variables.type, String(variables.id)] });
+            queryClient.invalidateQueries({ queryKey: ["media"] });
+        },
+    });
+}
+
+export function useCreateTag() {
+    const queryClient = useQueryClient();
+    return useMutation<TagOption, Error, { type: "movie" | "series"; label: string }>({
+        mutationFn: ({ type, label }) =>
+            apiFetch(`/api/media/tag/${type}`, {
+                method: "POST",
+                body: JSON.stringify({ label }),
+            }),
+        onSuccess: (_data, variables) => {
+            queryClient.invalidateQueries({ queryKey: ["media", "options", variables.type] });
+        },
+    });
+}
+
+export function useUpdateSeasonMonitoring() {
+    const queryClient = useQueryClient();
+    return useMutation<any, Error, { id: string | number; season: number; monitored: boolean }>({
+        mutationFn: ({ id, season, monitored }) =>
+            apiFetch(`/api/media/series/${id}/season/${season}`, {
+                method: "PATCH",
+                body: JSON.stringify({ monitored }),
+            }),
+        onSuccess: (_data, variables) => {
+            queryClient.invalidateQueries({ queryKey: ["media", "detail", "series", String(variables.id)] });
+            queryClient.invalidateQueries({ queryKey: ["media"] });
+        },
     });
 }

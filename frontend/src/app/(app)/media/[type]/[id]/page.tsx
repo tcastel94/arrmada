@@ -43,6 +43,8 @@ import {
     Search,
     Loader2,
     Send,
+    Pencil,
+    Plus,
 } from "lucide-react";
 import {
     useMediaDetail,
@@ -53,7 +55,12 @@ import {
     type CastMember,
     useMediaRootFolders,
     useUpdateMediaPath,
+    useMediaEditOptions,
+    useUpdateMedia,
+    useCreateTag,
+    useUpdateSeasonMonitoring,
 } from "@/hooks/use-media";
+import { Switch } from "@/components/ui/switch";
 import { useProfileOverrides, useAvailableProfiles, useCreateOverride, useDeleteOverride, useApplyOverride } from "@/hooks/use-profile-overrides";
 import { useTriggerMediaSearch, useMediaReleases, useGrabRelease, type Release } from "@/hooks/use-media-actions";
 import { cn } from "@/lib/utils";
@@ -187,46 +194,82 @@ function CastSection({ cast, crew }: { cast?: CastMember[]; crew?: CastMember[] 
     );
 }
 
-function SeasonSection({ seasons }: { seasons: SeasonDetail[] }) {
+function SeasonSection({ seasons, seriesId }: { seasons: SeasonDetail[]; seriesId: string | number }) {
     const [openSeason, setOpenSeason] = useState<number | null>(null);
+    const seasonMonitor = useUpdateSeasonMonitoring();
+    const [pendingSeason, setPendingSeason] = useState<number | null>(null);
+
+    const toggleSeason = (seasonNumber: number, monitored: boolean) => {
+        setPendingSeason(seasonNumber);
+        seasonMonitor.mutate(
+            { id: seriesId, season: seasonNumber, monitored },
+            {
+                onSuccess: () =>
+                    toast.success(
+                        `Saison ${seasonNumber} ${monitored ? "surveillée" : "non surveillée"}.`,
+                    ),
+                onError: (e) => toast.error("Erreur : " + e.message),
+                onSettled: () => setPendingSeason(null),
+            },
+        );
+    };
 
     return (
         <div className="space-y-3">
             {seasons.filter(s => s.season_number > 0).map((season) => (
                 <Card key={season.season_number} className="bg-card/50 border-border/50">
-                    <button
-                        className="w-full text-left"
-                        onClick={() =>
-                            setOpenSeason(
-                                openSeason === season.season_number ? null : season.season_number
-                            )
-                        }
-                    >
-                        <CardHeader className="p-4 pb-3">
-                            <div className="flex items-center justify-between">
-                                <CardTitle className="text-base">
-                                    Saison {season.season_number}
-                                </CardTitle>
-                                <div className="flex items-center gap-2">
-                                    <Badge
-                                        variant={
-                                            season.episodes_have === season.episode_count
-                                                ? "default"
-                                                : "secondary"
-                                        }
-                                        className={cn(
-                                            "text-xs",
-                                            season.episodes_have === season.episode_count
-                                                ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
-                                                : ""
-                                        )}
-                                    >
-                                        {season.episodes_have}/{season.episode_count} épisodes
-                                    </Badge>
+                    <div className="flex items-center">
+                        <button
+                            className="flex-1 text-left"
+                            onClick={() =>
+                                setOpenSeason(
+                                    openSeason === season.season_number ? null : season.season_number
+                                )
+                            }
+                        >
+                            <CardHeader className="p-4 pb-3">
+                                <div className="flex items-center justify-between">
+                                    <CardTitle className="text-base">
+                                        Saison {season.season_number}
+                                    </CardTitle>
+                                    <div className="flex items-center gap-2">
+                                        <Badge
+                                            variant={
+                                                season.episodes_have === season.episode_count
+                                                    ? "default"
+                                                    : "secondary"
+                                            }
+                                            className={cn(
+                                                "text-xs",
+                                                season.episodes_have === season.episode_count
+                                                    ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                                                    : ""
+                                            )}
+                                        >
+                                            {season.episodes_have}/{season.episode_count} épisodes
+                                        </Badge>
+                                    </div>
                                 </div>
-                            </div>
-                        </CardHeader>
-                    </button>
+                            </CardHeader>
+                        </button>
+                        <div
+                            className="flex items-center gap-2 pr-4"
+                            title={season.monitored ? "Surveillée" : "Non surveillée"}
+                        >
+                            <Eye
+                                className={cn(
+                                    "h-3.5 w-3.5",
+                                    season.monitored ? "text-emerald-400" : "text-muted-foreground/50",
+                                )}
+                            />
+                            <Switch
+                                checked={!!season.monitored}
+                                disabled={pendingSeason === season.season_number}
+                                onCheckedChange={(v) => toggleSeason(season.season_number, v)}
+                                aria-label="Surveiller la saison"
+                            />
+                        </div>
+                    </div>
                     {openSeason === season.season_number && (
                         <CardContent className="px-4 pb-4">
                             <div className="space-y-1">
@@ -272,6 +315,230 @@ function SeasonSection({ seasons }: { seasons: SeasonDetail[] }) {
     );
 }
 
+const MOVIE_AVAILABILITY = [
+    { value: "announced", label: "Annoncé" },
+    { value: "inCinemas", label: "En salle" },
+    { value: "released", label: "Sorti" },
+];
+
+const SERIES_TYPES = [
+    { value: "standard", label: "Standard" },
+    { value: "daily", label: "Quotidien (daily)" },
+    { value: "anime", label: "Anime" },
+];
+
+function EditMediaDialog({
+    type,
+    media,
+    open,
+    onOpenChange,
+}: {
+    type: "movie" | "series";
+    media: MediaDetail;
+    open: boolean;
+    onOpenChange: (v: boolean) => void;
+}) {
+    const isMovie = type === "movie";
+    const { data: options } = useMediaEditOptions(type, open);
+    const updateMedia = useUpdateMedia();
+    const createTag = useCreateTag();
+
+    const [monitored, setMonitored] = useState<boolean>(media.monitored);
+    const [qualityProfileId, setQualityProfileId] = useState<number | undefined>(
+        media.quality_profile_id ?? undefined,
+    );
+    const [tags, setTags] = useState<number[]>(media.tags ?? []);
+    const [minimumAvailability, setMinimumAvailability] = useState<string>(
+        media.minimum_availability ?? "released",
+    );
+    const [seriesType, setSeriesType] = useState<string>(media.series_type || "standard");
+    const [newTag, setNewTag] = useState("");
+
+    const toggleTag = (id: number) => {
+        setTags((prev) => (prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]));
+    };
+
+    const handleAddTag = () => {
+        const label = newTag.trim();
+        if (!label) return;
+        createTag.mutate(
+            { type, label },
+            {
+                onSuccess: (tag) => {
+                    setTags((prev) => [...prev, tag.id]);
+                    setNewTag("");
+                    toast.success(`Tag « ${tag.label} » créé.`);
+                },
+                onError: (e) => toast.error("Erreur : " + e.message),
+            },
+        );
+    };
+
+    const handleSave = () => {
+        const payload: Record<string, unknown> = { monitored };
+        if (qualityProfileId !== undefined) payload.quality_profile_id = qualityProfileId;
+        payload.tags = tags;
+        if (isMovie) payload.minimum_availability = minimumAvailability;
+        else payload.series_type = seriesType;
+
+        updateMedia.mutate(
+            { type, id: media.id, data: payload },
+            {
+                onSuccess: () => {
+                    toast.success("Média mis à jour dans " + (isMovie ? "Radarr" : "Sonarr") + " !");
+                    onOpenChange(false);
+                },
+                onError: (e) => toast.error("Erreur : " + e.message),
+            },
+        );
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-[520px]">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                        <Pencil className="h-4 w-4" /> Éditer « {media.title} »
+                    </DialogTitle>
+                    <DialogDescription>
+                        Modifie les paramètres {isMovie ? "du film" : "de la série"} dans{" "}
+                        {isMovie ? "Radarr" : "Sonarr"}.
+                    </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-5 py-2">
+                    {/* Monitored */}
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-sm font-medium">Surveillé</p>
+                            <p className="text-xs text-muted-foreground">
+                                {isMovie ? "Recherche auto du film" : "Recherche auto des épisodes"}
+                            </p>
+                        </div>
+                        <Switch checked={monitored} onCheckedChange={setMonitored} />
+                    </div>
+
+                    {/* Quality profile */}
+                    <div className="space-y-1.5">
+                        <p className="text-sm font-medium">Profil de qualité</p>
+                        <select
+                            className="w-full h-9 rounded-md border border-border/60 bg-card/50 px-2 text-sm"
+                            value={qualityProfileId ?? ""}
+                            onChange={(e) => setQualityProfileId(Number(e.target.value) || undefined)}
+                        >
+                            {(options?.quality_profiles ?? []).map((p) => (
+                                <option key={p.id} value={p.id}>
+                                    {p.name}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Movie: minimum availability */}
+                    {isMovie && (
+                        <div className="space-y-1.5">
+                            <p className="text-sm font-medium">Disponibilité minimale</p>
+                            <select
+                                className="w-full h-9 rounded-md border border-border/60 bg-card/50 px-2 text-sm"
+                                value={minimumAvailability}
+                                onChange={(e) => setMinimumAvailability(e.target.value)}
+                            >
+                                {MOVIE_AVAILABILITY.map((o) => (
+                                    <option key={o.value} value={o.value}>
+                                        {o.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+
+                    {/* Series: type */}
+                    {!isMovie && (
+                        <div className="space-y-1.5">
+                            <p className="text-sm font-medium">Type de série</p>
+                            <select
+                                className="w-full h-9 rounded-md border border-border/60 bg-card/50 px-2 text-sm"
+                                value={seriesType}
+                                onChange={(e) => setSeriesType(e.target.value)}
+                            >
+                                {SERIES_TYPES.map((o) => (
+                                    <option key={o.value} value={o.value}>
+                                        {o.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+
+                    {/* Tags */}
+                    <div className="space-y-2">
+                        <p className="text-sm font-medium">Tags</p>
+                        <div className="flex flex-wrap gap-1.5">
+                            {(options?.tags ?? []).map((t) => {
+                                const active = tags.includes(t.id);
+                                return (
+                                    <button
+                                        key={t.id}
+                                        type="button"
+                                        onClick={() => toggleTag(t.id)}
+                                        className={cn(
+                                            "px-2 py-1 rounded-md text-xs border transition-colors",
+                                            active
+                                                ? "bg-primary/20 border-primary/40 text-primary"
+                                                : "bg-card/50 border-border/50 text-muted-foreground hover:text-foreground",
+                                        )}
+                                    >
+                                        {t.label}
+                                    </button>
+                                );
+                            })}
+                            {(options?.tags ?? []).length === 0 && (
+                                <span className="text-xs text-muted-foreground">Aucun tag existant</span>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-2 pt-1">
+                            <input
+                                className="flex-1 h-8 rounded-md border border-border/60 bg-card/50 px-2 text-sm"
+                                placeholder="Nouveau tag…"
+                                value={newTag}
+                                onChange={(e) => setNewTag(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        handleAddTag();
+                                    }
+                                }}
+                            />
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={!newTag.trim() || createTag.isPending}
+                                onClick={handleAddTag}
+                            >
+                                {createTag.isPending ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                    <Plus className="h-4 w-4" />
+                                )}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => onOpenChange(false)} disabled={updateMedia.isPending}>
+                        Annuler
+                    </Button>
+                    <Button onClick={handleSave} disabled={updateMedia.isPending}>
+                        {updateMedia.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                        Enregistrer
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 export default function MediaDetailPage() {
     const params = useParams();
     const router = useRouter();
@@ -288,6 +555,7 @@ export default function MediaDetailPage() {
     const [moveDialogOpen, setMoveDialogOpen] = useState(false);
     const [selectedRootFolder, setSelectedRootFolder] = useState("");
     const [customMovePath, setCustomMovePath] = useState("");
+    const [editOpen, setEditOpen] = useState(false);
 
     const { data: rootFolders } = useMediaRootFolders(type, id);
     const updatePathMutation = useUpdateMediaPath();
@@ -530,6 +798,15 @@ export default function MediaDetailPage() {
                                     )}
                                     Rechercher
                                 </Button>
+                                <Button
+                                    variant="default"
+                                    size="sm"
+                                    className="bg-sky-600 hover:bg-sky-500 text-white"
+                                    onClick={() => setEditOpen(true)}
+                                >
+                                    <Pencil className="h-4 w-4 mr-2" />
+                                    Éditer
+                                </Button>
                                 <Button 
                                     variant="default" 
                                     size="sm" 
@@ -626,7 +903,7 @@ export default function MediaDetailPage() {
                     {/* Seasons tab (series only) */}
                     {!isMovie && media.seasons && (
                         <TabsContent value="seasons">
-                            <SeasonSection seasons={media.seasons} />
+                            <SeasonSection seasons={media.seasons} seriesId={media.id} />
                         </TabsContent>
                     )}
 
@@ -749,6 +1026,8 @@ export default function MediaDetailPage() {
                     </TabsContent>
                 </Tabs>
             </div>
+
+            <EditMediaDialog type={type} media={media} open={editOpen} onOpenChange={setEditOpen} />
 
             <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
                 <DialogContent>
@@ -1073,10 +1352,26 @@ function QualityTab({ media }: { media: MediaDetail }) {
 // ── Interactive Search Tab ──────────────────────────────────
 
 function InteractiveSearchTab({ type, media }: { type: "movie" | "series"; media: MediaDetail }) {
+    const isSeries = type === "series";
+    // Real seasons only (exclude specials / season 0).
+    const seasonOptions = (media.seasons ?? [])
+        .map((s) => s.season_number)
+        .filter((n) => n > 0)
+        .sort((a, b) => a - b);
     const [enabled, setEnabled] = useState(false);
-    const { data, isFetching, error, refetch } = useMediaReleases(type, media.id, enabled);
+    const [selectedSeason, setSelectedSeason] = useState<number | undefined>(
+        isSeries ? seasonOptions[0] : undefined,
+    );
+    const { data, isFetching, error, refetch } = useMediaReleases(
+        type,
+        media.id,
+        enabled,
+        selectedSeason,
+    );
     const grab = useGrabRelease();
     const [grabbing, setGrabbing] = useState<string | null>(null);
+
+    const canSearch = !isSeries || selectedSeason !== undefined;
 
     const handleGrab = (r: Release) => {
         setGrabbing(r.guid);
@@ -1095,24 +1390,46 @@ function InteractiveSearchTab({ type, media }: { type: "movie" | "series"; media
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <p className="text-sm text-muted-foreground">
                     Recherche interactive sur les indexeurs via {type === "movie" ? "Radarr" : "Sonarr"}.
-                    Choisissez une release à envoyer au client de téléchargement.
+                    {isSeries
+                        ? " Choisissez une saison, puis lancez la recherche."
+                        : " Choisissez une release à envoyer au client de téléchargement."}
                 </p>
-                <Button
-                    size="sm"
-                    variant="outline"
-                    className="shrink-0"
-                    disabled={isFetching}
-                    onClick={() => {
-                        if (!enabled) setEnabled(true);
-                        else refetch();
-                    }}
-                >
-                    {isFetching ? (
-                        <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Recherche…</>
-                    ) : (
-                        <><Search className="h-4 w-4 mr-2" /> {enabled ? "Relancer" : "Lancer la recherche"}</>
+                <div className="flex items-center gap-2 shrink-0">
+                    {isSeries && (
+                        <select
+                            className="h-9 rounded-md border border-border/60 bg-card/50 px-2 text-sm"
+                            value={selectedSeason ?? ""}
+                            onChange={(e) => {
+                                const n = Number(e.target.value);
+                                setSelectedSeason(Number.isNaN(n) ? undefined : n);
+                                setEnabled(false); // force an explicit re-search for the new season
+                            }}
+                        >
+                            {seasonOptions.length === 0 && <option value="">Aucune saison</option>}
+                            {seasonOptions.map((n) => (
+                                <option key={n} value={n}>
+                                    Saison {n}
+                                </option>
+                            ))}
+                        </select>
                     )}
-                </Button>
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        className="shrink-0"
+                        disabled={isFetching || !canSearch}
+                        onClick={() => {
+                            if (!enabled) setEnabled(true);
+                            else refetch();
+                        }}
+                    >
+                        {isFetching ? (
+                            <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Recherche…</>
+                        ) : (
+                            <><Search className="h-4 w-4 mr-2" /> {enabled ? "Relancer" : "Lancer la recherche"}</>
+                        )}
+                    </Button>
+                </div>
             </div>
 
             {error && (

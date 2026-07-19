@@ -3,6 +3,7 @@
 import { ThemeProvider as NextThemesProvider } from "next-themes";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
+import { Toaster } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 export function Providers({ children }: { children: ReactNode }) {
@@ -29,6 +30,12 @@ export function Providers({ children }: { children: ReactNode }) {
             >
                 <TooltipProvider delayDuration={300}>
                     {children}
+                    <Toaster
+                        richColors
+                        closeButton
+                        position="top-right"
+                        theme="dark"
+                    />
                 </TooltipProvider>
             </NextThemesProvider>
         </QueryClientProvider>

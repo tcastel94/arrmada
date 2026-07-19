@@ -36,6 +36,7 @@ export function useRequests() {
     return useQuery<RequestsResponse>({
         queryKey: ["requests"],
         queryFn: () => apiFetch("/api/requests"),
+        refetchInterval: 15000,
     });
 }
 

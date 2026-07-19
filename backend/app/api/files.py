@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pydantic import BaseModel
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
@@ -17,6 +17,7 @@ from app.services.media_mover import (
     get_stuck_downloads,
     trigger_manual_import,
 )
+from app.database import async_session_factory
 
 router = APIRouter(
     prefix="/api/files",
@@ -94,3 +95,36 @@ async def manual_import(payload: ImportPayload, db: AsyncSession = Depends(get_d
     and trigger Bazarr for subtitles + Jellyfin library update.
     """
     return await trigger_manual_import(db, payload.download_path, payload.media_type)
+
+
+class BulkImportPayload(BaseModel):
+    items: list[ImportPayload]
+
+
+@router.post("/import/bulk")
+async def bulk_import(
+    payload: BulkImportPayload,
+    background_tasks: BackgroundTasks,
+):
+    """Trigger manual import for multiple files in the background."""
+    async def run_imports():
+        import logging
+        logger = logging.getLogger("app.api.files")
+        
+        for idx, item in enumerate(payload.items):
+            try:
+                logger.info("Background bulk import [%d/%d]: %s (%s)", idx + 1, len(payload.items), item.download_path, item.media_type)
+                async with async_session_factory() as db:
+                    await trigger_manual_import(db, item.download_path, item.media_type)
+            except Exception as exc:
+                logger.error("Failed background bulk import for %s: %s", item.download_path, exc)
+
+    background_tasks.add_task(run_imports)
+    return {"success": True, "message": f"Importation en arrière-plan démarrée pour {len(payload.items)} fichiers !"}
+
+
+@router.get("/auto-import/reports")
+async def get_auto_import_reports():
+    """Get the 10 most recent auto-import execution reports."""
+    from app.services.auto_import_reports import get_reports
+    return get_reports()

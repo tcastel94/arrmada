@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Header } from "@/components/layout/header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { PageSkeleton } from "@/components/shared/loading-skeleton";
@@ -46,6 +46,7 @@ import {
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { useToast } from "@/components/ui/use-toast";
+import { apiFetch } from "@/lib/api-client";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: any }> = {
     requested: { label: "Demandé", color: "bg-blue-500", icon: Clock },
@@ -66,6 +67,30 @@ export default function RequestsPage() {
     const [type, setType] = useState("movie");
     const [year, setYear] = useState("");
     const [tmdbId, setTmdbId] = useState("");
+    const [posterUrl, setPosterUrl] = useState("");
+    const [searchResults, setSearchResults] = useState<any[]>([]);
+    const [isSearching, setIsSearching] = useState(false);
+
+    useEffect(() => {
+        if (title.trim().length < 2) {
+            setSearchResults([]);
+            return;
+        }
+
+        const delayDebounce = setTimeout(async () => {
+            setIsSearching(true);
+            try {
+                const results = await apiFetch(`/api/requests/lookup?q=${encodeURIComponent(title.trim())}&type=${type}`);
+                setSearchResults(results);
+            } catch {
+                setSearchResults([]);
+            } finally {
+                setIsSearching(false);
+            }
+        }, 500);
+
+        return () => clearTimeout(delayDebounce);
+    }, [title, type]);
 
     const handleSubmit = async () => {
         if (!title.trim()) return;
@@ -76,6 +101,7 @@ export default function RequestsPage() {
                 type,
                 year: year ? parseInt(year) : null,
                 tmdb_id: tmdbId ? parseInt(tmdbId) : null,
+                poster_url: posterUrl || null,
             });
             toast({
                 title: "Requête envoyée",
@@ -84,6 +110,8 @@ export default function RequestsPage() {
             setTitle("");
             setYear("");
             setTmdbId("");
+            setPosterUrl("");
+            setSearchResults([]);
             setDialogOpen(false);
         } catch {
             toast({
@@ -132,14 +160,23 @@ export default function RequestsPage() {
                         </p>
                     </div>
 
-                    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                    <Dialog open={dialogOpen} onOpenChange={(open) => {
+                        setDialogOpen(open);
+                        if (!open) {
+                            setTitle("");
+                            setYear("");
+                            setTmdbId("");
+                            setPosterUrl("");
+                            setSearchResults([]);
+                        }
+                    }}>
                         <DialogTrigger asChild>
                             <Button>
                                 <Plus className="h-4 w-4 mr-2" />
                                 Nouvelle requête
                             </Button>
                         </DialogTrigger>
-                        <DialogContent>
+                        <DialogContent className="max-w-md">
                             <DialogHeader>
                                 <DialogTitle>Ajouter un média</DialogTitle>
                                 <DialogDescription>
@@ -156,13 +193,93 @@ export default function RequestsPage() {
                                         placeholder="Ex: Dune Part Two"
                                         value={title}
                                         onChange={(e) => setTitle(e.target.value)}
+                                        autoComplete="off"
                                     />
                                 </div>
+
+                                {/* Autocomplete Results */}
+                                {title.trim().length >= 2 && searchResults.length > 0 && (
+                                    <div className="border rounded-md max-h-56 overflow-y-auto divide-y bg-popover text-popover-foreground shadow-lg">
+                                        {isSearching ? (
+                                            <div className="p-3 text-xs text-muted-foreground flex items-center justify-center gap-2">
+                                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                Recherche en cours...
+                                            </div>
+                                        ) : (
+                                            searchResults.map((item) => (
+                                                <button
+                                                    key={item.tmdb_id || item.title}
+                                                    type="button"
+                                                    className="w-full text-left p-2.5 hover:bg-accent hover:text-accent-foreground text-xs flex items-start gap-3 transition-colors"
+                                                    onClick={() => {
+                                                        setTitle(item.title);
+                                                        setYear(item.year ? item.year.toString() : "");
+                                                        setTmdbId(item.tmdb_id ? item.tmdb_id.toString() : "");
+                                                        setPosterUrl(item.poster_url || "");
+                                                        setSearchResults([]);
+                                                    }}
+                                                >
+                                                    {item.poster_url ? (
+                                                        <img
+                                                            src={item.poster_url}
+                                                            alt=""
+                                                            className="w-9 h-12 object-cover rounded bg-muted shrink-0"
+                                                        />
+                                                    ) : (
+                                                        <div className="w-9 h-12 bg-muted rounded shrink-0 flex items-center justify-center">
+                                                            {type === "movie" ? <Film className="h-4 w-4 text-muted-foreground/40" /> : <Tv className="h-4 w-4 text-muted-foreground/40" />}
+                                                        </div>
+                                                    )}
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="font-semibold flex items-center justify-between">
+                                                            <span className="truncate pr-1">{item.title}</span>
+                                                            {item.year && <span className="text-muted-foreground shrink-0 text-[10px]">{item.year}</span>}
+                                                        </div>
+                                                        {item.overview && (
+                                                            <p className="text-[10px] text-muted-foreground line-clamp-2 mt-0.5">
+                                                                {item.overview}
+                                                            </p>
+                                                        )}
+                                                        <div className="text-[9px] text-muted-foreground mt-1 flex items-center justify-between">
+                                                            <div>
+                                                                <span className="font-medium mr-0.5">{type === "movie" ? "TMDB ID:" : "TVDB ID:"}</span>
+                                                                <span className="bg-muted px-1 py-0.5 rounded">{item.tmdb_id || "N/A"}</span>
+                                                            </div>
+                                                            {item.tmdb_id && (
+                                                                <a
+                                                                    href={type === "movie" ? `https://www.themoviedb.org/movie/${item.tmdb_id}` : `https://thetvdb.com/dereferrer/series/${item.tmdb_id}`}
+                                                                    target="_blank"
+                                                                    rel="noreferrer"
+                                                                    className="text-primary hover:underline font-semibold"
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                >
+                                                                    Voir fiche ↗
+                                                                </a>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </button>
+                                            ))
+                                        )}
+                                    </div>
+                                )}
+                                {title.trim().length >= 2 && searchResults.length === 0 && isSearching && (
+                                    <div className="border rounded-md p-3 text-xs text-muted-foreground flex items-center justify-center gap-2 bg-popover shadow-lg">
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        Recherche en cours...
+                                    </div>
+                                )}
 
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-2">
                                         <Label>Type</Label>
-                                        <Select value={type} onValueChange={setType}>
+                                        <Select value={type} onValueChange={(val) => {
+                                            setType(val);
+                                            setSearchResults([]);
+                                            setYear("");
+                                            setTmdbId("");
+                                            setPosterUrl("");
+                                        }}>
                                             <SelectTrigger>
                                                 <SelectValue />
                                             </SelectTrigger>
@@ -184,16 +301,20 @@ export default function RequestsPage() {
                                 </div>
 
                                 <div className="space-y-2">
-                                    <Label htmlFor="req-tmdb">TMDB ID (optionnel)</Label>
+                                    <Label htmlFor="req-tmdb">
+                                        {type === "movie" ? "TMDB ID" : "TVDB ID"} (optionnel)
+                                    </Label>
                                     <Input
                                         id="req-tmdb"
-                                        placeholder="ex: 693134"
+                                        placeholder={type === "movie" ? "ex: 693134" : "ex: 79286"}
                                         value={tmdbId}
                                         onChange={(e) => setTmdbId(e.target.value)}
                                     />
                                     <p className="text-xs text-muted-foreground">
-                                        Si fourni, le média sera recherché par TMDB ID pour plus de
-                                        précision
+                                        {type === "movie" 
+                                            ? "Si fourni, le média sera recherché par TMDB ID pour plus de précision"
+                                            : "Si fourni, la série sera recherchée par TVDB ID pour plus de précision"
+                                        }
                                     </p>
                                 </div>
                             </div>
@@ -305,7 +426,8 @@ export default function RequestsPage() {
                                                     variant="outline"
                                                     className="gap-1.5 capitalize"
                                                 >
-                                                    <StatusIcon className="h-3 w-3" />
+                                                    <span className={cn("h-2 w-2 rounded-full", statusCfg.color)} />
+                                                    <StatusIcon className="h-3 w-3 text-muted-foreground" />
                                                     {statusCfg.label}
                                                 </Badge>
                                             </div>

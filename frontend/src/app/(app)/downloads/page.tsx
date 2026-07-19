@@ -5,6 +5,15 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
 import {
     Download,
     ArrowDownToLine,
@@ -16,10 +25,44 @@ import {
     HardDrive,
     Zap,
     RefreshCw,
+    Trash2,
+    Ban,
+    RotateCw,
+    Loader2,
 } from "lucide-react";
-import { useDownloads } from "@/hooks/use-downloads";
+import {
+    useDownloads,
+    useRemoveQueueItem,
+    useRetryQueueItem,
+    type DownloadItem,
+} from "@/hooks/use-downloads";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
+import { useState } from "react";
+import { toast } from "sonner";
+
+type PendingAction =
+    | { kind: "remove"; item: DownloadItem }
+    | { kind: "blocklist"; item: DownloadItem }
+    | { kind: "retry"; item: DownloadItem };
+
+const ACTION_COPY: Record<PendingAction["kind"], { title: string; description: string; confirm: string }> = {
+    remove: {
+        title: "Supprimer de la queue",
+        description: "Le téléchargement sera retiré du client et de la queue *arr. Le release n'est pas blocklisté.",
+        confirm: "Supprimer",
+    },
+    blocklist: {
+        title: "Supprimer + Blocklist",
+        description: "Le téléchargement sera supprimé ET le release blocklisté pour ne plus être re-grabé.",
+        confirm: "Supprimer + Blocklist",
+    },
+    retry: {
+        title: "Relancer (Retry)",
+        description: "Le release actuel sera blocklisté puis retiré, et une nouvelle recherche automatique sera lancée.",
+        confirm: "Relancer",
+    },
+};
 
 function formatBytes(bytes: number): string {
     if (!bytes) return "—";
@@ -79,6 +122,39 @@ const fadeUp = {
 
 export default function DownloadsPage() {
     const { data, isLoading, isFetching } = useDownloads();
+    const removeItem = useRemoveQueueItem();
+    const retryItem = useRetryQueueItem();
+    const [pending, setPending] = useState<PendingAction | null>(null);
+
+    const isBusy = removeItem.isPending || retryItem.isPending;
+
+    const runAction = async () => {
+        if (!pending) return;
+        const { kind, item } = pending;
+        const type = item.service_type; // "radarr" | "sonarr"
+        try {
+            if (kind === "retry") {
+                await retryItem.mutateAsync({
+                    type,
+                    id: item.id,
+                    movie_id: item.movie_id,
+                    series_id: item.series_id,
+                });
+                toast.success("Relance lancée — nouvelle recherche en cours.");
+            } else {
+                await removeItem.mutateAsync({
+                    type,
+                    id: item.id,
+                    removeFromClient: true,
+                    blocklist: kind === "blocklist",
+                });
+                toast.success(kind === "blocklist" ? "Supprimé et blocklisté." : "Supprimé de la queue.");
+            }
+            setPending(null);
+        } catch (e) {
+            toast.error("Erreur : " + (e as Error).message);
+        }
+    };
 
     return (
         <>
@@ -224,10 +300,41 @@ export default function DownloadsPage() {
                                                 </div>
 
                                                 {/* Progress */}
-                                                <div className="w-20 flex flex-col items-end gap-1 shrink-0">
+                                                <div className="w-14 flex flex-col items-end gap-1 shrink-0">
                                                     <span className="text-sm font-bold tabular-nums">
                                                         {dl.progress.toFixed(0)}%
                                                     </span>
+                                                </div>
+
+                                                {/* Actions */}
+                                                <div className="flex items-center gap-1 shrink-0">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-8 w-8 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
+                                                        title="Relancer (blocklist + recherche)"
+                                                        onClick={() => setPending({ kind: "retry", item: dl })}
+                                                    >
+                                                        <RotateCw className="h-4 w-4" />
+                                                    </Button>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-8 w-8 text-orange-400 hover:text-orange-300 hover:bg-orange-500/10"
+                                                        title="Supprimer + Blocklist"
+                                                        onClick={() => setPending({ kind: "blocklist", item: dl })}
+                                                    >
+                                                        <Ban className="h-4 w-4" />
+                                                    </Button>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                                                        title="Supprimer de la queue"
+                                                        onClick={() => setPending({ kind: "remove", item: dl })}
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </Button>
                                                 </div>
                                             </div>
 
@@ -249,6 +356,36 @@ export default function DownloadsPage() {
                     </motion.div>
                 )}
             </motion.div>
+
+            {/* Confirmation dialog */}
+            <Dialog open={!!pending} onOpenChange={(open) => !open && !isBusy && setPending(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>{pending ? ACTION_COPY[pending.kind].title : ""}</DialogTitle>
+                        <DialogDescription>
+                            {pending ? ACTION_COPY[pending.kind].description : ""}
+                        </DialogDescription>
+                    </DialogHeader>
+                    {pending && (
+                        <p className="text-sm text-muted-foreground truncate">
+                            <span className="font-medium text-foreground">{pending.item.title}</span>
+                        </p>
+                    )}
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setPending(null)} disabled={isBusy}>
+                            Annuler
+                        </Button>
+                        <Button
+                            variant={pending?.kind === "retry" ? "default" : "destructive"}
+                            onClick={runAction}
+                            disabled={isBusy}
+                        >
+                            {isBusy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                            {pending ? ACTION_COPY[pending.kind].confirm : ""}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </>
     );
 }

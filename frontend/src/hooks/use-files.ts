@@ -149,3 +149,43 @@ export function useManualImport() {
         },
     });
 }
+
+export function useBulkImport() {
+    const queryClient = useQueryClient();
+    return useMutation<{ success: boolean; message: string }, Error, { items: { download_path: string; media_type: string }[] }>({
+        mutationFn: (payload) =>
+            apiFetch("/api/files/import/bulk", {
+                method: "POST",
+                body: JSON.stringify(payload),
+            }),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["stuck-downloads"] });
+            queryClient.invalidateQueries({ queryKey: ["sabnzbd-history"] });
+        },
+    });
+}
+
+export interface AutoImportReportItem {
+    name: string;
+    storage_path: string;
+    media_type: string;
+    status: "success" | "failed";
+    message?: string;
+}
+
+export interface AutoImportReport {
+    timestamp: string;
+    duration_seconds: number;
+    scanned_count: number;
+    imported_count: number;
+    failed_count: number;
+    items: AutoImportReportItem[];
+}
+
+export function useAutoImportReports() {
+    return useQuery<AutoImportReport[]>({
+        queryKey: ["auto-import-reports"],
+        queryFn: () => apiFetch("/api/files/auto-import/reports"),
+        refetchInterval: 30_000,
+    });
+}

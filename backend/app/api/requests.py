@@ -3,11 +3,21 @@
 from __future__ import annotations
 
 from pydantic import BaseModel
-from fastapi import APIRouter, Depends, HTTPException, status, Response
+from fastapi import APIRouter, Depends, HTTPException, status, Response, BackgroundTasks, Query
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.service import Service
+from app.services.encryption import decrypt_api_key
+from app.services.radarr import RadarrClient
+from app.services.sonarr import SonarrClient
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 from app.api.deps import get_current_user, get_db
 from app.services.request_service import create_request, list_requests, delete_request
+
 
 router = APIRouter(
     prefix="/api/requests",
@@ -25,9 +35,86 @@ class RequestCreate(BaseModel):
     quality_profile: str | None = None
 
 
+async def _bg_sync_requests() -> None:
+    from app.database import async_session_factory
+    from app.services.request_service import sync_active_requests
+    from app.utils.logger import get_logger
+
+    logger = get_logger("requests_bg_sync")
+    async with async_session_factory() as session:
+        try:
+            await sync_active_requests(session)
+        except Exception as exc:
+            logger.error("Background request sync failed: %s", exc)
+
+
+@router.get("/lookup")
+async def lookup_media(
+    q: str = Query(..., min_length=2),
+    type: str = Query(..., description="movie or series"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Lookup movies/series from Sonarr/Radarr services."""
+    if type not in ("movie", "series"):
+        raise HTTPException(status_code=400, detail="Invalid media type")
+
+    target_service = "radarr" if type == "movie" else "sonarr"
+    stmt = select(Service).where(
+        Service.is_enabled == True,  # noqa: E712
+        Service.type == target_service,
+    )
+    result = await db.execute(stmt)
+    service = result.scalars().first()
+    if not service:
+        return []
+
+    api_key = decrypt_api_key(service.api_key)
+    results = []
+
+    if type == "movie":
+        client = RadarrClient(url=service.url, api_key=api_key)
+        try:
+            raw = await client.lookup_movie(q)
+            for item in raw[:10]:
+                images = item.get("images", [])
+                poster = next((img["remoteUrl"] for img in images if img.get("coverType") == "poster" and img.get("remoteUrl")), None)
+                results.append({
+                    "title": item.get("title"),
+                    "year": item.get("year"),
+                    "tmdb_id": item.get("tmdbId"),
+                    "overview": item.get("overview"),
+                    "poster_url": poster,
+                })
+        except Exception as exc:
+            logger.error("Radarr lookup failed: %s", exc)
+        finally:
+            await client.close()
+    else:
+        client = SonarrClient(url=service.url, api_key=api_key)
+        try:
+            raw = await client.lookup_series(q)
+            for item in raw[:10]:
+                images = item.get("images", [])
+                poster = next((img["remoteUrl"] for img in images if img.get("coverType") == "poster" and img.get("remoteUrl")), None)
+                results.append({
+                    "title": item.get("title"),
+                    "year": item.get("year"),
+                    "tmdb_id": item.get("tvdbId"),  # Sonarr uses TVDB ID
+                    "overview": item.get("overview"),
+                    "poster_url": poster,
+                })
+        except Exception as exc:
+            logger.error("Sonarr lookup failed: %s", exc)
+        finally:
+            await client.close()
+
+    return results
+
+
 @router.get("")
-async def get_requests(db: AsyncSession = Depends(get_db)):
+async def get_requests(background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
     """List all media requests."""
+    background_tasks.add_task(_bg_sync_requests)
     requests = await list_requests(db)
     return {
         "items": [

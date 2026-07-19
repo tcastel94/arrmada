@@ -3,6 +3,15 @@
 import { useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api-client";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
 import { Header } from "@/components/layout/header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Card, CardContent } from "@/components/ui/card";
@@ -30,7 +39,9 @@ import {
     Square,
     RefreshCw,
     CloudDownload,
-    Settings
+    Settings,
+    Trash2,
+    Loader2
 } from "lucide-react";
 import { useMedia, type MediaItem } from "@/hooks/use-media";
 import { cn } from "@/lib/utils";
@@ -191,9 +202,43 @@ export default function MediaPage() {
     const [order, setOrder] = useState("asc");
     const [page, setPage] = useState(1);
     
+    const queryClient = useQueryClient();
+
     // Selection state
     const [selectionMode, setSelectionMode] = useState(false);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+    // Bulk deletion state
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [deleteFiles, setDeleteFiles] = useState(true);
+    const [deleteDownloads, setDeleteDownloads] = useState(true);
+    const [isDeleting, setIsDeleting] = useState(false);
+
+    const handleBulkDelete = async () => {
+        const items = data?.items.filter(i => selectedIds.has(i.external_id));
+        if (!items || items.length === 0) return;
+
+        setIsDeleting(true);
+        try {
+            const promises = items.map(item => 
+                apiFetch(`/api/media/${item.type}/${item.external_id}?delete_files=${deleteFiles}&delete_downloads=${deleteDownloads}`, {
+                    method: "DELETE"
+                })
+            );
+            await Promise.all(promises);
+            
+            alert(`${items.length} média(s) supprimé(s) avec succès !`);
+            
+            setDeleteDialogOpen(false);
+            setSelectionMode(false);
+            setSelectedIds(new Set());
+            queryClient.invalidateQueries({ queryKey: ["media"] });
+        } catch (e) {
+            alert("Erreur lors de la suppression des médias.");
+        } finally {
+            setIsDeleting(false);
+        }
+    };
 
     const { data, isLoading } = useMedia({
         type: type === "all" ? undefined : type,
@@ -340,6 +385,15 @@ export default function MediaPage() {
                                 >
                                     <CloudDownload className="h-4 w-4 mr-1.5" />
                                     Scraper SR
+                                </Button>
+                                <Button 
+                                    size="sm" 
+                                    variant="destructive"
+                                    onClick={() => setDeleteDialogOpen(true)}
+                                    disabled={selectedIds.size === 0}
+                                >
+                                    <Trash2 className="h-4 w-4 mr-1.5" />
+                                    Supprimer
                                 </Button>
                                 <Button size="sm" variant="ghost" onClick={() => { setSelectionMode(false); setSelectedIds(new Set()); }}>Annuler</Button>
                             </>
@@ -495,6 +549,53 @@ export default function MediaPage() {
                     </div>
                 )}
             </motion.div>
+
+            <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Confirmer la suppression groupée</DialogTitle>
+                        <DialogDescription>
+                            Voulez-vous vraiment supprimer les {selectedIds.size} média(s) sélectionné(s) ? Cette action est irréversible.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-2 space-y-3">
+                        <label className="flex items-center gap-2.5 text-sm font-medium cursor-pointer">
+                            <input 
+                                type="checkbox" 
+                                checked={deleteFiles} 
+                                onChange={(e) => setDeleteFiles(e.target.checked)}
+                                className="h-4.5 w-4.5 rounded border-white/10 bg-muted text-red-600 focus:ring-red-500 focus:ring-offset-background"
+                            />
+                            <span>Supprimer également les fichiers téléchargés du disque</span>
+                        </label>
+                        <label className="flex items-center gap-2.5 text-sm font-medium cursor-pointer">
+                            <input 
+                                type="checkbox" 
+                                checked={deleteDownloads} 
+                                onChange={(e) => setDeleteDownloads(e.target.checked)}
+                                className="h-4.5 w-4.5 rounded border-white/10 bg-muted text-red-600 focus:ring-red-500 focus:ring-offset-background"
+                            />
+                            <span>Supprimer de la file d&apos;attente et de l&apos;historique (SABnzbd, torrents, etc.)</span>
+                        </label>
+                    </div>
+                    <DialogFooter>
+                        <Button 
+                            variant="outline" 
+                            onClick={() => setDeleteDialogOpen(false)}
+                            disabled={isDeleting}
+                        >
+                            Annuler
+                        </Button>
+                        <Button 
+                            variant="destructive" 
+                            onClick={handleBulkDelete}
+                            disabled={isDeleting || selectedIds.size === 0}
+                        >
+                            {isDeleting ? "Suppression..." : "Supprimer"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </>
     );
 }

@@ -186,6 +186,8 @@ async def get_queue_items(db: AsyncSession) -> list[dict[str, Any]]:
                         "time_left": item.get("timeleft"),
                         "source_service": svc.name,
                         "service_type": svc.type,
+                        "movie_id": item.get("movieId"),
+                        "series_id": item.get("seriesId"),
                         "download_client": item.get("downloadClient", ""),
                         "indexer": item.get("indexer", ""),
                         "quality": item.get("quality", {}).get("quality", {}).get("name", ""),

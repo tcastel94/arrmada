@@ -73,3 +73,33 @@ class RadarrClient(ArrBaseClient):
     async def grab_release(self, guid: str, indexer_id: int) -> dict[str, Any]:
         """Grab a specific release (native import via download client)."""
         return await self.post("/release", data={"guid": guid, "indexerId": indexer_id})
+
+    # ── Editing ───────────────────────────────────────────────
+    async def update_movie(self, movie_id: int, data: dict[str, Any]) -> dict[str, Any]:
+        """Update a movie (full object) via PUT /movie/{id}."""
+        return await self.put(f"/movie/{movie_id}", data=data)
+
+    # ── Tags ──────────────────────────────────────────────────
+    async def get_tags(self) -> list[dict[str, Any]]:
+        """Fetch all tags."""
+        return await self.get("/tag")
+
+    async def create_tag(self, label: str) -> dict[str, Any]:
+        """Create a new tag and return it."""
+        return await self.post("/tag", data={"label": label})
+
+    # ── Queue actions ─────────────────────────────────────────
+    async def remove_queue_item(
+        self,
+        queue_id: int,
+        remove_from_client: bool = True,
+        blocklist: bool = False,
+    ) -> None:
+        """Remove a queue item, optionally from the download client and/or blocklisting it."""
+        params = (
+            f"removeFromClient={str(remove_from_client).lower()}"
+            f"&blocklist={str(blocklist).lower()}"
+        )
+        url = f"{self.API_PREFIX}/queue/{queue_id}?{params}"
+        resp = await self.client.delete(url)
+        resp.raise_for_status()

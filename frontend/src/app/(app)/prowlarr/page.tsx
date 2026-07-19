@@ -5,6 +5,16 @@ import { PageSkeleton } from "@/components/shared/loading-skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
 import {
     Radar,
     CheckCircle,
@@ -14,10 +24,25 @@ import {
     Search,
     Download,
     BarChart3,
+    Trash2,
+    FlaskConical,
+    Loader2,
+    ShieldCheck,
+    Lock,
+    Unlock,
 } from "lucide-react";
-import { useProwlarrStats, IndexerStat } from "@/hooks/use-new-features";
+import {
+    useProwlarrStats,
+    useTestIndexer,
+    useToggleIndexer,
+    useDeleteIndexer,
+    IndexerStat,
+    ProwlarrIndexer,
+} from "@/hooks/use-new-features";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
+import { useState } from "react";
+import { toast } from "sonner";
 
 const container = {
     hidden: { opacity: 0 },
@@ -54,6 +79,169 @@ function SuccessRateBar({ rate, label }: { rate: number; label: string }) {
     );
 }
 
+function IndexerManagement({ indexers }: { indexers: ProwlarrIndexer[] }) {
+    const testIndexer = useTestIndexer();
+    const toggleIndexer = useToggleIndexer();
+    const deleteIndexer = useDeleteIndexer();
+    const [testingId, setTestingId] = useState<number | null>(null);
+    const [togglingId, setTogglingId] = useState<number | null>(null);
+    const [toDelete, setToDelete] = useState<ProwlarrIndexer | null>(null);
+
+    const handleTest = (idx: ProwlarrIndexer) => {
+        setTestingId(idx.id);
+        testIndexer.mutate(
+            { id: idx.id },
+            {
+                onSuccess: (res) => {
+                    if (res.ok) toast.success(`« ${idx.name} » : test réussi.`);
+                    else toast.error(`« ${idx.name} » : échec du test (HTTP ${res.status_code}).`);
+                },
+                onError: (e) => toast.error("Erreur : " + e.message),
+                onSettled: () => setTestingId(null),
+            },
+        );
+    };
+
+    const handleToggle = (idx: ProwlarrIndexer) => {
+        setTogglingId(idx.id);
+        toggleIndexer.mutate(
+            { id: idx.id, enable: !idx.enable },
+            {
+                onSuccess: (res) =>
+                    toast.success(`« ${idx.name} » ${res.enable ? "activé" : "désactivé"}.`),
+                onError: (e) => toast.error("Erreur : " + e.message),
+                onSettled: () => setTogglingId(null),
+            },
+        );
+    };
+
+    const handleDelete = () => {
+        if (!toDelete) return;
+        const name = toDelete.name;
+        deleteIndexer.mutate(
+            { id: toDelete.id },
+            {
+                onSuccess: () => {
+                    toast.success(`« ${name} » supprimé.`);
+                    setToDelete(null);
+                },
+                onError: (e) => toast.error("Erreur : " + e.message),
+            },
+        );
+    };
+
+    return (
+        <>
+            <Card className="border-0 ring-1 ring-white/5 bg-card/40 backdrop-blur-sm">
+                <CardContent className="p-0">
+                    <div className="flex items-center gap-2 px-5 py-3 border-b border-white/5">
+                        <ShieldCheck className="h-4 w-4 text-rose-400" />
+                        <span className="text-sm font-semibold">Gestion des indexers</span>
+                        <Badge variant="outline" className="text-[9px] px-1 h-4 ml-auto">
+                            {indexers.length}
+                        </Badge>
+                    </div>
+                    <div className="divide-y divide-white/5">
+                        {indexers.map((idx) => (
+                            <div key={`${idx.source}-${idx.id}`} className="flex items-center gap-3 p-4">
+                                <div className="flex items-center gap-2 min-w-0 flex-1">
+                                    {idx.enable ? (
+                                        <CheckCircle className="h-4 w-4 text-emerald-400 shrink-0" />
+                                    ) : (
+                                        <XCircle className="h-4 w-4 text-muted-foreground shrink-0" />
+                                    )}
+                                    <span className="text-sm font-medium truncate">{idx.name}</span>
+                                    <Badge variant="outline" className="text-[9px] px-1 h-4 shrink-0">
+                                        {idx.protocol}
+                                    </Badge>
+                                    {idx.privacy && (
+                                        <span className="text-muted-foreground shrink-0" title={idx.privacy}>
+                                            {idx.privacy === "private" ? (
+                                                <Lock className="h-3 w-3" />
+                                            ) : (
+                                                <Unlock className="h-3 w-3" />
+                                            )}
+                                        </span>
+                                    )}
+                                    {idx.status_messages && idx.status_messages.length > 0 && (
+                                        <AlertTriangle
+                                            className="h-3.5 w-3.5 text-amber-400 shrink-0"
+                                            aria-label="Indexer en erreur"
+                                        />
+                                    )}
+                                </div>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-8 gap-1.5 text-sky-400 hover:text-sky-300 hover:bg-sky-500/10"
+                                        disabled={testingId === idx.id}
+                                        onClick={() => handleTest(idx)}
+                                    >
+                                        {testingId === idx.id ? (
+                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        ) : (
+                                            <FlaskConical className="h-3.5 w-3.5" />
+                                        )}
+                                        Test
+                                    </Button>
+                                    <div className="flex items-center gap-1.5 px-1">
+                                        <Switch
+                                            checked={idx.enable}
+                                            disabled={togglingId === idx.id}
+                                            onCheckedChange={() => handleToggle(idx)}
+                                            aria-label="Activer / désactiver"
+                                        />
+                                    </div>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                                        title="Supprimer l'indexer"
+                                        onClick={() => setToDelete(idx)}
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                            </div>
+                        ))}
+                        {indexers.length === 0 && (
+                            <div className="text-center py-8 text-muted-foreground text-sm">
+                                Aucun indexer configuré
+                            </div>
+                        )}
+                    </div>
+                </CardContent>
+            </Card>
+
+            <Dialog open={!!toDelete} onOpenChange={(open) => !open && !deleteIndexer.isPending && setToDelete(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Supprimer l&apos;indexer</DialogTitle>
+                        <DialogDescription>
+                            L&apos;indexer sera définitivement supprimé de Prowlarr. Cette action est irréversible.
+                        </DialogDescription>
+                    </DialogHeader>
+                    {toDelete && (
+                        <p className="text-sm">
+                            <span className="font-medium">{toDelete.name}</span>
+                        </p>
+                    )}
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setToDelete(null)} disabled={deleteIndexer.isPending}>
+                            Annuler
+                        </Button>
+                        <Button variant="destructive" onClick={handleDelete} disabled={deleteIndexer.isPending}>
+                            {deleteIndexer.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                            Supprimer
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        </>
+    );
+}
+
 export default function ProwlarrPage() {
     const { data, isLoading } = useProwlarrStats();
 
@@ -68,6 +256,7 @@ export default function ProwlarrPage() {
 
     const summary = data?.summary;
     const stats = data?.stats ?? [];
+    const indexers = data?.indexers ?? [];
 
     return (
         <>
@@ -147,6 +336,11 @@ export default function ProwlarrPage() {
                         </div>
                     </motion.div>
                 )}
+
+                {/* Indexer Management */}
+                <motion.div variants={fadeUp}>
+                    <IndexerManagement indexers={indexers} />
+                </motion.div>
 
                 {/* Indexer List */}
                 <motion.div variants={fadeUp}>

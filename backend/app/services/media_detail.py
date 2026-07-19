@@ -144,6 +144,7 @@ async def get_movie_detail(
         "runtime": raw.get("runtime"),
         "status": raw.get("status", ""),
         "monitored": raw.get("monitored", False),
+        "minimum_availability": raw.get("minimumAvailability", ""),
         "has_file": raw.get("hasFile", False),
         "size_on_disk": raw.get("sizeOnDisk", 0),
         "added": raw.get("added"),
@@ -245,6 +246,12 @@ async def get_series_detail(
     for sn in seasons:
         seasons[sn].sort(key=lambda e: e.get("episode_number", 0))
 
+    # Per-season monitored flags from the raw Sonarr series object
+    season_monitored = {
+        s.get("seasonNumber"): s.get("monitored", False)
+        for s in (raw.get("seasons") or [])
+    }
+
     # Season summaries
     season_list = []
     for sn_num in sorted(seasons.keys()):
@@ -253,6 +260,7 @@ async def get_series_detail(
             "season_number": sn_num,
             "episode_count": len(eps),
             "episodes_have": sum(1 for e in eps if e["has_file"]),
+            "monitored": season_monitored.get(sn_num, False),
             "episodes": eps,
         })
 

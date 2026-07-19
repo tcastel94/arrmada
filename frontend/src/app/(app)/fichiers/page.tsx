@@ -19,16 +19,20 @@ import {
     Film,
     Tv,
     Check,
+    Activity,
 } from "lucide-react";
 import {
     useSabnzbdHistory,
     useStuckDownloads,
     usePathMappings,
     useManualImport,
+    useBulkImport,
+    useAutoImportReports,
 } from "@/hooks/use-files";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
-import { useState, useCallback } from "react";
+import { useState } from "react";
+import { toast } from "sonner";
 
 function statusIcon(status: string) {
     switch (status.toLowerCase()) {
@@ -63,8 +67,12 @@ export default function FichiersPage() {
     const { data: historyData, isLoading: historyLoading } = useSabnzbdHistory(100);
     const { data: stuckData, isLoading: stuckLoading } = useStuckDownloads();
     const { data: pathData } = usePathMappings();
+    const { data: reportsData } = useAutoImportReports();
     const importMutation = useManualImport();
+    const bulkImportMutation = useBulkImport();
 
+    // Section Toggle State
+    const [activeSection, setActiveSection] = useState<"downloads" | "reports">("downloads");
     // Per-item media type overrides
     const [typeOverrides, setTypeOverrides] = useState<Record<string, string>>({});
     // Per-item import status
@@ -170,24 +178,42 @@ export default function FichiersPage() {
         });
         setImportStatuses((prev) => ({ ...prev, ...pendingStatuses }));
 
-        // Import sequentially to avoid hammering the API
-        for (const item of toImport) {
-            try {
-                const result = await importMutation.mutateAsync({
-                    download_path: item.storage_path,
-                    media_type: getMediaType(item),
+        try {
+            const payloadItems = toImport.map((item) => ({
+                download_path: item.storage_path,
+                media_type: getMediaType(item),
+            }));
+
+            const result = await bulkImportMutation.mutateAsync({
+                items: payloadItems,
+            });
+
+            if (result.success) {
+                const successStatuses: Record<string, ImportStatus> = {};
+                const successMessages: Record<string, string> = {};
+                toImport.forEach((item) => {
+                    successStatuses[item.nzo_id] = "success";
+                    successMessages[item.nzo_id] = "Lancé en arrière-plan";
                 });
-                if (result.success) {
-                    setImportStatuses((prev) => ({ ...prev, [item.nzo_id]: "success" }));
-                    setImportMessages((prev) => ({ ...prev, [item.nzo_id]: result.message || "Importé" }));
-                } else {
-                    setImportStatuses((prev) => ({ ...prev, [item.nzo_id]: "error" }));
-                    setImportMessages((prev) => ({ ...prev, [item.nzo_id]: result.error || "Erreur" }));
-                }
-            } catch {
-                setImportStatuses((prev) => ({ ...prev, [item.nzo_id]: "error" }));
-                setImportMessages((prev) => ({ ...prev, [item.nzo_id]: "Erreur réseau" }));
+                setImportStatuses((prev) => ({ ...prev, ...successStatuses }));
+                setImportMessages((prev) => ({ ...prev, ...successMessages }));
+                toast.success(result.message || "Importation en arrière-plan lancée !");
+                setSelected(new Set());
+            } else {
+                const errorStatuses: Record<string, ImportStatus> = {};
+                toImport.forEach((item) => {
+                    errorStatuses[item.nzo_id] = "error";
+                });
+                setImportStatuses((prev) => ({ ...prev, ...errorStatuses }));
+                toast.error("Erreur lors du lancement de l'importation en lot.");
             }
+        } catch {
+            const errorStatuses: Record<string, ImportStatus> = {};
+            toImport.forEach((item) => {
+                errorStatuses[item.nzo_id] = "error";
+            });
+            setImportStatuses((prev) => ({ ...prev, ...errorStatuses }));
+            toast.error("Erreur réseau lors de l'importation en lot.");
         }
     };
 
@@ -272,286 +298,417 @@ export default function FichiersPage() {
                     </Card>
                 )}
 
-                {/* Stuck Downloads — Import Section */}
-                {stuckCount > 0 && (
-                    <Card className="border-yellow-500/30">
-                        <CardHeader className="pb-3">
-                            <div className="flex items-center justify-between">
-                                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                                    <AlertTriangle className="h-4 w-4 text-yellow-500" />
-                                    Téléchargements à importer ({stuckCount})
-                                </CardTitle>
+                {/* Tabs / Section Selector */}
+                <div className="flex gap-2 border-b border-white/5 pb-1">
+                    <button
+                        onClick={() => setActiveSection("downloads")}
+                        className={cn(
+                            "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap",
+                            activeSection === "downloads"
+                                ? "bg-white/10 ring-1 ring-white/20 text-foreground"
+                                : "bg-white/[0.02] hover:bg-white/[0.05] text-muted-foreground hover:text-foreground"
+                        )}
+                    >
+                        <FolderOpen className="h-4 w-4 text-sky-400" />
+                        Téléchargements & Files d&apos;attente
+                    </button>
+                    <button
+                        onClick={() => setActiveSection("reports")}
+                        className={cn(
+                            "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap",
+                            activeSection === "reports"
+                                ? "bg-white/10 ring-1 ring-white/20 text-foreground"
+                                : "bg-white/[0.02] hover:bg-white/[0.05] text-muted-foreground hover:text-foreground"
+                        )}
+                    >
+                        <Activity className="h-4 w-4 text-emerald-400" />
+                        Historique Auto-Import
+                    </button>
+                </div>
 
-                                {/* Batch actions */}
-                                <div className="flex items-center gap-2">
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="text-xs gap-1.5 h-7"
-                                        onClick={selectAllAsSeries}
-                                    >
-                                        <Tv className="h-3 w-3" />
-                                        Tout = Série
-                                    </Button>
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="text-xs gap-1.5 h-7"
-                                        onClick={selectAllAsMovies}
-                                    >
-                                        <Film className="h-3 w-3" />
-                                        Tout = Film
-                                    </Button>
+                {activeSection === "downloads" && (
+                    <>
+                        {/* Stuck Downloads — Import Section */}
+                        {stuckCount > 0 && (
+                            <Card className="border-yellow-500/30">
+                                <CardHeader className="pb-3">
+                                    <div className="flex items-center justify-between">
+                                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                                            <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                                            Téléchargements à importer ({stuckCount})
+                                        </CardTitle>
 
-                                    {selectedCount > 0 && (
-                                        <Button
-                                            size="sm"
-                                            variant="default"
-                                            className="gap-1.5 h-7"
-                                            onClick={importSelected}
-                                            disabled={readyToImport === 0 || pendingCount > 0}
-                                        >
-                                            {pendingCount > 0 ? (
-                                                <Loader2 className="h-3 w-3 animate-spin" />
-                                            ) : (
-                                                <ArrowRight className="h-3 w-3" />
-                                            )}
-                                            {pendingCount > 0
-                                                ? `Import en cours...`
-                                                : `Importer ${readyToImport} fichier${readyToImport > 1 ? "s" : ""}`
-                                            }
-                                        </Button>
-                                    )}
-                                </div>
-                            </div>
-                        </CardHeader>
-                        <CardContent className="space-y-2">
-                            <p className="text-xs text-muted-foreground mb-3">
-                                Sélectionnez le type (🎬 Film ou 📺 Série), cochez les fichiers, puis cliquez sur
-                                &quot;Importer&quot;. Radarr/Sonarr se chargera du déplacement, renommage, sous-titres et Jellyfin.
-                            </p>
-                            {stuck.map((item, i) => {
-                                const currentType = getMediaType(item);
-                                const status = importStatuses[item.nzo_id] || "idle";
-                                const isSelected = selected.has(item.nzo_id);
-                                return (
-                                    <motion.div
-                                        key={item.nzo_id || i}
-                                        initial={{ opacity: 0, y: 3 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        transition={{ delay: i * 0.03 }}
-                                        className={cn(
-                                            "flex items-center gap-3 p-3 rounded-lg transition-colors",
-                                            status === "success"
-                                                ? "bg-green-500/10 border border-green-500/20"
-                                                : status === "error"
-                                                    ? "bg-red-500/10 border border-red-500/20"
-                                                    : status === "pending"
-                                                        ? "bg-blue-500/10 border border-blue-500/20"
-                                                        : isSelected
-                                                            ? "bg-muted/40 border border-primary/20"
-                                                            : "bg-muted/20 hover:bg-muted/40 border border-transparent"
-                                        )}
-                                    >
-                                        {/* Checkbox */}
-                                        <button
-                                            onClick={() => toggleSelect(item.nzo_id)}
-                                            className={cn(
-                                                "h-5 w-5 rounded border-2 shrink-0 flex items-center justify-center transition-colors",
-                                                isSelected
-                                                    ? "bg-primary border-primary text-primary-foreground"
-                                                    : "border-muted-foreground/40 hover:border-primary"
-                                            )}
-                                        >
-                                            {isSelected && <Check className="h-3 w-3" />}
-                                        </button>
-
-                                        {/* Type toggle buttons */}
-                                        <div className="flex gap-0.5 shrink-0">
-                                            <button
-                                                onClick={() => toggleType(item.nzo_id, "movie")}
-                                                className={cn(
-                                                    "p-1.5 rounded-l-md border transition-colors",
-                                                    currentType === "movie"
-                                                        ? "bg-blue-500/20 border-blue-500/50 text-blue-400"
-                                                        : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/40"
-                                                )}
-                                                title="Film (Radarr)"
+                                        {/* Batch actions */}
+                                        <div className="flex items-center gap-2">
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                className="text-xs gap-1.5 h-7"
+                                                onClick={selectAllAsSeries}
                                             >
-                                                <Film className="h-3.5 w-3.5" />
-                                            </button>
-                                            <button
-                                                onClick={() => toggleType(item.nzo_id, "series")}
-                                                className={cn(
-                                                    "p-1.5 rounded-r-md border border-l-0 transition-colors",
-                                                    currentType === "series"
-                                                        ? "bg-purple-500/20 border-purple-500/50 text-purple-400"
-                                                        : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/40"
-                                                )}
-                                                title="Série (Sonarr)"
+                                                <Tv className="h-3 w-3" />
+                                                Tout = Série
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                className="text-xs gap-1.5 h-7"
+                                                onClick={selectAllAsMovies}
                                             >
-                                                <Tv className="h-3.5 w-3.5" />
-                                            </button>
-                                        </div>
+                                                <Film className="h-3 w-3" />
+                                                Tout = Film
+                                            </Button>
 
-                                        {/* Name & path */}
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-medium truncate">{item.name}</p>
-                                            <code className="text-[10px] text-muted-foreground font-mono truncate block">
-                                                {item.storage_path}
-                                            </code>
-                                        </div>
-
-                                        {/* Category badge */}
-                                        <Badge variant="outline" className={cn(
-                                            "text-[10px] shrink-0",
-                                            item.category === "software" && "border-yellow-500/50 text-yellow-500"
-                                        )}>
-                                            {item.category}
-                                        </Badge>
-
-                                        {/* Size */}
-                                        <span className="text-xs text-muted-foreground shrink-0 w-16 text-right tabular-nums">
-                                            {item.size_human}
-                                        </span>
-
-                                        {/* Status / Action */}
-                                        <div className="w-36 shrink-0 flex flex-col items-end gap-1">
-                                            {status === "pending" ? (
-                                                <Badge className="gap-1 bg-blue-500/20 text-blue-400 border-blue-500/30">
-                                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                                    En cours...
-                                                </Badge>
-                                            ) : status === "success" ? (
-                                                <Badge className="gap-1 bg-green-500/20 text-green-400 border-green-500/30"
-                                                    title={importMessages[item.nzo_id] || ""}
-                                                >
-                                                    <CheckCircle2 className="h-3 w-3" />
-                                                    Importé ✓
-                                                </Badge>
-                                            ) : status === "error" ? (
-                                                <>
-                                                    <Badge className="gap-1 bg-red-500/20 text-red-400 border-red-500/30"
-                                                        title={importMessages[item.nzo_id] || ""}
-                                                    >
-                                                        <XCircle className="h-3 w-3" />
-                                                        Erreur
-                                                    </Badge>
-                                                    {importMessages[item.nzo_id] && (
-                                                        <span className="text-[10px] text-red-400/80 max-w-[200px] text-right truncate">
-                                                            {importMessages[item.nzo_id]}
-                                                        </span>
-                                                    )}
-                                                </>
-                                            ) : (
+                                            {selectedCount > 0 && (
                                                 <Button
                                                     size="sm"
                                                     variant="default"
-                                                    className="gap-1.5"
-                                                    disabled={currentType === "unknown"}
-                                                    onClick={() => importSingle(item)}
+                                                    className="gap-1.5 h-7"
+                                                    onClick={importSelected}
+                                                    disabled={readyToImport === 0 || pendingCount > 0}
                                                 >
-                                                    <ArrowRight className="h-3 w-3" />
-                                                    {currentType === "unknown" ? "Choisir ←" : "Importer"}
+                                                    {pendingCount > 0 ? (
+                                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                                    ) : (
+                                                        <ArrowRight className="h-3 w-3" />
+                                                    )}
+                                                    {pendingCount > 0
+                                                        ? `Import en cours...`
+                                                        : `Importer ${readyToImport} fichier${readyToImport > 1 ? "s" : ""}`
+                                                    }
                                                 </Button>
                                             )}
                                         </div>
-                                    </motion.div>
-                                );
-                            })}
-                        </CardContent>
-                    </Card>
+                                    </div>
+                                </CardHeader>
+                                <CardContent className="space-y-2">
+                                    <p className="text-xs text-muted-foreground mb-3">
+                                        Sélectionnez le type (🎬 Film ou 📺 Série), cochez les fichiers, puis cliquez sur
+                                        &quot;Importer&quot;. Radarr/Sonarr se chargera du déplacement, renommage, sous-titres et Jellyfin.
+                                    </p>
+                                    {stuck.map((item, i) => {
+                                        const currentType = getMediaType(item);
+                                        const status = importStatuses[item.nzo_id] || "idle";
+                                        const isSelected = selected.has(item.nzo_id);
+                                        return (
+                                            <motion.div
+                                                key={item.nzo_id || i}
+                                                initial={{ opacity: 0, y: 3 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                transition={{ delay: i * 0.03 }}
+                                                className={cn(
+                                                    "flex items-center gap-3 p-3 rounded-lg transition-colors",
+                                                    status === "success"
+                                                        ? "bg-green-500/10 border border-green-500/20"
+                                                        : status === "error"
+                                                            ? "bg-red-500/10 border border-red-500/20"
+                                                            : status === "pending"
+                                                                ? "bg-blue-500/10 border border-blue-500/20"
+                                                                : isSelected
+                                                                    ? "bg-muted/40 border border-primary/20"
+                                                                    : "bg-muted/20 hover:bg-muted/40 border border-transparent"
+                                                )}
+                                            >
+                                                {/* Checkbox */}
+                                                <button
+                                                    onClick={() => toggleSelect(item.nzo_id)}
+                                                    className={cn(
+                                                        "h-5 w-5 rounded border-2 shrink-0 flex items-center justify-center transition-colors",
+                                                        isSelected
+                                                            ? "bg-primary border-primary text-primary-foreground"
+                                                            : "border-muted-foreground/40 hover:border-primary"
+                                                    )}
+                                                >
+                                                    {isSelected && <Check className="h-3 w-3" />}
+                                                </button>
+
+                                                {/* Type toggle buttons */}
+                                                <div className="flex gap-0.5 shrink-0">
+                                                    <button
+                                                        onClick={() => toggleType(item.nzo_id, "movie")}
+                                                        className={cn(
+                                                            "p-1.5 rounded-l-md border transition-colors",
+                                                            currentType === "movie"
+                                                                ? "bg-blue-500/20 border-blue-500/50 text-blue-400"
+                                                                : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                                                        )}
+                                                        title="Film (Radarr)"
+                                                    >
+                                                        <Film className="h-3.5 w-3.5" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => toggleType(item.nzo_id, "series")}
+                                                        className={cn(
+                                                            "p-1.5 rounded-r-md border border-l-0 transition-colors",
+                                                            currentType === "series"
+                                                                ? "bg-purple-500/20 border-purple-500/50 text-purple-400"
+                                                                : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                                                        )}
+                                                        title="Série (Sonarr)"
+                                                    >
+                                                        <Tv className="h-3.5 w-3.5" />
+                                                    </button>
+                                                </div>
+
+                                                {/* Name & path */}
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-medium truncate">{item.name}</p>
+                                                    <code className="text-[10px] text-muted-foreground font-mono truncate block">
+                                                        {item.storage_path}
+                                                    </code>
+                                                </div>
+
+                                                {/* Category badge */}
+                                                <Badge variant="outline" className={cn(
+                                                    "text-[10px] shrink-0",
+                                                    item.category === "software" && "border-yellow-500/50 text-yellow-500"
+                                                )}>
+                                                    {item.category}
+                                                </Badge>
+
+                                                {/* Size */}
+                                                <span className="text-xs text-muted-foreground shrink-0 w-16 text-right tabular-nums">
+                                                    {item.size_human}
+                                                </span>
+
+                                                {/* Status / Action */}
+                                                <div className="w-36 shrink-0 flex flex-col items-end gap-1">
+                                                    {status === "pending" ? (
+                                                        <Badge className="gap-1 bg-blue-500/20 text-blue-400 border-blue-500/30">
+                                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                                            En cours...
+                                                        </Badge>
+                                                    ) : status === "success" ? (
+                                                        <Badge className="gap-1 bg-green-500/20 text-green-400 border-green-500/30"
+                                                            title={importMessages[item.nzo_id] || ""}
+                                                        >
+                                                            <CheckCircle2 className="h-3 w-3" />
+                                                            Importé ✓
+                                                        </Badge>
+                                                    ) : status === "error" ? (
+                                                        <>
+                                                            <Badge className="gap-1 bg-red-500/20 text-red-400 border-red-500/30"
+                                                                title={importMessages[item.nzo_id] || ""}
+                                                            >
+                                                                <XCircle className="h-3 w-3" />
+                                                                Erreur
+                                                            </Badge>
+                                                            {importMessages[item.nzo_id] && (
+                                                                <span className="text-[10px] text-red-400/80 max-w-[200px] text-right truncate">
+                                                                    {importMessages[item.nzo_id]}
+                                                                </span>
+                                                            )}
+                                                        </>
+                                                    ) : (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="default"
+                                                            className="gap-1.5"
+                                                            disabled={currentType === "unknown"}
+                                                            onClick={() => importSingle(item)}
+                                                        >
+                                                            <ArrowRight className="h-3 w-3" />
+                                                            {currentType === "unknown" ? "Choisir ←" : "Importer"}
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            </motion.div>
+                                        );
+                                    })}
+                                </CardContent>
+                            </Card>
+                        )}
+
+                        {/* Full History */}
+                        <Card>
+                            <CardHeader className="pb-3">
+                                <CardTitle className="text-sm font-medium">
+                                    Historique complet ({items.length})
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="p-0">
+                                {items.length === 0 ? (
+                                    <div className="p-6">
+                                        <EmptyState
+                                            icon={FolderOpen}
+                                            title="Aucun historique"
+                                            description="L'historique SABnzbd est vide ou le service n'est pas configuré"
+                                        />
+                                    </div>
+                                ) : (
+                                    <div className="divide-y divide-border">
+                                        {items.map((item, i) => (
+                                            <motion.div
+                                                key={item.nzo_id || i}
+                                                initial={{ opacity: 0 }}
+                                                animate={{ opacity: 1 }}
+                                                transition={{ delay: i * 0.01 }}
+                                                className={cn(
+                                                    "p-4 hover:bg-muted/20 transition-colors",
+                                                    item.is_stuck && "bg-yellow-500/5"
+                                                )}
+                                            >
+                                                <div className="flex items-start gap-3">
+                                                    <div className="mt-0.5 shrink-0">
+                                                        {statusIcon(item.status)}
+                                                    </div>
+
+                                                    <div className="flex-1 min-w-0 space-y-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <p className="font-medium text-sm truncate">
+                                                                {item.name}
+                                                            </p>
+                                                            {item.is_stuck && (
+                                                                <Badge variant="destructive" className="text-[10px] shrink-0">
+                                                                    Bloqué
+                                                                </Badge>
+                                                            )}
+                                                        </div>
+
+                                                        {item.storage_path && (
+                                                            <div className="flex items-center gap-1.5">
+                                                                <HardDrive className="h-3 w-3 text-muted-foreground shrink-0" />
+                                                                <code className="text-xs text-muted-foreground font-mono truncate block">
+                                                                    {item.storage_path}
+                                                                </code>
+                                                            </div>
+                                                        )}
+
+                                                        {item.download_path && item.download_path !== item.storage_path && (
+                                                            <div className="flex items-center gap-1.5">
+                                                                <FolderOpen className="h-3 w-3 text-orange-400 shrink-0" />
+                                                                <code className="text-xs text-orange-400/80 font-mono truncate block">
+                                                                    {item.download_path}
+                                                                </code>
+                                                            </div>
+                                                        )}
+
+                                                        {item.fail_message && (
+                                                            <p className="text-xs text-red-400">
+                                                                ⚠ {item.fail_message}
+                                                            </p>
+                                                        )}
+                                                    </div>
+
+                                                    <div className="flex flex-col items-end gap-1 shrink-0">
+                                                        <Badge variant="outline" className="text-[10px]">
+                                                            {item.category || "*"}
+                                                        </Badge>
+                                                        <span className="text-xs text-muted-foreground tabular-nums">
+                                                            {item.size_human}
+                                                        </span>
+                                                        <span className={cn("text-xs font-medium", statusColor(item.status))}>
+                                                            {item.status}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </motion.div>
+                                        ))}
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </>
                 )}
 
-                {/* Full History */}
-                <Card>
-                    <CardHeader className="pb-3">
-                        <CardTitle className="text-sm font-medium">
-                            Historique complet ({items.length})
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                        {items.length === 0 ? (
-                            <div className="p-6">
-                                <EmptyState
-                                    icon={FolderOpen}
-                                    title="Aucun historique"
-                                    description="L'historique SABnzbd est vide ou le service n'est pas configuré"
-                                />
-                            </div>
-                        ) : (
-                            <div className="divide-y divide-border">
-                                {items.map((item, i) => (
-                                    <motion.div
-                                        key={item.nzo_id || i}
-                                        initial={{ opacity: 0 }}
-                                        animate={{ opacity: 1 }}
-                                        transition={{ delay: i * 0.01 }}
-                                        className={cn(
-                                            "p-4 hover:bg-muted/20 transition-colors",
-                                            item.is_stuck && "bg-yellow-500/5"
-                                        )}
-                                    >
-                                        <div className="flex items-start gap-3">
-                                            <div className="mt-0.5 shrink-0">
-                                                {statusIcon(item.status)}
-                                            </div>
-
-                                            <div className="flex-1 min-w-0 space-y-1">
+                {activeSection === "reports" && (
+                    <Card>
+                        <CardHeader className="pb-3 border-b border-white/5">
+                            <CardTitle className="text-sm font-medium flex items-center gap-2">
+                                <Activity className="h-4 w-4 text-emerald-400" />
+                                Rapports d&apos;auto-import périodique (10 derniers runs)
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-0 divide-y divide-border">
+                            {!reportsData || reportsData.length === 0 ? (
+                                <div className="p-12 text-center text-muted-foreground">
+                                    <Activity className="h-8 w-8 mx-auto mb-2 opacity-20" />
+                                    <p className="text-sm">Aucun rapport d&apos;auto-import disponible</p>
+                                    <p className="text-xs">La tâche s&apos;exécute automatiquement toutes les 5 minutes.</p>
+                                </div>
+                            ) : (
+                                reportsData.slice().reverse().map((report, idx) => {
+                                    const dateStr = new Date(report.timestamp).toLocaleString("fr-FR");
+                                    const hasErrors = report.failed_count > 0;
+                                    
+                                    return (
+                                        <div key={idx} className="p-5 hover:bg-muted/10 transition-colors">
+                                            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
                                                 <div className="flex items-center gap-2">
-                                                    <p className="font-medium text-sm truncate">
-                                                        {item.name}
-                                                    </p>
-                                                    {item.is_stuck && (
-                                                        <Badge variant="destructive" className="text-[10px] shrink-0">
-                                                            Bloqué
+                                                    <span className="font-semibold text-sm">{dateStr}</span>
+                                                    <span className="text-xs text-muted-foreground">({report.duration_seconds}s)</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    {report.scanned_count === 0 ? (
+                                                        <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                                                            Aucun élément
+                                                        </Badge>
+                                                    ) : hasErrors ? (
+                                                        <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-[10px]">
+                                                            Erreurs détectées
+                                                        </Badge>
+                                                    ) : (
+                                                        <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-[10px]">
+                                                            Succès total
                                                         </Badge>
                                                     )}
                                                 </div>
-
-                                                {item.storage_path && (
-                                                    <div className="flex items-center gap-1.5">
-                                                        <HardDrive className="h-3 w-3 text-muted-foreground shrink-0" />
-                                                        <code className="text-xs text-muted-foreground font-mono truncate block">
-                                                            {item.storage_path}
-                                                        </code>
-                                                    </div>
-                                                )}
-
-                                                {item.download_path && item.download_path !== item.storage_path && (
-                                                    <div className="flex items-center gap-1.5">
-                                                        <FolderOpen className="h-3 w-3 text-orange-400 shrink-0" />
-                                                        <code className="text-xs text-orange-400/80 font-mono truncate block">
-                                                            {item.download_path}
-                                                        </code>
-                                                    </div>
-                                                )}
-
-                                                {item.fail_message && (
-                                                    <p className="text-xs text-red-400">
-                                                        ⚠ {item.fail_message}
-                                                    </p>
-                                                )}
                                             </div>
 
-                                            <div className="flex flex-col items-end gap-1 shrink-0">
-                                                <Badge variant="outline" className="text-[10px]">
-                                                    {item.category || "*"}
-                                                </Badge>
-                                                <span className="text-xs text-muted-foreground tabular-nums">
-                                                    {item.size_human}
-                                                </span>
-                                                <span className={cn("text-xs font-medium", statusColor(item.status))}>
-                                                    {item.status}
-                                                </span>
+                                            <div className="text-xs text-muted-foreground mb-3 flex gap-4">
+                                                <span>Fichiers scannés : <strong className="text-foreground">{report.scanned_count}</strong></span>
+                                                <span>Importés : <strong className="text-emerald-400">{report.imported_count}</strong></span>
+                                                <span>Échecs : <strong className="text-red-400">{report.failed_count}</strong></span>
                                             </div>
+
+                                            {report.items && report.items.length > 0 && (
+                                                <div className="space-y-2 mt-2 pl-4 border-l-2 border-white/5">
+                                                    {report.items.map((item, itemIdx) => (
+                                                        <div key={itemIdx} className="text-xs flex items-start justify-between gap-3 bg-muted/10 p-2.5 rounded-lg border border-white/5">
+                                                            <div className="min-w-0 flex-1">
+                                                                <div className="flex items-center gap-2 mb-1">
+                                                                    {item.media_type === "movie" ? (
+                                                                        <Badge className="bg-blue-500/10 text-blue-400 border-blue-500/20 px-1 py-0 text-[9px] h-4">
+                                                                            Film
+                                                                        </Badge>
+                                                                    ) : (
+                                                                        <Badge className="bg-purple-500/10 text-purple-400 border-purple-500/20 px-1 py-0 text-[9px] h-4">
+                                                                            Série
+                                                                        </Badge>
+                                                                    )}
+                                                                    <span className="font-medium truncate text-foreground/90">{item.name}</span>
+                                                                </div>
+                                                                <code className="text-[10px] text-muted-foreground font-mono block truncate">
+                                                                    {item.storage_path}
+                                                                </code>
+                                                                {item.status === "failed" && item.message && (
+                                                                    <p className="text-red-400 text-[10px] mt-1 bg-red-500/5 p-1.5 rounded border border-red-500/10">
+                                                                        ⚠ {item.message}
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                            <div className="shrink-0 pt-0.5">
+                                                                {item.status === "success" ? (
+                                                                    <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-[9px]">
+                                                                        Importé ✓
+                                                                    </Badge>
+                                                                ) : (
+                                                                    <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-[9px]">
+                                                                        Échec ✗
+                                                                    </Badge>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </div>
-                                    </motion.div>
-                                ))}
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
+                                    );
+                                })
+                            )}
+                        </CardContent>
+                    </Card>
+                )}
             </div>
         </>
     );

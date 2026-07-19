@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api-client";
 
 /* ── Calendar ──────────────────────────────────────────────── */
@@ -105,9 +105,21 @@ export interface IndexerStat {
   source: string;
 }
 
+export interface ProwlarrIndexer {
+  id: number;
+  name: string;
+  protocol: string;
+  privacy: string;
+  enable: boolean;
+  status_messages: { title?: string; message?: string }[];
+  priority: number;
+  tags: number[];
+  source: string;
+}
+
 export function useProwlarrStats() {
   return useQuery<{
-    indexers: Record<string, unknown>[];
+    indexers: ProwlarrIndexer[];
     stats: IndexerStat[];
     summary: {
       total_indexers: number;
@@ -121,6 +133,48 @@ export function useProwlarrStats() {
     queryKey: ["prowlarr", "stats"],
     queryFn: () => apiFetch("/api/prowlarr/stats"),
     staleTime: 600_000,
+  });
+}
+
+/* ── Prowlarr indexer management ───────────────────────────── */
+
+export function useTestIndexer() {
+  return useMutation<
+    { ok: boolean; status_code: number; errors?: unknown },
+    Error,
+    { id: number }
+  >({
+    mutationFn: ({ id }) =>
+      apiFetch(`/api/prowlarr/indexers/${id}/test`, { method: "POST" }),
+  });
+}
+
+export function useToggleIndexer() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    { status: string; id: number; enable: boolean },
+    Error,
+    { id: number; enable: boolean }
+  >({
+    mutationFn: ({ id, enable }) =>
+      apiFetch(`/api/prowlarr/indexers/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ enable }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["prowlarr", "stats"] });
+    },
+  });
+}
+
+export function useDeleteIndexer() {
+  const queryClient = useQueryClient();
+  return useMutation<{ status: string; id: number }, Error, { id: number }>({
+    mutationFn: ({ id }) =>
+      apiFetch(`/api/prowlarr/indexers/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["prowlarr", "stats"] });
+    },
   });
 }
 

@@ -15,9 +15,13 @@ def start_scheduler() -> None:
     """Start the scheduler with all registered jobs."""
     from app.tasks.health_check_task import register as register_health_check
     from app.tasks.trash_sync_task import register as register_trash_sync
+    from app.tasks.request_sync_task import register as register_request_sync
+    from app.tasks.auto_import_task import register as register_auto_import
 
     register_health_check(scheduler)
     register_trash_sync(scheduler)
+    register_request_sync(scheduler)
+    register_auto_import(scheduler)
 
     scheduler.start()
     logger.info("Scheduler started with %d jobs", len(scheduler.get_jobs()))

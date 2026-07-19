@@ -414,13 +414,26 @@ async def trigger_media_search(
 async def list_media_releases(
     type: str,
     id: int,
+    season: int | None = Query(None, description="Series only: season to search (required for series)"),
     db: AsyncSession = Depends(get_db),
 ):
-    """Interactive search: list candidate releases sorted best-first."""
+    """Interactive search: list candidate releases sorted best-first.
+
+    For series a ``season`` is required — Sonarr ignores ``seriesId`` alone
+    and returns a generic, unfiltered set otherwise.
+    """
+    if type == "series" and season is None:
+        raise HTTPException(
+            status_code=400,
+            detail="A season number is required for interactive series search",
+        )
     # Indexer searches can be slow — allow a generous timeout.
     client = await _get_arr_client_for(db, type, timeout=120)
     try:
-        raw = await client.get_releases(id)
+        if type == "movie":
+            raw = await client.get_releases(id)
+        else:
+            raw = await client.get_releases(id, season)
         releases = [_normalise_release(r) for r in raw if isinstance(r, dict)]
         releases.sort(
             key=lambda x: (
@@ -456,6 +469,152 @@ async def grab_media_release(
         raise
     except Exception as exc:
         logger.error("Failed to grab release for %s %d: %s", type, id, exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        await client.close()
+
+
+# ── Media editing (monitored / quality profile / tags / …) ────
+
+@router.get("/options/{type}")
+async def get_media_edit_options(
+    type: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Expose quality profiles + tags for the edit UI (Radarr/Sonarr)."""
+    client = await _get_arr_client_for(db, type)
+    try:
+        profiles = await client.get_quality_profiles()
+        tags = await client.get_tags()
+        return {
+            "quality_profiles": [
+                {"id": p.get("id"), "name": p.get("name")} for p in profiles
+            ],
+            "tags": [{"id": t.get("id"), "label": t.get("label")} for t in tags],
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Failed to fetch edit options for %s: %s", type, exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        await client.close()
+
+
+class CreateTagPayload(BaseModel):
+    label: str
+
+
+@router.post("/tag/{type}")
+async def create_media_tag(
+    type: str,
+    payload: CreateTagPayload,
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a new tag in Radarr/Sonarr."""
+    client = await _get_arr_client_for(db, type)
+    try:
+        tag = await client.create_tag(payload.label)
+        return {"id": tag.get("id"), "label": tag.get("label")}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Failed to create tag for %s: %s", type, exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        await client.close()
+
+
+class MediaEditPayload(BaseModel):
+    monitored: bool | None = None
+    quality_profile_id: int | None = None
+    tags: list[int] | None = None
+    minimum_availability: str | None = None  # movie only
+    series_type: str | None = None  # series only
+
+
+@router.patch("/{type}/{id}")
+async def update_media(
+    type: str,
+    id: int,
+    payload: MediaEditPayload,
+    db: AsyncSession = Depends(get_db),
+):
+    """Update editable fields of a movie/series in Radarr/Sonarr.
+
+    Fetches the current object, applies only the provided fields, then
+    PUTs the full object back (as required by the *arr APIs).
+    """
+    client = await _get_arr_client_for(db, type)
+    try:
+        if type == "movie":
+            obj = await client.get_movie_by_id(id)
+            if payload.monitored is not None:
+                obj["monitored"] = payload.monitored
+            if payload.quality_profile_id is not None:
+                obj["qualityProfileId"] = payload.quality_profile_id
+            if payload.tags is not None:
+                obj["tags"] = payload.tags
+            if payload.minimum_availability is not None:
+                obj["minimumAvailability"] = payload.minimum_availability
+            updated = await client.update_movie(id, obj)
+        else:
+            obj = await client.get_series_by_id(id)
+            if payload.monitored is not None:
+                obj["monitored"] = payload.monitored
+            if payload.quality_profile_id is not None:
+                obj["qualityProfileId"] = payload.quality_profile_id
+            if payload.tags is not None:
+                obj["tags"] = payload.tags
+            if payload.series_type is not None:
+                obj["seriesType"] = payload.series_type
+            updated = await client.update_series(id, obj)
+
+        cache.invalidate("media:all")
+        return {
+            "status": "updated",
+            "monitored": updated.get("monitored"),
+            "quality_profile_id": updated.get("qualityProfileId"),
+            "tags": updated.get("tags", []),
+            "minimum_availability": updated.get("minimumAvailability"),
+            "series_type": updated.get("seriesType"),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Failed to update %s %d: %s", type, id, exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        await client.close()
+
+
+class SeasonMonitorPayload(BaseModel):
+    monitored: bool
+
+
+@router.patch("/series/{id}/season/{n}")
+async def update_season_monitoring(
+    id: int,
+    n: int,
+    payload: SeasonMonitorPayload,
+    db: AsyncSession = Depends(get_db),
+):
+    """Toggle monitoring for a single season of a series."""
+    client = await _get_arr_client_for(db, "series")
+    try:
+        updated = await client.set_season_monitored(id, n, payload.monitored)
+        cache.invalidate("media:all")
+        seasons = [
+            {"season_number": s.get("seasonNumber"), "monitored": s.get("monitored")}
+            for s in (updated.get("seasons") or [])
+        ]
+        return {"status": "updated", "season": n, "monitored": payload.monitored, "seasons": seasons}
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        logger.error("Failed to update season %d monitoring for series %d: %s", n, id, exc)
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
         await client.close()
