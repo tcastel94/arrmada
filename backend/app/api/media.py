@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import httpx
 from fastapi import APIRouter, Depends, Query, BackgroundTasks, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -403,9 +404,21 @@ async def trigger_media_search(
         return {"status": "search_triggered", "command": result}
     except HTTPException:
         raise
+    except httpx.TimeoutException as exc:
+        logger.warning("Search trigger timed out for %s %d: %s", type, id, type(exc).__name__)
+        raise HTTPException(
+            status_code=504,
+            detail="Le service *arr a mis trop de temps à répondre au lancement de la recherche.",
+        )
     except Exception as exc:
-        logger.error("Failed to trigger search for %s %d: %s", type, id, exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+        logger.error(
+            "Failed to trigger search for %s %d: %s: %s",
+            type, id, type(exc).__name__, exc,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail=f"Échec du lancement de la recherche ({type(exc).__name__}).",
+        )
     finally:
         await client.close()
 
@@ -446,9 +459,38 @@ async def list_media_releases(
         return {"items": releases, "total": len(releases)}
     except HTTPException:
         raise
+    except httpx.TimeoutException as exc:
+        logger.warning(
+            "Interactive search timed out for %s %d (season=%s): %s",
+            type, id, season, type(exc).__name__,
+        )
+        raise HTTPException(
+            status_code=504,
+            detail=(
+                "La recherche a expiré : l'indexeur a mis trop de temps à répondre. "
+                "Un ou plusieurs indexeurs sont probablement lents ou hors service — "
+                "réessayez, ou désactivez les indexeurs défaillants dans Prowlarr/Sonarr."
+            ),
+        )
+    except httpx.HTTPStatusError as exc:
+        body = (exc.response.text or "").strip()[:300]
+        logger.error(
+            "Indexer search failed for %s %d (season=%s): HTTP %s %s",
+            type, id, season, exc.response.status_code, body,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail=f"Le service *arr a renvoyé une erreur {exc.response.status_code} lors de la recherche.",
+        )
     except Exception as exc:
-        logger.error("Failed to fetch releases for %s %d: %s", type, id, exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+        logger.error(
+            "Failed to fetch releases for %s %d (season=%s): %s: %s",
+            type, id, season, type(exc).__name__, exc,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail=f"Échec de la recherche interactive ({type(exc).__name__}).",
+        )
     finally:
         await client.close()
 
