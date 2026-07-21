@@ -440,8 +440,12 @@ async def list_media_releases(
             status_code=400,
             detail="A season number is required for interactive series search",
         )
-    # Indexer searches can be slow — allow a generous timeout.
-    client = await _get_arr_client_for(db, type, timeout=120)
+    # Indexer searches can be slow. A Sonarr interactive *season* search
+    # fans out into a season-pack search plus one search per episode, so a
+    # 10-13 episode season easily needs 100s+; give series a wide budget.
+    # (Very large anime seasons may still exceed this and return a clean 504.)
+    search_timeout = 240 if type == "series" else 120
+    client = await _get_arr_client_for(db, type, timeout=search_timeout)
     try:
         if type == "movie":
             raw = await client.get_releases(id)
