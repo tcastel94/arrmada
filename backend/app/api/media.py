@@ -427,28 +427,34 @@ async def trigger_media_search(
 async def list_media_releases(
     type: str,
     id: int,
-    season: int | None = Query(None, description="Series only: season to search (required for series)"),
+    season: int | None = Query(None, description="Series only: season-pack search for this season"),
+    episode: int | None = Query(None, description="Series only: Sonarr episode id — search just this episode (fast)"),
     db: AsyncSession = Depends(get_db),
 ):
     """Interactive search: list candidate releases sorted best-first.
 
-    For series a ``season`` is required — Sonarr ignores ``seriesId`` alone
-    and returns a generic, unfiltered set otherwise.
+    For series either a ``season`` (season-pack search) or an ``episode`` id
+    (single-episode search) is required — Sonarr ignores ``seriesId`` alone and
+    returns a generic, unfiltered set otherwise. A single-episode search is
+    much faster and is the recommended path for very large (anime) seasons.
     """
-    if type == "series" and season is None:
+    if type == "series" and season is None and episode is None:
         raise HTTPException(
             status_code=400,
-            detail="A season number is required for interactive series search",
+            detail="A season number or episode id is required for interactive series search",
         )
-    # Indexer searches can be slow. A Sonarr interactive *season* search
-    # fans out into a season-pack search plus one search per episode, so a
-    # 10-13 episode season easily needs 100s+; give series a wide budget.
-    # (Very large anime seasons may still exceed this and return a clean 504.)
-    search_timeout = 240 if type == "series" else 120
+    # A single-episode search is one query per indexer (fast, ~30s even on a
+    # 500-episode anime). A *season* search fans out into a season-pack query
+    # plus one query per episode, so a 10-13 episode season easily needs 100s+
+    # and huge anime seasons can exceed even 240s (→ a clean 504). Budget
+    # accordingly so the fast path isn't penalised by the slow path's ceiling.
+    search_timeout = 240 if (type == "series" and episode is None) else 120
     client = await _get_arr_client_for(db, type, timeout=search_timeout)
     try:
         if type == "movie":
             raw = await client.get_releases(id)
+        elif episode is not None:
+            raw = await client.get_releases_for_episode(episode)
         else:
             raw = await client.get_releases(id, season)
         releases = [_normalise_release(r) for r in raw if isinstance(r, dict)]
@@ -465,8 +471,8 @@ async def list_media_releases(
         raise
     except httpx.TimeoutException as exc:
         logger.warning(
-            "Interactive search timed out for %s %d (season=%s): %s",
-            type, id, season, type(exc).__name__,
+            "Interactive search timed out for %s %d (season=%s episode=%s): %s",
+            type, id, season, episode, type(exc).__name__,
         )
         raise HTTPException(
             status_code=504,
@@ -479,8 +485,8 @@ async def list_media_releases(
     except httpx.HTTPStatusError as exc:
         body = (exc.response.text or "").strip()[:300]
         logger.error(
-            "Indexer search failed for %s %d (season=%s): HTTP %s %s",
-            type, id, season, exc.response.status_code, body,
+            "Indexer search failed for %s %d (season=%s episode=%s): HTTP %s %s",
+            type, id, season, episode, exc.response.status_code, body,
         )
         raise HTTPException(
             status_code=502,
@@ -488,8 +494,8 @@ async def list_media_releases(
         )
     except Exception as exc:
         logger.error(
-            "Failed to fetch releases for %s %d (season=%s): %s: %s",
-            type, id, season, type(exc).__name__, exc,
+            "Failed to fetch releases for %s %d (season=%s episode=%s): %s: %s",
+            type, id, season, episode, type(exc).__name__, exc,
         )
         raise HTTPException(
             status_code=502,

@@ -95,6 +95,15 @@ class SonarrClient(ArrBaseClient):
             params={"seriesId": series_id, "seasonNumber": season_number},
         )
 
+    async def get_releases_for_episode(self, episode_id: int) -> list[dict[str, Any]]:
+        """List candidate releases for a single episode (interactive search).
+
+        A single ``episodeId`` search is fast — one query per indexer — unlike a
+        season search, which fans out into a query per episode of the season and
+        can take minutes on very large (e.g. anime) seasons.
+        """
+        return await self.get("/release", params={"episodeId": episode_id})
+
     async def grab_release(self, guid: str, indexer_id: int) -> dict[str, Any]:
         """Grab a specific release (native import via download client)."""
         return await self.post("/release", data={"guid": guid, "indexerId": indexer_id})

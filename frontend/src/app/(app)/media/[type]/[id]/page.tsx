@@ -1354,24 +1354,41 @@ function QualityTab({ media }: { media: MediaDetail }) {
 function InteractiveSearchTab({ type, media }: { type: "movie" | "series"; media: MediaDetail }) {
     const isSeries = type === "series";
     // Real seasons only (exclude specials / season 0).
-    const seasonOptions = (media.seasons ?? [])
-        .map((s) => s.season_number)
-        .filter((n) => n > 0)
-        .sort((a, b) => a - b);
+    const seasons = (media.seasons ?? [])
+        .filter((s) => s.season_number > 0)
+        .sort((a, b) => a.season_number - b.season_number);
+    const seasonOptions = seasons.map((s) => s.season_number);
     const [enabled, setEnabled] = useState(false);
+    // "season" = season-pack search (slow fan-out across every episode);
+    // "episode" = single-episode search (fast) — the escape hatch for very
+    // large anime seasons that would otherwise time out.
+    const [searchMode, setSearchMode] = useState<"season" | "episode">("season");
     const [selectedSeason, setSelectedSeason] = useState<number | undefined>(
         isSeries ? seasonOptions[0] : undefined,
     );
+    const [selectedEpisode, setSelectedEpisode] = useState<number | undefined>(undefined);
+
+    const episodeOptions = isSeries
+        ? (seasons.find((s) => s.season_number === selectedSeason)?.episodes ?? [])
+        : [];
+    // Fall back to the first episode of the season when none is explicitly picked.
+    const effectiveEpisode = selectedEpisode ?? episodeOptions[0]?.id;
+
     const { data, isFetching, error, refetch } = useMediaReleases(
         type,
         media.id,
         enabled,
-        selectedSeason,
+        searchMode === "season" ? selectedSeason : undefined,
+        searchMode === "episode" ? effectiveEpisode : undefined,
     );
     const grab = useGrabRelease();
     const [grabbing, setGrabbing] = useState<string | null>(null);
 
-    const canSearch = !isSeries || selectedSeason !== undefined;
+    const canSearch =
+        !isSeries ||
+        (searchMode === "season"
+            ? selectedSeason !== undefined
+            : effectiveEpisode !== undefined);
 
     const handleGrab = (r: Release) => {
         setGrabbing(r.guid);
@@ -1391,27 +1408,61 @@ function InteractiveSearchTab({ type, media }: { type: "movie" | "series"; media
                 <p className="text-sm text-muted-foreground">
                     Recherche interactive sur les indexeurs via {type === "movie" ? "Radarr" : "Sonarr"}.
                     {isSeries
-                        ? " Choisissez une saison, puis lancez la recherche."
+                        ? " Choisissez une saison (pack) ou un épisode précis, puis lancez la recherche. L'épisode est plus rapide sur les très grosses saisons."
                         : " Choisissez une release à envoyer au client de téléchargement."}
                 </p>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
                     {isSeries && (
-                        <select
-                            className="h-9 rounded-md border border-border/60 bg-card/50 px-2 text-sm"
-                            value={selectedSeason ?? ""}
-                            onChange={(e) => {
-                                const n = Number(e.target.value);
-                                setSelectedSeason(Number.isNaN(n) ? undefined : n);
-                                setEnabled(false); // force an explicit re-search for the new season
-                            }}
-                        >
-                            {seasonOptions.length === 0 && <option value="">Aucune saison</option>}
-                            {seasonOptions.map((n) => (
-                                <option key={n} value={n}>
-                                    Saison {n}
-                                </option>
-                            ))}
-                        </select>
+                        <>
+                            <select
+                                className="h-9 rounded-md border border-border/60 bg-card/50 px-2 text-sm"
+                                value={searchMode}
+                                title="Mode de recherche"
+                                onChange={(e) => {
+                                    setSearchMode(e.target.value as "season" | "episode");
+                                    setEnabled(false); // force an explicit re-search for the new mode
+                                }}
+                            >
+                                <option value="season">Season pack</option>
+                                <option value="episode">Épisode</option>
+                            </select>
+                            <select
+                                className="h-9 rounded-md border border-border/60 bg-card/50 px-2 text-sm"
+                                value={selectedSeason ?? ""}
+                                onChange={(e) => {
+                                    const n = Number(e.target.value);
+                                    setSelectedSeason(Number.isNaN(n) ? undefined : n);
+                                    setSelectedEpisode(undefined); // reset episode for the new season
+                                    setEnabled(false); // force an explicit re-search for the new season
+                                }}
+                            >
+                                {seasonOptions.length === 0 && <option value="">Aucune saison</option>}
+                                {seasonOptions.map((n) => (
+                                    <option key={n} value={n}>
+                                        Saison {n}
+                                    </option>
+                                ))}
+                            </select>
+                            {searchMode === "episode" && (
+                                <select
+                                    className="h-9 max-w-[16rem] rounded-md border border-border/60 bg-card/50 px-2 text-sm"
+                                    value={effectiveEpisode ?? ""}
+                                    onChange={(e) => {
+                                        const n = Number(e.target.value);
+                                        setSelectedEpisode(Number.isNaN(n) ? undefined : n);
+                                        setEnabled(false); // force an explicit re-search for the new episode
+                                    }}
+                                >
+                                    {episodeOptions.length === 0 && <option value="">Aucun épisode</option>}
+                                    {episodeOptions.map((ep) => (
+                                        <option key={ep.id} value={ep.id}>
+                                            E{String(ep.episode_number).padStart(2, "0")}
+                                            {ep.title ? ` — ${ep.title}` : ""}
+                                        </option>
+                                    ))}
+                                </select>
+                            )}
+                        </>
                     )}
                     <Button
                         size="sm"

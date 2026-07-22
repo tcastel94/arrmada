@@ -59,12 +59,23 @@ export function useMediaReleases(
     id: number | string,
     enabled: boolean,
     season?: number,
+    episode?: number,
 ) {
-    const qs = type === "series" && season !== undefined ? `?season=${season}` : "";
-    // For series, an explicit season must be chosen before searching.
-    const canQuery = enabled && !!id && (type === "movie" || season !== undefined);
+    // Episode search (fast, single query per indexer) takes precedence over a
+    // season-pack search (slow fan-out). Only one is sent to the backend.
+    const qs =
+        type === "series"
+            ? episode !== undefined
+                ? `?episode=${episode}`
+                : season !== undefined
+                    ? `?season=${season}`
+                    : ""
+            : "";
+    // For series, either a season or an episode must be chosen before searching.
+    const canQuery =
+        enabled && !!id && (type === "movie" || season !== undefined || episode !== undefined);
     return useQuery<ReleasesResponse>({
-        queryKey: ["media", "releases", type, String(id), season ?? null],
+        queryKey: ["media", "releases", type, String(id), season ?? null, episode ?? null],
         queryFn: () => apiFetch(`/api/media/${type}/${id}/releases${qs}`),
         enabled: canQuery,
         staleTime: 60_000,
