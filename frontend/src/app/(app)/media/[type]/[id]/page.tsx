@@ -62,7 +62,7 @@ import {
 } from "@/hooks/use-media";
 import { Switch } from "@/components/ui/switch";
 import { useProfileOverrides, useAvailableProfiles, useCreateOverride, useDeleteOverride, useApplyOverride } from "@/hooks/use-profile-overrides";
-import { useTriggerMediaSearch, useMediaReleases, useGrabRelease, type Release } from "@/hooks/use-media-actions";
+import { useTriggerMediaSearch, useMediaReleases, useGrabRelease, useSearchEpisodes, type Release } from "@/hooks/use-media-actions";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { useState } from "react";
@@ -198,6 +198,9 @@ function SeasonSection({ seasons, seriesId }: { seasons: SeasonDetail[]; seriesI
     const [openSeason, setOpenSeason] = useState<number | null>(null);
     const seasonMonitor = useUpdateSeasonMonitoring();
     const [pendingSeason, setPendingSeason] = useState<number | null>(null);
+    const searchEpisodes = useSearchEpisodes();
+    const [searchingSeason, setSearchingSeason] = useState<number | null>(null);
+    const [searchingEp, setSearchingEp] = useState<number | null>(null);
 
     const toggleSeason = (seasonNumber: number, monitored: boolean) => {
         setPendingSeason(seasonNumber);
@@ -210,6 +213,37 @@ function SeasonSection({ seasons, seriesId }: { seasons: SeasonDetail[]; seriesI
                     ),
                 onError: (e) => toast.error("Erreur : " + e.message),
                 onSettled: () => setPendingSeason(null),
+            },
+        );
+    };
+
+    // Automatic search for a season's missing episodes (episodes without a file).
+    const searchMissingSeason = (season: SeasonDetail) => {
+        const ids = season.episodes.filter((e) => !e.has_file).map((e) => e.id);
+        if (ids.length === 0) return;
+        setSearchingSeason(season.season_number);
+        searchEpisodes.mutate(
+            { id: seriesId, episodeIds: ids },
+            {
+                onSuccess: (d) =>
+                    toast.success(
+                        `Recherche lancée pour ${d.count} épisode${d.count > 1 ? "s" : ""} manquant${d.count > 1 ? "s" : ""}.`,
+                    ),
+                onError: (e) => toast.error("Erreur : " + e.message),
+                onSettled: () => setSearchingSeason(null),
+            },
+        );
+    };
+
+    // Automatic search for a single episode.
+    const searchOneEpisode = (episodeId: number) => {
+        setSearchingEp(episodeId);
+        searchEpisodes.mutate(
+            { id: seriesId, episodeIds: [episodeId] },
+            {
+                onSuccess: () => toast.success("Recherche lancée pour l'épisode."),
+                onError: (e) => toast.error("Erreur : " + e.message),
+                onSettled: () => setSearchingEp(null),
             },
         );
     };
@@ -252,11 +286,28 @@ function SeasonSection({ seasons, seriesId }: { seasons: SeasonDetail[]; seriesI
                                 </div>
                             </CardHeader>
                         </button>
-                        <div
-                            className="flex items-center gap-2 pr-4"
-                            title={season.monitored ? "Surveillée" : "Non surveillée"}
-                        >
+                        <div className="flex items-center gap-2 pr-4">
+                            {season.episodes_have < season.episode_count && (
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 px-2 text-xs shrink-0"
+                                    disabled={searchingSeason === season.season_number}
+                                    title="Rechercher automatiquement les épisodes manquants"
+                                    onClick={() => searchMissingSeason(season)}
+                                >
+                                    {searchingSeason === season.season_number ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                        <>
+                                            <Download className="h-3.5 w-3.5 mr-1" />
+                                            Manquants ({season.episode_count - season.episodes_have})
+                                        </>
+                                    )}
+                                </Button>
+                            )}
                             <Eye
+                                title={season.monitored ? "Surveillée" : "Non surveillée"}
                                 className={cn(
                                     "h-3.5 w-3.5",
                                     season.monitored ? "text-emerald-400" : "text-muted-foreground/50",
@@ -303,6 +354,22 @@ function SeasonSection({ seasons, seriesId }: { seasons: SeasonDetail[]; seriesI
                                             <Badge variant="outline" className="text-[10px]">
                                                 {ep.file.quality}
                                             </Badge>
+                                        )}
+                                        {!ep.has_file && (
+                                            <Button
+                                                size="icon"
+                                                variant="ghost"
+                                                className="h-6 w-6 shrink-0"
+                                                disabled={searchingEp === ep.id}
+                                                title="Rechercher cet épisode"
+                                                onClick={() => searchOneEpisode(ep.id)}
+                                            >
+                                                {searchingEp === ep.id ? (
+                                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                ) : (
+                                                    <Search className="h-3.5 w-3.5" />
+                                                )}
+                                            </Button>
                                         )}
                                     </div>
                                 ))}

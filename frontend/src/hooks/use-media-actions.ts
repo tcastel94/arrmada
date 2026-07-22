@@ -24,6 +24,28 @@ export function useTriggerMediaSearch() {
     });
 }
 
+/* ── Automatic search for specific episodes (missing grab) ──── */
+
+export function useSearchEpisodes() {
+    const queryClient = useQueryClient();
+    return useMutation<
+        { status: string; command: any; count: number },
+        Error,
+        { id: number | string; episodeIds: number[] }
+    >({
+        mutationFn: ({ id, episodeIds }) =>
+            apiFetch(`/api/media/series/${id}/search-episodes`, {
+                method: "POST",
+                body: JSON.stringify({ episode_ids: episodeIds }),
+            }),
+        onSuccess: (_data, variables) => {
+            queryClient.invalidateQueries({
+                queryKey: ["media", "detail", "series", String(variables.id)],
+            });
+        },
+    });
+}
+
 /* ── Interactive release search ────────────────────────────── */
 
 export interface Release {

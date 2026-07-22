@@ -423,6 +423,52 @@ async def trigger_media_search(
         await client.close()
 
 
+class EpisodeSearchPayload(BaseModel):
+    episode_ids: list[int]
+
+
+@router.post("/series/{id}/search-episodes")
+async def trigger_episode_search(
+    id: int,
+    payload: EpisodeSearchPayload,
+    db: AsyncSession = Depends(get_db),
+):
+    """Trigger a native automatic search for specific episodes.
+
+    Used by the "search missing episodes" buttons: Sonarr searches the given
+    episodes and auto-grabs the best matching release per the quality profile.
+    """
+    if not payload.episode_ids:
+        raise HTTPException(status_code=400, detail="episode_ids is required")
+    client = await _get_arr_client_for(db, "series", timeout=30)
+    try:
+        result = await client.search_episodes(payload.episode_ids)
+        return {
+            "status": "search_triggered",
+            "command": result,
+            "count": len(payload.episode_ids),
+        }
+    except HTTPException:
+        raise
+    except httpx.TimeoutException as exc:
+        logger.warning("Episode search timed out for series %d: %s", id, type(exc).__name__)
+        raise HTTPException(
+            status_code=504,
+            detail="Sonarr a mis trop de temps à répondre au lancement de la recherche.",
+        )
+    except Exception as exc:
+        logger.error(
+            "Failed to trigger episode search for series %d: %s: %s",
+            id, type(exc).__name__, exc,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail=f"Échec du lancement de la recherche des épisodes ({type(exc).__name__}).",
+        )
+    finally:
+        await client.close()
+
+
 @router.get("/{type}/{id}/releases")
 async def list_media_releases(
     type: str,
