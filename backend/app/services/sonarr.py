@@ -83,6 +83,10 @@ class SonarrClient(ArrBaseClient):
         """Trigger an automatic search for specific episodes."""
         return await self.command("EpisodeSearch", episodeIds=episode_ids)
 
+    async def get_commands(self) -> list[dict[str, Any]]:
+        """Fetch the Sonarr command queue (queued / started / completed)."""
+        return await self.get("/command")
+
     # ── Interactive release search / grab ─────────────────────
     async def get_releases(self, series_id: int, season_number: int) -> list[dict[str, Any]]:
         """List candidate releases for a season (interactive search).

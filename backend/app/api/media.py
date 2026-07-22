@@ -469,6 +469,53 @@ async def trigger_episode_search(
         await client.close()
 
 
+@router.get("/series/{id}/search-activity")
+async def get_series_search_activity(
+    id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Report which episodes/seasons of a series have a search running in Sonarr.
+
+    Backs the "recherche en cours" indicator: the frontend polls this and
+    matches the returned episode ids against each season's episodes. Note that
+    ``EpisodeSearch`` commands are global (no seriesId in the body), so we
+    return the union of every active search's episode ids — the frontend
+    intersects them with this series' episodes, which filters other series out.
+    """
+    client = await _get_arr_client_for(db, "series", timeout=15)
+    active_states = {"queued", "started"}
+    episode_ids: set[int] = set()
+    seasons: set[int] = set()
+    series_search = False
+    try:
+        commands = await client.get_commands()
+        for c in commands if isinstance(commands, list) else []:
+            if c.get("status") not in active_states:
+                continue
+            name = c.get("name")
+            body = c.get("body") or {}
+            if name == "EpisodeSearch":
+                episode_ids.update(int(e) for e in (body.get("episodeIds") or []))
+            elif name == "SeasonSearch" and body.get("seriesId") == id:
+                sn = body.get("seasonNumber")
+                if sn is not None:
+                    seasons.add(int(sn))
+            elif name == "SeriesSearch" and body.get("seriesId") == id:
+                series_search = True
+        return {
+            "episode_ids": sorted(episode_ids),
+            "seasons": sorted(seasons),
+            "series_search": series_search,
+            "active": bool(episode_ids or seasons or series_search),
+        }
+    except Exception as exc:
+        # A polling endpoint must never break the page; degrade to "idle".
+        logger.warning("Failed to fetch search activity for series %d: %s", id, exc)
+        return {"episode_ids": [], "seasons": [], "series_search": False, "active": False}
+    finally:
+        await client.close()
+
+
 @router.get("/{type}/{id}/releases")
 async def list_media_releases(
     type: str,

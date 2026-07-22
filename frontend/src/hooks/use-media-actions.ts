@@ -46,6 +46,31 @@ export function useSearchEpisodes() {
     });
 }
 
+/* ── Live search activity (Sonarr command queue) ───────────── */
+
+export interface SearchActivity {
+    episode_ids: number[];
+    seasons: number[];
+    series_search: boolean;
+    active: boolean;
+}
+
+/**
+ * Poll which episodes/seasons of a series currently have a search running in
+ * Sonarr, so the UI can show a "recherche en cours" indicator. Polls every 4s
+ * while enabled; harmless to leave running on the page.
+ */
+export function useSeriesSearchActivity(id: number | string, enabled = true) {
+    return useQuery<SearchActivity>({
+        queryKey: ["media", "search-activity", String(id)],
+        queryFn: () => apiFetch(`/api/media/series/${id}/search-activity`),
+        enabled: enabled && !!id,
+        refetchInterval: 4000,
+        refetchOnWindowFocus: true,
+        staleTime: 0,
+    });
+}
+
 /* ── Interactive release search ────────────────────────────── */
 
 export interface Release {

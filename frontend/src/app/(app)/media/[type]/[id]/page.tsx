@@ -62,7 +62,7 @@ import {
 } from "@/hooks/use-media";
 import { Switch } from "@/components/ui/switch";
 import { useProfileOverrides, useAvailableProfiles, useCreateOverride, useDeleteOverride, useApplyOverride } from "@/hooks/use-profile-overrides";
-import { useTriggerMediaSearch, useMediaReleases, useGrabRelease, useSearchEpisodes, type Release } from "@/hooks/use-media-actions";
+import { useTriggerMediaSearch, useMediaReleases, useGrabRelease, useSearchEpisodes, useSeriesSearchActivity, type Release } from "@/hooks/use-media-actions";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { useState } from "react";
@@ -202,6 +202,16 @@ function SeasonSection({ seasons, seriesId }: { seasons: SeasonDetail[]; seriesI
     const [searchingSeason, setSearchingSeason] = useState<number | null>(null);
     const [searchingEp, setSearchingEp] = useState<number | null>(null);
 
+    // Live view of which episodes/seasons Sonarr is actively searching, so the
+    // UI shows "recherche en cours" instead of looking stuck (anime seasons run
+    // many serial per-episode searches that take minutes).
+    const { data: activity, refetch: refetchActivity } = useSeriesSearchActivity(seriesId);
+    const searchingEpIds = new Set(activity?.episode_ids ?? []);
+    const activeSeasons = new Set(activity?.seasons ?? []);
+    const isSeasonSearching = (season: SeasonDetail) =>
+        activeSeasons.has(season.season_number) ||
+        season.episodes.some((e) => searchingEpIds.has(e.id));
+
     const toggleSeason = (seasonNumber: number, monitored: boolean) => {
         setPendingSeason(seasonNumber);
         seasonMonitor.mutate(
@@ -225,10 +235,12 @@ function SeasonSection({ seasons, seriesId }: { seasons: SeasonDetail[]; seriesI
         searchEpisodes.mutate(
             { id: seriesId, episodeIds: ids },
             {
-                onSuccess: (d) =>
+                onSuccess: (d) => {
                     toast.success(
                         `Recherche lancée pour ${d.count} épisode${d.count > 1 ? "s" : ""} manquant${d.count > 1 ? "s" : ""}.`,
-                    ),
+                    );
+                    refetchActivity();
+                },
                 onError: (e) => toast.error("Erreur : " + e.message),
                 onSettled: () => setSearchingSeason(null),
             },
@@ -241,7 +253,10 @@ function SeasonSection({ seasons, seriesId }: { seasons: SeasonDetail[]; seriesI
         searchEpisodes.mutate(
             { id: seriesId, episodeIds: [episodeId] },
             {
-                onSuccess: () => toast.success("Recherche lancée pour l'épisode."),
+                onSuccess: () => {
+                    toast.success("Recherche lancée pour l'épisode.");
+                    refetchActivity();
+                },
                 onError: (e) => toast.error("Erreur : " + e.message),
                 onSettled: () => setSearchingEp(null),
             },
@@ -288,23 +303,34 @@ function SeasonSection({ seasons, seriesId }: { seasons: SeasonDetail[]; seriesI
                         </button>
                         <div className="flex items-center gap-2 pr-4">
                             {season.episodes_have < season.episode_count && (
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-7 px-2 text-xs shrink-0"
-                                    disabled={searchingSeason === season.season_number}
-                                    title="Rechercher automatiquement les épisodes manquants"
-                                    onClick={() => searchMissingSeason(season)}
-                                >
-                                    {searchingSeason === season.season_number ? (
+                                isSeasonSearching(season) ? (
+                                    <Badge
+                                        variant="outline"
+                                        className="h-7 px-2 text-xs shrink-0 gap-1 text-sky-400 border-sky-500/30"
+                                        title="Recherche Sonarr en cours pour cette saison"
+                                    >
                                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                    ) : (
-                                        <>
-                                            <Download className="h-3.5 w-3.5 mr-1" />
-                                            Manquants ({season.episode_count - season.episodes_have})
-                                        </>
-                                    )}
-                                </Button>
+                                        Recherche…
+                                    </Badge>
+                                ) : (
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-7 px-2 text-xs shrink-0"
+                                        disabled={searchingSeason === season.season_number}
+                                        title="Rechercher automatiquement les épisodes manquants"
+                                        onClick={() => searchMissingSeason(season)}
+                                    >
+                                        {searchingSeason === season.season_number ? (
+                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        ) : (
+                                            <>
+                                                <Download className="h-3.5 w-3.5 mr-1" />
+                                                Manquants ({season.episode_count - season.episodes_have})
+                                            </>
+                                        )}
+                                    </Button>
+                                )
                             )}
                             <Eye
                                 title={season.monitored ? "Surveillée" : "Non surveillée"}
@@ -360,11 +386,11 @@ function SeasonSection({ seasons, seriesId }: { seasons: SeasonDetail[]; seriesI
                                                 size="icon"
                                                 variant="ghost"
                                                 className="h-6 w-6 shrink-0"
-                                                disabled={searchingEp === ep.id}
-                                                title="Rechercher cet épisode"
+                                                disabled={searchingEp === ep.id || searchingEpIds.has(ep.id)}
+                                                title={searchingEpIds.has(ep.id) ? "Recherche en cours…" : "Rechercher cet épisode"}
                                                 onClick={() => searchOneEpisode(ep.id)}
                                             >
-                                                {searchingEp === ep.id ? (
+                                                {searchingEp === ep.id || searchingEpIds.has(ep.id) ? (
                                                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                                 ) : (
                                                     <Search className="h-3.5 w-3.5" />
