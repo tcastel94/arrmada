@@ -71,3 +71,34 @@ export function useAISearch(query: string) {
         retry: false,
     });
 }
+
+/* ── Discover lookup (new titles to add, via *arr TMDB lookup) ── */
+
+export interface LookupItem {
+    title: string;
+    year: number | null;
+    tmdb_id: number | null;
+    overview: string;
+    poster_url: string | null;
+    type: "movie" | "series";
+    in_library: boolean;
+    arr_id: number | null;
+}
+
+/** Look up addable movies AND series matching the query (both *arr services). */
+export function useDiscoverLookup(query: string, enabled = true) {
+    return useQuery<LookupItem[]>({
+        queryKey: ["lookup", "discover", query],
+        queryFn: async () => {
+            const q = encodeURIComponent(query);
+            const [movies, series] = await Promise.all([
+                apiFetch<LookupItem[]>(`/api/requests/lookup?q=${q}&type=movie`).catch(() => []),
+                apiFetch<LookupItem[]>(`/api/requests/lookup?q=${q}&type=series`).catch(() => []),
+            ]);
+            return [...(movies || []), ...(series || [])];
+        },
+        enabled: enabled && query.length >= 2,
+        staleTime: 60_000,
+        retry: false,
+    });
+}

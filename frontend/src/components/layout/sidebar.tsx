@@ -40,24 +40,39 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useUnreadCount } from "@/hooks/use-notifications";
 
-const NAV_ITEMS = [
-    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/media", label: "Médiathèque", icon: Film },
-    { href: "/calendar", label: "Calendrier", icon: CalendarDays },
-    { href: "/downloads", label: "Downloads", icon: Download },
-    { href: "/search", label: "Recherche", icon: Search },
-    { href: "/requests", label: "Requêtes", icon: MessageSquarePlus },
-    { href: "/recommendations", label: "Découvrir", icon: Sparkles },
-    { href: "/analytics", label: "Analytics", icon: BarChart3 },
-    { href: "/duplicates", label: "Doublons", icon: Copy },
-    { href: "/quality", label: "Qualité", icon: Gauge },
-    { href: "/cleanup", label: "Nettoyage", icon: Trash2 },
-    { href: "/prowlarr", label: "Indexers", icon: Radar },
-    { href: "/system", label: "Système", icon: HardDrive },
-    { href: "/docker", label: "Docker", icon: Container },
-    { href: "/fichiers", label: "Fichiers", icon: FolderOpen },
-    { href: "/trash-guides", label: "TRaSH Guides", icon: BookMarked },
-    { href: "/notifications", label: "Notifications", icon: Bell },
+// Dashboard stays standalone at the top; everything else is grouped.
+const TOP_ITEM = { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard };
+
+const NAV_GROUPS: { title: string; items: { href: string; label: string; icon: typeof Film }[] }[] = [
+    {
+        title: "Médias",
+        items: [
+            { href: "/media", label: "Médiathèque", icon: Film },
+            { href: "/search", label: "Rechercher & Ajouter", icon: Search },
+            { href: "/calendar", label: "Calendrier", icon: CalendarDays },
+            { href: "/downloads", label: "Downloads", icon: Download },
+        ],
+    },
+    {
+        title: "Bibliothèque",
+        items: [
+            { href: "/duplicates", label: "Doublons", icon: Copy },
+            { href: "/quality", label: "Qualité", icon: Gauge },
+            { href: "/cleanup", label: "Nettoyage", icon: Trash2 },
+            { href: "/fichiers", label: "Fichiers", icon: FolderOpen },
+            { href: "/trash-guides", label: "TRaSH Guides", icon: BookMarked },
+        ],
+    },
+    {
+        title: "Système & Infra",
+        items: [
+            { href: "/analytics", label: "Analytics", icon: BarChart3 },
+            { href: "/prowlarr", label: "Indexers", icon: Radar },
+            { href: "/system", label: "Système", icon: HardDrive },
+            { href: "/docker", label: "Docker", icon: Container },
+            { href: "/notifications", label: "Notifications", icon: Bell },
+        ],
+    },
 ];
 
 const BOTTOM_ITEMS = [
@@ -70,6 +85,47 @@ export function Sidebar() {
     const [collapsed, setCollapsed] = useState(false);
     const { data: unreadData } = useUnreadCount();
     const unreadCount = unreadData?.unread_count ?? 0;
+
+    const renderNavItem = (item: { href: string; label: string; icon: typeof Film }) => {
+        const isActive =
+            pathname === item.href || pathname.startsWith(item.href + "/");
+        const Icon = item.icon;
+
+        const button = (
+            <Link href={item.href} key={item.href}>
+                <Button
+                    variant={isActive ? "secondary" : "ghost"}
+                    className={cn(
+                        "w-full justify-start gap-3 h-10 relative",
+                        isActive &&
+                        "bg-primary/10 text-primary hover:bg-primary/15 font-medium",
+                        collapsed && "justify-center px-0"
+                    )}
+                    id={`nav-${item.href.slice(1)}`}
+                >
+                    <div className="relative">
+                        <Icon className="h-4 w-4 shrink-0" />
+                        {item.href === "/notifications" && unreadCount > 0 && (
+                            <span className="absolute -top-1.5 -right-1.5 h-4 min-w-4 flex items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white px-1">
+                                {unreadCount > 99 ? "99+" : unreadCount}
+                            </span>
+                        )}
+                    </div>
+                    {!collapsed && <span className="truncate">{item.label}</span>}
+                </Button>
+            </Link>
+        );
+
+        if (collapsed) {
+            return (
+                <Tooltip key={item.href}>
+                    <TooltipTrigger asChild>{button}</TooltipTrigger>
+                    <TooltipContent side="right">{item.label}</TooltipContent>
+                </Tooltip>
+            );
+        }
+        return button;
+    };
 
     return (
         <motion.aside
@@ -112,49 +168,21 @@ export function Sidebar() {
             {/* Navigation */}
             <ScrollArea className="flex-1 py-2">
                 <nav className="flex flex-col gap-1 px-2">
-                    {NAV_ITEMS.map((item) => {
-                        const isActive =
-                            pathname === item.href || pathname.startsWith(item.href + "/");
-                        const Icon = item.icon;
-
-                        const button = (
-                            <Link href={item.href} key={item.href}>
-                                <Button
-                                    variant={isActive ? "secondary" : "ghost"}
-                                    className={cn(
-                                        "w-full justify-start gap-3 h-10 relative",
-                                        isActive &&
-                                        "bg-primary/10 text-primary hover:bg-primary/15 font-medium",
-                                        collapsed && "justify-center px-0"
-                                    )}
-                                    id={`nav-${item.href.slice(1)}`}
-                                >
-                                    <div className="relative">
-                                        <Icon className="h-4 w-4 shrink-0" />
-                                        {item.href === "/notifications" && unreadCount > 0 && (
-                                            <span className="absolute -top-1.5 -right-1.5 h-4 min-w-4 flex items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white px-1">
-                                                {unreadCount > 99 ? "99+" : unreadCount}
-                                            </span>
-                                        )}
-                                    </div>
-                                    {!collapsed && (
-                                        <span className="truncate">{item.label}</span>
-                                    )}
-                                </Button>
-                            </Link>
-                        );
-
-                        if (collapsed) {
-                            return (
-                                <Tooltip key={item.href}>
-                                    <TooltipTrigger asChild>{button}</TooltipTrigger>
-                                    <TooltipContent side="right">{item.label}</TooltipContent>
-                                </Tooltip>
-                            );
-                        }
-
-                        return button;
-                    })}
+                    {renderNavItem(TOP_ITEM)}
+                    {NAV_GROUPS.map((group) => (
+                        <div key={group.title} className="mt-1.5">
+                            {collapsed ? (
+                                <div className="my-2 mx-1 border-t border-border/50" />
+                            ) : (
+                                <p className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/55">
+                                    {group.title}
+                                </p>
+                            )}
+                            <div className="flex flex-col gap-1">
+                                {group.items.map((item) => renderNavItem(item))}
+                            </div>
+                        </div>
+                    ))}
                 </nav>
             </ScrollArea>
 

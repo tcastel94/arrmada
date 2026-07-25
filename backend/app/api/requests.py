@@ -75,15 +75,20 @@ async def lookup_media(
         client = RadarrClient(url=service.url, api_key=api_key)
         try:
             raw = await client.lookup_movie(q)
-            for item in raw[:10]:
+            for item in raw[:15]:
                 images = item.get("images", [])
                 poster = next((img["remoteUrl"] for img in images if img.get("coverType") == "poster" and img.get("remoteUrl")), None)
+                # Radarr sets a non-zero ``id`` when the movie is already added.
+                arr_id = item.get("id") or 0
                 results.append({
                     "title": item.get("title"),
                     "year": item.get("year"),
                     "tmdb_id": item.get("tmdbId"),
                     "overview": item.get("overview"),
                     "poster_url": poster,
+                    "type": "movie",
+                    "in_library": arr_id > 0,
+                    "arr_id": arr_id or None,
                 })
         except Exception as exc:
             logger.error("Radarr lookup failed: %s", exc)
@@ -93,15 +98,19 @@ async def lookup_media(
         client = SonarrClient(url=service.url, api_key=api_key)
         try:
             raw = await client.lookup_series(q)
-            for item in raw[:10]:
+            for item in raw[:15]:
                 images = item.get("images", [])
                 poster = next((img["remoteUrl"] for img in images if img.get("coverType") == "poster" and img.get("remoteUrl")), None)
+                arr_id = item.get("id") or 0
                 results.append({
                     "title": item.get("title"),
                     "year": item.get("year"),
                     "tmdb_id": item.get("tvdbId"),  # Sonarr uses TVDB ID
                     "overview": item.get("overview"),
                     "poster_url": poster,
+                    "type": "series",
+                    "in_library": arr_id > 0,
+                    "arr_id": arr_id or None,
                 })
         except Exception as exc:
             logger.error("Sonarr lookup failed: %s", exc)
