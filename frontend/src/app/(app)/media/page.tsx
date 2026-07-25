@@ -44,8 +44,12 @@ import {
     Loader2
 } from "lucide-react";
 import { useMedia, type MediaItem } from "@/hooks/use-media";
+import { useSubtitleStatus } from "@/hooks/use-subtitles";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
+
+/** Per-item French-subtitle state derived from the Bazarr status map. */
+type SubState = "present" | "missing" | undefined;
 
 function formatBytes(bytes: number): string {
     if (!bytes) return "—";
@@ -69,7 +73,31 @@ const fadeUp = {
     },
 };
 
-function MediaCard({ item, selectionMode, isSelected, onToggle }: { item: MediaItem, selectionMode?: boolean, isSelected?: boolean, onToggle?: () => void }) {
+function SubBadge({ state }: { state: SubState }) {
+    if (state === "present") {
+        return (
+            <Badge
+                className="text-[10px] bg-emerald-600/80 backdrop-blur-sm border-0 text-white"
+                title="Sous-titres FR disponibles"
+            >
+                ST FR ✓
+            </Badge>
+        );
+    }
+    if (state === "missing") {
+        return (
+            <Badge
+                className="text-[10px] bg-amber-600/85 backdrop-blur-sm border-0 text-white"
+                title="Sous-titres FR manquants"
+            >
+                ST FR ✗
+            </Badge>
+        );
+    }
+    return null;
+}
+
+function MediaCard({ item, selectionMode, isSelected, onToggle, subState }: { item: MediaItem, selectionMode?: boolean, isSelected?: boolean, onToggle?: () => void, subState?: SubState }) {
     return (
         <motion.div variants={fadeUp} className="relative">
             {selectionMode && (
@@ -109,12 +137,13 @@ function MediaCard({ item, selectionMode, isSelected, onToggle }: { item: MediaI
                             </div>
                         )}
                         {/* Top badges */}
-                        <div className="absolute top-2 left-2 flex flex-col gap-1">
+                        <div className="absolute top-2 left-2 flex flex-col gap-1 items-start">
                             {item.quality && (
                                 <Badge className="text-[10px] bg-black/60 backdrop-blur-sm border-0 text-white">
                                     {item.quality}
                                 </Badge>
                             )}
+                            <SubBadge state={subState} />
                         </div>
                         <div className="absolute top-2 right-2">
                             {!item.has_file && (
@@ -201,7 +230,9 @@ export default function MediaPage() {
     const [sort, setSort] = useState("title");
     const [order, setOrder] = useState("asc");
     const [page, setPage] = useState(1);
-    
+    // French-subtitle filter: all / missing (sans ST FR) / present.
+    const [subFilter, setSubFilter] = useState<"all" | "missing" | "present">("all");
+
     const queryClient = useQueryClient();
 
     // Selection state
@@ -248,6 +279,26 @@ export default function MediaPage() {
         page,
         per_page: 48,
     });
+
+    // Bazarr French-subtitle status (full library map, keyed by Radarr/Sonarr id).
+    const { data: subStatus } = useSubtitleStatus("fr");
+
+    const subStateFor = (item: MediaItem): SubState => {
+        if (!subStatus) return undefined;
+        if (item.type === "movie") return subStatus.movies[item.external_id];
+        // Series map only lists series that still miss FR subs on some episode.
+        if (subStatus.series[item.external_id]) return "missing";
+        return item.has_file ? "present" : undefined;
+    };
+
+    // The filter narrows the current page client-side (the media list itself is
+    // paginated server-side, so it applies within the loaded page).
+    const visibleItems =
+        data?.items.filter((item) => {
+            if (subFilter === "all") return true;
+            const s = subStateFor(item);
+            return subFilter === "missing" ? s === "missing" : s === "present";
+        }) ?? [];
 
     return (
         <>
@@ -356,7 +407,19 @@ export default function MediaPage() {
                             <SortDesc className="h-4 w-4" />
                         )}
                     </Button>
-                    
+
+                    {/* Subtitle (FR) filter */}
+                    <Select value={subFilter} onValueChange={(v) => setSubFilter(v as typeof subFilter)}>
+                        <SelectTrigger className="w-[150px] border-white/10 bg-transparent">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">ST FR : tous</SelectItem>
+                            <SelectItem value="missing">Sans ST FR</SelectItem>
+                            <SelectItem value="present">Avec ST FR</SelectItem>
+                        </SelectContent>
+                    </Select>
+
                     {/* Spacer for sm screens */}
                     <div className="hidden lg:flex flex-1" />
 
@@ -460,15 +523,17 @@ export default function MediaPage() {
                             />
                         ))}
                     </div>
-                ) : !data || data.items.length === 0 ? (
+                ) : !data || visibleItems.length === 0 ? (
                     <div className="rounded-xl ring-1 ring-white/5 bg-card/30 p-12">
                         <EmptyState
                             icon={Film}
                             title="Aucun média trouvé"
                             description={
-                                search
-                                    ? `Aucun résultat pour « ${search} »`
-                                    : "Connectez vos services *arr pour voir votre médiathèque"
+                                subFilter !== "all"
+                                    ? `Aucun média « ${subFilter === "missing" ? "sans" : "avec"} ST FR » sur cette page`
+                                    : search
+                                        ? `Aucun résultat pour « ${search} »`
+                                        : "Connectez vos services *arr pour voir votre médiathèque"
                             }
                         />
                     </div>
@@ -479,10 +544,11 @@ export default function MediaPage() {
                         initial="hidden"
                         animate="show"
                     >
-                        {data.items.map((item) => (
+                        {visibleItems.map((item) => (
                             <MediaCard
                                 key={`${item.type}-${item.external_id}`}
                                 item={item}
+                                subState={subStateFor(item)}
                                 selectionMode={selectionMode}
                                 isSelected={selectedIds.has(item.external_id)}
                                 onToggle={() => {

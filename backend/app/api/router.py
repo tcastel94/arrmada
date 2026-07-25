@@ -33,6 +33,7 @@ from app.api.prowlarr_stats import router as prowlarr_stats_router
 from app.api.quality import router as quality_router
 from app.api.cleanup import router as cleanup_router
 from app.api.ai_search import router as ai_search_router
+from app.api.subtitles import router as subtitles_router
 
 # Main router that includes all sub-routers
 api_router = APIRouter()
@@ -69,3 +70,4 @@ api_router.include_router(prowlarr_stats_router)
 api_router.include_router(quality_router)
 api_router.include_router(cleanup_router)
 api_router.include_router(ai_search_router)
+api_router.include_router(subtitles_router)

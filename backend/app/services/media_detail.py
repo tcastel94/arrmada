@@ -171,7 +171,9 @@ async def get_movie_detail(
     }
 
     # ── Bazarr subtitle info ──────────────────────────────────
-    detail["subtitles"] = await _get_bazarr_movie_subtitles(db, raw.get("tmdbId"))
+    # Match on the Radarr id (== Bazarr radarrId == this movie_id); Bazarr does
+    # not expose tmdbId, so matching by tmdb never worked.
+    detail["subtitles"] = await _get_bazarr_movie_subtitles(db, raw.get("id"))
 
     return detail
 
@@ -307,10 +309,10 @@ async def get_series_detail(
 
 async def _get_bazarr_movie_subtitles(
     db: AsyncSession,
-    tmdb_id: int | None,
+    radarr_id: int | None,
 ) -> list[dict[str, Any]]:
-    """Fetch subtitle info for a movie from Bazarr."""
-    if not tmdb_id:
+    """Fetch subtitle info for a movie from Bazarr, matched on its Radarr id."""
+    if not radarr_id:
         return []
 
     stmt = select(Service).where(
@@ -330,8 +332,10 @@ async def _get_bazarr_movie_subtitles(
         items = movies_data.get("data", []) if isinstance(movies_data, dict) else []
 
         for m in items:
-            radarr_id = m.get("radarrId")
-            # Bazarr stores the Radarr ID, match by that
+            # Bazarr keys movies by radarrId — only return THIS movie's subs.
+            if m.get("radarrId") != radarr_id:
+                continue
+
             subtitles = []
             for sub in m.get("subtitles", []):
                 subtitles.append({
@@ -353,8 +357,7 @@ async def _get_bazarr_movie_subtitles(
                     "hi": ms.get("hi", False),
                 })
 
-            if subtitles or missing:
-                return [{"subtitles": subtitles, "missing": missing}]
+            return [{"radarr_id": radarr_id, "subtitles": subtitles, "missing": missing}]
 
         return []
     except Exception as exc:
@@ -407,9 +410,11 @@ async def _get_bazarr_series_subtitles(
                 })
 
             subtitles_info.append({
+                "episode_id": ep.get("sonarrEpisodeId"),
                 "season": ep.get("season"),
                 "episode": ep.get("episode"),
                 "title": ep.get("title", ""),
+                "monitored": ep.get("monitored", False),
                 "subtitles": ep_subs,
                 "missing": ep_missing,
             })

@@ -45,6 +45,7 @@ import {
     Send,
     Pencil,
     Plus,
+    Wand2,
 } from "lucide-react";
 import {
     useMediaDetail,
@@ -63,6 +64,24 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useProfileOverrides, useAvailableProfiles, useCreateOverride, useDeleteOverride, useApplyOverride } from "@/hooks/use-profile-overrides";
 import { useTriggerMediaSearch, useMediaReleases, useGrabRelease, useSearchEpisodes, useSeriesSearchActivity, type Release } from "@/hooks/use-media-actions";
+import {
+    DEFAULT_SUB_LANG,
+    useAutoDownloadMovieSub,
+    useAutoDownloadEpisodeSub,
+    useAutoDownloadSeriesSubs,
+    useMovieSubProviders,
+    useEpisodeSubProviders,
+    useDownloadMovieProviderSub,
+    useDownloadEpisodeProviderSub,
+    useDeleteMovieSub,
+    useDeleteEpisodeSub,
+    useSyncMovieSub,
+    useSyncEpisodeSub,
+    type SubtitleTrack,
+    type MovieSubtitleInfo,
+    type EpisodeSubtitleInfo,
+    type ProviderSubtitle,
+} from "@/hooks/use-subtitles";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { useState } from "react";
@@ -987,6 +1006,7 @@ export default function MediaDetailPage() {
                         <TabsTrigger value="file">
                             {isMovie ? "Fichier" : "Fichiers"}
                         </TabsTrigger>
+                        <TabsTrigger value="subtitles">Sous-titres</TabsTrigger>
                         <TabsTrigger value="cast">Casting</TabsTrigger>
                         <TabsTrigger value="quality">Qualité</TabsTrigger>
                         <TabsTrigger value="info">Infos</TabsTrigger>
@@ -1027,6 +1047,11 @@ export default function MediaDetailPage() {
                         ) : (
                             <p className="text-muted-foreground">Aucun fichier disponible</p>
                         )}
+                    </TabsContent>
+
+                    {/* Subtitles tab */}
+                    <TabsContent value="subtitles">
+                        <SubtitlesTab type={type} media={media} />
                     </TabsContent>
 
                     {/* Cast tab */}
@@ -1649,6 +1674,548 @@ function InteractiveSearchTab({ type, media }: { type: "movie" | "series"; media
                     ))}
                 </div>
             )}
+        </div>
+    );
+}
+
+/* ── Subtitles (Bazarr) ─────────────────────────────────────── */
+
+const FR = DEFAULT_SUB_LANG;
+
+function subLangLabel(t: SubtitleTrack): string {
+    return t.language || (t.code2 ? t.code2.toUpperCase() : "?");
+}
+
+function BazarrEmptyState() {
+    return (
+        <Card className="bg-card/50 border-border/50">
+            <CardContent className="p-6 text-center text-sm text-muted-foreground">
+                <Subtitles className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                Aucune information de sous-titres pour ce média. Vérifiez qu&apos;il est
+                suivi par Bazarr (et qu&apos;un fichier est présent).
+            </CardContent>
+        </Card>
+    );
+}
+
+function SubTrackChip({
+    track,
+    onDelete,
+    deleting,
+    onSync,
+    syncing,
+}: {
+    track: SubtitleTrack;
+    onDelete?: () => void;
+    deleting?: boolean;
+    onSync?: () => void;
+    syncing?: boolean;
+}) {
+    const external = !!track.path;
+    return (
+        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-300">
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            {subLangLabel(track)}
+            {track.forced && <span className="text-[9px] opacity-70">forced</span>}
+            {track.hi && <span className="text-[9px] opacity-70">HI</span>}
+            {!external && <span className="text-[9px] opacity-60">embarqué</span>}
+            {external && onSync && !track.forced && (
+                <button
+                    onClick={onSync}
+                    disabled={syncing}
+                    title="Caler sur ma vidéo (synchronise le timing sur l'audio du fichier)"
+                    className="ml-0.5 text-emerald-300/70 hover:text-sky-400 disabled:opacity-50"
+                >
+                    {syncing ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                        <Wand2 className="h-3 w-3" />
+                    )}
+                </button>
+            )}
+            {external && onDelete && (
+                <button
+                    onClick={onDelete}
+                    disabled={deleting}
+                    title="Supprimer ce sous-titre"
+                    className="text-emerald-300/70 hover:text-red-400 disabled:opacity-50"
+                >
+                    {deleting ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                        <Trash2 className="h-3 w-3" />
+                    )}
+                </button>
+            )}
+        </span>
+    );
+}
+
+function MissingChip({ track }: { track: SubtitleTrack }) {
+    return (
+        <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-300">
+            <XCircle className="h-3.5 w-3.5" />
+            {subLangLabel(track)}
+            {track.forced && <span className="text-[9px] opacity-70">forced</span>}
+            {track.hi && <span className="text-[9px] opacity-70">HI</span>}
+        </span>
+    );
+}
+
+function ProviderResults({
+    items,
+    onDownload,
+    downloadingKey,
+}: {
+    items: ProviderSubtitle[];
+    onDownload: (s: ProviderSubtitle) => void;
+    downloadingKey: string | null;
+}) {
+    if (items.length === 0) {
+        return (
+            <p className="text-sm text-muted-foreground">
+                Aucun sous-titre trouvé chez les providers.
+            </p>
+        );
+    }
+    return (
+        <div className="space-y-2">
+            {items.map((s) => {
+                const key = `${s.provider}:${s.subtitle}`;
+                return (
+                    <Card key={key} className="bg-card/50 border-border/50">
+                        <CardContent className="p-3 flex items-center gap-3">
+                            <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium truncate" title={s.release_info}>
+                                    {s.release_info || "(sans nom)"}
+                                </p>
+                                <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                    <Badge variant="secondary" className="text-[10px]">{s.provider}</Badge>
+                                    <Badge variant="outline" className="text-[10px] uppercase">{s.language}</Badge>
+                                    {s.hi && <Badge variant="outline" className="text-[10px]">HI</Badge>}
+                                    {s.forced && <Badge variant="outline" className="text-[10px]">forced</Badge>}
+                                    {s.uploader && (
+                                        <span className="text-[10px] text-muted-foreground">{s.uploader}</span>
+                                    )}
+                                    {s.score != null && (
+                                        <Badge
+                                            variant="outline"
+                                            className={cn(
+                                                "text-[10px]",
+                                                s.score >= 80
+                                                    ? "text-emerald-400 border-emerald-500/30"
+                                                    : s.score >= 50
+                                                        ? "text-amber-400 border-amber-500/30"
+                                                        : "text-muted-foreground",
+                                            )}
+                                        >
+                                            score {s.score}
+                                        </Badge>
+                                    )}
+                                </div>
+                            </div>
+                            <Button
+                                size="sm"
+                                className="shrink-0"
+                                disabled={downloadingKey === key}
+                                onClick={() => onDownload(s)}
+                            >
+                                {downloadingKey === key ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                    <><Download className="h-4 w-4 mr-1" /> Télécharger</>
+                                )}
+                            </Button>
+                        </CardContent>
+                    </Card>
+                );
+            })}
+        </div>
+    );
+}
+
+function SubtitlesTab({ type, media }: { type: "movie" | "series"; media: MediaDetail }) {
+    return type === "movie" ? (
+        <MovieSubtitlePanel media={media} />
+    ) : (
+        <SeriesSubtitlePanel media={media} />
+    );
+}
+
+function MovieSubtitlePanel({ media }: { media: MediaDetail }) {
+    const block = media.subtitles?.[0] as MovieSubtitleInfo | undefined;
+    const present = block?.subtitles ?? [];
+    const missing = block?.missing ?? [];
+    const hasFr = present.some((s) => s.code2 === FR);
+
+    const auto = useAutoDownloadMovieSub();
+    const del = useDeleteMovieSub();
+    const [deleting, setDeleting] = useState<string | null>(null);
+    const sync = useSyncMovieSub();
+    const [syncing, setSyncing] = useState<string | null>(null);
+
+    const [manual, setManual] = useState(false);
+    const providers = useMovieSubProviders(media.id, manual);
+    const dl = useDownloadMovieProviderSub();
+    const [dlKey, setDlKey] = useState<string | null>(null);
+
+    if (!media.subtitles || media.subtitles.length === 0) return <BazarrEmptyState />;
+
+    const runAuto = () =>
+        auto.mutate(
+            { radarrId: media.id },
+            {
+                onSuccess: () =>
+                    toast.success("Recherche de sous-titre FR lancée (Bazarr choisit le meilleur)."),
+                onError: (e) => toast.error("Échec : " + e.message),
+            },
+        );
+    const runDelete = (t: SubtitleTrack) => {
+        const key = t.path ?? subLangLabel(t);
+        setDeleting(key);
+        del.mutate(
+            { radarrId: media.id, track: t },
+            {
+                onSuccess: () => toast.success("Sous-titre supprimé."),
+                onError: (e) => toast.error("Échec : " + e.message),
+                onSettled: () => setDeleting(null),
+            },
+        );
+    };
+    const runDownload = (s: ProviderSubtitle) => {
+        const key = `${s.provider}:${s.subtitle}`;
+        setDlKey(key);
+        dl.mutate(
+            { radarrId: media.id, sub: s },
+            {
+                onSuccess: () => toast.success("Sous-titre téléchargé."),
+                onError: (e) => toast.error("Échec : " + e.message),
+                onSettled: () => setDlKey(null),
+            },
+        );
+    };
+    const runSync = (t: SubtitleTrack) => {
+        const key = t.path ?? subLangLabel(t);
+        setSyncing(key);
+        sync.mutate(
+            { radarrId: media.id, track: t },
+            {
+                onSuccess: () =>
+                    toast.success(
+                        "Synchronisation lancée — calage sur l'audio de la vidéo (quelques minutes selon la taille).",
+                    ),
+                onError: (e) => toast.error("Échec : " + e.message),
+                onSettled: () => setSyncing(null),
+            },
+        );
+    };
+
+    return (
+        <div className="space-y-5">
+            <div className="flex flex-wrap items-center gap-3">
+                {hasFr ? (
+                    <Badge className="bg-emerald-500/15 text-emerald-300 border-emerald-500/30 gap-1">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Sous-titres FR présents
+                    </Badge>
+                ) : (
+                    <Badge className="bg-red-500/15 text-red-300 border-red-500/30 gap-1">
+                        <XCircle className="h-3.5 w-3.5" /> Aucun sous-titre FR
+                    </Badge>
+                )}
+                <Button size="sm" onClick={runAuto} disabled={auto.isPending}>
+                    {auto.isPending ? (
+                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    ) : (
+                        <CloudDownload className="h-4 w-4 mr-1" />
+                    )}
+                    {hasFr ? "Re-télécharger ST FR (auto)" : "Télécharger ST FR (auto)"}
+                </Button>
+            </div>
+
+            <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Présents</p>
+                {present.length ? (
+                    <div className="flex flex-wrap gap-2">
+                        {present.map((t, i) => (
+                            <SubTrackChip
+                                key={i}
+                                track={t}
+                                onDelete={() => runDelete(t)}
+                                deleting={deleting === (t.path ?? subLangLabel(t))}
+                                onSync={() => runSync(t)}
+                                syncing={syncing === (t.path ?? subLangLabel(t))}
+                            />
+                        ))}
+                    </div>
+                ) : (
+                    <p className="text-sm text-muted-foreground">Aucun sous-titre téléchargé.</p>
+                )}
+            </div>
+
+            {missing.length > 0 && (
+                <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Manquants (suivis par Bazarr)
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                        {missing.map((t, i) => (
+                            <MissingChip key={i} track={t} />
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            <div className="space-y-3 pt-2 border-t border-border/40">
+                <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm text-muted-foreground">
+                        Recherche manuelle chez les providers (choix de la release).
+                    </p>
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={providers.isFetching}
+                        onClick={() => {
+                            if (!manual) setManual(true);
+                            else providers.refetch();
+                        }}
+                    >
+                        {providers.isFetching ? (
+                            <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Recherche…</>
+                        ) : (
+                            <><Search className="h-4 w-4 mr-2" /> {manual ? "Relancer" : "Rechercher"}</>
+                        )}
+                    </Button>
+                </div>
+                {providers.error && (
+                    <div className="p-3 rounded-lg border bg-red-500/10 text-red-400 text-sm">
+                        Erreur : {providers.error.message}
+                    </div>
+                )}
+                {manual && !providers.isFetching && providers.data && (
+                    <ProviderResults items={providers.data.items} onDownload={runDownload} downloadingKey={dlKey} />
+                )}
+            </div>
+        </div>
+    );
+}
+
+function SeriesSubtitlePanel({ media }: { media: MediaDetail }) {
+    const eps = (media.subtitles ?? []) as EpisodeSubtitleInfo[];
+    const seriesAuto = useAutoDownloadSeriesSubs();
+    const epAuto = useAutoDownloadEpisodeSub();
+    const [autoEp, setAutoEp] = useState<number | null>(null);
+    const del = useDeleteEpisodeSub();
+    const [deleting, setDeleting] = useState<string | null>(null);
+    const epSync = useSyncEpisodeSub();
+    const [syncing, setSyncing] = useState<string | null>(null);
+    const [openEp, setOpenEp] = useState<number | null>(null);
+    const providers = useEpisodeSubProviders(openEp, openEp !== null);
+    const dl = useDownloadEpisodeProviderSub();
+    const [dlKey, setDlKey] = useState<string | null>(null);
+
+    if (eps.length === 0) return <BazarrEmptyState />;
+
+    const frMissingCount = eps.filter((e) => e.missing.some((s) => s.code2 === FR)).length;
+
+    const bySeason = new Map<number, EpisodeSubtitleInfo[]>();
+    for (const e of eps) {
+        if (!bySeason.has(e.season)) bySeason.set(e.season, []);
+        bySeason.get(e.season)!.push(e);
+    }
+    const seasons = [...bySeason.keys()].sort((a, b) => a - b);
+
+    const runEpAuto = (e: EpisodeSubtitleInfo) => {
+        setAutoEp(e.episode_id);
+        epAuto.mutate(
+            { seriesId: media.id, episodeId: e.episode_id },
+            {
+                onSuccess: () =>
+                    toast.success(`Recherche ST FR lancée (S${e.season}E${e.episode}).`),
+                onError: (err) => toast.error("Échec : " + err.message),
+                onSettled: () => setAutoEp(null),
+            },
+        );
+    };
+    const runDelete = (e: EpisodeSubtitleInfo, t: SubtitleTrack) => {
+        const key = `${e.episode_id}:${t.path ?? subLangLabel(t)}`;
+        setDeleting(key);
+        del.mutate(
+            { seriesId: media.id, episodeId: e.episode_id, track: t },
+            {
+                onSuccess: () => toast.success("Sous-titre supprimé."),
+                onError: (err) => toast.error("Échec : " + err.message),
+                onSettled: () => setDeleting(null),
+            },
+        );
+    };
+    const runDownload = (s: ProviderSubtitle) => {
+        if (openEp === null) return;
+        const key = `${s.provider}:${s.subtitle}`;
+        setDlKey(key);
+        dl.mutate(
+            { seriesId: media.id, episodeId: openEp, sub: s },
+            {
+                onSuccess: () => toast.success("Sous-titre téléchargé."),
+                onError: (err) => toast.error("Échec : " + err.message),
+                onSettled: () => setDlKey(null),
+            },
+        );
+    };
+    const runSync = (e: EpisodeSubtitleInfo, t: SubtitleTrack) => {
+        const key = `${e.episode_id}:${t.path ?? subLangLabel(t)}`;
+        setSyncing(key);
+        epSync.mutate(
+            { seriesId: media.id, episodeId: e.episode_id, track: t },
+            {
+                onSuccess: () =>
+                    toast.success(
+                        `Synchronisation lancée (S${e.season}E${e.episode}) — calage sur l'audio.`,
+                    ),
+                onError: (err) => toast.error("Échec : " + err.message),
+                onSettled: () => setSyncing(null),
+            },
+        );
+    };
+
+    return (
+        <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                {frMissingCount > 0 ? (
+                    <Badge className="bg-red-500/15 text-red-300 border-red-500/30 gap-1">
+                        <XCircle className="h-3.5 w-3.5" /> {frMissingCount} épisode
+                        {frMissingCount > 1 ? "s" : ""} sans ST FR
+                    </Badge>
+                ) : (
+                    <Badge className="bg-emerald-500/15 text-emerald-300 border-emerald-500/30 gap-1">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Tous les épisodes ont un ST FR
+                    </Badge>
+                )}
+                {frMissingCount > 0 && (
+                    <Button
+                        size="sm"
+                        onClick={() =>
+                            seriesAuto.mutate(
+                                { seriesId: media.id },
+                                {
+                                    onSuccess: (d) =>
+                                        toast.success(
+                                            `Recherche lancée pour ${d.triggered} épisode${d.triggered > 1 ? "s" : ""}.`,
+                                        ),
+                                    onError: (e) => toast.error("Échec : " + e.message),
+                                },
+                            )
+                        }
+                        disabled={seriesAuto.isPending}
+                    >
+                        {seriesAuto.isPending ? (
+                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                        ) : (
+                            <CloudDownload className="h-4 w-4 mr-1" />
+                        )}
+                        Télécharger tous les ST FR manquants
+                    </Button>
+                )}
+            </div>
+
+            {seasons.map((sn) => (
+                <Card key={sn} className="bg-card/50 border-border/50">
+                    <CardHeader className="p-3 pb-2">
+                        <CardTitle className="text-sm">Saison {sn}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-3 pt-0 space-y-1.5">
+                        {bySeason
+                            .get(sn)!
+                            .sort((a, b) => a.episode - b.episode)
+                            .map((e) => {
+                                const frOk = e.subtitles.some((s) => s.code2 === FR);
+                                const isOpen = openEp === e.episode_id;
+                                return (
+                                    <div
+                                        key={e.episode_id}
+                                        className="rounded-lg border border-border/40 bg-background/30"
+                                    >
+                                        <div className="flex items-center gap-2 p-2">
+                                            {frOk ? (
+                                                <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                                            ) : (
+                                                <XCircle className="h-4 w-4 text-red-400 shrink-0" />
+                                            )}
+                                            <span className="text-xs font-medium shrink-0 w-10">
+                                                E{String(e.episode).padStart(2, "0")}
+                                            </span>
+                                            <span
+                                                className="text-xs text-muted-foreground truncate flex-1"
+                                                title={e.title}
+                                            >
+                                                {e.title}
+                                            </span>
+                                            <div className="hidden sm:flex flex-wrap gap-1 shrink-0 max-w-[38%] justify-end">
+                                                {e.subtitles.map((t, i) => (
+                                                    <SubTrackChip
+                                                        key={i}
+                                                        track={t}
+                                                        onDelete={() => runDelete(e, t)}
+                                                        deleting={
+                                                            deleting ===
+                                                            `${e.episode_id}:${t.path ?? subLangLabel(t)}`
+                                                        }
+                                                        onSync={() => runSync(e, t)}
+                                                        syncing={
+                                                            syncing ===
+                                                            `${e.episode_id}:${t.path ?? subLangLabel(t)}`
+                                                        }
+                                                    />
+                                                ))}
+                                            </div>
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                className="h-7 px-2 shrink-0"
+                                                title="Télécharger auto ST FR"
+                                                disabled={autoEp === e.episode_id}
+                                                onClick={() => runEpAuto(e)}
+                                            >
+                                                {autoEp === e.episode_id ? (
+                                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                ) : (
+                                                    <CloudDownload className="h-3.5 w-3.5" />
+                                                )}
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                className="h-7 px-2 shrink-0"
+                                                title="Recherche manuelle"
+                                                onClick={() => setOpenEp(isOpen ? null : e.episode_id)}
+                                            >
+                                                <Search className="h-3.5 w-3.5" />
+                                            </Button>
+                                        </div>
+                                        {isOpen && (
+                                            <div className="p-2 pt-0 space-y-2">
+                                                {providers.isFetching && (
+                                                    <div className="h-10 bg-muted/40 rounded animate-pulse" />
+                                                )}
+                                                {providers.error && (
+                                                    <div className="p-2 rounded border bg-red-500/10 text-red-400 text-xs">
+                                                        Erreur : {providers.error.message}
+                                                    </div>
+                                                )}
+                                                {!providers.isFetching && providers.data && (
+                                                    <ProviderResults
+                                                        items={providers.data.items}
+                                                        onDownload={runDownload}
+                                                        downloadingKey={dlKey}
+                                                    />
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                    </CardContent>
+                </Card>
+            ))}
         </div>
     );
 }
