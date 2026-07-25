@@ -58,7 +58,17 @@ async def sync_kodi(db: AsyncSession) -> dict[str, Any]:
     stmt = select(Service).where(Service.type == "kodi", Service.is_enabled == True)
     result = await db.execute(stmt)
     kodis = result.scalars().all()
-    
+
+    # Dedup by URL so duplicate rows can't trigger several scans of the same Kodi.
+    seen_urls: set[str] = set()
+    unique_kodis = []
+    for k in kodis:
+        if k.url in seen_urls:
+            continue
+        seen_urls.add(k.url)
+        unique_kodis.append(k)
+    kodis = unique_kodis
+
     success = 0
     failed = 0
     

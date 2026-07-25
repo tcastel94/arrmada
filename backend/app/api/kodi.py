@@ -47,11 +47,33 @@ async def get_kodi_settings(db: AsyncSession = Depends(get_db)):
 
 @router.post("/settings")
 async def add_kodi_setting(data: dict, db: AsyncSession = Depends(get_db)):
-    """Add a new Kodi instance."""
+    """Add or update a Kodi instance — idempotent by URL to avoid duplicates.
+
+    Adding the same Kodi (same URL) twice used to create a duplicate row, so a
+    sync would scan the same Kodi several times. We now reuse the existing entry.
+    """
+    url = (data.get("url") or "").strip()
+
+    existing = None
+    if url:
+        res = await db.execute(
+            select(Service).where(Service.type == "kodi", Service.url == url)
+        )
+        existing = res.scalars().first()
+
+    if existing:
+        existing.name = data.get("name", existing.name)
+        if data.get("api_key"):
+            existing.api_key = encrypt_api_key(data.get("api_key", ""))
+        existing.is_enabled = data.get("is_enabled", True)
+        await db.commit()
+        await db.refresh(existing)
+        return {"id": existing.id, "message": "Kodi mis à jour"}
+
     new_kodi = Service(
         name=data.get("name", "Kodi"),
         type="kodi",
-        url=data.get("url"),
+        url=url,
         api_key=encrypt_api_key(data.get("api_key", "")),
         is_enabled=data.get("is_enabled", True)
     )
