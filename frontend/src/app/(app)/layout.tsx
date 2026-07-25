@@ -59,7 +59,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
             <Sidebar />
             <MobileNav />
             <CommandPalette />
-            <main className="lg:pl-[260px] pb-16 lg:pb-0">{children}</main>
+            <main className="lg:pl-[260px] pb-[calc(4rem+env(safe-area-inset-bottom))] lg:pb-0">{children}</main>
         </div>
     );
 }

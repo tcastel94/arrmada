@@ -45,7 +45,7 @@ export function CommandPalette() {
     const router = useRouter();
     const { data: searchResults } = useMediaSearch(query);
 
-    // ⌘K / Ctrl+K shortcut
+    // ⌘K / Ctrl+K shortcut + header search button (mobile-friendly)
     useEffect(() => {
         const down = (e: KeyboardEvent) => {
             if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
@@ -53,8 +53,13 @@ export function CommandPalette() {
                 setOpen((v) => !v);
             }
         };
+        const openViaButton = () => setOpen(true);
         document.addEventListener("keydown", down);
-        return () => document.removeEventListener("keydown", down);
+        window.addEventListener("open-command-palette", openViaButton);
+        return () => {
+            document.removeEventListener("keydown", down);
+            window.removeEventListener("open-command-palette", openViaButton);
+        };
     }, []);
 
     const navigate = useCallback(

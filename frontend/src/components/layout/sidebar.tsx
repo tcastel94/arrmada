@@ -39,46 +39,7 @@ import {
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useUnreadCount } from "@/hooks/use-notifications";
-
-// Dashboard stays standalone at the top; everything else is grouped.
-const TOP_ITEM = { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard };
-
-const NAV_GROUPS: { title: string; items: { href: string; label: string; icon: typeof Film }[] }[] = [
-    {
-        title: "Médias",
-        items: [
-            { href: "/media", label: "Médiathèque", icon: Film },
-            { href: "/search", label: "Rechercher & Ajouter", icon: Search },
-            { href: "/calendar", label: "Calendrier", icon: CalendarDays },
-            { href: "/downloads", label: "Downloads", icon: Download },
-        ],
-    },
-    {
-        title: "Bibliothèque",
-        items: [
-            { href: "/duplicates", label: "Doublons", icon: Copy },
-            { href: "/quality", label: "Qualité", icon: Gauge },
-            { href: "/cleanup", label: "Nettoyage", icon: Trash2 },
-            { href: "/fichiers", label: "Fichiers", icon: FolderOpen },
-            { href: "/trash-guides", label: "TRaSH Guides", icon: BookMarked },
-        ],
-    },
-    {
-        title: "Système & Infra",
-        items: [
-            { href: "/analytics", label: "Analytics", icon: BarChart3 },
-            { href: "/prowlarr", label: "Indexers", icon: Radar },
-            { href: "/system", label: "Système", icon: HardDrive },
-            { href: "/docker", label: "Docker", icon: Container },
-            { href: "/notifications", label: "Notifications", icon: Bell },
-        ],
-    },
-];
-
-const BOTTOM_ITEMS = [
-    { href: "/services", label: "Services", icon: Server },
-    { href: "/settings", label: "Paramètres", icon: Settings },
-];
+import { TOP_ITEM, NAV_GROUPS, BOTTOM_ITEMS, type NavItem } from "@/lib/nav";
 
 export function Sidebar() {
     const pathname = usePathname();
@@ -86,7 +47,7 @@ export function Sidebar() {
     const { data: unreadData } = useUnreadCount();
     const unreadCount = unreadData?.unread_count ?? 0;
 
-    const renderNavItem = (item: { href: string; label: string; icon: typeof Film }) => {
+    const renderNavItem = (item: NavItem) => {
         const isActive =
             pathname === item.href || pathname.startsWith(item.href + "/");
         const Icon = item.icon;
