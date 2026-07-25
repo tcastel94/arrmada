@@ -120,6 +120,9 @@ async def get_movie_detail(
             "name": c.get("personName", ""),
             "character": c.get("character", ""),
             "type": c.get("type", ""),
+            # TMDB person id enables the actor filmography lookup on click.
+            "tmdb_id": c.get("personTmdbId"),
+            "order": c.get("order", 999),
         }
         # Extract headshot
         images_list = c.get("images") or []
@@ -130,6 +133,9 @@ async def get_movie_detail(
             cast.append(person)
         else:
             crew.append(person)
+
+    # Cast ordered by billing (Radarr's ``order`` field).
+    cast.sort(key=lambda p: p.get("order", 999))
 
     detail = {
         "id": raw.get("id"),

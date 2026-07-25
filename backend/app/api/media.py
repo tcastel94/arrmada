@@ -57,6 +57,17 @@ async def search_media(
     return {"items": results[:30], "total": len(results)}
 
 
+@router.get("/person/{person_id}")
+async def get_person_filmography(
+    person_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """An actor's movie filmography, split into library-owned vs discoverable."""
+    from app.services import people
+
+    return await people.get_person_filmography(db, person_id)
+
+
 @router.delete("/{type}/{id}")
 async def delete_media(
     type: str,

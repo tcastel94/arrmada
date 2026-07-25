@@ -102,6 +102,50 @@ export interface CastMember {
     character: string;
     type: string;
     photo?: string;
+    tmdb_id?: number | null;
+    order?: number;
+}
+
+/* ── Actor filmography (cast click → library + discovery) ───── */
+
+export interface PersonInfo {
+    tmdb_id: number;
+    name: string;
+    photo: string | null;
+    biography: string;
+    known_for: string;
+    birthday: string | null;
+    place_of_birth: string | null;
+}
+
+export interface PersonMovie {
+    tmdb_id: number;
+    title: string;
+    year: number | null;
+    character: string;
+    poster: string | null;
+    vote_average: number;
+    popularity: number;
+    /** Present only for in-library entries. */
+    radarr_id?: number;
+    has_file?: boolean;
+}
+
+export interface PersonFilmography {
+    person: PersonInfo | null;
+    in_library: PersonMovie[];
+    discover: PersonMovie[];
+    counts: { in_library: number; discover: number };
+    error?: string;
+}
+
+export function usePersonFilmography(personId: number | null, enabled: boolean) {
+    return useQuery<PersonFilmography>({
+        queryKey: ["media", "person", personId],
+        queryFn: () => apiFetch(`/api/media/person/${personId}`),
+        enabled: enabled && !!personId,
+        staleTime: 5 * 60_000,
+    });
 }
 
 export interface SubtitleInfo {

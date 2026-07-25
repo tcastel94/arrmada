@@ -1,6 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { apiFetch } from "@/lib/api-client";
 import { Header } from "@/components/layout/header";
 import { Badge } from "@/components/ui/badge";
@@ -60,7 +61,10 @@ import {
     useUpdateMedia,
     useCreateTag,
     useUpdateSeasonMonitoring,
+    usePersonFilmography,
+    type PersonMovie,
 } from "@/hooks/use-media";
+import { useCreateRequest } from "@/hooks/use-requests";
 import { Switch } from "@/components/ui/switch";
 import { useProfileOverrides, useAvailableProfiles, useCreateOverride, useDeleteOverride, useApplyOverride } from "@/hooks/use-profile-overrides";
 import { useTriggerMediaSearch, useMediaReleases, useGrabRelease, useSearchEpisodes, useSeriesSearchActivity, type Release } from "@/hooks/use-media-actions";
@@ -169,6 +173,7 @@ function FileInfoCard({ file }: { file: FileInfo }) {
 }
 
 function CastSection({ cast, crew }: { cast?: CastMember[]; crew?: CastMember[] }) {
+    const [person, setPerson] = useState<{ id: number; name: string } | null>(null);
     if ((!cast || cast.length === 0) && (!crew || crew.length === 0)) return null;
     return (
         <div className="space-y-4">
@@ -177,26 +182,63 @@ function CastSection({ cast, crew }: { cast?: CastMember[]; crew?: CastMember[] 
                     <h3 className="text-lg font-semibold flex items-center gap-2">
                         <Users className="h-5 w-5" /> Casting
                     </h3>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                        {cast.slice(0, 10).map((actor, i) => (
-                            <div key={i} className="flex items-center gap-3 bg-card/50 rounded-lg p-2 border border-border/50">
-                                {actor.photo ? (
-                                    <img
-                                        src={actor.photo}
-                                        alt={actor.name}
-                                        className="w-10 h-10 rounded-full object-cover shrink-0"
-                                    />
-                                ) : (
-                                    <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center shrink-0">
-                                        <Users className="h-4 w-4 text-muted-foreground" />
+                    <p className="text-xs text-muted-foreground -mt-2">
+                        Clique sur un acteur pour voir ses films dans ta bibliothèque et
+                        d&apos;autres à découvrir.
+                    </p>
+                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
+                        {cast.slice(0, 18).map((actor, i) => {
+                            const clickable = !!actor.tmdb_id;
+                            return (
+                                <button
+                                    key={i}
+                                    disabled={!clickable}
+                                    onClick={() =>
+                                        actor.tmdb_id &&
+                                        setPerson({ id: actor.tmdb_id, name: actor.name })
+                                    }
+                                    title={
+                                        clickable
+                                            ? `Voir la filmographie de ${actor.name}`
+                                            : actor.name
+                                    }
+                                    className={cn(
+                                        "group text-left rounded-xl overflow-hidden bg-card/50 border border-border/50 transition",
+                                        clickable
+                                            ? "hover:border-primary/50 hover:bg-card cursor-pointer"
+                                            : "cursor-default",
+                                    )}
+                                >
+                                    <div className="relative aspect-[3/4] bg-muted/40 overflow-hidden">
+                                        {actor.photo ? (
+                                            <img
+                                                src={actor.photo}
+                                                alt={actor.name}
+                                                loading="lazy"
+                                                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                                            />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center">
+                                                <Users className="h-8 w-8 text-muted-foreground/30" />
+                                            </div>
+                                        )}
+                                        {clickable && (
+                                            <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-1.5">
+                                                <span className="text-[10px] text-white/90 flex items-center gap-1">
+                                                    <Film className="h-3 w-3" /> Filmographie
+                                                </span>
+                                            </div>
+                                        )}
                                     </div>
-                                )}
-                                <div className="min-w-0">
-                                    <p className="text-sm font-medium truncate">{actor.name}</p>
-                                    <p className="text-xs text-muted-foreground truncate">{actor.character}</p>
-                                </div>
-                            </div>
-                        ))}
+                                    <div className="p-2">
+                                        <p className="text-sm font-medium truncate">{actor.name}</p>
+                                        <p className="text-xs text-muted-foreground truncate">
+                                            {actor.character}
+                                        </p>
+                                    </div>
+                                </button>
+                            );
+                        })}
                     </div>
                 </>
             )}
@@ -209,7 +251,197 @@ function CastSection({ cast, crew }: { cast?: CastMember[]; crew?: CastMember[] 
                     ))}
                 </div>
             )}
+            <PersonDialog person={person} onClose={() => setPerson(null)} />
         </div>
+    );
+}
+
+function MoviePoster({
+    m,
+    ownedBadge,
+    onAdd,
+    addState,
+}: {
+    m: PersonMovie;
+    ownedBadge?: boolean;
+    onAdd?: () => void;
+    addState?: "idle" | "adding" | "added";
+}) {
+    return (
+        <div className="rounded-lg overflow-hidden bg-card/50 border border-border/50 h-full">
+            <div className="relative aspect-[2/3] bg-muted/40">
+                {m.poster ? (
+                    <img
+                        src={m.poster}
+                        alt={m.title}
+                        loading="lazy"
+                        className="w-full h-full object-cover"
+                    />
+                ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                        <Film className="h-6 w-6 text-muted-foreground/30" />
+                    </div>
+                )}
+                {ownedBadge && (
+                    <Badge className="absolute top-1 right-1 text-[9px] bg-emerald-600/85 border-0 text-white">
+                        ✓
+                    </Badge>
+                )}
+                {onAdd && (
+                    <button
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onAdd();
+                        }}
+                        disabled={addState !== "idle"}
+                        title="Ajouter à Radarr et lancer la recherche"
+                        className="absolute bottom-1 right-1 rounded-md bg-primary/90 hover:bg-primary text-primary-foreground p-1.5 disabled:opacity-80"
+                    >
+                        {addState === "adding" ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : addState === "added" ? (
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                        ) : (
+                            <Plus className="h-3.5 w-3.5" />
+                        )}
+                    </button>
+                )}
+            </div>
+            <div className="p-1.5">
+                <p className="text-xs font-medium truncate" title={m.title}>
+                    {m.title}
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                    {m.year ?? "—"}
+                    {m.vote_average ? ` · ★${m.vote_average}` : ""}
+                </p>
+            </div>
+        </div>
+    );
+}
+
+function PersonDialog({
+    person,
+    onClose,
+}: {
+    person: { id: number; name: string } | null;
+    onClose: () => void;
+}) {
+    const { data, isLoading, error } = usePersonFilmography(person?.id ?? null, !!person);
+    const createReq = useCreateRequest();
+    const [added, setAdded] = useState<Set<number>>(new Set());
+    const [adding, setAdding] = useState<number | null>(null);
+
+    const addMovie = (m: PersonMovie) => {
+        setAdding(m.tmdb_id);
+        createReq.mutate(
+            {
+                title: m.title,
+                type: "movie",
+                tmdb_id: m.tmdb_id,
+                year: m.year ?? undefined,
+                poster_url: m.poster ?? undefined,
+            },
+            {
+                onSuccess: () => {
+                    setAdded((prev) => new Set(prev).add(m.tmdb_id));
+                    toast.success(`« ${m.title} » ajouté à Radarr — recherche lancée.`);
+                },
+                onError: (e) => toast.error("Échec de l'ajout : " + e.message),
+                onSettled: () => setAdding(null),
+            },
+        );
+    };
+
+    return (
+        <Dialog open={!!person} onOpenChange={(o) => { if (!o) onClose(); }}>
+            <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-3">
+                        {data?.person?.photo && (
+                            <img
+                                src={data.person.photo}
+                                alt=""
+                                className="w-11 h-11 rounded-full object-cover"
+                            />
+                        )}
+                        <span>{person?.name ?? "Acteur"}</span>
+                    </DialogTitle>
+                    <DialogDescription>
+                        {data?.counts
+                            ? `${data.counts.in_library} film${data.counts.in_library > 1 ? "s" : ""} dans ta bibliothèque · ${data.counts.discover} à découvrir`
+                            : "Filmographie"}
+                    </DialogDescription>
+                </DialogHeader>
+
+                {isLoading && (
+                    <div className="py-12 flex justify-center">
+                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    </div>
+                )}
+                {error && (
+                    <p className="text-sm text-red-400">Erreur : {error.message}</p>
+                )}
+                {data?.error && (
+                    <p className="text-sm text-muted-foreground">{data.error}</p>
+                )}
+
+                {data && !data.error && (
+                    <div className="space-y-6">
+                        {data.in_library.length > 0 && (
+                            <section className="space-y-2">
+                                <h4 className="text-sm font-semibold text-emerald-400 flex items-center gap-1.5">
+                                    <CheckCircle2 className="h-4 w-4" /> Dans ta bibliothèque
+                                </h4>
+                                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
+                                    {data.in_library.map((m) => (
+                                        <Link
+                                            key={m.tmdb_id}
+                                            href={`/media/movie/${m.radarr_id}`}
+                                            onClick={onClose}
+                                            className="hover:opacity-90 transition-opacity"
+                                        >
+                                            <MoviePoster m={m} ownedBadge={m.has_file} />
+                                        </Link>
+                                    ))}
+                                </div>
+                            </section>
+                        )}
+
+                        {data.discover.length > 0 && (
+                            <section className="space-y-2">
+                                <h4 className="text-sm font-semibold flex items-center gap-1.5">
+                                    <Film className="h-4 w-4" /> À découvrir
+                                </h4>
+                                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
+                                    {data.discover.map((m) => (
+                                        <MoviePoster
+                                            key={m.tmdb_id}
+                                            m={m}
+                                            onAdd={() => addMovie(m)}
+                                            addState={
+                                                added.has(m.tmdb_id)
+                                                    ? "added"
+                                                    : adding === m.tmdb_id
+                                                        ? "adding"
+                                                        : "idle"
+                                            }
+                                        />
+                                    ))}
+                                </div>
+                            </section>
+                        )}
+
+                        {data.in_library.length === 0 && data.discover.length === 0 && (
+                            <p className="text-sm text-muted-foreground">
+                                Aucun film trouvé pour cet acteur.
+                            </p>
+                        )}
+                    </div>
+                )}
+            </DialogContent>
+        </Dialog>
     );
 }
 
