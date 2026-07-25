@@ -126,6 +126,17 @@ async def _handle_arr_webhook(
         except Exception:
             pass
 
+        # Auto-refresh Kodi so the new import shows up without a manual sync.
+        if service_type in ("radarr", "sonarr"):
+            try:
+                from app.services.kodi import sync_kodi
+                result = await sync_kodi(db)
+                cache.invalidate("kodi:watched")
+                if result.get("success"):
+                    logger.info("[Webhook] Triggered Kodi scan after %s import", service_type)
+            except Exception as exc:
+                logger.debug("[Webhook] Kodi auto-scan skipped: %s", exc)
+
     elif event_type == "Health":
         try:
             from app.services.notification_service import create_notification

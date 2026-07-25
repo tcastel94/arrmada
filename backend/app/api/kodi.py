@@ -9,7 +9,9 @@ from sqlalchemy import select
 from app.api.deps import get_current_user, get_db
 from app.models.service import Service
 from app.services.encryption import encrypt_api_key, decrypt_api_key
+from app.services import kodi as kodi_service
 from app.services.kodi import discover_kodi, sync_kodi
+from app.utils.cache import cache
 
 router = APIRouter(
     prefix="/api/kodi",
@@ -26,6 +28,43 @@ async def discover_instances() -> List[dict]:
 async def trigger_kodi_sync(db: AsyncSession = Depends(get_db)):
     """Trigger library scan on all configured Kodis."""
     return await sync_kodi(db)
+
+
+@router.post("/play")
+async def play_on_kodi(data: dict, db: AsyncSession = Depends(get_db)):
+    """Start playback of a movie (by TMDB id) on a Kodi instance."""
+    tmdb_id = data.get("tmdb_id")
+    if not tmdb_id:
+        return {"status": "error", "detail": "tmdb_id requis"}
+    return await kodi_service.play_movie(db, int(tmdb_id), data.get("service_id"))
+
+
+@router.get("/watched-status")
+async def watched_status(db: AsyncSession = Depends(get_db)):
+    """Watched/resume state per TMDB id from Kodi (cached 60s)."""
+    async def _compute():
+        return await kodi_service.get_watched_status(db)
+
+    return await cache.get_or_set("kodi:watched", _compute, ttl_seconds=60)
+
+
+@router.post("/clean")
+async def clean_kodi(data: dict | None = None, db: AsyncSession = Depends(get_db)):
+    """Trigger VideoLibrary.Clean on a Kodi instance."""
+    cache.invalidate("kodi:watched")
+    return await kodi_service.clean_library(db, (data or {}).get("service_id"))
+
+
+@router.get("/drift")
+async def kodi_drift(db: AsyncSession = Depends(get_db)):
+    """Movies in Radarr but missing from the Kodi library."""
+    return await kodi_service.get_drift(db)
+
+
+@router.post("/test/{service_id}")
+async def test_kodi(service_id: int, db: AsyncSession = Depends(get_db)):
+    """Ping a Kodi instance and read its version."""
+    return await kodi_service.test_connection(db, service_id)
 
 @router.get("/settings")
 async def get_kodi_settings(db: AsyncSession = Depends(get_db)):

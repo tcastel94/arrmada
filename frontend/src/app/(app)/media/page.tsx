@@ -45,11 +45,15 @@ import {
 } from "lucide-react";
 import { useMedia, type MediaItem } from "@/hooks/use-media";
 import { useSubtitleStatus } from "@/hooks/use-subtitles";
+import { useKodiWatchedStatus } from "@/hooks/use-kodi";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 
 /** Per-item French-subtitle state derived from the Bazarr status map. */
 type SubState = "present" | "missing" | undefined;
+
+/** Per-item Kodi watch state (movies only). */
+type WatchState = { watched: boolean; progress: number | null } | undefined;
 
 function formatBytes(bytes: number): string {
     if (!bytes) return "—";
@@ -97,7 +101,29 @@ function SubBadge({ state }: { state: SubState }) {
     return null;
 }
 
-function MediaCard({ item, selectionMode, isSelected, onToggle, subState }: { item: MediaItem, selectionMode?: boolean, isSelected?: boolean, onToggle?: () => void, subState?: SubState }) {
+function WatchBadge({ state }: { state: WatchState }) {
+    if (!state) return null;
+    if (state.watched) {
+        return (
+            <Badge className="text-[10px] bg-violet-600/85 backdrop-blur-sm border-0 text-white" title="Vu sur Kodi">
+                Vu
+            </Badge>
+        );
+    }
+    if (state.progress && state.progress > 0) {
+        return (
+            <Badge
+                className="text-[10px] bg-amber-500/85 backdrop-blur-sm border-0 text-white"
+                title={`En cours sur Kodi — ${state.progress}%`}
+            >
+                ⏵ {state.progress}%
+            </Badge>
+        );
+    }
+    return null;
+}
+
+function MediaCard({ item, selectionMode, isSelected, onToggle, subState, watchState }: { item: MediaItem, selectionMode?: boolean, isSelected?: boolean, onToggle?: () => void, subState?: SubState, watchState?: WatchState }) {
     return (
         <motion.div variants={fadeUp} className="relative">
             {selectionMode && (
@@ -144,6 +170,7 @@ function MediaCard({ item, selectionMode, isSelected, onToggle, subState }: { it
                                 </Badge>
                             )}
                             <SubBadge state={subState} />
+                            <WatchBadge state={watchState} />
                         </div>
                         <div className="absolute top-2 right-2">
                             {!item.has_file && (
@@ -282,6 +309,20 @@ export default function MediaPage() {
 
     // Bazarr French-subtitle status (full library map, keyed by Radarr/Sonarr id).
     const { data: subStatus } = useSubtitleStatus("fr");
+
+    // Kodi watched/resume status (movies only), keyed by TMDB id.
+    const { data: kodiWatched } = useKodiWatchedStatus();
+
+    const watchStateFor = (item: MediaItem): WatchState => {
+        if (!kodiWatched || item.type !== "movie" || !item.tmdb_id) return undefined;
+        const e = kodiWatched[String(item.tmdb_id)];
+        if (!e) return undefined;
+        const progress =
+            e.resume_position > 0 && e.resume_total > 0
+                ? Math.round((e.resume_position / e.resume_total) * 100)
+                : null;
+        return { watched: e.playcount > 0, progress };
+    };
 
     const subStateFor = (item: MediaItem): SubState => {
         if (!subStatus) return undefined;
@@ -549,6 +590,7 @@ export default function MediaPage() {
                                 key={`${item.type}-${item.external_id}`}
                                 item={item}
                                 subState={subStateFor(item)}
+                                watchState={watchStateFor(item)}
                                 selectionMode={selectionMode}
                                 isSelected={selectedIds.has(item.external_id)}
                                 onToggle={() => {

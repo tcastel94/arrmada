@@ -65,6 +65,7 @@ import {
     type PersonMovie,
 } from "@/hooks/use-media";
 import { useCreateRequest } from "@/hooks/use-requests";
+import { useKodiPlay } from "@/hooks/use-kodi";
 import { Switch } from "@/components/ui/switch";
 import { useProfileOverrides, useAvailableProfiles, useCreateOverride, useDeleteOverride, useApplyOverride } from "@/hooks/use-profile-overrides";
 import { useTriggerMediaSearch, useMediaReleases, useGrabRelease, useSearchEpisodes, useSeriesSearchActivity, type Release } from "@/hooks/use-media-actions";
@@ -904,6 +905,7 @@ export default function MediaDetailPage() {
     const { data: rootFolders } = useMediaRootFolders(type, id);
     const updatePathMutation = useUpdateMediaPath();
     const triggerSearch = useTriggerMediaSearch();
+    const kodiPlay = useKodiPlay();
 
     const handleDelete = async () => {
         if (!media) return;
@@ -1119,6 +1121,34 @@ export default function MediaDetailPage() {
 
                             {/* Action buttons */}
                             <div className="flex flex-wrap gap-2 pt-2">
+                                {isMovie && media.has_file && media.tmdb_id && (
+                                    <Button
+                                        variant="default"
+                                        size="sm"
+                                        className="bg-violet-600 hover:bg-violet-500 text-white"
+                                        disabled={kodiPlay.isPending}
+                                        title="Lancer la lecture sur Kodi (Salon)"
+                                        onClick={() =>
+                                            kodiPlay.mutate(
+                                                { tmdb_id: media.tmdb_id! },
+                                                {
+                                                    onSuccess: (r) =>
+                                                        r.status === "ok"
+                                                            ? toast.success(`Lecture lancée sur ${r.kodi ?? "Kodi"} 📺`)
+                                                            : toast.error(r.detail || "Lecture impossible"),
+                                                    onError: (e) => toast.error("Erreur : " + e.message),
+                                                },
+                                            )
+                                        }
+                                    >
+                                        {kodiPlay.isPending ? (
+                                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                        ) : (
+                                            <Play className="h-4 w-4 mr-2" />
+                                        )}
+                                        Lire sur Kodi
+                                    </Button>
+                                )}
                                 <Button
                                     variant="default"
                                     size="sm"
