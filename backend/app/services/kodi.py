@@ -216,8 +216,51 @@ def _secs(t: dict | None) -> int:
     return t.get("hours", 0) * 3600 + t.get("minutes", 0) * 60 + t.get("seconds", 0)
 
 
+def _resolution_label(width: int | None, height: int | None) -> str | None:
+    """Human resolution label from a stream's pixel dimensions."""
+    h = height or 0
+    w = width or 0
+    ref = max(h, (w * 9) // 16) if w else h  # tolerate anamorphic/odd aspect
+    if not ref:
+        return None
+    if ref >= 2000:
+        return "4K"
+    if ref >= 1400:
+        return "1440p"
+    if ref >= 1000:
+        return "1080p"
+    if ref >= 700:
+        return "720p"
+    if ref >= 540:
+        return "576p"
+    return "SD"
+
+
+def _tech_details(it: dict) -> dict[str, Any]:
+    """Extract video/audio/subtitle technical info from a Kodi item's streamdetails."""
+    sd = (it.get("streamdetails") or {})
+    video = (sd.get("video") or [{}])
+    audio = (sd.get("audio") or [{}])
+    subs = (sd.get("subtitle") or [])
+    v = video[0] if video else {}
+    a = audio[0] if audio else {}
+    return {
+        "resolution": _resolution_label(v.get("width"), v.get("height")),
+        "video_codec": (v.get("codec") or "").upper() or None,
+        "hdr": v.get("hdrtype") or None,
+        "audio_codec": (a.get("codec") or "").upper() or None,
+        "audio_channels": a.get("channels") or None,
+        "audio_language": a.get("language") or None,
+        "subtitle_count": len(subs),
+    }
+
+
 async def get_now_playing(db: AsyncSession) -> dict[str, Any]:
-    """Current Kodi playback state (for the on-detail remote)."""
+    """Current Kodi playback state (for the on-detail remote + dashboard card).
+
+    Enriched with poster/overview/genres from the media library (matched by TMDB
+    id) and with stream technical details (resolution, codecs) from Kodi itself.
+    """
     kodi = await _pick(db, None)
     if not kodi:
         return {"playing": False}
@@ -235,7 +278,10 @@ async def get_now_playing(db: AsyncSession) -> dict[str, Any]:
             )
             item = await _rpc(
                 client, kodi.url, auth, "Player.GetItem",
-                {"playerid": pid, "properties": ["title", "showtitle", "season", "episode", "uniqueid", "year"]},
+                {"playerid": pid, "properties": [
+                    "title", "showtitle", "season", "episode", "uniqueid", "year",
+                    "plot", "runtime", "genre", "rating", "streamdetails",
+                ]},
             )
             appp = await _rpc(
                 client, kodi.url, auth, "Application.GetProperties", {"properties": ["volume", "muted"]},
@@ -244,13 +290,20 @@ async def get_now_playing(db: AsyncSession) -> dict[str, Any]:
             subtitle = ""
             if it.get("type") == "episode":
                 subtitle = f"{it.get('showtitle', '')} S{it.get('season')}E{it.get('episode')}"
-            return {
+            tmdb = (it.get("uniqueid") or {}).get("tmdb")
+
+            result = {
                 "playing": True,
                 "playerid": pid,
                 "title": it.get("title") or it.get("label") or "",
                 "subtitle": subtitle,
                 "type": it.get("type"),
-                "tmdb": (it.get("uniqueid") or {}).get("tmdb"),
+                "tmdb": tmdb,
+                "year": it.get("year") or None,
+                "overview": it.get("plot") or "",
+                "genres": [g for g in (it.get("genre") or []) if g],
+                "rating": round(it.get("rating"), 1) if it.get("rating") else None,
+                "runtime": (it.get("runtime") or 0) // 60 or None,  # Kodi runtime is seconds
                 "position": _secs((props or {}).get("time")),
                 "total": _secs((props or {}).get("totaltime")),
                 "percentage": round((props or {}).get("percentage", 0) or 0, 1),
@@ -258,10 +311,50 @@ async def get_now_playing(db: AsyncSession) -> dict[str, Any]:
                 "volume": (appp or {}).get("volume", 100),
                 "muted": (appp or {}).get("muted", False),
                 "kodi": kodi.name,
+                "poster": None,
+                "media_id": None,
+                "media_type": it.get("type"),
+                **_tech_details(it),
             }
+
+            # Enrich poster / overview / media link from the library (movies by TMDB).
+            try:
+                await _enrich_now_playing(db, result, tmdb)
+            except Exception as exc:  # enrichment is best-effort
+                logger.debug("Kodi now-playing enrich skipped: %s", exc)
+
+            return result
     except Exception as exc:
         logger.debug("Kodi now-playing failed: %s", exc)
         return {"playing": False, "error": type(exc).__name__}
+
+
+async def _enrich_now_playing(db: AsyncSession, result: dict[str, Any], tmdb: str | None) -> None:
+    """Fill poster/overview/genres/media_id from the media library, matched by TMDB id."""
+    if not tmdb:
+        return
+    from app.services import media_aggregator
+    from app.utils.cache import cache
+
+    media = list(
+        await cache.get_or_set(
+            "media:all", lambda: media_aggregator.fetch_all_media(db), ttl_seconds=300
+        )
+    )
+    match = next((m for m in media if str(m.get("tmdb_id")) == str(tmdb)), None)
+    if not match:
+        return
+    result["poster"] = match.get("poster_url")
+    result["media_id"] = match.get("external_id")
+    result["media_type"] = match.get("type") or result.get("media_type")
+    if not result.get("overview"):
+        result["overview"] = match.get("overview") or ""
+    if not result.get("genres"):
+        result["genres"] = match.get("genres") or []
+    if not result.get("year"):
+        result["year"] = match.get("year")
+    if not result.get("rating") and match.get("rating"):
+        result["rating"] = round(match["rating"], 1)
 
 
 async def control_player(db: AsyncSession, action: str, value: Any = None) -> dict[str, Any]:

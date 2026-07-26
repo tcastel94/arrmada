@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 import { STATUS_COLORS, SERVICE_META } from "@/lib/constants";
 import { motion } from "framer-motion";
 import { ActivityFeedCard } from "@/components/dashboard/activity-feed";
+import { NowPlayingCard } from "@/components/dashboard/now-playing";
 import Link from "next/link";
 
 function formatBytes(bytes: number): string {
@@ -143,6 +144,11 @@ export default function DashboardPage() {
                 initial="hidden"
                 animate="show"
             >
+                {/* ── Now Playing on Kodi (only while a media plays) ─ */}
+                <motion.div variants={fadeUp}>
+                    <NowPlayingCard />
+                </motion.div>
+
                 {/* ── Hero Stats ────────────────────────────────── */}
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     {STAT_CONFIGS.map((cfg, idx) => {

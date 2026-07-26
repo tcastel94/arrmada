@@ -46,6 +46,11 @@ export interface KodiNowPlaying {
     subtitle?: string;
     type?: string;
     tmdb?: string | null;
+    year?: number | null;
+    overview?: string;
+    genres?: string[];
+    rating?: number | null;
+    runtime?: number | null; // minutes
     position?: number; // seconds
     total?: number; // seconds
     percentage?: number;
@@ -53,6 +58,17 @@ export interface KodiNowPlaying {
     volume?: number;
     muted?: boolean;
     kodi?: string;
+    poster?: string | null;
+    media_id?: string | null;
+    media_type?: string | null;
+    // stream technical details
+    resolution?: string | null;
+    video_codec?: string | null;
+    hdr?: string | null;
+    audio_codec?: string | null;
+    audio_channels?: number | null;
+    audio_language?: string | null;
+    subtitle_count?: number;
 }
 
 /** Poll the active Kodi playback state. Poll only while `enabled`. */
