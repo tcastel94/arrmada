@@ -37,6 +37,48 @@ export function useKodiPlay() {
     });
 }
 
+/* ── Now playing + remote control ──────────────────────────── */
+
+export interface KodiNowPlaying {
+    playing: boolean;
+    playerid?: number;
+    title?: string;
+    subtitle?: string;
+    type?: string;
+    tmdb?: string | null;
+    position?: number; // seconds
+    total?: number; // seconds
+    percentage?: number;
+    paused?: boolean;
+    volume?: number;
+    muted?: boolean;
+    kodi?: string;
+}
+
+/** Poll the active Kodi playback state. Poll only while `enabled`. */
+export function useKodiNowPlaying(enabled = true) {
+    return useQuery<KodiNowPlaying>({
+        queryKey: ["kodi", "now-playing"],
+        queryFn: () => apiFetch("/api/kodi/now-playing"),
+        enabled,
+        refetchInterval: enabled ? 3000 : false,
+        staleTime: 0,
+    });
+}
+
+export function useKodiControl() {
+    const qc = useQueryClient();
+    return useMutation<
+        { status: string; detail?: string },
+        Error,
+        { action: "playpause" | "stop" | "seek" | "volume" | "mute"; value?: number }
+    >({
+        mutationFn: (body) =>
+            apiFetch("/api/kodi/control", { method: "POST", body: JSON.stringify(body) }),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ["kodi", "now-playing"] }),
+    });
+}
+
 /* ── Maintenance ───────────────────────────────────────────── */
 
 export interface KodiDrift {

@@ -39,6 +39,21 @@ async def play_on_kodi(data: dict, db: AsyncSession = Depends(get_db)):
     return await kodi_service.play_movie(db, int(tmdb_id), data.get("service_id"))
 
 
+@router.get("/now-playing")
+async def now_playing(db: AsyncSession = Depends(get_db)):
+    """Current Kodi playback state (for the remote on the media detail page)."""
+    return await kodi_service.get_now_playing(db)
+
+
+@router.post("/control")
+async def control(data: dict, db: AsyncSession = Depends(get_db)):
+    """Send a remote command: playpause | stop | seek | volume | mute."""
+    action = (data or {}).get("action")
+    if not action:
+        return {"status": "error", "detail": "action requise"}
+    return await kodi_service.control_player(db, action, (data or {}).get("value"))
+
+
 @router.get("/watched-status")
 async def watched_status(db: AsyncSession = Depends(get_db)):
     """Watched/resume state per TMDB id from Kodi (cached 60s)."""

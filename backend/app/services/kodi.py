@@ -210,6 +210,95 @@ async def get_watched_status(db: AsyncSession) -> dict[str, Any]:
     return out
 
 
+# ── Feature: now-playing + remote control ────────────────────
+def _secs(t: dict | None) -> int:
+    t = t or {}
+    return t.get("hours", 0) * 3600 + t.get("minutes", 0) * 60 + t.get("seconds", 0)
+
+
+async def get_now_playing(db: AsyncSession) -> dict[str, Any]:
+    """Current Kodi playback state (for the on-detail remote)."""
+    kodi = await _pick(db, None)
+    if not kodi:
+        return {"playing": False}
+    auth = _auth_of(kodi)
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            players = await _rpc(client, kodi.url, auth, "Player.GetActivePlayers")
+            player = next((p for p in (players or []) if p.get("type") in ("video", "audio")), None)
+            if not player:
+                return {"playing": False, "kodi": kodi.name}
+            pid = player["playerid"]
+            props = await _rpc(
+                client, kodi.url, auth, "Player.GetProperties",
+                {"playerid": pid, "properties": ["speed", "time", "totaltime", "percentage"]},
+            )
+            item = await _rpc(
+                client, kodi.url, auth, "Player.GetItem",
+                {"playerid": pid, "properties": ["title", "showtitle", "season", "episode", "uniqueid", "year"]},
+            )
+            appp = await _rpc(
+                client, kodi.url, auth, "Application.GetProperties", {"properties": ["volume", "muted"]},
+            )
+            it = (item or {}).get("item", {}) or {}
+            subtitle = ""
+            if it.get("type") == "episode":
+                subtitle = f"{it.get('showtitle', '')} S{it.get('season')}E{it.get('episode')}"
+            return {
+                "playing": True,
+                "playerid": pid,
+                "title": it.get("title") or it.get("label") or "",
+                "subtitle": subtitle,
+                "type": it.get("type"),
+                "tmdb": (it.get("uniqueid") or {}).get("tmdb"),
+                "position": _secs((props or {}).get("time")),
+                "total": _secs((props or {}).get("totaltime")),
+                "percentage": round((props or {}).get("percentage", 0) or 0, 1),
+                "paused": ((props or {}).get("speed", 1) or 0) == 0,
+                "volume": (appp or {}).get("volume", 100),
+                "muted": (appp or {}).get("muted", False),
+                "kodi": kodi.name,
+            }
+    except Exception as exc:
+        logger.debug("Kodi now-playing failed: %s", exc)
+        return {"playing": False, "error": type(exc).__name__}
+
+
+async def control_player(db: AsyncSession, action: str, value: Any = None) -> dict[str, Any]:
+    """Send a remote-control command to the active Kodi player."""
+    kodi = await _pick(db, None)
+    if not kodi:
+        return {"status": "error", "detail": "Aucun Kodi configuré"}
+    auth = _auth_of(kodi)
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            if action in ("playpause", "stop", "seek"):
+                players = await _rpc(client, kodi.url, auth, "Player.GetActivePlayers")
+                player = next((p for p in (players or []) if p.get("type") in ("video", "audio")), None)
+                if not player:
+                    return {"status": "error", "detail": "Rien en lecture"}
+                pid = player["playerid"]
+                if action == "playpause":
+                    await _rpc(client, kodi.url, auth, "Player.PlayPause", {"playerid": pid})
+                elif action == "stop":
+                    await _rpc(client, kodi.url, auth, "Player.Stop", {"playerid": pid})
+                elif action == "seek":
+                    await _rpc(
+                        client, kodi.url, auth, "Player.Seek",
+                        {"playerid": pid, "value": {"percentage": float(value or 0)}},
+                    )
+            elif action == "volume":
+                await _rpc(client, kodi.url, auth, "Application.SetVolume", {"volume": int(value or 0)})
+            elif action == "mute":
+                await _rpc(client, kodi.url, auth, "Application.SetMute", {"mute": "toggle"})
+            else:
+                return {"status": "error", "detail": "Action inconnue"}
+        return {"status": "ok"}
+    except Exception as exc:
+        logger.error("Kodi control failed: %s", exc)
+        return {"status": "error", "detail": type(exc).__name__}
+
+
 # ── Feature: maintenance (clean + drift) ──────────────────────
 async def clean_library(db: AsyncSession, service_id: int | None = None) -> dict[str, Any]:
     """Trigger VideoLibrary.Clean on a Kodi instance."""

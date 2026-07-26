@@ -47,6 +47,10 @@ import {
     Pencil,
     Plus,
     Wand2,
+    Pause,
+    Square,
+    VolumeX,
+    MonitorPlay,
 } from "lucide-react";
 import {
     useMediaDetail,
@@ -65,7 +69,7 @@ import {
     type PersonMovie,
 } from "@/hooks/use-media";
 import { useCreateRequest } from "@/hooks/use-requests";
-import { useKodiPlay } from "@/hooks/use-kodi";
+import { useKodiPlay, useKodiNowPlaying, useKodiControl } from "@/hooks/use-kodi";
 import { Switch } from "@/components/ui/switch";
 import { useProfileOverrides, useAvailableProfiles, useCreateOverride, useDeleteOverride, useApplyOverride } from "@/hooks/use-profile-overrides";
 import { useTriggerMediaSearch, useMediaReleases, useGrabRelease, useSearchEpisodes, useSeriesSearchActivity, type Release } from "@/hooks/use-media-actions";
@@ -1262,6 +1266,7 @@ export default function MediaDetailPage() {
 
             {/* Tabs section */}
             <div className="p-6 pt-2">
+                <KodiRemote />
                 <Tabs defaultValue={isMovie ? "file" : "seasons"} className="space-y-4">
                     <TabsList>
                         {!isMovie && <TabsTrigger value="seasons">Saisons</TabsTrigger>}
@@ -2479,5 +2484,109 @@ function SeriesSubtitlePanel({ media }: { media: MediaDetail }) {
                 </Card>
             ))}
         </div>
+    );
+}
+
+/* ── Kodi remote (appears while something plays on Kodi) ────── */
+
+function fmtTime(s?: number): string {
+    if (!s || s < 0) return "0:00";
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = Math.floor(s % 60);
+    return h > 0
+        ? `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`
+        : `${m}:${String(sec).padStart(2, "0")}`;
+}
+
+function KodiRemote() {
+    const { data } = useKodiNowPlaying(true);
+    const control = useKodiControl();
+
+    if (!data?.playing) return null;
+    const pct = data.percentage ?? 0;
+
+    const seek = (e: React.MouseEvent<HTMLDivElement>) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const p = Math.min(100, Math.max(0, ((e.clientX - rect.left) / rect.width) * 100));
+        control.mutate({ action: "seek", value: Math.round(p) });
+    };
+
+    return (
+        <Card className="mb-4 bg-gradient-to-br from-violet-600/15 to-transparent border-violet-500/25">
+            <CardContent className="p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                    <MonitorPlay className="h-4 w-4 text-violet-400 animate-pulse" />
+                    <span className="text-xs font-medium text-violet-300">
+                        En lecture sur {data.kodi ?? "Kodi"}
+                    </span>
+                    {data.paused && (
+                        <Badge variant="outline" className="text-[9px] border-amber-500/30 text-amber-300">
+                            En pause
+                        </Badge>
+                    )}
+                </div>
+
+                <div className="min-w-0">
+                    <p className="text-sm font-semibold truncate">{data.title}</p>
+                    {data.subtitle && (
+                        <p className="text-xs text-muted-foreground truncate">{data.subtitle}</p>
+                    )}
+                </div>
+
+                <div className="space-y-1">
+                    <div
+                        className="h-2 rounded-full bg-muted/40 cursor-pointer overflow-hidden"
+                        onClick={seek}
+                        title="Cliquer pour se déplacer"
+                    >
+                        <div className="h-full bg-violet-500 rounded-full transition-[width]" style={{ width: `${pct}%` }} />
+                    </div>
+                    <div className="flex justify-between text-[10px] text-muted-foreground tabular-nums">
+                        <span>{fmtTime(data.position)}</span>
+                        <span>{fmtTime(data.total)}</span>
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                    <Button
+                        size="icon"
+                        className="h-10 w-10 rounded-full bg-violet-600 hover:bg-violet-500 text-white"
+                        title={data.paused ? "Lecture" : "Pause"}
+                        onClick={() => control.mutate({ action: "playpause" })}
+                    >
+                        {data.paused ? <Play className="h-5 w-5" /> : <Pause className="h-5 w-5" />}
+                    </Button>
+                    <Button
+                        size="icon"
+                        variant="outline"
+                        className="h-9 w-9 border-white/10"
+                        title="Arrêter"
+                        onClick={() => control.mutate({ action: "stop" })}
+                    >
+                        <Square className="h-4 w-4" />
+                    </Button>
+                    <div className="flex-1" />
+                    <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-9 w-9"
+                        title={data.muted ? "Réactiver le son" : "Couper le son"}
+                        onClick={() => control.mutate({ action: "mute" })}
+                    >
+                        {data.muted ? <VolumeX className="h-4 w-4 text-red-400" /> : <Volume2 className="h-4 w-4" />}
+                    </Button>
+                    <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        value={data.muted ? 0 : data.volume ?? 100}
+                        onChange={(e) => control.mutate({ action: "volume", value: Number(e.target.value) })}
+                        className="w-24 accent-violet-500"
+                        title="Volume"
+                    />
+                </div>
+            </CardContent>
+        </Card>
     );
 }
