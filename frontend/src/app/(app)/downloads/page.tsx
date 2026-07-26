@@ -36,9 +36,10 @@ import {
     useRetryQueueItem,
     type DownloadItem,
 } from "@/hooks/use-downloads";
+import { ClientBadge, getClientMeta } from "@/components/shared/download-client";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 type PendingAction =
@@ -70,6 +71,20 @@ function formatBytes(bytes: number): string {
     const sizes = ["B", "KB", "MB", "GB", "TB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+}
+
+/** Human hint for the *arr tracked-download state (why an item sits at 100%). */
+const TRACKED_STATE_HINTS: Record<string, string> = {
+    importpending: "Import en attente",
+    importing: "Import en cours",
+    importblocked: "Import bloqué",
+    failedpending: "Échec — en attente",
+    downloadfailed: "Échec du téléchargement",
+    ignored: "Ignoré",
+};
+function trackedStateHint(state?: string): string | null {
+    if (!state) return null;
+    return TRACKED_STATE_HINTS[state.toLowerCase()] ?? null;
 }
 
 const STATUS_CONFIGS: Record<string, { icon: any; color: string; gradient: string; label: string }> = {
@@ -125,8 +140,24 @@ export default function DownloadsPage() {
     const removeItem = useRemoveQueueItem();
     const retryItem = useRetryQueueItem();
     const [pending, setPending] = useState<PendingAction | null>(null);
+    const [clientFilter, setClientFilter] = useState<string | null>(null);
 
     const isBusy = removeItem.isPending || retryItem.isPending;
+
+    // Breakdown by download client (SABnzbd / Deluge / …) for the summary + filter.
+    const clientSummary = useMemo(() => {
+        const counts = new Map<string, number>();
+        for (const it of data?.items ?? []) {
+            const key = it.download_client || "?";
+            counts.set(key, (counts.get(key) ?? 0) + 1);
+        }
+        return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+    }, [data]);
+
+    const visibleItems = useMemo(
+        () => (data?.items ?? []).filter((it) => !clientFilter || it.download_client === clientFilter),
+        [data, clientFilter],
+    );
 
     const runAction = async () => {
         if (!pending) return;
@@ -198,6 +229,43 @@ export default function DownloadsPage() {
                     </div>
                 </motion.div>
 
+                {/* Par client (SABnzbd / Deluge / …) — résumé + filtre */}
+                {clientSummary.length > 0 && (
+                    <motion.div variants={fadeUp} className="flex flex-wrap items-center gap-2">
+                        <button
+                            onClick={() => setClientFilter(null)}
+                            className={cn(
+                                "rounded-full px-3 py-1 text-xs font-medium ring-1 transition-colors",
+                                clientFilter === null
+                                    ? "bg-foreground/10 ring-white/20 text-foreground"
+                                    : "ring-white/5 text-muted-foreground hover:text-foreground hover:ring-white/10",
+                            )}
+                        >
+                            Tous · {data?.total ?? 0}
+                        </button>
+                        {clientSummary.map(([client, count]) => {
+                            const m = getClientMeta(client);
+                            const Icon = m.icon;
+                            const active = clientFilter === client;
+                            return (
+                                <button
+                                    key={client}
+                                    onClick={() => setClientFilter(active ? null : client)}
+                                    className={cn(
+                                        "flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ring-1 transition-colors",
+                                        active
+                                            ? cn(m.bg, m.ring, m.color)
+                                            : "ring-white/5 text-muted-foreground hover:text-foreground hover:ring-white/10",
+                                    )}
+                                >
+                                    <Icon className={cn("h-3 w-3", active ? m.color : "")} />
+                                    {client} · {count}
+                                </button>
+                            );
+                        })}
+                    </motion.div>
+                )}
+
                 {/* Downloads List */}
                 {isLoading ? (
                     <div className="space-y-3">
@@ -220,7 +288,7 @@ export default function DownloadsPage() {
                     </motion.div>
                 ) : (
                     <motion.div className="space-y-2" variants={container}>
-                        {data.items.map((dl, idx) => {
+                        {visibleItems.map((dl) => {
                             const cfg =
                                 STATUS_CONFIGS[dl.status.toLowerCase()] ||
                                 STATUS_CONFIGS.queued;
@@ -265,6 +333,10 @@ export default function DownloadsPage() {
                                                         <span className="text-xs text-muted-foreground">
                                                             {dl.source_service}
                                                         </span>
+                                                        <ClientBadge
+                                                            client={dl.download_client}
+                                                            protocol={dl.protocol}
+                                                        />
                                                         {dl.quality && (
                                                             <Badge
                                                                 variant="outline"
@@ -279,6 +351,31 @@ export default function DownloadsPage() {
                                                             </span>
                                                         )}
                                                     </div>
+                                                    {(() => {
+                                                        const hint = trackedStateHint(dl.tracked_state);
+                                                        const isError = !!dl.error;
+                                                        const text = dl.error || hint || dl.detail;
+                                                        if (!text) return null;
+                                                        return (
+                                                            <p
+                                                                className={cn(
+                                                                    "text-[10px] mt-1 truncate flex items-center gap-1",
+                                                                    isError ? "text-red-400/80" : "text-amber-400/80",
+                                                                )}
+                                                                title={dl.detail || dl.error || undefined}
+                                                            >
+                                                                {isError ? (
+                                                                    <AlertTriangle className="h-2.5 w-2.5 shrink-0" />
+                                                                ) : (
+                                                                    <Clock className="h-2.5 w-2.5 shrink-0" />
+                                                                )}
+                                                                <span className="truncate">
+                                                                    {text}
+                                                                    {!isError && hint && dl.detail ? ` — ${dl.detail}` : ""}
+                                                                </span>
+                                                            </p>
+                                                        );
+                                                    })()}
                                                 </div>
 
                                                 {/* Size */}

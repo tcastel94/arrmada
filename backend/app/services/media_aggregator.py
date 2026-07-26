@@ -189,6 +189,14 @@ async def get_queue_items(db: AsyncSession) -> list[dict[str, Any]]:
                         "movie_id": item.get("movieId"),
                         "series_id": item.get("seriesId"),
                         "download_client": item.get("downloadClient", ""),
+                        "protocol": item.get("protocol", ""),  # usenet | torrent
+                        "tracked_state": item.get("trackedDownloadState", ""),  # downloading | importPending | importing | ...
+                        "error": item.get("errorMessage") or "",  # real client/download error
+                        "detail": next(  # first status message (e.g. why import is pending)
+                            (msg for m in (item.get("statusMessages") or [])
+                             for msg in (m.get("messages") or []) if msg),
+                            "",
+                        ),
                         "indexer": item.get("indexer", ""),
                         "quality": item.get("quality", {}).get("quality", {}).get("name", ""),
                     })

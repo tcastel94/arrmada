@@ -27,6 +27,7 @@ import { STATUS_COLORS, SERVICE_META } from "@/lib/constants";
 import { motion } from "framer-motion";
 import { ActivityFeedCard } from "@/components/dashboard/activity-feed";
 import { NowPlayingCard } from "@/components/dashboard/now-playing";
+import { ClientBadge } from "@/components/shared/download-client";
 import Link from "next/link";
 
 function formatBytes(bytes: number): string {
@@ -381,6 +382,10 @@ export default function DashboardPage() {
                                                                     dl.source_service
                                                                 }
                                                             </span>
+                                                            <ClientBadge
+                                                                client={dl.download_client}
+                                                                protocol={dl.protocol}
+                                                            />
                                                             {dl.quality && (
                                                                 <Badge
                                                                     variant="outline"

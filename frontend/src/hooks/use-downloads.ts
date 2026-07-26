@@ -16,6 +16,10 @@ export interface DownloadItem {
     movie_id: number | null;
     series_id: number | null;
     download_client: string;
+    protocol: string; // "usenet" | "torrent"
+    tracked_state: string; // "downloading" | "importPending" | "importing" | ...
+    error: string; // real download error
+    detail: string; // status message (e.g. why import is pending)
     indexer: string;
     quality: string;
 }
