@@ -18,6 +18,7 @@ import {
     Trash2,
     PackageX,
     Speaker,
+    Activity,
     type LucideIcon,
 } from "lucide-react";
 
@@ -39,6 +40,7 @@ export const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
             { href: "/search", label: "Rechercher & Ajouter", icon: Search },
             { href: "/calendar", label: "Calendrier", icon: CalendarDays },
             { href: "/downloads", label: "Downloads", icon: Download },
+            { href: "/activity", label: "Activité", icon: Activity },
         ],
     },
     {

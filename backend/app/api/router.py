@@ -24,6 +24,7 @@ from app.api.sabnzbd_config import router as sabnzbd_config_router
 from app.api.activity import router as activity_router
 from app.api.kodi import router as kodi_router
 from app.api.yamaha import router as yamaha_router
+from app.api.activity_timeline import router as activity_timeline_router
 
 # New feature routers
 from app.api.events import router as events_router
@@ -63,6 +64,7 @@ api_router.include_router(sabnzbd_config_router)
 api_router.include_router(activity_router)
 api_router.include_router(kodi_router)
 api_router.include_router(yamaha_router)
+api_router.include_router(activity_timeline_router)
 
 # New feature routes
 api_router.include_router(events_router)

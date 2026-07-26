@@ -36,7 +36,24 @@ async def play_on_kodi(data: dict, db: AsyncSession = Depends(get_db)):
     tmdb_id = data.get("tmdb_id")
     if not tmdb_id:
         return {"status": "error", "detail": "tmdb_id requis"}
-    return await kodi_service.play_movie(db, int(tmdb_id), data.get("service_id"))
+    result = await kodi_service.play_movie(db, int(tmdb_id), data.get("service_id"))
+
+    from app.services.activity_log import log_event
+    ok = result.get("status") == "ok"
+    await log_event(
+        category="playback",
+        action="kodi_play",
+        status="ok" if ok else "ko",
+        source="arrmada",
+        media_type="movie",
+        media_id=data.get("media_id"),
+        tmdb_id=int(tmdb_id),
+        title=data.get("title"),
+        device=result.get("kodi"),
+        detail=None if ok else result.get("detail"),
+        meta={"movieid": result.get("movieid")} if ok else None,
+    )
+    return result
 
 
 @router.get("/now-playing")

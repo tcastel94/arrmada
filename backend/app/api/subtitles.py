@@ -169,6 +169,11 @@ async def auto_download_movie(
     finally:
         await bazarr.close()
     _invalidate_status()
+    from app.services.activity_log import log_event
+    await log_event(
+        category="subtitle", action="sub_download", source="arrmada",
+        media_type="movie", media_id=radarr_id, subtitle=language.upper(),
+    )
     return {"status": "ok", "result": res}
 
 
@@ -190,6 +195,11 @@ async def auto_download_episode(
     finally:
         await bazarr.close()
     _invalidate_status()
+    from app.services.activity_log import log_event
+    await log_event(
+        category="subtitle", action="sub_download", source="arrmada",
+        media_type="series", media_id=series_id, subtitle=f"{language.upper()} · ep {episode_id}",
+    )
     return {"status": "ok", "result": res}
 
 
@@ -432,6 +442,11 @@ async def sync_movie_subtitle(
         )
     finally:
         await bazarr.close()
+    from app.services.activity_log import log_event
+    await log_event(
+        category="subtitle", action="sub_sync", source="arrmada",
+        media_type="movie", media_id=radarr_id, subtitle=body.language.upper(),
+    )
     return {"status": "ok", "result": res}
 
 
@@ -456,4 +471,9 @@ async def sync_episode_subtitle(
         )
     finally:
         await bazarr.close()
+    from app.services.activity_log import log_event
+    await log_event(
+        category="subtitle", action="sub_sync", source="arrmada",
+        media_type="series", media_id=series_id, subtitle=f"{body.language.upper()} · ep {episode_id}",
+    )
     return {"status": "ok", "result": res}

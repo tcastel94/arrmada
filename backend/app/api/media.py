@@ -180,6 +180,17 @@ async def delete_media(
     # Clear cached media list
     cache.invalidate("media:all")
 
+    from app.services.activity_log import log_event
+    await log_event(
+        category="library",
+        action="delete",
+        status="ok",
+        source="arrmada",
+        media_type=type,
+        media_id=id,
+        meta={"delete_files": delete_files, "delete_downloads": delete_downloads},
+    )
+
     return {"status": "deleted"}
 
 
@@ -452,6 +463,8 @@ def _normalise_release(r: dict) -> dict:
 class GrabReleasePayload(BaseModel):
     guid: str
     indexer_id: int
+    title: str | None = None
+    release_title: str | None = None
 
 
 @router.post("/{type}/{id}/search")
@@ -470,6 +483,15 @@ async def trigger_media_search(
             result = await client.search_season(id, season)
         else:
             result = await client.search_series(id)
+        from app.services.activity_log import log_event
+        await log_event(
+            category="library",
+            action="search",
+            source="arrmada",
+            media_type=type,
+            media_id=id,
+            subtitle=f"Saison {season}" if season is not None else None,
+        )
         return {"status": "search_triggered", "command": result}
     except HTTPException:
         raise
@@ -676,13 +698,27 @@ async def grab_media_release(
 ):
     """Grab a specific release via the native *arr release endpoint (managed import)."""
     client = await _get_arr_client_for(db, type, timeout=60)
+    from app.services.activity_log import log_event
     try:
         result = await client.grab_release(payload.guid, payload.indexer_id)
+        await log_event(
+            category="download",
+            action="grab",
+            source="arrmada",
+            media_type=type,
+            media_id=id,
+            title=payload.title,
+            subtitle=payload.release_title,
+        )
         return {"status": "grabbed", "release": result}
     except HTTPException:
         raise
     except Exception as exc:
         logger.error("Failed to grab release for %s %d: %s", type, id, exc)
+        await log_event(
+            category="download", action="grab", status="ko", source="arrmada",
+            media_type=type, media_id=id, title=payload.title, detail=str(exc),
+        )
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
         await client.close()

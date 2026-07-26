@@ -63,6 +63,34 @@ async def _handle_arr_webhook(
 
     logger.info("[Webhook] %s → %s: %s (%s)", service_type, event_type, title, quality or "n/a")
 
+    # Persist meaningful events to the activity timeline (imports, adds, deletes).
+    # Grabs & failures are intentionally left to the merged *arr history to avoid
+    # duplicating rows already surfaced there.
+    _obj = payload.get("movie") or payload.get("series") or {}
+    _media_type = "movie" if "movie" in payload else ("series" if "series" in payload else None)
+    _wh_map: dict[str, tuple[str, str, str]] = {
+        "Download": ("download", "imported", "ok"),
+        "MovieAdded": ("library", "add", "ok"),
+        "SeriesAdd": ("library", "add", "ok"),
+        "MovieDelete": ("library", "delete", "ok"),
+        "EpisodeFileDelete": ("library", "delete", "ok"),
+        "MovieFileDelete": ("library", "delete", "ok"),
+    }
+    if event_type in _wh_map:
+        _cat, _act, _st = _wh_map[event_type]
+        from app.services.activity_log import log_event
+        await log_event(
+            category=_cat,
+            action=_act,
+            status=_st,
+            source=service_type,
+            media_type=_media_type,
+            media_id=_obj.get("id"),
+            tmdb_id=_obj.get("tmdbId"),
+            title=title,
+            subtitle=quality or None,
+        )
+
     # Invalidate caches based on event type
     if event_type in ("Download", "Grab", "MovieAdded", "SeriesAdd", "EpisodeFileDelete", "MovieDelete"):
         cache.invalidate_pattern("media:*")
