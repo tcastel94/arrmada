@@ -41,19 +41,29 @@ export interface SearchResponse {
     total: number;
 }
 
-export function useMedia(params: {
+export interface MediaFilters {
     type?: string;
     search?: string;
     sort?: string;
     order?: string;
+    genre?: string;
+    quality?: string;
+    availability?: "available" | "missing";
+    monitored?: boolean;
     page?: number;
     per_page?: number;
-}) {
+}
+
+export function useMedia(params: MediaFilters) {
     const searchParams = new URLSearchParams();
     if (params.type) searchParams.set("type", params.type);
     if (params.search) searchParams.set("search", params.search);
     if (params.sort) searchParams.set("sort", params.sort);
     if (params.order) searchParams.set("order", params.order);
+    if (params.genre) searchParams.set("genre", params.genre);
+    if (params.quality) searchParams.set("quality", params.quality);
+    if (params.availability) searchParams.set("availability", params.availability);
+    if (params.monitored !== undefined) searchParams.set("monitored", String(params.monitored));
     if (params.page) searchParams.set("page", String(params.page));
     if (params.per_page) searchParams.set("per_page", String(params.per_page));
 
@@ -62,6 +72,23 @@ export function useMedia(params: {
     return useQuery<MediaResponse>({
         queryKey: ["media", params],
         queryFn: () => apiFetch(`/api/media${qs ? `?${qs}` : ""}`),
+    });
+}
+
+export interface MediaFacets {
+    genres: string[];
+    qualities: string[];
+    total: number;
+    missing_count: number;
+    missing_monitored_count: number;
+}
+
+/** Distinct genres/qualities + missing counts across the whole library. */
+export function useMediaFacets() {
+    return useQuery<MediaFacets>({
+        queryKey: ["media", "facets"],
+        queryFn: () => apiFetch("/api/media/facets"),
+        staleTime: 5 * 60_000,
     });
 }
 

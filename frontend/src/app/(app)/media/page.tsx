@@ -41,9 +41,13 @@ import {
     CloudDownload,
     Settings,
     Trash2,
-    Loader2
+    Loader2,
+    Filter,
+    X,
+    Eye,
+    PackageX
 } from "lucide-react";
-import { useMedia, type MediaItem } from "@/hooks/use-media";
+import { useMedia, useMediaFacets, type MediaItem } from "@/hooks/use-media";
 import { useSubtitleStatus } from "@/hooks/use-subtitles";
 import { useKodiWatchedStatus } from "@/hooks/use-kodi";
 import { cn } from "@/lib/utils";
@@ -259,6 +263,38 @@ export default function MediaPage() {
     const [page, setPage] = useState(1);
     // French-subtitle filter: all / missing (sans ST FR) / present.
     const [subFilter, setSubFilter] = useState<"all" | "missing" | "present">("all");
+    // Server-side filters (apply to the whole library, before pagination).
+    const [genre, setGenre] = useState<string>("all");
+    const [quality, setQuality] = useState<string>("all");
+    const [availability, setAvailability] = useState<"all" | "available" | "missing">("all");
+    const [monitored, setMonitored] = useState<"all" | "yes" | "no">("all");
+    // Kodi watch filter (client-side, movies on the current page).
+    const [watchFilter, setWatchFilter] = useState<"all" | "watched" | "unwatched" | "inprogress">("all");
+    const [showFilters, setShowFilters] = useState(false);
+
+    // Reset to page 1 whenever a filter changes.
+    const onFilterChange = <T,>(setter: (v: T) => void) => (v: T) => {
+        setter(v);
+        setPage(1);
+    };
+
+    const resetFilters = () => {
+        setGenre("all");
+        setQuality("all");
+        setAvailability("all");
+        setMonitored("all");
+        setSubFilter("all");
+        setWatchFilter("all");
+        setPage(1);
+    };
+
+    const activeFilterCount =
+        (genre !== "all" ? 1 : 0) +
+        (quality !== "all" ? 1 : 0) +
+        (availability !== "all" ? 1 : 0) +
+        (monitored !== "all" ? 1 : 0) +
+        (subFilter !== "all" ? 1 : 0) +
+        (watchFilter !== "all" ? 1 : 0);
 
     const queryClient = useQueryClient();
 
@@ -303,9 +339,16 @@ export default function MediaPage() {
         search: search || undefined,
         sort,
         order,
+        genre: genre === "all" ? undefined : genre,
+        quality: quality === "all" ? undefined : quality,
+        availability: availability === "all" ? undefined : availability,
+        monitored: monitored === "all" ? undefined : monitored === "yes",
         page,
         per_page: 48,
     });
+
+    // Distinct genres / qualities + missing count (for the filter dropdowns).
+    const { data: facets } = useMediaFacets();
 
     // Bazarr French-subtitle status (full library map, keyed by Radarr/Sonarr id).
     const { data: subStatus } = useSubtitleStatus("fr");
@@ -336,9 +379,17 @@ export default function MediaPage() {
     // paginated server-side, so it applies within the loaded page).
     const visibleItems =
         data?.items.filter((item) => {
-            if (subFilter === "all") return true;
-            const s = subStateFor(item);
-            return subFilter === "missing" ? s === "missing" : s === "present";
+            if (subFilter !== "all") {
+                const s = subStateFor(item);
+                if (subFilter === "missing" ? s !== "missing" : s !== "present") return false;
+            }
+            if (watchFilter !== "all") {
+                const w = watchStateFor(item);
+                if (watchFilter === "watched" && !w?.watched) return false;
+                if (watchFilter === "unwatched" && (w?.watched || (w?.progress ?? 0) > 0)) return false;
+                if (watchFilter === "inprogress" && !(w && !w.watched && (w.progress ?? 0) > 0)) return false;
+            }
+            return true;
         }) ?? [];
 
     return (
@@ -449,17 +500,44 @@ export default function MediaPage() {
                         )}
                     </Button>
 
-                    {/* Subtitle (FR) filter */}
-                    <Select value={subFilter} onValueChange={(v) => setSubFilter(v as typeof subFilter)}>
-                        <SelectTrigger className="w-[150px] border-white/10 bg-transparent">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">ST FR : tous</SelectItem>
-                            <SelectItem value="missing">Sans ST FR</SelectItem>
-                            <SelectItem value="present">Avec ST FR</SelectItem>
-                        </SelectContent>
-                    </Select>
+                    {/* Filters toggle */}
+                    <Button
+                        variant={activeFilterCount > 0 ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setShowFilters((s) => !s)}
+                        className={cn(
+                            "shrink-0 gap-1.5",
+                            activeFilterCount > 0
+                                ? "bg-violet-600 hover:bg-violet-500"
+                                : "border-white/10"
+                        )}
+                    >
+                        <Filter className="h-4 w-4" />
+                        Filtres
+                        {activeFilterCount > 0 && (
+                            <span className="ml-0.5 rounded-full bg-white/25 px-1.5 text-[10px] font-semibold tabular-nums">
+                                {activeFilterCount}
+                            </span>
+                        )}
+                    </Button>
+
+                    {/* Missing view shortcut */}
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        asChild
+                        className="shrink-0 gap-1.5 border-amber-500/30 text-amber-300 hover:bg-amber-500/10"
+                    >
+                        <Link href="/media/missing" title="Voir les médias manquants">
+                            <PackageX className="h-4 w-4" />
+                            Manquants
+                            {facets && facets.missing_count > 0 && (
+                                <span className="ml-0.5 rounded-full bg-amber-500/20 px-1.5 text-[10px] font-semibold tabular-nums">
+                                    {facets.missing_count}
+                                </span>
+                            )}
+                        </Link>
+                    </Button>
 
                     {/* Spacer for sm screens */}
                     <div className="hidden lg:flex flex-1" />
@@ -554,6 +632,100 @@ export default function MediaPage() {
                     </div>
                 </div>
 
+                {/* Collapsible filter panel */}
+                {showFilters && (
+                    <div className="rounded-xl ring-1 ring-white/5 bg-card/30 backdrop-blur-sm p-3 space-y-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                            {/* Availability */}
+                            <Select value={availability} onValueChange={onFilterChange((v: string) => setAvailability(v as typeof availability))}>
+                                <SelectTrigger className="w-[150px] border-white/10 bg-transparent">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">Dispo : tous</SelectItem>
+                                    <SelectItem value="available">Présent</SelectItem>
+                                    <SelectItem value="missing">Manquant</SelectItem>
+                                </SelectContent>
+                            </Select>
+
+                            {/* Genre */}
+                            <Select value={genre} onValueChange={onFilterChange((v: string) => setGenre(v))}>
+                                <SelectTrigger className="w-[160px] border-white/10 bg-transparent">
+                                    <SelectValue placeholder="Genre" />
+                                </SelectTrigger>
+                                <SelectContent className="max-h-72">
+                                    <SelectItem value="all">Genre : tous</SelectItem>
+                                    {facets?.genres.map((g) => (
+                                        <SelectItem key={g} value={g}>{g}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+
+                            {/* Quality */}
+                            <Select value={quality} onValueChange={onFilterChange((v: string) => setQuality(v))}>
+                                <SelectTrigger className="w-[170px] border-white/10 bg-transparent">
+                                    <SelectValue placeholder="Qualité" />
+                                </SelectTrigger>
+                                <SelectContent className="max-h-72">
+                                    <SelectItem value="all">Qualité : toutes</SelectItem>
+                                    {facets?.qualities.map((q) => (
+                                        <SelectItem key={q} value={q}>{q}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+
+                            {/* Monitored */}
+                            <Select value={monitored} onValueChange={onFilterChange((v: string) => setMonitored(v as typeof monitored))}>
+                                <SelectTrigger className="w-[160px] border-white/10 bg-transparent">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">Surveillé : tous</SelectItem>
+                                    <SelectItem value="yes">Surveillé</SelectItem>
+                                    <SelectItem value="no">Non surveillé</SelectItem>
+                                </SelectContent>
+                            </Select>
+
+                            {/* Subtitle FR (client-side, current page) */}
+                            <Select value={subFilter} onValueChange={(v) => setSubFilter(v as typeof subFilter)}>
+                                <SelectTrigger className="w-[150px] border-white/10 bg-transparent">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">ST FR : tous</SelectItem>
+                                    <SelectItem value="missing">Sans ST FR</SelectItem>
+                                    <SelectItem value="present">Avec ST FR</SelectItem>
+                                </SelectContent>
+                            </Select>
+
+                            {/* Kodi watch (client-side, current page) */}
+                            <Select value={watchFilter} onValueChange={(v) => setWatchFilter(v as typeof watchFilter)}>
+                                <SelectTrigger className="w-[150px] border-white/10 bg-transparent">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">Vu : tous</SelectItem>
+                                    <SelectItem value="watched">Vu</SelectItem>
+                                    <SelectItem value="unwatched">Non vu</SelectItem>
+                                    <SelectItem value="inprogress">En cours</SelectItem>
+                                </SelectContent>
+                            </Select>
+
+                            {activeFilterCount > 0 && (
+                                <Button variant="ghost" size="sm" onClick={resetFilters} className="gap-1.5 text-muted-foreground">
+                                    <X className="h-4 w-4" />
+                                    Réinitialiser
+                                </Button>
+                            )}
+                        </div>
+
+                        <p className="text-[11px] text-muted-foreground/60">
+                            <Eye className="inline h-3 w-3 mr-1 -mt-0.5" />
+                            Genre, qualité, disponibilité et surveillé filtrent toute la bibliothèque ; ST&nbsp;FR et Vu s'appliquent à la page affichée.
+                        </p>
+                    </div>
+                )}
+
                 {/* Grid */}
                 {isLoading ? (
                     <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8">
@@ -570,8 +742,8 @@ export default function MediaPage() {
                             icon={Film}
                             title="Aucun média trouvé"
                             description={
-                                subFilter !== "all"
-                                    ? `Aucun média « ${subFilter === "missing" ? "sans" : "avec"} ST FR » sur cette page`
+                                activeFilterCount > 0
+                                    ? "Aucun média ne correspond aux filtres actifs"
                                     : search
                                         ? `Aucun résultat pour « ${search} »`
                                         : "Connectez vos services *arr pour voir votre médiathèque"

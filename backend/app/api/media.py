@@ -195,12 +195,52 @@ async def trigger_scrape(
 
 
 
+@router.get("/facets")
+async def media_facets(db: AsyncSession = Depends(get_db)):
+    """Distinct filter values across the whole library (for filter dropdowns).
+
+    Returns the sorted list of genres and (file) qualities present in the
+    library, plus how many items are missing (no file) — used to populate the
+    médiathèque filter bar and the "Manquants" badge without loading every page.
+    """
+    async def _fetch():
+        return await media_aggregator.fetch_all_media(db)
+
+    media = list(await cache.get_or_set("media:all", _fetch, ttl_seconds=300))
+
+    genres: set[str] = set()
+    qualities: set[str] = set()
+    for m in media:
+        for g in m.get("genres") or []:
+            if g:
+                genres.add(g)
+        q = m.get("quality")
+        # Only movies expose a human quality name; series store a profile id (int).
+        if isinstance(q, str) and q:
+            qualities.add(q)
+
+    missing = [m for m in media if not m.get("has_file")]
+    return {
+        "genres": sorted(genres, key=str.lower),
+        "qualities": sorted(qualities, key=str.lower),
+        "total": len(media),
+        "missing_count": len(missing),
+        "missing_monitored_count": len([m for m in missing if m.get("monitored")]),
+    }
+
+
 @router.get("")
 async def list_media(
     type: str | None = Query(None, description="Filter by type: movie, series"),
     search: str | None = Query(None, description="Search by title"),
     sort: str = Query("title", description="Sort by: title, year, added, size"),
     order: str = Query("asc", description="Sort order: asc or desc"),
+    genre: str | None = Query(None, description="Filter by a single genre"),
+    quality: str | None = Query(None, description="Filter by a file quality name"),
+    availability: str | None = Query(
+        None, description="Filter by file presence: available | missing"
+    ),
+    monitored: bool | None = Query(None, description="Filter by monitored flag"),
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
@@ -220,6 +260,24 @@ async def list_media(
     if search:
         q = search.lower()
         media = [m for m in media if q in m.get("title", "").lower()]
+
+    # Availability (file presence)
+    if availability == "available":
+        media = [m for m in media if m.get("has_file")]
+    elif availability == "missing":
+        media = [m for m in media if not m.get("has_file")]
+
+    # Monitored flag
+    if monitored is not None:
+        media = [m for m in media if bool(m.get("monitored")) == monitored]
+
+    # Genre (single)
+    if genre:
+        media = [m for m in media if genre in (m.get("genres") or [])]
+
+    # Quality (file quality name; movies only in practice)
+    if quality:
+        media = [m for m in media if m.get("quality") == quality]
 
     # Sort
     sort_key = sort if sort in ("title", "year", "added", "size_bytes") else "title"

@@ -16,6 +16,7 @@ import {
     Radar,
     Gauge,
     Trash2,
+    PackageX,
     type LucideIcon,
 } from "lucide-react";
 
@@ -33,6 +34,7 @@ export const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
         title: "Médias",
         items: [
             { href: "/media", label: "Médiathèque", icon: Film },
+            { href: "/media/missing", label: "Manquants", icon: PackageX },
             { href: "/search", label: "Rechercher & Ajouter", icon: Search },
             { href: "/calendar", label: "Calendrier", icon: CalendarDays },
             { href: "/downloads", label: "Downloads", icon: Download },
