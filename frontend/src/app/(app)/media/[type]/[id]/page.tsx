@@ -70,6 +70,7 @@ import {
 } from "@/hooks/use-media";
 import { useCreateRequest } from "@/hooks/use-requests";
 import { useKodiPlay, useKodiNowPlaying, useKodiControl } from "@/hooks/use-kodi";
+import { YamahaRemote } from "@/components/yamaha-remote";
 import { Switch } from "@/components/ui/switch";
 import { useProfileOverrides, useAvailableProfiles, useCreateOverride, useDeleteOverride, useApplyOverride } from "@/hooks/use-profile-overrides";
 import { useTriggerMediaSearch, useMediaReleases, useGrabRelease, useSearchEpisodes, useSeriesSearchActivity, type Release } from "@/hooks/use-media-actions";
@@ -1266,7 +1267,7 @@ export default function MediaDetailPage() {
 
             {/* Tabs section */}
             <div className="p-6 pt-2">
-                <KodiRemote />
+                <PlaybackRemotes />
                 <Tabs defaultValue={isMovie ? "file" : "seasons"} className="space-y-4">
                     <TabsList>
                         {!isMovie && <TabsTrigger value="seasons">Saisons</TabsTrigger>}
@@ -2497,6 +2498,18 @@ function fmtTime(s?: number): string {
     return h > 0
         ? `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`
         : `${m}:${String(sec).padStart(2, "0")}`;
+}
+
+/** Playback remotes shown while a movie plays: Kodi transport + Yamaha AVR volume. */
+function PlaybackRemotes() {
+    const { data } = useKodiNowPlaying(true);
+    if (!data?.playing) return null;
+    return (
+        <div className="grid gap-3 md:grid-cols-2 mb-4 items-start">
+            <KodiRemote />
+            <YamahaRemote />
+        </div>
+    );
 }
 
 function KodiRemote() {
