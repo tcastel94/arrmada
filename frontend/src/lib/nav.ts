@@ -19,6 +19,7 @@ import {
     PackageX,
     Speaker,
     Activity,
+    Cast,
     type LucideIcon,
 } from "lucide-react";
 
@@ -59,6 +60,7 @@ export const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
             { href: "/analytics", label: "Analytics", icon: BarChart3 },
             { href: "/prowlarr", label: "Indexers", icon: Radar },
             { href: "/settings/yamaha", label: "Ampli Yamaha", icon: Speaker },
+            { href: "/settings/cast", label: "Cast", icon: Cast },
             { href: "/system", label: "Système", icon: HardDrive },
             { href: "/docker", label: "Docker", icon: Container },
             { href: "/notifications", label: "Notifications", icon: Bell },

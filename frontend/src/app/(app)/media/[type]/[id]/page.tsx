@@ -71,6 +71,7 @@ import {
 import { useCreateRequest } from "@/hooks/use-requests";
 import { useKodiPlay, useKodiNowPlaying, useKodiControl } from "@/hooks/use-kodi";
 import { YamahaRemote } from "@/components/yamaha-remote";
+import { CastButton } from "@/components/cast-button";
 import { Switch } from "@/components/ui/switch";
 import { useProfileOverrides, useAvailableProfiles, useCreateOverride, useDeleteOverride, useApplyOverride } from "@/hooks/use-profile-overrides";
 import { useTriggerMediaSearch, useMediaReleases, useGrabRelease, useSearchEpisodes, useSeriesSearchActivity, type Release } from "@/hooks/use-media-actions";
@@ -1153,6 +1154,14 @@ export default function MediaDetailPage() {
                                         )}
                                         Lire sur Kodi
                                     </Button>
+                                )}
+                                {isMovie && media.has_file && media.tmdb_id && (
+                                    <CastButton
+                                        tmdbId={media.tmdb_id}
+                                        mediaId={String(media.id)}
+                                        title={media.title}
+                                        className="h-9"
+                                    />
                                 )}
                                 <Button
                                     variant="default"

@@ -42,3 +42,4 @@ httpx==0.28.1
 
 # mDNS Discovery
 zeroconf>=0.131.0
+PyChromecast==14.0.5
