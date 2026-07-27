@@ -147,10 +147,18 @@ async def find_movie_item(db: AsyncSession, tmdb_id: int) -> Optional[dict[str, 
 
 
 def stream_url(base: str, key: str, item_id: str, *, max_width: int = 1920, bitrate: int = 8_000_000) -> str:
-    """Build an HLS master URL Jellyfin transcodes to Chromecast-friendly H.264/AAC."""
+    """Build a progressive MP4 URL Jellyfin transcodes to Chromecast-friendly H.264/AAC.
+
+    We deliberately use a progressive (single-file) MP4 stream rather than HLS.
+    Chromecast's Default Media Receiver rejects adaptive (HLS/DASH) streams that
+    lack CORS headers, and Jellyfin's transcode endpoints don't emit
+    Access-Control-Allow-Origin — so an HLS ``master.m3u8`` loads and then fails
+    immediately with ``idle_reason=ERROR`` (playback never starts). A progressive
+    ``video/mp4`` stream is a plain single media file that needs no CORS, so the
+    receiver plays it reliably.
+    """
     params = {
         "api_key": key,
-        "MediaSourceId": item_id,
         "VideoCodec": "h264",
         "AudioCodec": "aac",
         "AudioChannels": 2,
@@ -158,16 +166,14 @@ def stream_url(base: str, key: str, item_id: str, *, max_width: int = 1920, bitr
         "VideoBitrate": bitrate,
         "AudioBitrate": 192_000,
         "MaxWidth": max_width,
-        "SegmentContainer": "ts",
-        "TranscodingContainer": "ts",
-        "TranscodingProtocol": "hls",
-        "BreakOnNonKeyFrames": "true",
+        "Container": "mp4",
+        "TranscodingContainer": "mp4",
         "h264-profile": "high",
         "h264-level": "41",
         "deviceId": "arrmada-cast",
         "PlaySessionId": f"arrmada-{item_id}",
     }
-    return f"{base}/Videos/{item_id}/master.m3u8?{urlencode(params)}"
+    return f"{base}/Videos/{item_id}/stream.mp4?{urlencode(params)}"
 
 
 async def build_movie_stream(db: AsyncSession, tmdb_id: int) -> Optional[dict[str, Any]]:
@@ -181,7 +187,7 @@ async def build_movie_stream(db: AsyncSession, tmdb_id: int) -> Optional[dict[st
         return None
     return {
         "url": stream_url(base, key, item["id"]),
-        "content_type": "application/x-mpegurl",
+        "content_type": "video/mp4",
         "title": item.get("name"),
         "item_id": item["id"],
     }
