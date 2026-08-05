@@ -46,6 +46,17 @@ class Settings(BaseSettings):
     OPENROUTER_API_KEY: str = ""
     AI_MODEL: str = "google/gemini-2.0-flash-001"  # cost-effective, fast
 
+    # ── Auto-import ───────────────────────────────────────────
+    # Scheduled job that imports completed-but-orphaned downloads.
+    # Set AUTO_IMPORT_ENABLED=false to stop it entirely.
+    AUTO_IMPORT_ENABLED: bool = True
+    AUTO_IMPORT_INTERVAL_MINUTES: int = 5
+    # Safety: the scheduled job never replaces an episode/movie that
+    # already has a file — *arr parsers do mis-map releases (e.g. anime
+    # cour numbering), and an unattended overwrite is unrecoverable.
+    # Only explicit, user-initiated imports may overwrite.
+    AUTO_IMPORT_ALLOW_OVERWRITE: bool = False
+
     # ── Misc ──────────────────────────────────────────────────
     LOG_LEVEL: str = "INFO"
 

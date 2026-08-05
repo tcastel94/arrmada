@@ -16,7 +16,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.service import Service
 from app.services.encryption import decrypt_api_key
-from app.services.import_helpers import build_import_payload, find_candidates, trigger_rename
+from app.services.import_helpers import (
+    build_import_payload,
+    filter_safe_candidates,
+    find_candidates,
+    trigger_rename,
+)
 from app.services.path_mapper import get_path_mappings  # noqa: F401 — re-export
 from app.services.radarr import RadarrClient
 from app.services.sonarr import SonarrClient
@@ -279,8 +284,13 @@ async def trigger_manual_import(
     db: AsyncSession,
     download_path: str,
     media_type: str,
+    allow_overwrite: bool = False,
 ) -> dict[str, Any]:
     """Import a stuck download into the media library.
+
+    ``allow_overwrite`` must stay False for the scheduled job: candidates
+    whose destination already holds a file are skipped rather than
+    replaced.  Only an explicit user action should pass True.
 
     Strategy (3-phase):
     ───────────────────────────────────────────────────────────
@@ -347,6 +357,24 @@ async def trigger_manual_import(
         matched = await find_candidates(client, scan_folder, match_name)
         if not matched and scan_folder != "/data":
             matched = await find_candidates(client, "/data", match_name)
+
+        found = len(matched)
+        matched = filter_safe_candidates(matched, target_service, allow_overwrite)
+
+        if found and not matched:
+            # Candidates existed but every one was unsafe.  Phase 2 would
+            # only rescan the library for the same files, so stop here and
+            # tell the caller this is a deliberate skip, not a failure —
+            # otherwise the scheduled job retries it forever.
+            return {
+                "success": False,
+                "skipped": True,
+                "service": target_service,
+                "error": (
+                    f"{found} fichier(s) écarté(s) : rejet *arr ou destination "
+                    f"déjà pourvue (import automatique sans écrasement)"
+                ),
+            }
 
         if matched:
             files_payload = build_import_payload(matched, target_service)
@@ -471,6 +499,10 @@ async def trigger_manual_import(
                                 logger.info(
                                     "Phase 2: matched candidate %s", c_path,
                                 )
+
+                    matched_lib = filter_safe_candidates(
+                        matched_lib, target_service, allow_overwrite,
+                    )
 
                     if matched_lib:
                         files_payload = build_import_payload(
