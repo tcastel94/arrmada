@@ -56,6 +56,11 @@ class Settings(BaseSettings):
     # cour numbering), and an unattended overwrite is unrecoverable.
     # Only explicit, user-initiated imports may overwrite.
     AUTO_IMPORT_ALLOW_OVERWRITE: bool = False
+    # Completed-downloads folder as seen from inside Sonarr/Radarr.
+    # Keep it on the same mount as the library: a separate Docker bind
+    # mount of the same share still fails link() with EXDEV, turning
+    # every import into a multi-GB copy.
+    ARR_DOWNLOADS_PATH: str = "/media/downloads/complete"
 
     # ── Misc ──────────────────────────────────────────────────
     LOG_LEVEL: str = "INFO"
