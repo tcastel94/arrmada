@@ -307,7 +307,77 @@ SONARR_ROUTES: list[tuple[str, Handler]] = [
     (r"/api/v3/(calendar|tag|history|wanted/missing|blocklist|command|release)", _const([])),
 ]
 
-ROUTES = {"radarr.test": RADARR_ROUTES, "sonarr.test": SONARR_ROUTES}
+# ── Faux TMDB (api.themoviedb.org) ─────────────────────────────
+# Actif seulement si le test définit settings.TMDB_API_KEY. La série
+# « The Expanse » (TVDB 280619) correspond à l'ID TMDB 63639 : le endpoint
+# /tv/280619/… n'existe volontairement pas, pour attraper toute confusion
+# entre ID TVDB et ID TMDB.
+
+
+def _tmdb_movie(tmdb_id: int, title: str) -> dict[str, Any]:
+    return {
+        "id": tmdb_id,
+        "title": title,
+        "original_title": title,
+        "overview": "",
+        "release_date": "2014-11-05",
+        "poster_path": "/p.jpg",
+        "backdrop_path": "/b.jpg",
+        "vote_average": 8.4,
+        "vote_count": 1000,
+        "popularity": 99.0,
+        "genre_ids": [878],
+    }
+
+
+def _tmdb_tv(tmdb_id: int, name: str) -> dict[str, Any]:
+    return {
+        "id": tmdb_id,
+        "name": name,
+        "original_name": name,
+        "overview": "",
+        "first_air_date": "2022-02-18",
+        "poster_path": "/p.jpg",
+        "backdrop_path": "/b.jpg",
+        "vote_average": 8.7,
+        "vote_count": 500,
+        "popularity": 80.0,
+        "genre_ids": [18],
+    }
+
+
+TMDB_DETAIL = {
+    **_tmdb_movie(157336, "Interstellar"),
+    "runtime": 169,
+    "genres": [{"id": 878, "name": "Science-Fiction"}],
+    "credits": {
+        "cast": [{"id": 1, "name": "Matthew McConaughey", "character": "Cooper"}],
+        "crew": [{"id": 2, "name": "Christopher Nolan", "job": "Director"}],
+    },
+    "videos": {"results": [{"key": "zSWdZVtXT7E", "site": "YouTube", "type": "Trailer"}]},
+}
+
+TMDB_ROUTES: list[tuple[str, Handler]] = [
+    (r"/3/trending/movie/week", _const({"results": [_tmdb_movie(157336, "Interstellar")]})),
+    (r"/3/trending/tv/week", _const({"results": [_tmdb_tv(95396, "Severance")]})),
+    (r"/3/movie/\d+/recommendations", _const({"results": [_tmdb_movie(27205, "Inception")]})),
+    (r"/3/tv/63639/recommendations", _const({"results": [_tmdb_tv(1399, "Game of Thrones")]})),
+    (r"/3/find/280619", _const({"tv_results": [{"id": 63639, "name": "The Expanse"}]})),
+    (r"/3/find/\d+", _const({"tv_results": []})),
+    (r"/3/movie/157336", _const(TMDB_DETAIL)),
+    (r"/3/genre/(movie|tv)/list", _const({"genres": [{"id": 878, "name": "Science-Fiction"}]})),
+    (
+        r"/3/discover/movie",
+        _const({"results": [_tmdb_movie(157336, "Interstellar")], "total_pages": 1}),
+    ),
+    (r"/3/discover/tv", _const({"results": [_tmdb_tv(95396, "Severance")], "total_pages": 1})),
+]
+
+ROUTES = {
+    "radarr.test": RADARR_ROUTES,
+    "sonarr.test": SONARR_ROUTES,
+    "api.themoviedb.org": TMDB_ROUTES,
+}
 
 
 def handle(request: httpx.Request) -> httpx.Response:

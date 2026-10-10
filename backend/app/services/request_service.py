@@ -22,16 +22,40 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+def _utcnow() -> datetime:
+    """Current UTC time, naive.
+
+    MediaRequest.completed_at maps to TIMESTAMP WITHOUT TIME ZONE, like
+    every datetime column in this codebase.  Handing asyncpg an aware
+    datetime for such a column raises DataError and aborts the whole
+    executemany batch, so the value must be stripped of its tzinfo.
+    """
+    return datetime.now(UTC).replace(tzinfo=None)
+
+
 def _resolve_quality_profile_id(profiles: list[dict], name: str | None) -> int:
     """Return the id of the profile matching ``name`` (case-insensitive).
 
-    Falls back to the first available profile when no name is given or no
-    match is found, mirroring the previous ``profiles[0]`` behaviour.
+    If no name is given, defaults to the '👑 Ultra-HD Cinema & Auto-Upgrade' profile,
+    or any Ultra-HD profile, before falling back to profiles[0].
     """
+    if not profiles:
+        return 1
+
     if name:
         for p in profiles:
             if str(p.get("name", "")).strip().lower() == name.strip().lower():
                 return p["id"]
+
+    # Default: prioritize our Cinema / Ultra-HD profile
+    for p in profiles:
+        pname = str(p.get("name", "")).lower()
+        if "👑" in p.get("name", "") or "cinema" in pname:
+            return p["id"]
+    for p in profiles:
+        if "ultra" in str(p.get("name", "")).lower():
+            return p["id"]
+
     return profiles[0]["id"]
 
 
@@ -369,7 +393,7 @@ async def sync_active_requests(db: AsyncSession) -> None:
                         movie = await client.get_movie_by_id(req.arr_id)
                         if movie.get("hasFile"):
                             req.status = "available"
-                            req.completed_at = datetime.now(UTC)
+                            req.completed_at = _utcnow()
                         elif req.arr_id in downloading_movie_ids:
                             req.status = "downloading"
                         else:
@@ -434,12 +458,12 @@ async def sync_active_requests(db: AsyncSession) -> None:
 
                         if episode_file_count == episode_count and episode_count > 0:
                             req.status = "available"
-                            req.completed_at = datetime.now(UTC)
+                            req.completed_at = _utcnow()
                         elif req.arr_id in downloading_series_ids:
                             req.status = "downloading"
                         elif episode_file_count > 0:
                             req.status = "available"
-                            req.completed_at = datetime.now(UTC)
+                            req.completed_at = _utcnow()
                         else:
                             req.status = "searching"
                     except httpx.HTTPStatusError as exc:

@@ -86,6 +86,14 @@ Live SABnzbd / Deluge queue with per-item actions (retry, blocklist, remove) and
 ### 🔔 Real-time
 Server-Sent Events keep every page fresh and raise toasts on imports, grabs and service outages; a floating mini-player follows Kodi playback across pages.
 
+### 🛋️ Home cinema
+- **Kodi add-on** (`kodi-addon/`): scrobbling, add-on dashboard, home-screen widgets, search & add from the couch, subtitle download / audio sync, release upgrade — see [`kodi-addon/README.md`](kodi-addon/README.md)
+- **Yamaha room profiles** (Salon / Cinéma): sound program, dialogue lift, DRC… applied automatically when a movie starts on Kodi
+- **Technical badges** (4K, HDR / Dolby Vision, Atmos, 7.1…), studio / network logos and trailers on media sheets
+
+### 🐳 Docker logs & AI diagnosis
+Aggregated, level-classified logs of every service container (System → Docker, requires `/var/run/docker.sock:ro`), and a one-click AI analysis (local Ollama or OpenRouter) that groups problems with their cause and fix.
+
 ### 🛡️ Security First
 - JWT authentication with configurable expiration
 - Fernet-encrypted API keys at rest

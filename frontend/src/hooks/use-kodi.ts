@@ -28,9 +28,9 @@ export function useKodiWatchedStatus(enabled = true) {
 
 export function useKodiPlay() {
     return useMutation<
-        { status: string; detail?: string; kodi?: string; movieid?: number },
+        { status: string; detail?: string; kodi?: string; movieid?: number; room?: string },
         Error,
-        { tmdb_id: number; service_id?: number }
+        { tmdb_id: number; service_id?: number; room?: "salon" | "cinema" | string }
     >({
         mutationFn: (body) =>
             apiFetch("/api/kodi/play", { method: "POST", body: JSON.stringify(body) }),

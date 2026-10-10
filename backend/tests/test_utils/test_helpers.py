@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from app.services.docker_logs import _classify, _demux, _parse_json_object
 from app.services.kodi import _resolution_label, _secs, _tech_details
 from app.services.media_aggregator import _calc_progress, _normalise_movie, _normalise_series
 from app.services.media_detail import _extract_images, _format_file_info, _key_crew
@@ -95,11 +96,10 @@ class TestMediaDetailHelpers:
 
     def test_extract_images(self) -> None:
         imgs = _extract_images(fake_arr.MOVIES[0])
-        assert imgs == {
-            "poster": "https://img.test/dune.jpg",
-            "fanart": "https://img.test/dune-fanart.jpg",
-            "banner": None,
-        }
+        assert imgs["poster"] == "https://img.test/dune.jpg"
+        assert imgs["fanart"] == "https://img.test/dune-fanart.jpg"
+        assert imgs["banner"] is None
+        assert imgs["clearlogo"] is None  # pas de logo dans les données de test
 
     def test_format_file_info(self) -> None:
         info = _format_file_info(fake_arr.MOVIES[0]["movieFile"])
@@ -157,3 +157,34 @@ class TestKodiHelpers:
 def test_categorize_cf_returns_label() -> None:
     assert isinstance(_categorize_cf("x265 (HD)"), str)
     assert isinstance(_categorize_cf("Unknown Thing"), str)
+
+
+class TestDockerLogs:
+    """Classification et décodage des logs Docker (page Système → Docker)."""
+
+    @pytest.mark.parametrize(
+        ("line", "level"),
+        [
+            ("[Error] Couldn't import episode", "error"),
+            ("2026-10-10 12:00:00 CRITICAL disk full", "error"),
+            ("[Warn] Indexer is slow", "warning"),
+            ("::warning:: deprecated option", "warning"),
+            ("[Info] Import complete", "info"),
+            ("just some output", "other"),
+        ],
+    )
+    def test_classify(self, line: str, level: str) -> None:
+        assert _classify(line) == level
+
+    def test_demux_framed_stream(self) -> None:
+        # Trame Docker non-TTY : [stream][0,0,0][taille big-endian][données]
+        frame = bytes([1, 0, 0, 0]) + (5).to_bytes(4, "big") + b"hello"
+        frame2 = bytes([2, 0, 0, 0]) + (3).to_bytes(4, "big") + b"err"
+        assert _demux(frame + frame2) == b"helloerr"
+
+    def test_demux_tty_untouched(self) -> None:
+        assert _demux(b"plain tty output\n") == b"plain tty output\n"
+
+    def test_parse_llm_json(self) -> None:
+        assert _parse_json_object('```json\n{"a": 1}\n```') == {"a": 1}
+        assert _parse_json_object('Voici : {"b": [1, 2]} fin') == {"b": [1, 2]}

@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Server features (developed on the Unraid host, merged into UI v2)
+
+#### Added
+- **Kodi add-on** (`kodi-addon/`, v1.3.2) and its API under `/api/kodi`: live scrobbling, add-on dashboard and status, home-screen widgets, media lookup/add, interactive releases, queue pause/resume/remove, subtitle search & audio sync (Bazarr), library maintenance. The add-on authenticates with `X-Api-Key` = `ARRMADA_AUTH_SECRET`
+- **Docker logs**: aggregated, level-classified logs from the service containers (`/api/files/docker/logs`, needs `/var/run/docker.sock:ro`) and AI analysis grouping problems with causes and fixes (`POST …/logs/analyze`, local Ollama or OpenRouter)
+- **Local AI assistant** (Ollama): weekly summary of added media
+- **Yamaha room profiles** (Salon / Cinéma): sound program, dialogue lift, DRC, enhancer, extra bass; applied automatically when playing a movie on Kodi
+- Recommendations: "because you have…" for series too, TMDB detail modal endpoint, targeted recommendations based on a library title
+- Media items expose resolution, video/audio codecs, HDR, channels, studio/network and ClearLogo
+- Auto-import: scans the folder as seen by *arr (`ARR_DOWNLOADS_PATH`), never overwrites an existing file unless `AUTO_IMPORT_ALLOW_OVERWRITE=true`, execution reports
+- Scripts: orphan import/cleanup, cinema audio profile, weekly summary
+
+#### Fixed
+- Yamaha room profiles crashed on save (`cache.set` does not exist) and were kept in memory only: now persisted to `data/yamaha_room_profiles.json`
+- Series "because you have…" recommendations queried TMDB with the Sonarr TVDB id (wrong show)
+- API-key authentication uses a constant-time comparison
+
+#### Security
+- The add-on no longer ships a hard-coded default API key; `.gitignore` now covers `.env.*` copies and `*.bak` files
+
 ### UI v2 — « Neon Armada »
 
 #### Added

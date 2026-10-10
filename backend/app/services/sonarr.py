@@ -29,9 +29,14 @@ class SonarrClient(ArrBaseClient):
         """Add a new series to Sonarr."""
         return await self.post("/series", data=data)
 
-    async def delete_series(self, series_id: int, delete_files: bool = False) -> None:
-        """Delete a series from Sonarr."""
-        url = f"/series/{series_id}?deleteFiles={str(delete_files).lower()}"
+    async def delete_series(
+        self, series_id: int, delete_files: bool = False, add_exclusion: bool = False
+    ) -> None:
+        """Delete a series from Sonarr, optionally adding it to the import-list exclusions."""
+        url = (
+            f"/series/{series_id}?deleteFiles={str(delete_files).lower()}"
+            f"&addImportListExclusion={str(add_exclusion).lower()}"
+        )
         resp = await self.client.delete(f"{self.API_PREFIX}{url}")
         resp.raise_for_status()
 

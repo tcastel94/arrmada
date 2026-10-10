@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
 from app.database import async_session_factory
+from app.services.docker_logs import analyze_logs, get_aggregated_logs
 from app.services.file_manager import (
     docker_action,
     get_docker_containers,
@@ -80,6 +81,25 @@ async def run_docker_action(payload: DockerActionPayload):
     return {"result": result, "container_id": payload.container_id, "action": payload.action}
 
 
+@router.get("/docker/logs")
+async def docker_logs(
+    tail: int = Query(60, ge=10, le=300),
+    db: AsyncSession = Depends(get_db),
+):
+    """Aggregated, level-classified logs across registered-service containers."""
+    logs = await get_aggregated_logs(db, tail=tail)
+    return {"logs": logs, "count": len(logs)}
+
+
+@router.post("/docker/logs/analyze")
+async def analyze_docker_logs(
+    tail: int = Query(150, ge=20, le=400),
+    db: AsyncSession = Depends(get_db),
+):
+    """Ask the LLM to group the problems in recent logs and propose fixes."""
+    return await analyze_logs(db, tail=tail)
+
+
 # ── Media Mover ───────────────────────────────────────────────
 
 
@@ -112,6 +132,10 @@ async def stuck_downloads(db: AsyncSession = Depends(get_db)):
 class ImportPayload(BaseModel):
     download_path: str
     media_type: str  # movie or series
+    # Opt-in: replace a file that already exists at the destination.
+    # Off by default — a mis-parsed release would otherwise destroy an
+    # unrelated episode, and *arr's recycle bin is often not configured.
+    allow_overwrite: bool = False
 
 
 @router.post("/import")
@@ -121,7 +145,12 @@ async def manual_import(payload: ImportPayload, db: AsyncSession = Depends(get_d
     This will move the files to the proper media folder, rename them,
     and trigger Bazarr for subtitles + Jellyfin library update.
     """
-    return await trigger_manual_import(db, payload.download_path, payload.media_type)
+    return await trigger_manual_import(
+        db,
+        payload.download_path,
+        payload.media_type,
+        allow_overwrite=payload.allow_overwrite,
+    )
 
 
 class BulkImportPayload(BaseModel):
@@ -150,7 +179,12 @@ async def bulk_import(
                     item.media_type,
                 )
                 async with async_session_factory() as db:
-                    await trigger_manual_import(db, item.download_path, item.media_type)
+                    await trigger_manual_import(
+                        db,
+                        item.download_path,
+                        item.media_type,
+                        allow_overwrite=item.allow_overwrite,
+                    )
             except Exception as exc:
                 logger.error("Failed background bulk import for %s: %s", item.download_path, exc)
 

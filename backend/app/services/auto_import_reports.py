@@ -35,6 +35,7 @@ def add_report(
     imported_count: int,
     failed_count: int,
     items: list[dict[str, Any]],
+    skipped_count: int = 0,
 ) -> None:
     """Save a new execution report, keeping only the 10 most recent ones."""
     reports = get_reports()
@@ -46,6 +47,7 @@ def add_report(
         "scanned_count": scanned_count,
         "imported_count": imported_count,
         "failed_count": failed_count,
+        "skipped_count": skipped_count,
         "items": items,
     }
 
