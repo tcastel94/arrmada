@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api-client";
 
 export interface MediaItem {
@@ -72,6 +72,9 @@ export function useMedia(params: MediaFilters) {
     return useQuery<MediaResponse>({
         queryKey: ["media", params],
         queryFn: () => apiFetch(`/api/media${qs ? `?${qs}` : ""}`),
+        // Garde la page précédente affichée pendant le chargement de la
+        // suivante (évite le « flash » de squelettes à chaque filtre/page).
+        placeholderData: keepPreviousData,
     });
 }
 

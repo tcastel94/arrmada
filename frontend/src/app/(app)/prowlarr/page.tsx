@@ -31,14 +31,7 @@ import {
     Lock,
     Unlock,
 } from "lucide-react";
-import {
-    useProwlarrStats,
-    useTestIndexer,
-    useToggleIndexer,
-    useDeleteIndexer,
-    IndexerStat,
-    ProwlarrIndexer,
-} from "@/hooks/use-new-features";
+import { useProwlarrStats, useTestIndexer, useToggleIndexer, useDeleteIndexer, IndexerStat, ProwlarrIndexer } from "@/hooks/use-prowlarr";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { useState } from "react";

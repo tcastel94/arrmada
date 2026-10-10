@@ -71,13 +71,24 @@ export interface KodiNowPlaying {
     subtitle_count?: number;
 }
 
-/** Poll the active Kodi playback state. Poll only while `enabled`. */
+/**
+ * État de lecture Kodi.
+ * Interrogation adaptative : toutes les 3 s pendant une lecture (barre de
+ * progression fluide), toutes les 20 s au repos, 60 s si Kodi ne répond pas
+ * (avant : 3 s en permanence ≈ 1 200 requêtes/heure pour rien).
+ */
 export function useKodiNowPlaying(enabled = true) {
     return useQuery<KodiNowPlaying>({
         queryKey: ["kodi", "now-playing"],
         queryFn: () => apiFetch("/api/kodi/now-playing"),
         enabled,
-        refetchInterval: enabled ? 3000 : false,
+        refetchInterval: enabled
+            ? (query) => {
+                  if (query.state.status === "error") return 60_000;
+                  return query.state.data?.playing ? 3_000 : 20_000;
+              }
+            : false,
+        retry: 1,
         staleTime: 0,
     });
 }
@@ -89,8 +100,16 @@ export function useKodiControl() {
         Error,
         { action: "playpause" | "stop" | "seek" | "volume" | "mute"; value?: number }
     >({
-        mutationFn: (body) =>
-            apiFetch("/api/kodi/control", { method: "POST", body: JSON.stringify(body) }),
+        mutationFn: async (body) => {
+            const res = await apiFetch<{ status: string; detail?: string }>("/api/kodi/control", {
+                method: "POST",
+                body: JSON.stringify(body),
+            });
+            // Le backend répond 200 avec {status:"error"} quand Kodi refuse :
+            // on le remonte comme une vraie erreur pour afficher un toast.
+            if (res?.status === "error") throw new Error(res.detail || "Kodi n'a pas accepté la commande");
+            return res;
+        },
         onSuccess: () => qc.invalidateQueries({ queryKey: ["kodi", "now-playing"] }),
     });
 }

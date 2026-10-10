@@ -1,40 +1,29 @@
 "use client";
 
-import { useState, useCallback } from "react";
+/**
+ * Compatibilité : ancien hook shadcn `useToast`.
+ * ----------------------------------------------------------------
+ * BUG corrigé : l'ancienne version stockait les toasts dans un state
+ * local que RIEN n'affichait → tous les messages de TRaSH Guides,
+ * Paramètres, Requêtes… étaient invisibles. On redirige désormais vers
+ * sonner (le seul <Toaster> monté dans l'app).
+ * Pour du nouveau code, importer directement `toast` depuis "sonner".
+ */
+import { toast as sonner } from "sonner";
 
 interface Toast {
-    id: string;
     title: string;
     description?: string;
     variant?: "default" | "destructive";
 }
 
-let toastCounter = 0;
-let globalAddToast: ((toast: Omit<Toast, "id">) => void) | null = null;
-
-export function useToast() {
-    const [toasts, setToasts] = useState<Toast[]>([]);
-
-    const addToast = useCallback(
-        (toast: Omit<Toast, "id">) => {
-            const id = `toast-${++toastCounter}`;
-            setToasts((prev) => [...prev, { ...toast, id }]);
-            // Auto-dismiss after 4 seconds
-            setTimeout(() => {
-                setToasts((prev) => prev.filter((t) => t.id !== id));
-            }, 4000);
-        },
-        []
-    );
-
-    globalAddToast = addToast;
-
-    return {
-        toasts,
-        toast: addToast,
-        dismiss: (id: string) =>
-            setToasts((prev) => prev.filter((t) => t.id !== id)),
-    };
+function toast({ title, description, variant }: Toast) {
+    if (variant === "destructive") sonner.error(title, { description });
+    else sonner.success(title, { description });
 }
 
-export { type Toast };
+export function useToast() {
+    return { toast, dismiss: (id?: string | number) => sonner.dismiss(id) };
+}
+
+export { toast, type Toast };

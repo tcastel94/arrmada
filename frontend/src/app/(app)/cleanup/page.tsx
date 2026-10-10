@@ -16,7 +16,7 @@ import {
     Maximize,
     DiscAlbum,
 } from "lucide-react";
-import { useCleanupScan, CleanupItem } from "@/hooks/use-new-features";
+import { useCleanupScan, CleanupItem } from "@/hooks/use-cleanup";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { useState } from "react";

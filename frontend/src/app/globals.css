@@ -2,75 +2,64 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
-  }
-}
+/* ════════════════════════════════════════════════════════════════
+   ArrMada — Design system "Neon Armada"
+   ----------------------------------------------------------------
+   Thème sombre unique (le logo néon cyan est pensé pour un fond nuit).
+   Toutes les couleurs passent par des variables CSS HSL : un composant
+   ne doit JAMAIS coder une couleur de fond/bordure en dur, il utilise
+   ces tokens (bg-card, border-border, text-primary…) ou les utilitaires
+   ci-dessous (.glass, .text-gradient…).
+   ════════════════════════════════════════════════════════════════ */
 
 @layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 217.2 91.2% 59.8%;
-    --chart-1: 217 91% 60%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
-    --radius: 0.5rem;
-    --sidebar-width: 260px;
-    --sidebar-collapsed-width: 68px;
-    --success: 142 76% 36%;
-    --success-foreground: 0 0% 100%;
-    --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 100%;
-  }
+  :root,
   .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 217.2 91.2% 59.8%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
-    --success: 142 76% 36%;
-    --success-foreground: 0 0% 100%;
-    --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 100%;
+    /* Fond « nuit en mer » : bleu marine très profond, pas du gris. */
+    --background: 226 50% 4%;
+    --foreground: 213 40% 97%;
+
+    --card: 225 42% 7%;
+    --card-foreground: 213 40% 97%;
+    --popover: 225 44% 7%;
+    --popover-foreground: 213 40% 97%;
+
+    /* Accent principal #4A9EFF + cyan de marque (logo). */
+    --primary: 212 100% 65%;
+    --primary-foreground: 226 60% 7%;
+    --brand: 183 88% 52%;
+    --brand-foreground: 226 60% 7%;
+
+    --secondary: 224 32% 12%;
+    --secondary-foreground: 213 40% 97%;
+    --muted: 224 30% 11%;
+    --muted-foreground: 218 18% 63%;
+    --accent: 223 32% 14%;
+    --accent-foreground: 213 40% 97%;
+
+    --destructive: 0 84% 62%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 152 69% 47%;
+    --success-foreground: 226 60% 7%;
+    --warning: 38 95% 58%;
+    --warning-foreground: 226 60% 7%;
+
+    --border: 223 30% 15%;
+    --input: 223 30% 17%;
+    --ring: 212 100% 65%;
+
+    /* Palette graphes : bleu, cyan, violet, ambre, rose. */
+    --chart-1: 212 100% 65%;
+    --chart-2: 183 88% 52%;
+    --chart-3: 262 83% 70%;
+    --chart-4: 38 95% 58%;
+    --chart-5: 330 85% 66%;
+
+    --radius: 0.85rem;
+    --sidebar-width: 272px;
+    --sidebar-collapsed-width: 76px;
+
+    color-scheme: dark;
   }
 }
 
@@ -78,27 +67,396 @@
   * {
     @apply border-border;
   }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
+  }
+
   body {
     @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1;
+    font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.35);
+    color: hsl(var(--foreground));
+  }
+
+  /* Chiffres alignés partout où on affiche des compteurs. */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Scrollbar globale discrète (Chrome/Edge/Safari + Firefox). */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.25) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.22);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.4);
+    background-clip: padding-box;
   }
 }
 
-/* Custom scrollbar */
+/* ════════════════════════════════════════════════════════════════
+   Composants visuels réutilisables
+   ════════════════════════════════════════════════════════════════ */
+@layer components {
+  /* Panneau « verre dépoli » : la brique de base de toutes les cartes. */
+  .glass {
+    background: linear-gradient(
+      180deg,
+      hsl(var(--card) / 0.72) 0%,
+      hsl(var(--card) / 0.5) 100%
+    );
+    backdrop-filter: blur(18px) saturate(150%);
+    -webkit-backdrop-filter: blur(18px) saturate(150%);
+    border: 1px solid hsl(0 0% 100% / 0.065);
+    box-shadow:
+      inset 0 1px 0 0 hsl(0 0% 100% / 0.05),
+      0 10px 40px -18px rgb(0 0 0 / 0.75);
+  }
+
+  /* Variante plus opaque (menus, popovers, dialogues). */
+  .glass-strong {
+    background: hsl(var(--popover) / 0.88);
+    backdrop-filter: blur(24px) saturate(160%);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
+    border: 1px solid hsl(0 0% 100% / 0.08);
+    box-shadow:
+      inset 0 1px 0 0 hsl(0 0% 100% / 0.06),
+      0 24px 64px -16px rgb(0 0 0 / 0.8);
+  }
+
+  /* Survol interactif standard d'une carte en verre. */
+  .glass-hover {
+    transition:
+      border-color 0.3s ease,
+      box-shadow 0.3s ease,
+      transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .glass-hover:hover {
+    border-color: hsl(var(--primary) / 0.28);
+    box-shadow:
+      inset 0 1px 0 0 hsl(0 0% 100% / 0.07),
+      0 0 0 1px hsl(var(--primary) / 0.08),
+      0 18px 50px -20px hsl(var(--primary) / 0.45);
+  }
+
+  /* Bordure en dégradé (1px) via masque — pour les éléments « premium ». */
+  .border-gradient {
+    position: relative;
+    isolation: isolate;
+  }
+  .border-gradient::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    padding: 1px;
+    border-radius: inherit;
+    background: linear-gradient(
+      135deg,
+      hsl(var(--primary) / 0.7),
+      hsl(var(--brand) / 0.35) 40%,
+      hsl(0 0% 100% / 0.04) 70%,
+      hsl(var(--primary) / 0.4)
+    );
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  /* Bordure lumineuse qui tourne (faisceau) — badges « live ». */
+  .border-beam {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+  }
+  .border-beam::before {
+    content: "";
+    position: absolute;
+    inset: -150%;
+    background: conic-gradient(
+      from 0deg,
+      transparent 0deg,
+      hsl(var(--brand)) 40deg,
+      hsl(var(--primary)) 80deg,
+      transparent 120deg
+    );
+    animation: spin 4s linear infinite;
+    z-index: -2;
+  }
+  .border-beam::after {
+    content: "";
+    position: absolute;
+    inset: 1px;
+    border-radius: inherit;
+    background: hsl(var(--card));
+    z-index: -1;
+  }
+
+  /* Halo qui suit la souris (variables --mx/--my posées en JS). */
+  .spotlight {
+    position: relative;
+    isolation: isolate;
+  }
+  .spotlight::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+    background: radial-gradient(
+      420px circle at var(--mx, 50%) var(--my, 50%),
+      hsl(var(--primary) / 0.13),
+      transparent 45%
+    );
+    z-index: 1;
+  }
+  .spotlight:hover::after {
+    opacity: 1;
+  }
+
+  /* Reflet qui balaie l'élément au survol (posters, boutons premium). */
+  .shine {
+    position: relative;
+    overflow: hidden;
+  }
+  .shine::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -75%;
+    z-index: 2;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(
+      100deg,
+      transparent,
+      hsl(0 0% 100% / 0.18),
+      transparent
+    );
+    transform: skewX(-20deg);
+    pointer-events: none;
+    opacity: 0;
+  }
+  .shine:hover::before {
+    animation: shine-sweep 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Squelette de chargement avec reflet animé (remplace animate-pulse). */
+  .shimmer {
+    position: relative;
+    overflow: hidden;
+    background: hsl(var(--muted) / 0.55);
+  }
+  .shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      hsl(var(--primary) / 0.07),
+      hsl(0 0% 100% / 0.05),
+      transparent
+    );
+    animation: shimmer 1.6s infinite;
+  }
+
+  /* Pastille en verre pour chips / filtres. */
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-all;
+    background: hsl(var(--muted) / 0.5);
+    border: 1px solid hsl(0 0% 100% / 0.06);
+    color: hsl(var(--muted-foreground));
+  }
+  .chip:hover {
+    color: hsl(var(--foreground));
+    border-color: hsl(0 0% 100% / 0.12);
+  }
+  .chip[data-active="true"] {
+    color: hsl(var(--primary));
+    background: hsl(var(--primary) / 0.12);
+    border-color: hsl(var(--primary) / 0.35);
+    box-shadow: 0 0 20px -6px hsl(var(--primary) / 0.55);
+  }
+
+  /* Libellé de section (petites capitales espacées). */
+  .eyebrow {
+    @apply text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/70;
+  }
+
+  /* Touche clavier (raccourcis). */
+  .kbd {
+    @apply inline-flex h-5 min-w-5 items-center justify-center rounded-md px-1.5 font-mono text-[10px] font-medium text-muted-foreground;
+    background: hsl(var(--muted) / 0.8);
+    border: 1px solid hsl(0 0% 100% / 0.08);
+    box-shadow: inset 0 -1px 0 hsl(0 0% 0% / 0.4);
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   Utilitaires
+   ════════════════════════════════════════════════════════════════ */
 @layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Texte en dégradé de marque (bleu → cyan). */
+  .text-gradient {
+    background-image: linear-gradient(
+      110deg,
+      hsl(var(--primary)) 0%,
+      hsl(200 100% 75%) 45%,
+      hsl(var(--brand)) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Même dégradé, animé en boucle (titres héros). */
+  .text-gradient-animated {
+    background-image: linear-gradient(
+      110deg,
+      hsl(var(--primary)),
+      hsl(var(--brand)),
+      hsl(262 83% 75%),
+      hsl(var(--primary))
+    );
+    background-size: 300% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: gradient-x 8s ease infinite;
+  }
+
+  /* Halo lumineux autour d'un élément. */
+  .glow-primary {
+    box-shadow:
+      0 0 0 1px hsl(var(--primary) / 0.35),
+      0 0 28px -6px hsl(var(--primary) / 0.6);
+  }
+  .glow-brand {
+    box-shadow:
+      0 0 0 1px hsl(var(--brand) / 0.35),
+      0 0 28px -6px hsl(var(--brand) / 0.6);
+  }
+
+  /* Grille fine en fond, estompée sur les bords. */
+  .bg-grid {
+    background-image:
+      linear-gradient(hsl(0 0% 100% / 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(0 0% 100% / 0.035) 1px, transparent 1px);
+    background-size: 44px 44px;
+  }
+  .mask-radial {
+    -webkit-mask-image: radial-gradient(ellipse at center, #000 20%, transparent 75%);
+    mask-image: radial-gradient(ellipse at center, #000 20%, transparent 75%);
+  }
+  .mask-fade-x {
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent);
+  }
+  .mask-fade-b {
+    -webkit-mask-image: linear-gradient(180deg, #000 60%, transparent);
+    mask-image: linear-gradient(180deg, #000 60%, transparent);
+  }
+
+  /* Grain argentique très léger par-dessus le fond (anti « aplat numérique »). */
+  .bg-noise {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+  }
+
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+  /* Compat : ancienne classe utilisée par certaines pages. */
   .scrollbar-thin {
     scrollbar-width: thin;
-    scrollbar-color: hsl(var(--muted)) transparent;
   }
-  .scrollbar-thin::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+
+  .perspective {
+    perspective: 1000px;
   }
-  .scrollbar-thin::-webkit-scrollbar-track {
-    background: transparent;
+  .preserve-3d {
+    transform-style: preserve-3d;
   }
-  .scrollbar-thin::-webkit-scrollbar-thumb {
-    background-color: hsl(var(--muted));
-    border-radius: 3px;
+
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   Keyframes partagées (aussi déclarées dans tailwind.config pour les
+   classes animate-*)
+   ════════════════════════════════════════════════════════════════ */
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+@keyframes shine-sweep {
+  0% {
+    left: -75%;
+    opacity: 1;
+  }
+  100% {
+    left: 130%;
+    opacity: 1;
+  }
+}
+@keyframes gradient-x {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Accessibilité : on coupe les animations décoratives si l'OS le demande. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

@@ -15,7 +15,7 @@ import {
     Library,
     ChevronRight,
 } from "lucide-react";
-import { useRecommendations, TMDBItem } from "@/hooks/use-new-features";
+import { useRecommendations, TMDBItem } from "@/hooks/use-recommendations";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 

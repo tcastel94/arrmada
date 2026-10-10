@@ -15,7 +15,7 @@ import {
     Pause,
     Monitor,
 } from "lucide-react";
-import { useSystemOverview, useKodiSessions, DiskInfo, KodiSession } from "@/hooks/use-new-features";
+import { useSystemOverview, useKodiSessions, DiskInfo, KodiSession } from "@/hooks/use-system";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 

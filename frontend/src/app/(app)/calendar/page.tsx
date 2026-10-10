@@ -14,7 +14,7 @@ import {
     Clock,
     Eye,
 } from "lucide-react";
-import { useCalendar, CalendarEntry } from "@/hooks/use-new-features";
+import { useCalendar, CalendarEntry } from "@/hooks/use-calendar";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { useState, useMemo } from "react";

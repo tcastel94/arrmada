@@ -13,7 +13,7 @@ import {
     HardDrive,
     TrendingUp,
 } from "lucide-react";
-import { useQualityOverview } from "@/hooks/use-new-features";
+import { useQualityOverview } from "@/hooks/use-quality";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 
