@@ -5,6 +5,11 @@
  *  - MediaPosterCard : carte affiche (vue grille) basée sur PosterCard
  *  - MediaListRow    : ligne compacte (vue liste)
  *  - MediaStateBadges: badges ST FR / Vu partagés par les deux vues
+ *
+ * Films : la qualité brute (« Bluray-2160p ») est remplacée par 2-3 badges
+ * techniques courts (4K · DV · Atmos) quand Radarr fournit les infos du
+ * fichier ; sinon on garde le nom de qualité. Séries : pas de fichier
+ * unique → on garde le nom du profil qualité.
  */
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -17,6 +22,8 @@ import { fadeIn } from "@/lib/motion";
 import { MediaThumb } from "./media-thumb";
 import type { SubState, WatchState } from "./enrichment";
 import { translateGenre } from "@/lib/genres";
+import { MediaTechBadges, cardTechBadges } from "@/components/media/media-tech-badges";
+import { StudioNetworkLogo } from "@/components/media/studio-network-logo";
 
 /** Lien vers la fiche d'un média. */
 export const mediaHref = (item: Pick<MediaItem, "type" | "external_id">) => `/media/${item.type}/${item.external_id}`;
@@ -76,13 +83,33 @@ interface MediaViewProps {
     onToggleSelect?: () => void;
 }
 
+/** Badges techniques retenus pour l'affiche (films uniquement, max 3). */
+function techBadgesOf(item: MediaItem) {
+    return item.type === "movie" ? cardTechBadges(item) : [];
+}
+
 export function MediaPosterCard({ item, sub, watch, selectable, selected, onToggleSelect }: MediaViewProps) {
     const progress = episodeProgress(item);
     const quality = qualityLabel(item);
+    const isMovie = item.type === "movie";
+    const hasTech = techBadgesOf(item).length > 0;
     return (
         <PosterCard
             title={item.title}
-            subtitle={`${item.year ?? "—"} · ${item.type === "movie" ? "Film" : "Série"}`}
+            subtitle={
+                // Studio / chaîne en pastille discrète à droite, tronquée si le nom est long.
+                <span className="flex min-w-0 items-center justify-between gap-1.5">
+                    <span className="shrink-0">
+                        {item.year ?? "—"} · {isMovie ? "Film" : "Série"}
+                    </span>
+                    <StudioNetworkLogo
+                        name={isMovie ? item.studio : item.network}
+                        kind={isMovie ? "studio" : "network"}
+                        variant="mini"
+                        className="max-w-[60%]"
+                    />
+                </span>
+            }
             posterUrl={item.poster_url}
             type={item.type}
             href={mediaHref(item)}
@@ -90,7 +117,7 @@ export function MediaPosterCard({ item, sub, watch, selectable, selected, onTogg
             progress={progress}
             badges={
                 <>
-                    {quality && <PosterBadge>{quality}</PosterBadge>}
+                    {hasTech ? <MediaTechBadges specs={item} variant="card" /> : quality && <PosterBadge>{quality}</PosterBadge>}
                     <MediaStateBadges sub={sub} watch={watch} />
                 </>
             }
@@ -129,7 +156,7 @@ export function MediaListHeader({ selectable }: { selectable?: boolean }) {
             {selectable && <span className="w-5" />}
             <span className="w-10" />
             <span className="min-w-0 flex-1">Titre</span>
-            <span className="w-24">Qualité</span>
+            <span className="w-28">Qualité</span>
             <span className="w-20 text-right">Taille</span>
             <span className="w-16 text-center">ST FR</span>
             <span className="w-16 text-center">Vu</span>
@@ -141,6 +168,9 @@ export function MediaListHeader({ selectable }: { selectable?: boolean }) {
 export function MediaListRow({ item, sub, watch, selectable, selected, onToggleSelect }: MediaViewProps) {
     const progress = episodeProgress(item);
     const quality = qualityLabel(item);
+    const tech = techBadgesOf(item);
+    // Mobile (colonne Qualité masquée) : « 4K · DV · Atmos » en texte.
+    const qualityText = tech.length > 0 ? tech.map((b) => b.short).join(" · ") : quality;
     const TypeIcon = item.type === "series" ? Tv : Film;
 
     const content = (
@@ -168,7 +198,7 @@ export function MediaListRow({ item, sub, watch, selectable, selected, onToggleS
                     </span>
                     {item.genres.length > 0 && <span className="hidden truncate lg:inline">{item.genres.slice(0, 2).map(translateGenre).join(" · ")}</span>}
                     {/* Infos des colonnes, repliées sous le titre sur mobile */}
-                    {quality && <span className="md:hidden">{quality}</span>}
+                    {qualityText && <span className="md:hidden">{qualityText}</span>}
                     <span className="tabular-nums md:hidden">{item.size_bytes > 0 ? formatBytes(item.size_bytes) : ""}</span>
                     {sub && <span className={cn("md:hidden", sub === "present" ? "text-emerald-400" : "text-amber-400")}>ST FR {sub === "present" ? "✓" : "✗"}</span>}
                     {watch?.watched && <span className="text-violet-300 md:hidden">Vu</span>}
@@ -180,8 +210,10 @@ export function MediaListRow({ item, sub, watch, selectable, selected, onToggleS
                 )}
             </div>
 
-            <span className="hidden w-24 truncate text-xs md:block">
-                {quality ? (
+            <span className="hidden w-28 truncate text-xs md:block">
+                {tech.length > 0 ? (
+                    <MediaTechBadges specs={item} variant="card" max={2} className="flex-nowrap" />
+                ) : quality ? (
                     <span className="rounded-md bg-white/[0.05] px-1.5 py-0.5 ring-1 ring-white/[0.08]">{quality}</span>
                 ) : (
                     <span className="text-muted-foreground/50">—</span>

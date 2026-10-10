@@ -30,6 +30,22 @@ export interface MediaItem {
     rating: number | null;
     runtime: number | null;
     overview: string;
+    /*
+     * Infos techniques du fichier (films uniquement : une série n'a pas de
+     * « fichier » unique). Optionnelles : un backend plus ancien ne les
+     * renvoie pas. Radarr donne la résolution en nombre (2160) ou en texte.
+     */
+    resolution?: string | number | null;
+    video_codec?: string | null;
+    video_dynamic_range?: string | null;
+    audio_codec?: string | null;
+    audio_channels?: number | null;
+    /** Studio de production (films). */
+    studio?: string | null;
+    /** Chaîne / plateforme de diffusion (séries). */
+    network?: string | null;
+    /** Logo-titre transparent (ClearLogo) fourni par Radarr/Sonarr, s'il existe. */
+    clearlogo_url?: string | null;
     seasons?: number;
     episodes_total?: number;
     episodes_have?: number;
@@ -254,7 +270,12 @@ export interface MediaDetail {
     imdb_id?: string;
     tvdb_id?: number;
     ratings: MediaRatings;
-    images: { poster: string | null; fanart: string | null; banner: string | null };
+    /**
+     * `clearlogo` / `logo` : logo-titre transparent (même URL pour les deux
+     * côté backend ; `logo` est gardé pour compatibilité). Absents si
+     * Radarr/Sonarr n'en connaissent pas.
+     */
+    images: { poster: string | null; fanart: string | null; banner: string | null; logo?: string | null; clearlogo?: string | null };
     file?: FileInfo | null;
     seasons?: SeasonDetail[];
     season_count?: number;

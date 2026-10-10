@@ -16,6 +16,11 @@
  *    sous forme de chips supprimables.
  *  - Sélection multiple avec barre d'actions flottante ; suppression en
  *    parallèle avec bilan précis (succès / échecs) au lieu d'alert().
+ *  - « Filtres enregistrés » : un jeu de filtres (= paramètres d'URL) peut
+ *    être nommé, réappliqué en un clic ou supprimé (localStorage, voir
+ *    lib/media-filters). Inutile de mémoriser les filtres en session :
+ *    l'URL s'en charge déjà.
+ *  - Affiches : badges techniques (4K · DV · Atmos) et studio / chaîne.
  */
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -75,8 +80,8 @@ import { SegmentedControl } from "@/components/library/segmented-control";
 import { LiveCount } from "@/components/library/live-count";
 import { SmartPagination } from "@/components/library/smart-pagination";
 import { FloatingBar, SelectionCount } from "@/components/library/floating-bar";
-import { RemovableChip, SearchField, StickyToolbar } from "@/components/library/toolbar";
-import { FilterSelect, type FilterChoice } from "@/components/library/filter-select";
+import { FilterPresetsMenu, RemovableChip, SearchField, StickyToolbar } from "@/components/library/toolbar";
+import { FilterSelect } from "@/components/library/filter-select";
 import { useLibraryEnrichment } from "@/components/library/enrichment";
 import {
     MediaListHeader,
@@ -85,51 +90,41 @@ import {
     mediaKey,
 } from "@/components/library/media-card";
 import { translateGenre } from "@/lib/genres";
+import {
+    AVAIL_LABELS,
+    MEDIA_AVAILS,
+    MEDIA_MONITORS,
+    MEDIA_ORDERS,
+    MEDIA_SORTS,
+    MEDIA_SUBS,
+    MEDIA_TYPES,
+    MEDIA_WATCHES,
+    MONITOR_LABELS,
+    SORT_LABELS,
+    SUB_LABELS,
+    WATCH_LABELS,
+    choicesOf,
+    paramsFromSearch,
+    presetUpdates,
+    type FilterPreset,
+    type MediaSort,
+} from "@/lib/media-filters";
 
 /* ── Constantes ─────────────────────────────────────────────── */
 
 const PER_PAGE = 48;
 const GRID = "grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8";
 
-const TYPES = ["all", "movie", "series"] as const;
-const SORTS = ["title", "year", "added", "size_bytes"] as const;
-const ORDERS = ["asc", "desc"] as const;
+// Valeurs autorisées et libellés des filtres : partagés avec les « filtres
+// enregistrés » (lib/media-filters), pour qu'un préréglage parle le même langage.
 const VIEWS = ["grid", "list"] as const;
-const AVAILS = ["all", "available", "missing"] as const;
-const MONITORS = ["all", "yes", "no"] as const;
-const SUBS = ["all", "missing", "present"] as const;
-const WATCHES = ["all", "watched", "unwatched", "inprogress"] as const;
 
-type Sort = (typeof SORTS)[number];
+type Sort = MediaSort;
 
-const SORT_LABELS: Record<Sort, string> = {
-    title: "Titre",
-    year: "Année",
-    added: "Date d'ajout",
-    size_bytes: "Taille",
-};
-
-const AVAIL_CHOICES: FilterChoice<(typeof AVAILS)[number]>[] = [
-    { value: "all", label: "Tous" },
-    { value: "available", label: "Présents" },
-    { value: "missing", label: "Manquants" },
-];
-const MONITOR_CHOICES: FilterChoice<(typeof MONITORS)[number]>[] = [
-    { value: "all", label: "Tous" },
-    { value: "yes", label: "Surveillés" },
-    { value: "no", label: "Non surveillés" },
-];
-const SUB_CHOICES: FilterChoice<(typeof SUBS)[number]>[] = [
-    { value: "all", label: "Tous" },
-    { value: "missing", label: "Sans ST FR" },
-    { value: "present", label: "Avec ST FR" },
-];
-const WATCH_CHOICES: FilterChoice<(typeof WATCHES)[number]>[] = [
-    { value: "all", label: "Tous" },
-    { value: "watched", label: "Vus" },
-    { value: "unwatched", label: "Non vus" },
-    { value: "inprogress", label: "En cours" },
-];
+const AVAIL_CHOICES = choicesOf(MEDIA_AVAILS, AVAIL_LABELS);
+const MONITOR_CHOICES = choicesOf(MEDIA_MONITORS, MONITOR_LABELS);
+const SUB_CHOICES = choicesOf(MEDIA_SUBS, SUB_LABELS);
+const WATCH_CHOICES = choicesOf(MEDIA_WATCHES, WATCH_LABELS);
 
 /* ── Page ───────────────────────────────────────────────────── */
 
@@ -157,16 +152,16 @@ function MediaLibrary() {
     const params = useSearchParams();
 
     /* ── État lu dans l'URL ── */
-    const [type] = useParamState("type", "all", TYPES);
-    const [sort] = useParamState<Sort>("sort", "title", SORTS);
-    const [order] = useParamState("order", "asc", ORDERS);
+    const [type] = useParamState("type", "all", MEDIA_TYPES);
+    const [sort] = useParamState<Sort>("sort", "title", MEDIA_SORTS);
+    const [order] = useParamState("order", "asc", MEDIA_ORDERS);
     const [view, setView] = useParamState("view", "grid", VIEWS);
     const [genre] = useParamState<string>("genre", "all");
     const [quality] = useParamState<string>("quality", "all");
-    const [availability] = useParamState("avail", "all", AVAILS);
-    const [monitored] = useParamState("mon", "all", MONITORS);
-    const [subFilter] = useParamState("sub", "all", SUBS);
-    const [watchFilter] = useParamState("watch", "all", WATCHES);
+    const [availability] = useParamState("avail", "all", MEDIA_AVAILS);
+    const [monitored] = useParamState("mon", "all", MEDIA_MONITORS);
+    const [subFilter] = useParamState("sub", "all", MEDIA_SUBS);
+    const [watchFilter] = useParamState("watch", "all", MEDIA_WATCHES);
     const [page, setPage] = usePageParam();
 
     /**
@@ -254,22 +249,29 @@ function MediaLibrary() {
     const [showFilters, setShowFilters] = useState(false);
     const activeChips = useMemo(() => {
         const chips: { key: string; label: string; clear: () => void }[] = [];
-        if (genre !== "all") chips.push({ key: "genre", label: `Genre : ${genre}`, clear: () => setFilter("genre", "all") });
+        if (genre !== "all") chips.push({ key: "genre", label: `Genre : ${translateGenre(genre)}`, clear: () => setFilter("genre", "all") });
         if (quality !== "all") chips.push({ key: "quality", label: `Qualité : ${quality}`, clear: () => setFilter("quality", "all") });
-        if (availability !== "all")
-            chips.push({ key: "avail", label: availability === "missing" ? "Manquants" : "Présents", clear: () => setFilter("avail", "all") });
-        if (monitored !== "all")
-            chips.push({ key: "mon", label: monitored === "yes" ? "Surveillés" : "Non surveillés", clear: () => setFilter("mon", "all") });
-        if (subFilter !== "all")
-            chips.push({ key: "sub", label: subFilter === "missing" ? "Sans ST FR" : "Avec ST FR", clear: () => setFilter("sub", "all") });
-        if (watchFilter !== "all")
-            chips.push({
-                key: "watch",
-                label: WATCH_CHOICES.find((c) => c.value === watchFilter)?.label ?? watchFilter,
-                clear: () => setFilter("watch", "all"),
-            });
+        if (availability !== "all") chips.push({ key: "avail", label: AVAIL_LABELS[availability], clear: () => setFilter("avail", "all") });
+        if (monitored !== "all") chips.push({ key: "mon", label: MONITOR_LABELS[monitored], clear: () => setFilter("mon", "all") });
+        if (subFilter !== "all") chips.push({ key: "sub", label: SUB_LABELS[subFilter], clear: () => setFilter("sub", "all") });
+        if (watchFilter !== "all") chips.push({ key: "watch", label: WATCH_LABELS[watchFilter], clear: () => setFilter("watch", "all") });
         return chips;
     }, [genre, quality, availability, monitored, subFilter, watchFilter, setFilter]);
+
+    /* ── Filtres enregistrés ── */
+    // Instantané des filtres de l'URL (recherche comprise) : c'est ce qu'un
+    // préréglage enregistre, et ce qui permet de reconnaître celui qui est actif.
+    const currentParams = useMemo(() => paramsFromSearch(params), [params]);
+
+    /** Applique un préréglage : réécrit TOUTE l'URL de filtres et revient en page 1. */
+    const applyPreset = (preset: FilterPreset) => {
+        // Le champ de recherche suit l'URL (effet ci-dessus) ; on le cale tout
+        // de suite pour éviter qu'une frappe en attente ne réécrive l'ancien texte.
+        const q = preset.params.q ?? "";
+        setSearchInput(q);
+        lastSynced.current = q;
+        writeParams(presetUpdates(preset.params));
+    };
 
     const resetFilters = () =>
         writeParams({ genre: null, quality: null, avail: null, mon: null, sub: null, watch: null, page: null });
@@ -508,6 +510,7 @@ function MediaLibrary() {
                                 </motion.span>
                             )}
                         </Button>
+                        <FilterPresetsMenu current={currentParams} onApply={applyPreset} className="order-2 xl:order-3" />
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button variant="outline" size="icon" aria-label="Plus d'actions" className="order-3 xl:order-5">
@@ -561,7 +564,7 @@ function MediaLibrary() {
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {SORTS.map((s) => (
+                                        {MEDIA_SORTS.map((s) => (
                                             <SelectItem key={s} value={s}>
                                                 {SORT_LABELS[s]}
                                             </SelectItem>

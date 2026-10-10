@@ -6,15 +6,17 @@
  * - `HeroBackdrop` : l'image de fond (fanart) plein cadre, placée DERRIÈRE
  *   la barre du haut, avec parallaxe au défilement (l'image descend moins vite
  *   que la page), vignettage vers la couleur de fond et grain argentique.
- * - `MediaHero` : affiche inclinable avec halo coloré, grand titre, méta
- *   (année, durée, certification, statut traduit), genres, notes animées,
- *   synopsis repliable, barre d'actions et liens externes.
+ * - `MediaHero` : affiche inclinable avec halo coloré, grand titre (ou
+ *   ClearLogo, le logo-titre officiel, quand Radarr/Sonarr en ont un),
+ *   studio / chaîne et badges techniques du fichier (4K, HDR, Atmos…),
+ *   méta (année, durée, certification, statut traduit), genres, notes
+ *   animées, synopsis repliable, barre d'actions et liens externes.
  *
  * Performance : la parallaxe n'anime que `transform` et `opacity` (GPU),
  * et est neutralisée si l'utilisateur a demandé « réduire les animations ».
  */
 /* eslint-disable @next/next/no-img-element */
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
 import {
     Calendar,
@@ -30,7 +32,9 @@ import {
     ExternalLink,
     ChevronDown,
 } from "lucide-react";
-import type { MediaDetail } from "@/hooks/use-media";
+import type { FileInfo, MediaDetail, SeasonDetail } from "@/hooks/use-media";
+import { MediaTechBadges, parseTechSpecs } from "@/components/media/media-tech-badges";
+import { StudioNetworkLogo } from "@/components/media/studio-network-logo";
 import { TiltCard } from "@/components/fx/tilt-card";
 import { AnimatedNumber } from "@/components/fx/animated-number";
 import { RingGauge } from "@/components/fx/ring-gauge";
@@ -39,14 +43,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatBytes, formatDuration } from "@/lib/format";
 import { EASE_OUT, fadeUp, scaleIn, stagger } from "@/lib/motion";
 import { cn } from "@/lib/utils";
-import {
-    audioChannelsLabel,
-    hdrLabel,
-    resolutionLabel,
-    seriesStats,
-    statusInfo,
-    type StatusTone,
-} from "./labels";
+import { hdrLabel, resolutionLabel, seriesStats, statusInfo, type StatusTone } from "./labels";
 import { translateGenre } from "@/lib/genres";
 
 /* ════════════════════════════════════════════════════════════════
@@ -278,6 +275,79 @@ function Overview({ text }: { text: string }) {
     );
 }
 
+/** Classes du grand titre texte (aussi utilisé en repli du ClearLogo). */
+const TITLE_CLASS =
+    "text-balance bg-gradient-to-b from-white via-white to-white/65 bg-clip-text pb-1 text-3xl font-bold leading-[1.05] tracking-tight text-transparent drop-shadow-[0_4px_24px_rgb(0_0_0/0.6)] sm:text-4xl lg:text-5xl xl:text-6xl";
+
+/**
+ * Titre du média : le ClearLogo (logo-titre transparent) s'il existe, sinon
+ * le titre en texte.
+ * - Accessibilité : le <h1> garde le vrai titre en texte masqué (sr-only),
+ *   l'image est décorative (alt vide) → lu une seule fois.
+ * - Hauteur réservée pendant le chargement : pas de saut de mise en page.
+ * - Image introuvable / bloquée (onError) : repli immédiat sur le texte.
+ */
+function HeroTitle({ media }: { media: MediaDetail }) {
+    const logo = media.images?.clearlogo || media.images?.logo || null;
+    const [state, setState] = useState<"loading" | "ready" | "failed">("loading");
+    const imgRef = useRef<HTMLImageElement>(null);
+
+    // Nouvelle image : on repart de zéro. Si elle est déjà en cache, onLoad a
+    // pu partir avant l'hydratation → on vérifie `complete` nous-mêmes.
+    useEffect(() => {
+        setState("loading");
+        const img = imgRef.current;
+        if (img?.complete) setState(img.naturalWidth > 0 ? "ready" : "failed");
+    }, [logo]);
+
+    if (!logo || state === "failed") return <h1 className={TITLE_CLASS}>{media.title}</h1>;
+
+    return (
+        <h1 className="pb-1">
+            <span className="sr-only">{media.title}</span>
+            <span className="block h-16 sm:h-20 lg:h-28" aria-hidden>
+                <motion.img
+                    ref={imgRef}
+                    src={logo}
+                    alt=""
+                    onLoad={() => setState("ready")}
+                    onError={() => setState("failed")}
+                    initial={false}
+                    animate={state === "ready" ? { opacity: 1, y: 0, scale: 1 } : { opacity: 0, y: 10, scale: 0.97 }}
+                    transition={{ duration: 0.8, ease: EASE_OUT }}
+                    // object-contain + ancrage en bas à gauche : un logo très large
+                    // rétrécit dans la boîte au lieu de déborder.
+                    className="h-full w-auto max-w-full object-contain object-left-bottom drop-shadow-[0_6px_24px_rgb(0_0_0/0.75)]"
+                />
+            </span>
+        </h1>
+    );
+}
+
+/**
+ * Série : fichier « représentatif » pour les badges du hero = la signature
+ * technique (résolution + HDR + audio) la plus fréquente parmi les épisodes
+ * présents. Plus juste que le 1er épisode, souvent d'une autre release.
+ */
+function dominantEpisodeFile(seasons: SeasonDetail[] | undefined): FileInfo | null {
+    const groups = new Map<string, { file: FileInfo; count: number }>();
+    for (const season of seasons ?? []) {
+        for (const ep of season.episodes) {
+            const f = ep.file;
+            if (!f) continue;
+            const key = [resolutionLabel(f.resolution), hdrLabel(f) ?? "", f.audio_codec, f.audio_channels].join("|");
+            const g = groups.get(key);
+            if (g) g.count++;
+            else groups.set(key, { file: f, count: 1 });
+        }
+    }
+    const best = Array.from(groups.values()).reduce<{ file: FileInfo; count: number } | null>(
+        (acc, g) => (!acc || g.count > acc.count ? g : acc),
+        null,
+    );
+    return best?.file ?? null;
+}
+
 /* ════════════════════════════════════════════════════════════════
    Hero complet
    ════════════════════════════════════════════════════════════════ */
@@ -287,17 +357,18 @@ export function MediaHero({ media, actions }: { media: MediaDetail; actions?: Re
     const status = statusInfo(media.status, media.type);
     const statusStyle = status ? STATUS_TONE_STYLE[status.tone] : null;
     const stats = !isMovie ? seriesStats(media.seasons) : null;
-    const file = isMovie ? media.file : null;
     const regularSeasons = (media.seasons ?? []).filter((s) => s.season_number > 0).length;
     // Défensif : un payload partiel (service *arr dégradé) ne doit pas faire planter la fiche.
     const genres = media.genres ?? [];
 
-    // Points forts techniques du fichier (film) : 4K, HDR, audio.
-    const highlights = file
-        ? [resolutionLabel(file.resolution), hdrLabel(file), [file.audio_codec, audioChannelsLabel(file.audio_channels)].filter(Boolean).join(" ")].filter(
-              (v): v is string => !!v,
-          )
-        : [];
+    // Fichier principal pour les badges techniques : celui du film, ou
+    // l'épisode « type » d'une série (calcul sur toutes les saisons → mémoïsé).
+    const techFile = useMemo(
+        () => (isMovie ? media.file ?? null : dominantEpisodeFile(media.seasons)),
+        [isMovie, media.file, media.seasons],
+    );
+    const hasTech = parseTechSpecs(techFile).length > 0;
+    const studioName = isMovie ? media.studio : media.network;
 
     const ratings = media.ratings ?? {};
     const hasRatings = isMovie
@@ -334,16 +405,26 @@ export function MediaHero({ media, actions }: { media: MediaDetail; actions?: Re
                         <p className="eyebrow flex items-center gap-1.5 text-foreground/60">
                             {isMovie ? <Film className="h-3 w-3" aria-hidden /> : <Tv className="h-3 w-3" aria-hidden />}
                             {isMovie ? "Film" : "Série"}
-                            {(media.studio || media.network) && <span className="truncate normal-case tracking-normal">· {media.studio || media.network}</span>}
                         </p>
-                        <h1 className="text-balance bg-gradient-to-b from-white via-white to-white/65 bg-clip-text pb-1 text-3xl font-bold leading-[1.05] tracking-tight text-transparent drop-shadow-[0_4px_24px_rgb(0_0_0/0.6)] sm:text-4xl lg:text-5xl xl:text-6xl">
-                            {media.title}
-                        </h1>
+                        <HeroTitle key={media.id} media={media} />
                         {media.original_title && media.original_title !== media.title && (
                             <p className="text-sm italic text-muted-foreground">{media.original_title}</p>
                         )}
                     </div>
                 </motion.div>
+
+                {/* Studio / chaîne + badges techniques du fichier principal */}
+                {(studioName || hasTech) && (
+                    <motion.div
+                        variants={fadeUp}
+                        className="flex flex-wrap items-center gap-1.5"
+                        title={!isMovie && hasTech ? "Badges techniques : qualité la plus fréquente parmi les épisodes" : undefined}
+                    >
+                        <StudioNetworkLogo name={studioName} kind={isMovie ? "studio" : "network"} variant="hero" />
+                        {/* `contents` : les pastilles rejoignent la même rangée que le studio. */}
+                        <MediaTechBadges specs={techFile} variant="hero" className="contents" />
+                    </motion.div>
+                )}
 
                 {/* Méta : année · durée · certification · statut · surveillance · taille */}
                 <motion.div variants={fadeUp} className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground">
@@ -394,14 +475,9 @@ export function MediaHero({ media, actions }: { media: MediaDetail; actions?: Re
                     )}
                 </motion.div>
 
-                {/* Genres + points forts techniques */}
-                {(genres.length > 0 || highlights.length > 0 || (isMovie && !media.has_file)) && (
+                {/* Genres (+ alerte fichier manquant) */}
+                {(genres.length > 0 || (isMovie && !media.has_file)) && (
                     <motion.div variants={fadeUp} className="flex flex-wrap items-center gap-1.5">
-                        {highlights.map((h) => (
-                            <Badge key={h} variant="default" className="rounded-full px-2.5 shadow-[0_0_16px_-6px_hsl(var(--primary)/0.8)]">
-                                {h}
-                            </Badge>
-                        ))}
                         {isMovie && !media.has_file && (
                             <Badge variant="warning" className="rounded-full px-2.5">
                                 Fichier manquant
