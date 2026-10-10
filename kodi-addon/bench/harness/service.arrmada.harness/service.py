@@ -2,8 +2,9 @@
 """Harnais du banc de test : pilote Kodi comme une télécommande et prend des captures.
 
 Lancé automatiquement au démarrage de Kodi (add-on de type « service »), il
-rejoue un parcours fixe sur l'écran « Accueil » d'ArrMada, puis quitte Kodi.
-Variables d'environnement (posées par run.sh) : SHOT_DIR, MOCK_URL.
+rejoue un parcours complet sur l'appli ArrMada (Accueil, Fiche média,
+Téléchargements, Salon), puis quitte Kodi.
+Variables d'environnement (posées par run.sh) : SHOT_DIR, MOCK_URL, PACE, DEMO_VIDEO.
 """
 
 import os
@@ -15,14 +16,13 @@ import xbmcvfs
 MONITOR = xbmc.Monitor()
 OUT = os.environ.get("SHOT_DIR", "/tmp")
 MOCK = os.environ.get("MOCK_URL", "")
+DEMO_VIDEO = os.environ.get("DEMO_VIDEO", "")
+# PACE > 1 ralentit tout le parcours (vidéos de démonstration).
+PACE = float(os.environ.get("PACE", "1") or 1)
 
 
 def log(message):
     xbmc.log(f"[HARNESS] {message}", xbmc.LOGINFO)
-
-
-# PACE > 1 ralentit tout le parcours (vidéos de démonstration).
-PACE = float(os.environ.get("PACE", "1") or 1)
 
 
 def wait(seconds):
@@ -41,13 +41,17 @@ def press(action, times=1, pause=0.7):
         wait(pause)
 
 
-def open_home():
-    xbmc.executebuiltin("RunPlugin(plugin://script.arrmada/?action=home)")
+def focus():
+    return xbmc.getInfoLabel("System.CurrentControlID")
+
+
+def run_plugin(action):
+    xbmc.executebuiltin(f"RunPlugin(plugin://script.arrmada/?action={action})")
 
 
 wait(8)  # accueil de Kodi chargé
 
-# 1. Ouverture depuis le menu de l'add-on, comme à la télécommande
+# ── 1. Ouverture depuis le menu de l'add-on (intro), accueil ────────────────
 xbmc.executebuiltin("ActivateWindow(Videos,plugin://script.arrmada/,return)")
 wait(4.0)
 shot("00-menu-addon")
@@ -55,75 +59,143 @@ for _ in range(3):  # 1er élément = « .. » si Kodi affiche le dossier parent
     if "Accueil ArrMada" in xbmc.getInfoLabel("ListItem.Label"):
         break
     press("Down", 1, 0.5)
-log(f"entrée sélectionnée : {xbmc.getInfoLabel('ListItem.Label')}")
 press("Select", 1, 0.1)
 wait(0.6)
-shot("01a-intro-logo")  # intro : le logo se construit
+shot("01a-intro-logo")
 wait(0.2)
-shot("01b-intro-nom")  # intro : le nom et l'accroche montent
+shot("01b-intro-nom")
 wait(5)
 shot("02-accueil")
 
-# 2. Focus et navigation
+# ── 2. Rangée : focus, appui long, touche Lecture ──────────────────────────
 press("Right", 3)
-wait(1.5)
+wait(1.2)
 shot("03-focus-affiche")
-press("Right", 7, 0.5)
-wait(1.5)
-shot("04-sans-affiche")
-
-# 2 bis. Télécommande : appui long sur OK (= menu contextuel) et touche Lecture
 press("ContextMenu")
 wait(1.2)
-shot("04b-actions-rapides")
+shot("03b-actions-rapides")
 press("Back")
 press("PlayPause")
 wait(1.2)
-shot("04c-lecture-hors-mediatheque")  # titre absent de la médiathèque Kodi du banc
+shot("03c-lecture-hors-mediatheque")
 wait(2.5)
 
+# ── 3. Fiche média : film (Monte-Cristo), puis série (Severance) ───────────
+press("Select")  # OK sur l'affiche → fiche
+wait(0.8)
+shot("04a-fiche-ouverture")
+wait(3.0)
+shot("04b-fiche-film")
+press("Down")
+press("Right", 2)
+wait(1.0)
+shot("04c-fiche-casting")
 press("Up")
-wait(1.0)
-shot("05-boutons")
-press("Right", 2)  # Rechercher → Actualiser → Diagnostic
-press("Select")
-wait(2.0)
-shot("06-diagnostic")
-press("Back")
-wait(1.0)
-shot("07-retour")
-press("Left", 2)  # → Rechercher
+press("Right")  # Lire → Bande-annonce
 press("Select")
 wait(1.5)
-shot("07b-recherche-clavier")
+shot("04d-bande-annonce-sans-youtube")
+press("Back")  # retour à l'accueil
+wait(1.5)
+press("Right")  # Severance (série)
+press("Select")
+wait(3.5)
+shot("04e-fiche-serie")
+press("Down")
+press("Right")
+wait(1.0)
+shot("04f-fiche-saisons")
+press("Back")
+wait(1.5)
+
+# ── 4. Téléchargements (bouton du bandeau) ─────────────────────────────────
+press("Up")  # → Rechercher
+press("Right")  # → Téléchargements
+press("Select")
+wait(3.0)
+shot("05a-telechargements")
+wait(6.0)  # 2e passage : débit estimé
+press("Down", 4, 0.5)
+wait(1.0)
+shot("05b-telechargements-debit")
+press("Up", 6, 0.4)  # → boutons du haut
+press("Select")  # Tout mettre en pause
+wait(3.0)
+shot("05c-telechargements-pause")
+press("Right")
+press("Select")  # Tout reprendre
+wait(2.0)
+press("Back")
+wait(1.5)
+
+# ── 5. Salon (bouton du bandeau), sans lecture ─────────────────────────────
+log(f"focus avant Salon = {focus()}")
+press("Right")  # Téléchargements → Salon
+press("Select")
+wait(3.0)
+shot("06a-salon")
+press("Select", 3, 0.8)  # Vol + ×3
+wait(3.5)
+shot("06b-salon-volume")
+press("Down")  # préréglages
+press("Select")  # Salon
+wait(3.5)
+shot("06c-salon-prereglage")
+press("Back")
+wait(1.5)
+
+# ── 6. Diagnostic puis fermeture ───────────────────────────────────────────
+press("Right", 3)  # Salon → Actualiser → Diagnostic
+press("Select")
+wait(2.0)
+shot("07-diagnostic")
 press("Back")
 wait(1.0)
-press("Back")
+press("Back")  # ferme l'accueil
 wait(2.0)
 
-# 3. Réouverture : affichage immédiat depuis le cache
-open_home()
+# ── 7. Réouverture (cache), panne serveur ──────────────────────────────────
+run_plugin("home")
 wait(1.2)
 shot("08-reouverture-cache")
 
-# 4. Panne du serveur pendant l'affichage
+# ── 8. Lecture d'une vidéo + écran Salon par-dessus ────────────────────────
+if DEMO_VIDEO and os.path.exists(DEMO_VIDEO):
+    press("Back")
+    wait(1.5)
+    xbmc.Player().play(DEMO_VIDEO)
+    wait(4.0)
+    run_plugin("salon")
+    wait(3.0)
+    shot("09a-salon-lecture")
+    press("Select")  # Lecture / Pause
+    wait(1.5)
+    shot("09b-salon-pause")
+    press("Back")
+    wait(1.0)
+    xbmc.executebuiltin("PlayerControl(Stop)")
+    wait(2.0)
+    run_plugin("home")
+    wait(1.5)
+
 urllib.request.urlopen(f"{MOCK}/__down").read()
 press("Up")
-press("Right")  # Rechercher → Actualiser
+press("Right", 3)  # Rechercher → … → Actualiser
+log(f"focus avant Actualiser = {focus()}")
 press("Select")
 wait(4.0)
-shot("09-hors-ligne")
+shot("10-hors-ligne")
 press("Back")
 wait(1.5)
 
-# 5. Panne du serveur ET aucun cache (première ouverture hors ligne)
+# ── 9. Panne ET aucun cache ────────────────────────────────────────────────
 cache = xbmcvfs.translatePath("special://profile/addon_data/script.arrmada/cache/home.json")
 if os.path.exists(cache):
     os.remove(cache)
-open_home()
+run_plugin("home")
 wait(4.0)
-shot("10-hors-ligne-sans-cache")
-log(f"focus = {xbmc.getInfoLabel('System.CurrentControlID')} (attendu : 401, Actualiser)")
+shot("11-hors-ligne-sans-cache")
+log(f"focus = {focus()} (attendu : 401, Actualiser)")
 press("Back")
 wait(1.5)
 

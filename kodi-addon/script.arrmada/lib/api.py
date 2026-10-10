@@ -203,7 +203,48 @@ class ArrMadaAPI:
         res = cls._request("/api/kodi/widgets/recent", method="GET", timeout=15)
         return res if isinstance(res, list) else []
 
+    @classmethod
+    def get_recent_media_or_none(cls):
+        """Comme get_recent_media, mais None en cas d'erreur (≠ liste vide) :
+        l'Accueil ne doit pas vider sa rangée sur une panne passagère."""
+        res = cls._request("/api/kodi/widgets/recent", method="GET", timeout=15)
+        return res if isinstance(res, list) else None
 
 
+    # ── Écrans de la phase 2 (fiche, téléchargements, Salon) ───
+    @classmethod
+    def get_media_detail(cls, kind: str, arr_id) -> dict:
+        """Fiche complète d'un film (Radarr) ou d'une série (Sonarr), + Bazarr."""
+        path_kind = "movie" if kind == "movie" else "series"
+        return cls._request(f"/api/media/{path_kind}/{arr_id}", method="GET", timeout=20)
 
+    @classmethod
+    def get_downloads(cls) -> list:
+        """File de téléchargement complète (Radarr + Sonarr)."""
+        res = cls._request("/api/downloads", method="GET", timeout=15)
+        return res.get("items", []) if isinstance(res, dict) else []
 
+    @classmethod
+    def yamaha_state(cls) -> dict:
+        """État de l'ampli : marche, volume, entrée, programme sonore."""
+        return cls._request("/api/yamaha/state", method="GET", timeout=8)
+
+    @classmethod
+    def yamaha_profiles(cls) -> dict:
+        """Préréglages des pièces (Salon / Salle de cinéma)."""
+        return cls._request("/api/yamaha/profiles", method="GET", timeout=8)
+
+    @classmethod
+    def yamaha_control(cls, action: str, value=None) -> dict:
+        """Commande de l'ampli : volume_step, mute, power…"""
+        return cls._request("/api/yamaha/control", method="POST", data={"action": action, "value": value}, timeout=8)
+
+    @classmethod
+    def yamaha_apply_preset(cls, room: str, media_type: str = "movie", audio_codec=None, audio_channels=None) -> dict:
+        """Applique le préréglage audio de la pièce (avant de lancer un film)."""
+        payload = {"room": room, "media_type": media_type}
+        if audio_codec:
+            payload["audio_codec"] = audio_codec
+        if audio_channels:
+            payload["audio_channels"] = audio_channels
+        return cls._request("/api/yamaha/preset/apply", method="POST", data=payload, timeout=12)

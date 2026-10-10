@@ -184,16 +184,42 @@ pièce. Le choix d'une autre pièce reste possible dans un menu secondaire.
 | Phase | Livrables | Critère de fin |
 |---|---|---|
 | **0. Prototype** (quelques jours) | Une fenêtre WindowXML minimale sous SiLVO / Kodi 21 / Shield : polices, focus, animations, performances | Captures validées sur la Shield |
+| **1. Fondations** | Appairage, cache + service, dépôt de mises à jour, navigation native, widgets SiLVO, CI de l'add-on | Appli utilisable au quotidien, aucun gel de l'interface, mise à jour automatique |
+| **2. Écrans waouh** | Accueil, Fiche média, Téléchargements, Salon | Parcours complet « découvrir → ajouter → suivre → lire » sans quitter Kodi |
+| **3. Finitions** | Notifications temps réel enrichies, QR codes vers la web app, raccourcis, nettoyage de l'ancien `X-Api-Key` | Ancien mode d'authentification supprimé |
 
 > **Avancement (10/10/2026)** — Phase 0 livrée dans l'add-on 1.4.0 : écran
 > « Accueil » (`action=home`) avec panneau Diagnostic. Déjà validé sur un banc
 > Kodi 20 sous écran virtuel avec les polices de SiLVO 10.0.4. Polices
 > retenues : celles communes à tous les jeux de polices de SiLVO. Glyphes
 > `→ ★ ✓ ▶` absents de la police, donc proscrits. Il reste les captures sur la
-> Shield (voir `kodi-addon/README.md`, « Valider le prototype »).
-| **1. Fondations** | Appairage, cache + service, dépôt de mises à jour, navigation native, widgets SiLVO, CI de l'add-on | Appli utilisable au quotidien, aucun gel de l'interface, mise à jour automatique |
-| **2. Écrans waouh** | Accueil, Fiche média, Téléchargements, Salon | Parcours complet « découvrir → ajouter → suivre → lire » sans quitter Kodi |
-| **3. Finitions** | Notifications temps réel enrichies, QR codes vers la web app, raccourcis, nettoyage de l'ancien `X-Api-Key` | Ancien mode d'authentification supprimé |
+> Shield (voir `kodi-addon/README.md`, « Valider sur la Shield »).
+
+> **Avancement phase 2 (10/10/2026)** — Livrée dans l'add-on 1.5.0, avant la
+> phase 1 (les écrans ne dépendent pas de l'appairage) :
+> - **Fiche média** (`detail_window.py`) : fanart, ClearLogo, notes, badges,
+>   synopsis, casting (films) ou saisons (séries), fichier et sous-titres.
+>   Actions *Lire* (médiathèque Kodi + préréglage Yamaha de la pièce),
+>   *Bande-annonce* (YouTube), *Meilleure version*, *Sous-titres*.
+> - **Téléchargements** (`downloads_window.py`, `action=queue`) : progression,
+>   débit estimé, temps restant, statuts, rafraîchi toutes les 5 s sans
+>   clignotement ; *Tout mettre en pause* / *Tout reprendre*.
+> - **Salon** (`salon_window.py`, `action=salon`) : lecture en cours
+>   (infos de Kodi, valables hors ligne), ampli Yamaha (volume, muet,
+>   marche/veille), préréglages *Salon* / *Salle de cinéma*.
+> - Validé sur le banc Kodi 20 (25 captures, vidéo). Reste la validation sur
+>   la Shield.
+>
+> Écarts connus, à traiter plus tard :
+> - **Pause/reprise globales** : l'API `/api/kodi/downloads/…/pause|resume`
+>   met en pause **tout SABnzbd**, pas un élément. L'écran le dit
+>   honnêtement (boutons « Tout… »). Pause par élément = évolution backend
+>   (API `queue` de SABnzbd avec le `nzo_id`).
+> - **Bande-annonce absente** : message seulement ; le QR code vers le
+>   téléphone arrivera avec les QR codes de la phase 3.
+> - L'ancien menu **[TELECHARG.]** du plugin permet encore de supprimer un
+>   téléchargement depuis la TV (contraire à la décision 1) : à retirer avec
+>   le nettoyage de la phase 3, ou dès l'appairage (phase 1) côté backend.
 
 ## Conséquences
 

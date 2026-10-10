@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Écran « Accueil » de l'appli Kodi ArrMada (prototype phase 0, ADR-003).
+"""Écran « Accueil » de l'appli Kodi ArrMada (ADR-003, phases 0 et 2).
 
 Fenêtre sur mesure (WindowXML) : la mise en page vit dans
 resources/skins/Default/1080i/script-arrmada-home.xml, ce module ne fait que
@@ -13,35 +13,29 @@ Règle d'or (ADR-003 § 1) : AUCUN appel réseau dans le fil de l'interface.
   Analogie infra : l'écran lit un « miroir local », un démon le resynchronise.
 
 Les temps mesurés (ouverture, réseau, rendu) sont affichés dans le panneau
-« Diagnostic » et écrits dans kodi.log (préfixe [ArrMada]) : c'est le critère
-« performances » de la phase 0.
+« Diagnostic » et écrits dans kodi.log (préfixe [ArrMada]).
 
 Télécommande (Shield et toute télécommande Android TV) :
-  OK                 fiche du titre (phase 2 : message en attendant)
-  OK maintenu / Menu actions rapides : lire, chercher une meilleure version
+  OK                 fiche du titre (écran « Fiche média »)
+  OK maintenu / Menu actions rapides : lire, fiche, chercher une meilleure version
                      (Kodi traduit l'appui long sur OK en « menu contextuel »)
   Lecture/Pause      lit le film (ou ouvre la série) dans la médiathèque Kodi
-  Rechercher         clavier Kodi ; sur Android, son micro permet de dicter
+  Bandeau            Rechercher, Téléchargements, Salon, Actualiser, Diagnostic
 """
 
 from __future__ import annotations
 
-import json
-import os
 import threading
 import time
-import urllib.parse
 from datetime import datetime, timezone
 
 import xbmc
-import xbmcaddon
 import xbmcgui
-import xbmcvfs
 
 import home_data
+import ui_common as ui
 from api import ArrMadaAPI
 
-ADDON = xbmcaddon.Addon("script.arrmada")
 XML_FILE = "script-arrmada-home.xml"
 
 # Identifiants des contrôles : DOIVENT correspondre au XML.
@@ -52,56 +46,24 @@ BUTTONS = 400  # boutons du bandeau (groupe)
 BTN_REFRESH = 401
 BTN_DIAG = 402
 BTN_SEARCH = 403
+BTN_DOWNLOADS = 404
+BTN_SALON = 405
 DIAG_CLOSE = 901
 DL_PROGRESS = (211, 221, 231)  # barres des 3 emplacements de téléchargement
 STORAGE_PROGRESS = 251
+FOCUSABLE = (RAIL, BTN_SEARCH, BTN_DOWNLOADS, BTN_SALON, BTN_REFRESH, BTN_DIAG, DIAG_CLOSE)
 
 REFRESH_SECONDS = 20  # le backend met déjà le tableau de bord en cache 15 s
 ANIM_FRAMES = 22  # compteurs et barres : 22 images × 33 ms ≈ 0,7 s
+ANIM_FRAME_MS = 33
 INTRO_SECONDS = 2.4  # durée de l'intro (logo qui se construit), cf. XML
 # Propriété globale (fenêtre Home de Kodi, id 10000) : l'intro ne se joue
 # qu'une fois par session Kodi ; les ouvertures suivantes vont droit au but.
 INTRO_SEEN = "ArrMada.IntroSeen"
-ANIM_FRAME_MS = 33
-BACK_ACTIONS = (xbmcgui.ACTION_NAV_BACK, xbmcgui.ACTION_PREVIOUS_MENU)
-# « Menu contextuel » : appui long sur OK (Android TV) ou touche Menu.
-MENU_ACTIONS = (xbmcgui.ACTION_CONTEXT_MENU,)
-# Touche Lecture/Pause de la télécommande (selon le modèle : lecture seule,
-# pause seule, ou les deux sur la même touche).
-PLAY_ACTIONS = (xbmcgui.ACTION_PLAYER_PLAY, xbmcgui.ACTION_PLAYER_PLAYPAUSE, xbmcgui.ACTION_PAUSE)
 
 
 def _log(message: str, level: int = xbmc.LOGINFO) -> None:
-    xbmc.log(f"[ArrMada] Accueil : {message}", level=level)
-
-
-def _ms(since: float) -> int:
-    return round((time.perf_counter() - since) * 1000)
-
-
-def _fmt_ms(value: int) -> str:
-    return f"{value} ms" if value else "< 1 ms"
-
-
-def _notify(title: str, message: str, ms: int = 3500) -> None:
-    xbmcgui.Dialog().notification(title, message, ADDON.getAddonInfo("icon"), ms)
-
-
-def _jsonrpc(method: str, params: dict) -> dict:
-    """Appel JSON-RPC local à Kodi (médiathèque, lecteur) ; {} en cas d'erreur."""
-    request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
-    try:
-        response = json.loads(xbmc.executeJSONRPC(json.dumps(request)))
-    except ValueError:
-        return {}
-    if "error" in response:
-        _log(f"JSON-RPC {method} refusé : {response['error']}", xbmc.LOGWARNING)
-    return response.get("result") or {}
-
-
-def _cache_dir() -> str:
-    """special://profile/addon_data/script.arrmada/cache/ en chemin réel."""
-    return os.path.join(xbmcvfs.translatePath(ADDON.getAddonInfo("profile")), "cache")
+    ui.log("Accueil", message, level)
 
 
 class HomeWindow(xbmcgui.WindowXML):
@@ -125,14 +87,14 @@ class HomeWindow(xbmcgui.WindowXML):
     # ── Cycle de vie ────────────────────────────────────────────────────────
 
     def onInit(self):
-        # onInit est rappelé quand on revient d'une autre fenêtre : ne pas
-        # tout refaire (ni relancer un second fil).
+        # onInit est rappelé quand on revient d'une autre fenêtre (fiche,
+        # lecture…) : ne pas tout refaire (ni relancer un second fil).
         if self._initialized:
             return
         self._initialized = True
 
-        self.setProperty("icon", ADDON.getAddonInfo("icon"))
-        self.setProperty("version", ADDON.getAddonInfo("version"))
+        self.setProperty("icon", ui.ADDON.getAddonInfo("icon"))
+        self.setProperty("version", ui.ADDON.getAddonInfo("version"))
         self.setProperty("skin", xbmc.getSkinDir())
         self.setProperty("server_url", ArrMadaAPI.get_config()["url"])
         self.setProperty("greeting", home_data.greeting(datetime.now().hour))
@@ -143,15 +105,15 @@ class HomeWindow(xbmcgui.WindowXML):
             self._intro_running = True
             threading.Thread(target=self._intro, name="arrmada-intro", daemon=True).start()
 
-        cached = home_data.load_cache(_cache_dir())
+        cached = home_data.load_cache(ui.cache_dir())
         if cached:
             started = time.perf_counter()
             self._render(cached, source="cache")
-            self.setProperty("perf_cache", _fmt_ms(_ms(started)))
+            self.setProperty("perf_cache", ui.fmt_ms(ui.ms_since(started)))
         else:
             self.setProperty("perf_cache", "aucun cache (1re ouverture)")
-        open_ms = _ms(self._opened_at)
-        self.setProperty("perf_open", _fmt_ms(open_ms))
+        open_ms = ui.ms_since(self._opened_at)
+        self.setProperty("perf_open", ui.fmt_ms(open_ms))
         _log(f"ouverture en {open_ms} ms ({'cache' if cached else 'sans cache'})")
 
         threading.Thread(target=self._loop, name="arrmada-home", daemon=True).start()
@@ -196,13 +158,18 @@ class HomeWindow(xbmcgui.WindowXML):
             self.setProperty("loading", "1")
             started = time.perf_counter()
             dashboard = ArrMadaAPI.get_dashboard()
-            recent = ArrMadaAPI.get_recent_media()
-            net_ms = _ms(started)
+            recent = ArrMadaAPI.get_recent_media_or_none()
+            net_ms = ui.ms_since(started)
             if self._stop.is_set():
                 return
 
-            if not isinstance(dashboard, dict) or dashboard.get("status") == "error":
+            # Les DEUX appels doivent réussir pour remplacer l'affichage (et le
+            # cache) : sinon une panne entre les deux viderait la rangée.
+            failed = not isinstance(dashboard, dict) or dashboard.get("status") == "error"
+            if failed or recent is None:
                 message = dashboard.get("message") if isinstance(dashboard, dict) else ""
+                if not failed:
+                    message = "ajouts récents indisponibles"
                 self.setProperty("error", message or "Serveur ArrMada injoignable")
                 # Âge des données encore affichées (cache), recalculé à chaque essai.
                 self.setProperty(
@@ -221,20 +188,23 @@ class HomeWindow(xbmcgui.WindowXML):
             model = home_data.build_model(dashboard, recent, datetime.now(timezone.utc))
             started = time.perf_counter()
             self._render(model, source="serveur")
-            render_ms = _ms(started)
-            self.setProperty("perf_net", _fmt_ms(net_ms))
-            self.setProperty("perf_render", _fmt_ms(render_ms))
+            render_ms = ui.ms_since(started)
+            self.setProperty("perf_net", ui.fmt_ms(net_ms))
+            self.setProperty("perf_render", ui.fmt_ms(render_ms))
             _log(f"réseau {net_ms} ms, rendu {render_ms} ms, {len(model['recent'])} affiches")
 
             try:
-                home_data.save_cache(_cache_dir(), model)
+                home_data.save_cache(ui.cache_dir(), model)
             except OSError as exc:
                 _log(f"cache non écrit : {exc}", xbmc.LOGWARNING)
         except RuntimeError as exc:
             # Fenêtre fermée pendant la mise à jour : rien à faire.
             _log(f"rafraîchissement interrompu : {exc}", xbmc.LOGDEBUG)
         finally:
-            self.clearProperty("loading")
+            try:
+                self.clearProperty("loading")
+            except RuntimeError:
+                pass
             self._busy.release()
 
     # ── Affichage ───────────────────────────────────────────────────────────
@@ -417,7 +387,7 @@ class HomeWindow(xbmcgui.WindowXML):
             focused = self.getFocusId()
         except RuntimeError:
             focused = 0
-        if focused not in (RAIL, BTN_SEARCH, BTN_REFRESH, BTN_DIAG, DIAG_CLOSE):
+        if focused not in FOCUSABLE:
             self.setFocusId(target)
 
     # ── Télécommande ────────────────────────────────────────────────────────
@@ -427,7 +397,7 @@ class HomeWindow(xbmcgui.WindowXML):
             self._end_intro()  # n'importe quelle touche passe l'intro
             return
         action_id = action.getId()
-        if action_id in BACK_ACTIONS:
+        if action_id in ui.BACK_ACTIONS:
             if self.getProperty("diag"):
                 self._show_diag(False)
             else:
@@ -437,20 +407,26 @@ class HomeWindow(xbmcgui.WindowXML):
             on_rail = self.getFocusId() == RAIL and not self.getProperty("diag")
         except RuntimeError:
             on_rail = False
-        if on_rail and action_id in MENU_ACTIONS:
+        if on_rail and action_id in ui.MENU_ACTIONS:
             self._quick_actions()
-        elif on_rail and action_id in PLAY_ACTIONS:
-            self._play_selected()
+        elif on_rail and action_id in ui.PLAY_ACTIONS:
+            entry = self._selected()
+            if entry:
+                ui.play_entry(entry)
 
     def onClick(self, controlId):
         if controlId == RAIL:
-            item = self.getControl(RAIL).getSelectedItem()
-            title = item.getLabel() if item else "ArrMada"
-            xbmcgui.Dialog().notification(
-                title, "Fiche média : arrive en phase 2", ADDON.getAddonInfo("icon"), 2500
-            )
+            self._open_detail()
         elif controlId == BTN_SEARCH:
-            self._search()
+            ui.open_search()
+        elif controlId == BTN_DOWNLOADS:
+            import downloads_window  # import à la demande : ouverture de l'accueil plus rapide
+
+            downloads_window.open_downloads()
+        elif controlId == BTN_SALON:
+            import salon_window
+
+            salon_window.open_salon()
         elif controlId == BTN_REFRESH:
             threading.Thread(target=self._refresh, name="arrmada-refresh", daemon=True).start()
         elif controlId == BTN_DIAG:
@@ -458,20 +434,35 @@ class HomeWindow(xbmcgui.WindowXML):
         elif controlId == DIAG_CLOSE:
             self._show_diag(False)
 
-    # ── Actions de la télécommande ─────────────────────────────────────────
+    # ── Actions sur l'affiche sélectionnée ─────────────────────────────────
 
     def _selected(self) -> dict | None:
-        """Titre, année et identifiants de l'affiche sélectionnée."""
+        """Titre, année, identifiants et visuels de l'affiche sélectionnée."""
         item = self.getControl(RAIL).getSelectedItem()
         if not item:
             return None
+        kind_prefix, _, arr_id = item.getProperty("arrmada_id").partition(":")
         return {
             "title": item.getLabel(),
             "year": item.getVideoInfoTag().getYear(),
             "kind": item.getProperty("kind") or "movie",
+            "arr_id": arr_id,
             "tmdb_id": item.getProperty("tmdb_id"),
             "tvdb_id": item.getProperty("tvdb_id"),
+            "poster": item.getArt("poster"),
+            "fanart": item.getArt("fanart"),
+            "clearlogo": item.getArt("clearlogo"),
+            "plot": item.getVideoInfoTag().getPlot(),
+            "meta": item.getProperty("meta"),
         }
+
+    def _open_detail(self) -> None:
+        entry = self._selected()
+        if not entry or not entry["arr_id"]:
+            return
+        import detail_window  # import à la demande : ouverture de l'accueil plus rapide
+
+        detail_window.open_detail(entry)
 
     def _quick_actions(self) -> None:
         """Appui long sur OK : petit menu d'actions (aucune action destructrice, ADR-003)."""
@@ -481,103 +472,29 @@ class HomeWindow(xbmcgui.WindowXML):
         is_movie = entry["kind"] == "movie"
         choices = [
             ("play", "Lire" if is_movie else "Ouvrir dans la médiathèque Kodi"),
+            ("details", "Fiche détaillée"),
             ("search", "Chercher une meilleure version"),
-            ("details", "Fiche détaillée (bientôt)"),
         ]
         index = xbmcgui.Dialog().contextmenu([label for _, label in choices])
         if index < 0:
             return
         action = choices[index][0]
         if action == "play":
-            self._play_selected()
-        elif action == "search":
-            threading.Thread(target=self._search_release, args=(entry,), daemon=True).start()
+            ui.play_entry(entry)
+        elif action == "details":
+            self._open_detail()
         else:
-            _notify(entry["title"], "Fiche média : arrive en phase 2")
-
-    def _play_selected(self) -> None:
-        """Lit le film (ou ouvre la série) depuis la médiathèque Kodi de cet appareil."""
-        entry = self._selected()
-        if not entry:
-            return
-        if entry["kind"] == "movie":
-            method, key, unique, unique_value = (
-                "VideoLibrary.GetMovies",
-                "movieid",
-                "tmdb",
-                entry["tmdb_id"],
-            )
-            list_key = "movies"
-        else:
-            method, key, unique, unique_value = (
-                "VideoLibrary.GetTVShows",
-                "tvshowid",
-                "tvdb",
-                entry["tvdb_id"],
-            )
-            list_key = "tvshows"
-        result = _jsonrpc(
-            method,
-            {
-                "filter": home_data.library_filter(entry["title"], entry["year"]),
-                "properties": ["title", "year", "uniqueid"],
-            },
-        )
-        found = home_data.pick_library_match(
-            result.get(list_key) or [], entry["title"], entry["year"], key, unique, unique_value
-        )
-        if found is None:
-            _notify(entry["title"], "Pas (encore) dans la médiathèque Kodi de cet appareil")
-            return
-        if entry["kind"] == "movie":
-            _jsonrpc("Player.Open", {"item": {"movieid": found}, "options": {"resume": True}})
-        else:
-            xbmc.executebuiltin(f"ActivateWindow(Videos,videodb://tvshows/titles/{found}/,return)")
-
-    def _search_release(self, entry: dict) -> None:
-        """Demande à Radarr/Sonarr de chercher une meilleure version (fil d'arrière-plan)."""
-        _notify(entry["title"], "Recherche d'une meilleure version…", 2500)
-        payload = {
-            "title": entry["title"],
-            "media_type": "movie" if entry["kind"] == "movie" else "series",
-        }
-        if entry["tmdb_id"]:
-            payload["tmdb_id"] = entry["tmdb_id"]
-        if entry["tvdb_id"]:
-            payload["tvdb_id"] = entry["tvdb_id"]
-        result = ArrMadaAPI.trigger_search(payload)
-        ok = result.get("status") == "ok"
-        _notify(
-            entry["title"],
-            result.get("message") or ("Recherche lancée" if ok else "Échec de la recherche"),
-        )
-
-    def _search(self) -> None:
-        """Recherche : clavier de Kodi (sur Android, son bouton micro permet de dicter)."""
-        query = xbmcgui.Dialog().input("ArrMada : rechercher un film ou une série")
-        if query:
-            url = f"plugin://script.arrmada/?action=search_results&q={urllib.parse.quote(query)}"
-            xbmc.executebuiltin(f"ActivateWindow(Videos,{url},return)")
+            ui.run_in_background(ui.search_release, entry)
 
     def _show_diag(self, visible: bool) -> None:
         """Panneau « Diagnostic » : polices, système, temps mesurés."""
         self.setProperty("diag", "1" if visible else "")
-        target = DIAG_CLOSE if visible else BTN_DIAG
-        # La visibilité est réévaluée à l'image suivante : on réessaie
-        # brièvement, sinon le bouton encore masqué refuse le focus.
-        for _ in range(10):
-            self.setFocusId(target)
-            xbmc.sleep(20)
-            try:
-                if self.getFocusId() == target:
-                    return
-            except RuntimeError:
-                pass
+        ui.focus_when_visible(self, DIAG_CLOSE if visible else BTN_DIAG)
 
 
 def open_home() -> None:
     """Ouvre l'Accueil et bloque jusqu'à sa fermeture (touche Retour)."""
-    window = HomeWindow(XML_FILE, ADDON.getAddonInfo("path"), "Default", "1080i")
+    window = HomeWindow(XML_FILE, ui.ADDON.getAddonInfo("path"), "Default", "1080i")
     try:
         window.doModal()
     finally:

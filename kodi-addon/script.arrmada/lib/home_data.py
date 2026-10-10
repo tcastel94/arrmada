@@ -213,7 +213,7 @@ def _storage(dashboard: dict) -> dict[str, Any]:
         total += size_key[0]
         free += size_key[1]
     used_pct = round((total - free) * 100 / total) if total else 0
-    free_label = _human_bytes(free) if total else ""
+    free_label = human_bytes(free) if total else ""
     return {
         "value": stats.get("total_size_human") or "—",
         # Court : la tuile ne fait que 212 px de large (« 78 % · 13,0 To libres »).
@@ -222,7 +222,7 @@ def _storage(dashboard: dict) -> dict[str, Any]:
     }
 
 
-def _human_bytes(num: float) -> str:
+def human_bytes(num: float) -> str:
     """Octets → « 12,3 To » (unités françaises, comme le backend)."""
     for unit in ("o", "Ko", "Mo", "Go", "To", "Po"):
         if abs(num) < 1024 or unit == "Po":

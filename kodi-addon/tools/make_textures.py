@@ -216,6 +216,53 @@ TEXTURES: dict[str, tuple[int, int, AlphaFn, str]] = {
 }
 
 
+# Barres de progression des LISTES (téléchargements, saisons, volume).
+# Kodi ne sait pas remplir une barre « progress » à partir d'une propriété
+# d'élément de liste : chaque ligne affiche donc l'image pré-rendue au bon
+# pourcentage (bar-000.png … bar-100.png, par pas de 2 %). Couleurs intégrées :
+# piste blanche à 12 %, remplissage en dégradé accent → cyan.
+BAR_W, BAR_H, BAR_STEP = 1000, 12, 2
+ACCENT, CYAN = (74, 158, 255), (34, 224, 238)
+
+
+def write_bar(path: Path, pct: int) -> None:
+    fill = BAR_W * pct / 100
+    rows = bytearray()
+    for y in range(BAR_H):
+        rows.append(0)
+        for x in range(BAR_W):
+            cx, cy = x + 0.5, y + 0.5
+            track = coverage(
+                sd_round_rect(cx, cy, BAR_W / 2, BAR_H / 2, BAR_W / 2, BAR_H / 2, BAR_H / 2)
+            )
+            inside = (
+                coverage(
+                    sd_round_rect(
+                        cx, cy, fill / 2, BAR_H / 2, fill / 2, BAR_H / 2, min(BAR_H / 2, fill / 2)
+                    )
+                )
+                if fill > 0
+                else 0.0
+            )
+            t = x / BAR_W
+            color = tuple(round(a + (b - a) * t) for a, b in zip(ACCENT, CYAN))
+            # Remplissage par-dessus la piste (alpha 0,12)
+            alpha = inside + track * 0.12 * (1 - inside)
+            if alpha <= 0:
+                rows += bytes((255, 255, 255, 0))
+                continue
+            mix = inside / alpha
+            rgb = tuple(round(c * mix + 255 * (1 - mix)) for c in color)
+            rows += bytes((*rgb, round(alpha * 255)))
+    png = (
+        b"\x89PNG\r\n\x1a\n"
+        + _chunk(b"IHDR", struct.pack(">IIBBBBB", BAR_W, BAR_H, 8, 6, 0, 0, 0))
+        + _chunk(b"IDAT", zlib.compress(bytes(rows), 9))
+        + _chunk(b"IEND", b"")
+    )
+    path.write_bytes(png)
+
+
 def main(out_dir: Path = OUT_DIR) -> None:
     """Écrit toutes les textures dans `out_dir` (les tests l'appellent sur un
     dossier temporaire pour vérifier que les PNG du dépôt sont à jour)."""
@@ -223,7 +270,12 @@ def main(out_dir: Path = OUT_DIR) -> None:
     for name, (w, h, fn, usage) in TEXTURES.items():
         write_png(out_dir / name, w, h, fn)
         print(f"  + {name:18} {w:>3}×{h:<3}  {usage}")
-    print(f"OK : {len(TEXTURES)} textures dans {out_dir}")
+    bars = out_dir / "progress"
+    bars.mkdir(exist_ok=True)
+    for pct in range(0, 101, BAR_STEP):
+        write_bar(bars / f"bar-{pct:03d}.png", pct)
+    print(f"  + progress/bar-000…100.png  {BAR_W}×{BAR_H}  barres de progression des listes")
+    print(f"OK : {len(TEXTURES)} textures + {100 // BAR_STEP + 1} barres dans {out_dir}")
 
 
 if __name__ == "__main__":

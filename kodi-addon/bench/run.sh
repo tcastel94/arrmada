@@ -67,6 +67,16 @@ rm -rf "$KODI_DIR/userdata/addon_data/script.arrmada/cache" \
   curl -fsS -o assets/RobotoCondensed-Regular.ttf "$SILVO_RAW/fonts/RobotoCondensed-Regular.ttf"
 cp assets/RobotoCondensed-Regular.ttf "$KODI_DIR/media/Fonts/"
 
+# Petite vidéo de test (mire) pour l'écran Salon « Lecture en cours ».
+# SANS piste son : Xvfb n'a pas de carte son, Kodi chercherait une sortie
+# audio pendant ~10 s avec sa fenêtre « occupé » ouverte, et refuserait
+# d'ouvrir toute autre fenêtre pendant ce temps (dont l'écran Salon).
+if command -v ffmpeg >/dev/null && [[ ! -s assets/demo-video-muette.mp4 ]]; then
+  ffmpeg -loglevel error -y -f lavfi -i testsrc2=size=1280x720:rate=25 \
+    -t 40 -an -c:v libx264 -pix_fmt yuv420p assets/demo-video-muette.mp4 || true
+fi
+export DEMO_VIDEO="$BENCH_DIR/assets/demo-video-muette.mp4"
+
 # Copie d'Estuary dans le profil (prioritaire sur celle du système), puis on
 # remplace ses polices homonymes par celles de SiLVO et on ajoute les autres.
 rm -rf "$KODI_DIR/addons/skin.estuary"
@@ -127,8 +137,8 @@ PY
 
 # ── 5. Passage instrumenté (le harnais quitte Kodi à la fin) ─────────────────
 if [[ "$RECORD" != "1" ]]; then
-  echo "== Kodi + harnais (≈ 90 s)"
-  timeout 240 xvfb-run -a -s "-screen 0 1920x1080x24" kodi --standalone -fs > kodi.log 2>&1 || true
+  echo "== Kodi + harnais (≈ 2 min 30)"
+  timeout 360 xvfb-run -a -s "-screen 0 1920x1080x24" kodi --standalone -fs > kodi.log 2>&1 || true
 else
   # Mode vidéo : on lance l'écran virtuel nous-mêmes pour pouvoir le filmer.
   echo "== Kodi + harnais, enregistrement vidéo ($RES)"
@@ -141,7 +151,7 @@ else
   ffmpeg -loglevel error -y -f x11grab -framerate 30 -video_size "$RES" -i "$DISP" \
     -c:v libx264 -preset ultrafast -crf 16 -pix_fmt yuv420p demo-raw.mp4 &
   FFMPEG_PID=$!
-  timeout 300 tail --pid="$KODI_PID" -f /dev/null || kill "$KODI_PID" 2>/dev/null || true
+  timeout 420 tail --pid="$KODI_PID" -f /dev/null || kill "$KODI_PID" 2>/dev/null || true
   kill -INT "$FFMPEG_PID" 2>/dev/null || true
   wait "$FFMPEG_PID" 2>/dev/null || true
   kill "$XVFB_PID" 2>/dev/null || true

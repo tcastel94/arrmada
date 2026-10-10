@@ -16,7 +16,7 @@
       boutons (400)  ↑↓  affiches (100)        Retour : ferme / ferme le diagnostic
 -->
 <window>
-	<defaultcontrol always="true">100</defaultcontrol>
+	<defaultcontrol always="false">100</defaultcontrol>
 	<backgroundcolor>FF0A0E16</backgroundcolor>
 	<!-- Fondu d'ouverture seulement sans intro : Kodi l'applique calque par calque,
 	     l'accueil transparaîtrait à travers l'intro pendant 350 ms. -->
@@ -79,32 +79,32 @@
 				<label>[COLOR FF4A9EFF][B]Arr[/B][/COLOR]Mada</label>
 			</control>
 			<control type="image">
-				<left>352</left><top>54</top><width>196</width><height>34</height>
+				<left>352</left><top>54</top><width>64</width><height>34</height>
 				<texture border="14" colordiffuse="264A9EFF">arrmada/rounded-12.png</texture>
 			</control>
 			<control type="label">
-				<left>352</left><top>54</top><width>196</width><height>34</height>
+				<left>352</left><top>54</top><width>64</width><height>34</height>
 				<font>font10</font>
 				<textcolor>FF9CCBFF</textcolor>
 				<align>center</align><aligny>center</aligny>
-				<label>Aperçu v2 · prototype</label>
+				<label>v2</label>
 			</control>
 			<!-- Indicateur de chargement : tourne pendant un rafraîchissement. -->
 			<control type="image">
-				<left>846</left><top>54</top><width>36</width><height>36</height>
+				<left>500</left><top>54</top><width>36</width><height>36</height>
 				<texture colordiffuse="FF4A9EFF">arrmada/spinner.png</texture>
 				<visible>!String.IsEmpty(Window.Property(loading))</visible>
 				<animation effect="rotate" end="-360" center="auto" time="900" loop="true" condition="true">Conditional</animation>
 				<animation effect="fade" time="200">VisibleChange</animation>
 			</control>
 			<control type="grouplist" id="400">
-				<left>904</left><top>44</top><width>636</width><height>56</height>
+				<left>568</left><top>44</top><width>972</width><height>56</height>
 				<orientation>horizontal</orientation>
-				<itemgap>16</itemgap>
+				<itemgap>12</itemgap>
 				<ondown>100</ondown>
 				<!-- Rechercher : clavier Kodi (avec micro sur Android pour dicter) -->
 				<control type="button" id="403">
-					<width>200</width><height>56</height>
+					<width>180</width><height>56</height>
 					<label>Rechercher</label>
 					<font>font12</font>
 					<textcolor>D9F5F7FA</textcolor>
@@ -115,8 +115,32 @@
 					<animation effect="zoom" start="100" end="106" time="160" tween="cubic" easing="out" center="auto">Focus</animation>
 					<animation effect="zoom" start="106" end="100" time="160" tween="cubic" easing="out" center="auto">UnFocus</animation>
 				</control>
+				<control type="button" id="404">
+					<width>240</width><height>56</height>
+					<label>Téléchargements</label>
+					<font>font12</font>
+					<textcolor>D9F5F7FA</textcolor>
+					<focusedcolor>FF0A0E16</focusedcolor>
+					<align>center</align><aligny>center</aligny>
+					<texturenofocus border="14" colordiffuse="1AFFFFFF">arrmada/rounded-12.png</texturenofocus>
+					<texturefocus border="14" colordiffuse="FF4A9EFF">arrmada/rounded-12.png</texturefocus>
+					<animation effect="zoom" start="100" end="106" time="160" tween="cubic" easing="out" center="auto">Focus</animation>
+					<animation effect="zoom" start="106" end="100" time="160" tween="cubic" easing="out" center="auto">UnFocus</animation>
+				</control>
+				<control type="button" id="405">
+					<width>140</width><height>56</height>
+					<label>Salon</label>
+					<font>font12</font>
+					<textcolor>D9F5F7FA</textcolor>
+					<focusedcolor>FF0A0E16</focusedcolor>
+					<align>center</align><aligny>center</aligny>
+					<texturenofocus border="14" colordiffuse="1AFFFFFF">arrmada/rounded-12.png</texturenofocus>
+					<texturefocus border="14" colordiffuse="FF4A9EFF">arrmada/rounded-12.png</texturefocus>
+					<animation effect="zoom" start="100" end="106" time="160" tween="cubic" easing="out" center="auto">Focus</animation>
+					<animation effect="zoom" start="106" end="100" time="160" tween="cubic" easing="out" center="auto">UnFocus</animation>
+				</control>
 				<control type="button" id="401">
-					<width>200</width><height>56</height>
+					<width>180</width><height>56</height>
 					<label>Actualiser</label>
 					<font>font12</font>
 					<textcolor>D9F5F7FA</textcolor>
@@ -128,7 +152,7 @@
 					<animation effect="zoom" start="106" end="100" time="160" tween="cubic" easing="out" center="auto">UnFocus</animation>
 				</control>
 				<control type="button" id="402">
-					<width>204</width><height>56</height>
+					<width>184</width><height>56</height>
 					<label>Diagnostic</label>
 					<font>font12</font>
 					<textcolor>D9F5F7FA</textcolor>

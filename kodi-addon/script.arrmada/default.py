@@ -117,6 +117,8 @@ def show_root_menu():
     # Raccourci possible depuis le menu de SiLVO :
     #   RunPlugin(plugin://script.arrmada/?action=home)
     add_dir("[NOUVEAU]        Accueil ArrMada (apercu v2)", "home", is_folder=False)
+    # Écran Salon en accès direct (aussi en favori Kodi : action=salon)
+    add_dir("[NOUVEAU]        Salon : ampli et lecture en cours", "salon", is_folder=False)
     add_dir("[RECHERCHE]      Rechercher un film ou une serie...", "search_input", is_folder=False)
     add_dir("[DECOUVERTE]     Tendances TMDB & Ajout 1-Clic", "discovery", is_folder=False)
     add_dir("[FILMS]          Films Tendances & Populaires", "trending_movies")
@@ -427,6 +429,15 @@ def main():
     elif action == "home":
         import home_window
         home_window.open_home()
+    elif action == "salon":
+        # Écran Salon (lecture + ampli), aussi ouvrable pendant un film :
+        #   RunPlugin(plugin://script.arrmada/?action=salon)
+        import salon_window
+        salon_window.open_salon()
+    elif action == "queue":
+        # Écran Téléchargements : RunPlugin(plugin://script.arrmada/?action=queue)
+        import downloads_window
+        downloads_window.open_downloads()
     elif action == "search_input":
         query = xbmcgui.Dialog().input("ArrMada : Rechercher un film ou une serie")
         if query:

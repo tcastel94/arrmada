@@ -105,7 +105,10 @@ jobs:
         # Config : kodi-addon/ruff.toml. Seuls les modules des écrans v2,
         # les outils et les tests sont contrôlés (l'ancien code suivra).
         run: |
-          FILES="kodi-addon/script.arrmada/lib/home_data.py kodi-addon/script.arrmada/lib/home_window.py kodi-addon/tests kodi-addon/tools"
+          LIB=kodi-addon/script.arrmada/lib
+          FILES="$LIB/home_data.py $LIB/home_window.py $LIB/screens_data.py $LIB/ui_common.py"
+          FILES="$FILES $LIB/detail_window.py $LIB/downloads_window.py $LIB/salon_window.py"
+          FILES="$FILES kodi-addon/tests kodi-addon/tools"
           ruff check $FILES
           ruff format --check $FILES
 

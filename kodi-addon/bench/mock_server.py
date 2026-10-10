@@ -5,6 +5,11 @@ Répond comme le vrai backend aux routes lues par l'écran « Accueil » :
   GET /api/kodi/dashboard       indicateurs, disques, téléchargements, services
   GET /api/kodi/widgets/recent  ajouts récents (affiches, fanart, ClearLogo)
   GET /api/kodi/addon-status    utilisé par le service de l'add-on
+  GET /api/media/{movie|series}/{id}  fiche complète (casting, fichier, saisons)
+  GET /api/downloads            file complète (le « reste » diminue à chaque appel)
+  GET /api/yamaha/state|profiles, POST /api/yamaha/control|preset/apply
+                                faux ampli qui réagit aux commandes
+  POST /api/kodi/actions/*, /api/kodi/downloads/*/pause|resume
   GET /img/<fichier>            images générées au démarrage (Pillow)
   GET /__down                   simule une panne : toutes les routes API → 503
 
@@ -44,7 +49,19 @@ TITLES = [
     ("Interstellar", 2014, "movie", (2160, "HDR10", "DTS-HD MA", 5.1), ((180, 170, 150), (20, 20, 25))),
 ]
 
-STATE = {"tick": 0, "down": False}
+STATE = {
+    "tick": 0,
+    "down": False,
+    "qtick": 0,
+    "paused": False,
+    "amp": {"power": "on", "volume": 84, "mute": False, "input": "hdmi1", "sound_program": "surr_decoder"},
+}
+CAST = [
+    ("Timothée Chalamet", "Paul Atréides"), ("Zendaya", "Chani"), ("Rebecca Ferguson", "Jessica"),
+    ("Josh Brolin", "Gurney Halleck"), ("Austin Butler", "Feyd-Rautha"), ("Florence Pugh", "Irulan"),
+    ("Javier Bardem", "Stilgar"), ("Léa Seydoux", "Margot Fenring"),
+]
+PHOTO_COLORS = [(214, 140, 60), (120, 60, 200), (60, 140, 160), (230, 90, 60), (40, 90, 160)]
 
 
 # ── Images factices ──────────────────────────────────────────────────────────
@@ -137,6 +154,14 @@ def make_images(out: Path, font_path: str) -> None:
                                   fill=(255, 255, 255, 255), anchor="rm")
         logo.save(out / f"logo-{idx}.png")
 
+    for idx, (name, _role) in enumerate(CAST[: len(PHOTO_COLORS)]):
+        color = PHOTO_COLORS[idx]
+        photo = _gradient((300, 300), color, (12, 14, 22))
+        initials = "".join(part[0] for part in name.split()[:2])
+        ImageDraw.Draw(photo).text((150, 160), initials, font=ImageFont.truetype(font_path, 120),
+                                    fill=(255, 255, 255), anchor="mm")
+        photo.save(out / f"photo-{idx}.jpg", quality=88)
+
 
 # ── Réponses API ─────────────────────────────────────────────────────────────
 
@@ -199,6 +224,163 @@ def dashboard() -> dict:
     }
 
 
+def episodes(season: int, count: int, have: int) -> dict:
+    """Saison façon Sonarr : les `have` premiers épisodes ont un fichier."""
+    return {
+        "season_number": season,
+        "episode_count": count,
+        "episodes_have": have,
+        "episodes": [
+            {
+                "episode_number": n,
+                "season_number": season,
+                "has_file": n <= have,
+                "file": {
+                    "quality": "WEBDL-2160p",
+                    "resolution": 2160,
+                    "size_bytes": 4 * 1024**3,
+                    "video_codec": "HEVC",
+                    "video_dynamic_range_type": "DV HDR10",
+                    "audio_codec": "EAC3 Atmos",
+                    "audio_channels": 6,
+                    "audio_languages": "Anglais / Français",
+                }
+                if n <= have
+                else None,
+            }
+            for n in range(1, count + 1)
+        ],
+    }
+
+
+def detail(base: str, kind: str, arr_id: int) -> dict | None:
+    """Fiche façon /api/media/{movie|series}/{id} pour les titres de TITLES."""
+    idx = arr_id - 100
+    if not 0 <= idx < len(TITLES):
+        return None
+    title, year, item_kind, (res, hdr, audio, channels), colors = TITLES[idx]
+    images = {
+        "poster": f"{base}/img/poster-{idx}.jpg" if colors else None,
+        "fanart": f"{base}/img/fanart-{idx}.jpg" if colors else None,
+        "clearlogo": f"{base}/img/logo-{idx}.png" if colors else None,
+    }
+    common = {
+        "id": arr_id,
+        "title": title,
+        "year": year,
+        "overview": f"Synopsis de test pour « {title} ». Un récit ambitieux porté par une distribution "
+        "remarquable, une photographie spectaculaire et une bande originale envoûtante. "
+        "Le texte est volontairement long pour vérifier le défilement automatique du synopsis "
+        "dans la fiche, comme sur un vrai titre de la médiathèque.",
+        "genres": ["Science Fiction", "Adventure", "Drama"],
+        "images": images,
+        "certification": "PG-13",
+    }
+    if kind == "series" or item_kind == "series":
+        return {
+            **common,
+            "type": "series",
+            "runtime": 55,
+            "network": "Apple TV+",
+            "tvdb_id": 371980,
+            "episodes_have": 15,
+            "total_episodes": 19,
+            "status": "continuing",
+            "size_on_disk": 61 * 1024**3,
+            "ratings": {"value": 8.7},
+            "seasons": [
+                episodes(1, 9, 9),
+                episodes(2, 10, 6),
+                episodes(3, 8, 0),
+            ],
+            "subtitles": [{"language": "Français"}, {"language": "Anglais"}],
+        }
+    return {
+        **common,
+        "type": "movie",
+        "runtime": 166,
+        "has_file": True,
+        "tmdb_id": 693134 + idx,
+        "youtube_trailer_id": "Way9Dexny3w" if idx == 0 else "",
+        "ratings": {"tmdb": 8.2, "imdb": 8.6, "rotten_tomatoes": 92},
+        "file": {
+            "quality": "Remux-2160p" if res >= 2160 else "WEBDL-1080p",
+            "resolution": res,
+            "size_bytes": 64 * 1024**3,
+            "video_codec": "HEVC",
+            "video_dynamic_range_type": hdr,
+            "audio_codec": audio,
+            "audio_channels": channels,
+            "audio_languages": "Français / Anglais",
+            "release_group": "FraMeSToR",
+        },
+        "cast": [
+            {"name": name, "character": role,
+             "photo": f"{base}/img/photo-{i}.jpg" if i < len(PHOTO_COLORS) else None}
+            for i, (name, role) in enumerate(CAST)
+        ],
+        "crew": [
+            {"name": "Denis Villeneuve", "job": "Director"},
+            {"name": "Hans Zimmer", "job": "Original Music Composer"},
+        ],
+        "subtitles": [{"language": "Français"}, {"language": "Anglais"}],
+    }
+
+
+def queue() -> dict:
+    """File complète : le « reste » diminue de ~180 Mo par appel (débit visible)."""
+    STATE["qtick"] += 1
+    t = STATE["qtick"]
+    GB = 1024**3
+    downloading = "paused" if STATE["paused"] else "downloading"
+
+    def item(i, service, title, size, done, quality, extra=None):
+        left = max(0, size - done - (0 if STATE["paused"] else t * 180 * 1024**2))
+        return {
+            "id": 500 + i,
+            "service_type": service,
+            "title": title,
+            "status": downloading,
+            "tracked_state": "downloading",
+            "progress": round((size - left) * 100 / size, 1),
+            "size_bytes": size,
+            "size_left_bytes": left,
+            "time_left": "00:12:30",
+            "download_client": "SABnzbd",
+            "protocol": "usenet",
+            "quality": quality,
+            "indexer": "NZBgeek",
+            "movie_id": 100 + i if service == "radarr" else None,
+            "series_id": 104 if service == "sonarr" else None,
+            **(extra or {}),
+        }
+
+    items = [
+        item(0, "radarr", "Gladiator.II.2024.2160p.UHD.BluRay.REMUX.DV.HDR10.TrueHD.Atmos", 78 * GB, 48 * GB, "Remux-2160p"),
+        item(1, "sonarr", "The.Penguin.S01E08.1080p.WEB.H264", 3 * GB, 1 * GB, "WEBDL-1080p"),
+        item(2, "radarr", "Wicked.2024.2160p.WEB-DL.DV.HDR.DDP5.1.Atmos", 22 * GB, 2 * GB, "WEBDL-2160p",
+             {"time_left": "1.02:15:00"}),
+        item(3, "sonarr", "Silo.S02E05.2160p.WEB.H265", 6 * GB, 0, "WEBDL-2160p",
+             {"status": "queued", "tracked_state": "queued", "time_left": ""}),
+        item(4, "radarr", "Nosferatu.2024.1080p.BluRay.x264", 12 * GB, 12 * GB, "Bluray-1080p",
+             {"status": "completed", "tracked_state": "importPending", "time_left": ""}),
+        item(5, "sonarr", "Shogun.S01E10.2160p.WEB.H265", 7 * GB, 7 * GB, "WEBDL-2160p",
+             {"status": "warning", "tracked_state": "importBlocked", "time_left": "",
+              "error": "Import bloqué : épisode déjà présent avec une meilleure qualité"}),
+    ]
+    return {"items": items, "total": len(items)}
+
+
+def yamaha_state() -> dict:
+    amp = STATE["amp"]
+    return {"devices": [{
+        "id": 1, "name": "Yamaha RX-A2080", "online": True, "power": amp["power"],
+        "volume": amp["volume"], "max_volume": 161, "volume_pct": round(amp["volume"] * 100 / 161),
+        "mute": amp["mute"], "input": amp["input"], "actual_db": -80.5 + amp["volume"] * 0.5,
+        "sound_program": amp["sound_program"],
+    }]}
+
+
 def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):  # journal sur stderr, préfixé
@@ -239,6 +421,50 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
                 self._json(dashboard())
             elif path == "/api/kodi/widgets/recent":
                 self._json(recent(base))
+            elif path.startswith("/api/media/"):
+                _, _, _, kind, arr_id = path.split("/")[:5]
+                payload = detail(base, kind, int(arr_id)) if arr_id.isdigit() else None
+                if payload is None:
+                    self.send_error(404)
+                else:
+                    self._json(payload)
+            elif path == "/api/downloads":
+                self._json(queue())
+            elif path == "/api/yamaha/state":
+                self._json(yamaha_state())
+            elif path == "/api/yamaha/profiles":
+                self._json({"salon": {"name": "Salon"}, "cinema": {"name": "Salle de cinéma"}})
+            else:
+                self.send_error(404)
+
+        def do_POST(self):  # noqa: N802
+            path = self.path.split("?")[0]
+            length = int(self.headers.get("Content-Length") or 0)
+            try:
+                data = json.loads(self.rfile.read(length) or b"{}")
+            except ValueError:
+                data = {}
+            time.sleep(delay / 2)
+            amp = STATE["amp"]
+            if STATE["down"]:
+                self.send_error(503, "ArrMada en maintenance")
+            elif path == "/api/yamaha/control":
+                action, value = data.get("action"), data.get("value")
+                if action == "volume_step":
+                    amp["volume"] = max(0, min(161, amp["volume"] + int(value)))
+                elif action == "mute":
+                    amp["mute"] = bool(value)
+                elif action == "power":
+                    amp["power"] = "standby" if value == "standby" else "on"
+                self._json({"status": "ok", "action": action})
+            elif path == "/api/yamaha/preset/apply":
+                amp["sound_program"] = "straight" if data.get("room") == "salon" else "surr_decoder"
+                self._json({"status": "ok", "room": data.get("room")})
+            elif path.startswith("/api/kodi/downloads/"):
+                STATE["paused"] = path.endswith("/pause")
+                self._json({"status": "ok", "message": "ok"})
+            elif path.startswith("/api/kodi/actions/"):
+                self._json({"status": "ok", "message": "Demande envoyée (banc de test)"})
             else:
                 self.send_error(404)
 
