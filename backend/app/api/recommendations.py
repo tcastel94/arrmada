@@ -148,7 +148,7 @@ async def get_recommendations(db: AsyncSession = Depends(get_db)):
         # 2. Wanted (monitored, no file)
         result["wanted"] = [
             {
-                "id": m.get("id"),
+                "id": m.get("external_id"),  # id Radarr/Sonarr → fiche
                 "title": m["title"],
                 "type": m["type"],
                 "year": m.get("year"),

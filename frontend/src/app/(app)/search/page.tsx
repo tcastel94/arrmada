@@ -5,13 +5,16 @@
  * titre, l'ajouter à Radarr/Sonarr et suivre son arrivée.
  * ----------------------------------------------------------------
  * Fusionne les anciennes pages /requests (→ onglet Suivi + ajout manuel)
- * et /recommendations (→ onglet Suggestions), qui redirigent ici.
+ * et /recommendations (→ onglet Découvrir), qui redirigent ici.
  * Onglets dans l'URL : ?tab=search|tracking|discover (+ ?q= pour la
  * recherche, utilisé par la palette ⌘K).
  *
  * Le découpage en composants vit dans src/components/library/ :
- * SearchTab, TrackingTab, DiscoverTab, AddPreviewDialog, ManualAddDialog,
- * et AdderProvider (logique d'ajout partagée par tous les onglets).
+ * SearchTab, TrackingTab, DiscoverTab, ManualAddDialog, AdderProvider
+ * (logique d'ajout partagée par tous les onglets) et AddPreviewDialog, qui
+ * ouvre la fiche TMDB détaillée (components/media/recommendation-detail-modal :
+ * casting, bande-annonce, ajout) au clic sur n'importe quelle affiche
+ * ajoutable — résultats de recherche comme suggestions.
  */
 import { Suspense, useCallback, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -119,7 +122,7 @@ function SearchHub() {
                         options={[
                             { value: "search", label: "Rechercher", icon: Search },
                             { value: "tracking", label: "Suivi", icon: ListChecks, count: stats.active || null },
-                            { value: "discover", label: "Suggestions", icon: Flame },
+                            { value: "discover", label: "Découvrir", icon: Flame },
                         ]}
                     />
                 </div>

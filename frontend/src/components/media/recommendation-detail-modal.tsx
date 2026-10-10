@@ -1,296 +1,588 @@
 "use client";
 
-import React, { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/api-client";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
+/**
+ * Fiche détaillée d'un titre TMDB (suggestion de l'onglet « Découvrir » ou
+ * résultat « À ajouter » de la recherche).
+ * ----------------------------------------------------------------
+ * Affiche, fond, synopsis, genres traduits, note, réalisation, casting et
+ * bande-annonce YouTube, plus le bouton « Ajouter » du flux d'ajout commun
+ * (AdderProvider) : ajouter depuis la modale marque aussi la tuile d'origine
+ * comme ajoutée, et inversement.
+ *
+ * Chargement progressif : la tuile cliquée fournit déjà titre, affiche et
+ * résumé (`preview`) ; on les montre tout de suite, puis la fiche TMDB
+ * (/api/recommendations/details) complète le reste. Sans ID TMDB (série
+ * Sonarr inconnue de TMDB) ou sans clé TMDB, la modale reste utile : elle
+ * garde l'aperçu et le bouton d'ajout.
+ *
+ * Vie privée : le lecteur YouTube (domaine youtube-nocookie) n'est chargé
+ * qu'au clic sur « Bande-annonce », jamais à l'ouverture de la fiche.
+ */
+/* eslint-disable @next/next/no-img-element */
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
+import { AnimatePresence, motion } from "framer-motion";
 import {
-    Star,
-    Film,
-    Tv,
+    AlertTriangle,
+    ArrowUpRight,
+    CalendarDays,
+    Check,
     Clock,
-    User,
+    ExternalLink,
+    Film,
+    Loader2,
     Play,
     Plus,
-    Check,
-    ExternalLink,
-    Loader2,
-    Sparkles,
+    RotateCcw,
+    Tv,
+    Users,
+    X,
 } from "lucide-react";
-import { useCreateRequest } from "@/hooks/use-requests";
-import { toast } from "sonner";
-import Link from "next/link";
-
-export interface TMDBDetailResponse {
-    tmdb_id: number;
-    title: string;
-    original_title: string;
-    type: string;
-    year: string | null;
-    release_date: string | null;
-    overview: string;
-    rating: number | null;
-    vote_count: number;
-    popularity: number;
-    runtime: number | null;
-    poster_url: string | null;
-    backdrop_url: string | null;
-    genres: string[];
-    cast: { name: string; character: string; profile_path: string | null }[];
-    director: string | null;
-    trailer_key: string | null;
-    in_library: boolean;
-    library_item: { id: number; type: string } | null;
-}
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Shimmer } from "@/components/shared/loading-skeleton";
+import { ErrorState } from "@/components/shared/empty-state";
+import { RingGauge } from "@/components/fx/ring-gauge";
+import { TiltCard } from "@/components/fx/tilt-card";
+import { useRecommendationDetail, type TMDBCastMember, type TMDBDetail } from "@/hooks/use-recommendations";
+import {
+    AdderProvider,
+    externalLink,
+    fromTmdbDetail,
+    useAdder,
+    useOptionalAdder,
+    type AddableItem,
+} from "@/components/library/adder";
+import { translateGenre } from "@/lib/genres";
+import { formatDuration, formatShortDate, plural } from "@/lib/format";
+import { EASE_OUT, SPRING_SOFT, scaleIn, stagger } from "@/lib/motion";
+import { cn } from "@/lib/utils";
 
 export interface RecommendationDetailModalProps {
+    /** Vrai ID TMDB du titre (null → pas de fiche TMDB, seul `preview` est affiché). */
     tmdbId: number | null;
-    mediaType?: string;
+    mediaType?: "movie" | "series" | string;
     isOpen: boolean;
     onClose: () => void;
+    /** Données déjà connues (tuile cliquée) : affichées immédiatement, puis enrichies. */
+    preview?: AddableItem | null;
+    /** Action « Voir le suivi » proposée après un ajout (onglet Suivi de /search). */
+    onShowTracking?: () => void;
 }
 
-export function RecommendationDetailModal({
-    tmdbId,
-    mediaType = "movie",
-    isOpen,
-    onClose,
-}: RecommendationDetailModalProps) {
-    const [isPlayingTrailer, setIsPlayingTrailer] = useState(false);
-    const createRequest = useCreateRequest();
+/**
+ * Point d'entrée. Sur /search, la modale partage l'AdderProvider de la page ;
+ * ailleurs (fiche média, tableau de bord…), elle crée le sien pour que le
+ * bouton « Ajouter » fonctionne quand même.
+ */
+export function RecommendationDetailModal(props: RecommendationDetailModalProps) {
+    const adder = useOptionalAdder();
+    const dialog = <DetailDialog {...props} />;
+    return adder ? dialog : <AdderProvider onShowTracking={props.onShowTracking}>{dialog}</AdderProvider>;
+}
 
-    const { data: detail, isLoading } = useQuery<TMDBDetailResponse>({
-        queryKey: ["tmdb-detail", mediaType, tmdbId],
-        queryFn: () => apiFetch(`/api/recommendations/details/${mediaType}/${tmdbId}`),
-        enabled: isOpen && !!tmdbId,
-    });
+interface Shown {
+    tmdbId: number | null;
+    type: "movie" | "series";
+    preview: AddableItem | null;
+}
 
-    const handleAddRequest = async () => {
-        if (!detail) return;
-        try {
-            await createRequest.mutateAsync({
-                title: detail.title,
-                type: detail.type,
-                tmdb_id: detail.tmdb_id,
-                year: detail.year ? parseInt(detail.year, 10) : null,
-                poster_url: detail.poster_url,
-            });
-            toast.success(`Demandé : ${detail.title} a été ajouté aux requêtes !`);
-        } catch (err: any) {
-            toast.error(err.message || "Erreur lors de l'ajout de la requête.");
-        }
-    };
+function DetailDialog({ tmdbId, mediaType = "movie", isOpen, onClose, preview = null, onShowTracking }: RecommendationDetailModalProps) {
+    const type: Shown["type"] = (preview?.type ?? mediaType) === "series" ? "series" : "movie";
+    const current: Shown | null = isOpen && (tmdbId || preview) ? { tmdbId, type, preview } : null;
 
-    if (!isOpen || !tmdbId) return null;
+    // Le parent remet souvent son état à null dès la fermeture : on garde le
+    // dernier titre affiché pour que le contenu ne disparaisse pas pendant
+    // l'animation de sortie (état dérivé, mis à jour pendant le rendu).
+    const [last, setLast] = useState<Shown | null>(current);
+    if (current && (current.tmdbId !== last?.tmdbId || current.type !== last?.type || current.preview !== last?.preview)) {
+        setLast(current);
+    }
+    const shown = current ?? last;
 
     return (
-        <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
-            <DialogContent className="max-w-3xl p-0 overflow-hidden bg-zinc-950/95 border-zinc-800 text-white shadow-2xl backdrop-blur-xl rounded-2xl">
-                <DialogHeader className="sr-only">
-                    <DialogTitle>{detail?.title || "Détails du média"}</DialogTitle>
-                </DialogHeader>
+        <Dialog open={!!current} onOpenChange={(open) => !open && onClose()}>
+            <DialogContent className="max-w-3xl gap-0 overflow-x-hidden p-0">
+                {shown && (
+                    <DetailBody
+                        // Nouvelle clé = nouvel état (bande-annonce fermée, défilement en haut).
+                        key={`${shown.type}:${shown.tmdbId ?? shown.preview?.key ?? ""}`}
+                        {...shown}
+                        active={!!current}
+                        onClose={onClose}
+                        onShowTracking={onShowTracking}
+                    />
+                )}
+            </DialogContent>
+        </Dialog>
+    );
+}
 
-                {isLoading ? (
-                    <div className="p-8 space-y-4">
-                        <Skeleton className="h-60 w-full rounded-xl bg-zinc-800/50" />
-                        <Skeleton className="h-8 w-1/2 bg-zinc-800/50" />
-                        <Skeleton className="h-20 w-full bg-zinc-800/50" />
-                    </div>
-                ) : detail ? (
-                    <div className="relative max-h-[85vh] overflow-y-auto custom-scrollbar">
-                        {/* Backdrop Hero Header */}
-                        <div className="relative aspect-[16/9] sm:aspect-[21/9] w-full overflow-hidden bg-zinc-900">
-                            {detail.backdrop_url ? (
-                                <img
-                                    src={detail.backdrop_url}
-                                    alt={detail.title}
-                                    className="w-full h-full object-cover opacity-40"
-                                />
-                            ) : (
-                                <div className="w-full h-full bg-gradient-to-br from-indigo-900/30 to-purple-900/30" />
-                            )}
-                            <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/60 to-transparent" />
+function DetailBody({
+    tmdbId,
+    type,
+    preview,
+    active,
+    onClose,
+    onShowTracking,
+}: Shown & { active: boolean; onClose: () => void; onShowTracking?: () => void }) {
+    const { data: detail, isLoading, isError, error, refetch, isFetching } = useRecommendationDetail(type, tmdbId, active);
+    const [playing, setPlaying] = useState(false);
+    const trailerRef = useRef<HTMLDivElement>(null);
 
-                            {/* Floating Actions on Backdrop */}
-                            <div className="absolute bottom-4 left-6 right-6 flex items-end justify-between gap-4">
-                                <div className="space-y-1">
-                                    <div className="flex items-center gap-2">
-                                        <Badge className="bg-primary/80 text-white text-xs">
-                                            {detail.type === "movie" ? "Film" : "Série"}
-                                        </Badge>
-                                        {detail.year && (
-                                            <span className="text-xs text-zinc-300 font-medium">
-                                                {detail.year}
-                                            </span>
-                                        )}
-                                        {detail.runtime && (
-                                            <span className="text-xs text-zinc-400 flex items-center gap-1">
-                                                <Clock className="h-3 w-3" /> {detail.runtime} min
-                                            </span>
-                                        )}
+    // Le lecteur s'ouvre sous les boutons : on le fait défiler dans la vue.
+    useEffect(() => {
+        if (!playing) return;
+        const t = window.setTimeout(() => trailerRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 120);
+        return () => window.clearTimeout(t);
+    }, [playing]);
+
+    const loading = !!tmdbId && isLoading;
+
+    // Sans aperçu, rien à montrer tant que la fiche n'est pas là.
+    if (!preview && loading) return <FullSkeleton />;
+    if (!preview && !detail) {
+        return (
+            <div className="p-6">
+                <DialogTitle className="sr-only">Fiche indisponible</DialogTitle>
+                <DialogDescription className="sr-only">La fiche TMDB de ce titre n&apos;a pas pu être chargée.</DialogDescription>
+                <ErrorState error={error} onRetry={() => refetch()} title="Impossible de charger cette fiche" compact />
+            </div>
+        );
+    }
+
+    // Fusion : la fiche TMDB complète prime, l'aperçu comble en attendant.
+    const title = detail?.title ?? preview?.title ?? "";
+    // Affiche : celle de la tuile d'abord (déjà en cache navigateur → pas de
+    // clignotement quand la fiche TMDB arrive avec une autre taille d'image).
+    const poster = preview?.poster_url ?? detail?.poster_url ?? null;
+    const backdrop = detail?.backdrop_url ?? null;
+    const overview = detail?.overview || preview?.overview || "";
+    const year = detail?.year ?? (preview?.year ? String(preview.year) : null);
+    const rating = detail?.rating ?? preview?.rating ?? null;
+    const genres = detail?.genres ?? [];
+    const cast = detail?.cast ?? [];
+    const trailerKey = detail?.trailer_key ?? null;
+    const TypeIcon = type === "series" ? Tv : Film;
+
+    // Élément ajoutable : l'aperçu prime. Il porte les bons IDs (un résultat
+    // Sonarr a aussi l'ID TVDB, plus sûr pour l'ajout), la même clé que la
+    // tuile (état « ajouté » partagé) et un « déjà possédé » fiable : celui
+    // du lookup Radarr/Sonarr est calculé par ID, alors que /details compare
+    // aussi les titres (un remake homonyme passerait pour « déjà là » et le
+    // bouton Ajouter disparaîtrait).
+    const addable: AddableItem | null = preview ?? (detail ? fromTmdbDetail(detail) : null);
+    const link = addable ? externalLink(addable) : null;
+
+    return (
+        <div className="relative">
+            {/* ── Fond « cinéma » ── */}
+            <div aria-hidden className="relative h-40 w-full overflow-hidden sm:h-64">
+                {/* Couche 1 : l'affiche floutée, visible tout de suite (ou seule s'il n'y a pas de fond TMDB). */}
+                {poster ? (
+                    <img src={poster} alt="" className="absolute inset-0 h-full w-full scale-125 object-cover opacity-40 blur-2xl" />
+                ) : loading ? (
+                    <Shimmer className="absolute inset-0 rounded-none" />
+                ) : (
+                    <div className="absolute inset-0 bg-gradient-to-br from-primary/25 via-brand/10 to-transparent" />
+                )}
+                {/* Couche 2 : le fond TMDB arrive en fondu par-dessus (effet « mise au point »). */}
+                {backdrop && (
+                    <motion.img
+                        src={backdrop}
+                        alt=""
+                        initial={{ opacity: 0, scale: 1.08 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 1.1, ease: EASE_OUT }}
+                        className="absolute inset-0 h-full w-full object-cover"
+                    />
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-popover via-popover/60 to-transparent" />
+                {/* Assombrit le haut : le bouton « Fermer » reste lisible sur un fond clair. */}
+                <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-black/60 to-transparent" />
+            </div>
+
+            <div className="relative -mt-20 px-5 pb-6 sm:-mt-28 sm:px-7 sm:pb-7">
+                {/* ── Affiche + titre ── */}
+                <div className="flex gap-4 sm:gap-6">
+                    <motion.div
+                        initial={{ opacity: 0, y: 18, scale: 0.94 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        transition={SPRING_SOFT}
+                        className="w-24 shrink-0 sm:w-36"
+                    >
+                        <TiltCard className="rounded-2xl" max={8}>
+                            <div className="relative aspect-[2/3] overflow-hidden rounded-2xl bg-muted/40 shadow-[0_24px_60px_-18px_rgba(0,0,0,0.95)] ring-1 ring-white/10">
+                                {poster ? (
+                                    <img src={poster} alt={`Affiche de ${title}`} className="h-full w-full object-cover" />
+                                ) : loading ? (
+                                    <Shimmer className="h-full w-full rounded-none" />
+                                ) : (
+                                    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-muted/60 to-primary/10">
+                                        <TypeIcon className="h-8 w-8 text-muted-foreground/40" strokeWidth={1.5} />
                                     </div>
-                                    <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight drop-shadow-md">
-                                        {detail.title}
-                                    </h2>
-                                </div>
-
-                                {detail.trailer_key && (
-                                    <Button
-                                        size="sm"
-                                        onClick={() => setIsPlayingTrailer(true)}
-                                        className="bg-red-600 hover:bg-red-500 text-white gap-1.5 shadow-lg shrink-0 rounded-full px-4"
-                                    >
-                                        <Play className="h-4 w-4 fill-white" /> Bande-annonce
-                                    </Button>
                                 )}
                             </div>
-                        </div>
+                        </TiltCard>
+                    </motion.div>
 
-                        {/* Trailer Video Player Overlay */}
-                        {isPlayingTrailer && detail.trailer_key && (
-                            <div className="p-4 bg-black border-b border-zinc-800 relative">
-                                <div className="aspect-video w-full rounded-lg overflow-hidden shadow-2xl">
+                    <motion.div
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.5, ease: EASE_OUT, delay: 0.05 }}
+                        className="min-w-0 flex-1 space-y-2 pt-[4.5rem] sm:pt-24"
+                    >
+                        <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                            <MetaChip icon={TypeIcon}>{type === "series" ? "Série" : "Film"}</MetaChip>
+                            {year && <MetaChip>{year}</MetaChip>}
+                            {detail?.runtime ? (
+                                <MetaChip icon={Clock} title={type === "series" ? "Durée d'un épisode" : "Durée"}>
+                                    {formatDuration(detail.runtime * 60)}
+                                </MetaChip>
+                            ) : null}
+                            {detail?.release_date && (
+                                <MetaChip icon={CalendarDays} title={type === "series" ? "Première diffusion" : "Sortie"} className="hidden sm:inline-flex">
+                                    {formatShortDate(detail.release_date)}
+                                </MetaChip>
+                            )}
+                        </div>
+                        <DialogTitle className="text-balance text-xl font-bold leading-tight tracking-tight sm:text-3xl">{title}</DialogTitle>
+                        {detail?.original_title && detail.original_title !== title && (
+                            <p className="truncate text-xs italic text-muted-foreground" title={detail.original_title}>
+                                {detail.original_title}
+                            </p>
+                        )}
+                        {detail?.director ? (
+                            <p className="text-xs text-muted-foreground">
+                                <span className="font-medium text-foreground/80">{type === "series" ? "Création" : "Réalisation"} · </span>
+                                {detail.director}
+                            </p>
+                        ) : (
+                            loading && <Shimmer className="h-3 w-40 rounded-md" />
+                        )}
+                        <DialogDescription className="sr-only">
+                            Fiche détaillée de {title} : synopsis, casting, bande-annonce et ajout à ta médiathèque.
+                        </DialogDescription>
+                    </motion.div>
+                </div>
+
+                {/* ── Actions + note ── */}
+                <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.45, ease: EASE_OUT, delay: 0.12 }}
+                    className="mt-5 flex flex-wrap items-center gap-2"
+                >
+                    {addable && <AddAction item={addable} detail={detail} onShowTracking={onShowTracking} onNavigate={onClose} />}
+                    {trailerKey && (
+                        <Button
+                            variant="glow"
+                            onClick={() => setPlaying((p) => !p)}
+                            aria-expanded={playing}
+                            aria-controls={playing ? "tmdb-trailer" : undefined}
+                        >
+                            {playing ? <X /> : <Play className="fill-current" />}
+                            {playing ? "Fermer la vidéo" : "Bande-annonce"}
+                        </Button>
+                    )}
+                    {link && (
+                        <Button variant="ghost" asChild className="text-muted-foreground">
+                            <a href={link.href} target="_blank" rel="noreferrer noopener">
+                                Fiche {link.label}
+                                <ExternalLink />
+                            </a>
+                        </Button>
+                    )}
+                    {rating ? <RatingBlock rating={rating} votes={detail?.vote_count} /> : null}
+                </motion.div>
+
+                {/* ── Bande-annonce (chargée uniquement à la demande) ── */}
+                <AnimatePresence initial={false}>
+                    {playing && trailerKey && (
+                        <motion.div
+                            key="trailer"
+                            id="tmdb-trailer"
+                            ref={trailerRef}
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.4, ease: EASE_OUT }}
+                            className="overflow-hidden"
+                        >
+                            <div className="mt-5 overflow-hidden rounded-2xl bg-black shadow-[0_24px_60px_-20px_rgba(0,0,0,0.9)] ring-1 ring-white/10">
+                                <div className="aspect-video w-full">
                                     <iframe
-                                        src={`https://www.youtube.com/embed/${detail.trailer_key}?autoplay=1`}
-                                        title={`${detail.title} Trailer`}
-                                        className="w-full h-full border-0"
-                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                        src={`https://www.youtube-nocookie.com/embed/${encodeURIComponent(trailerKey)}?autoplay=1&rel=0`}
+                                        title={`Bande-annonce de ${title}`}
+                                        className="h-full w-full border-0"
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                                        referrerPolicy="strict-origin-when-cross-origin"
                                         allowFullScreen
                                     />
                                 </div>
-                                <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => setIsPlayingTrailer(false)}
-                                    className="mt-2 text-xs text-zinc-400 hover:text-white"
-                                >
-                                    Fermer la vidéo
-                                </Button>
                             </div>
-                        )}
+                        </motion.div>
+                    )}
+                </AnimatePresence>
 
-                        {/* Main Content Info */}
-                        <div className="p-6 space-y-6">
-                            <div className="grid grid-cols-1 md:grid-cols-[180px_1fr] gap-6">
-                                {/* Poster */}
-                                <div className="hidden md:block shrink-0">
-                                    <div className="w-[180px] aspect-[2/3] rounded-xl overflow-hidden border border-zinc-800 shadow-xl">
-                                        {detail.poster_url ? (
-                                            <img
-                                                src={detail.poster_url}
-                                                alt={detail.title}
-                                                className="w-full h-full object-cover"
-                                            />
-                                        ) : (
-                                            <div className="w-full h-full bg-zinc-800 flex items-center justify-center">
-                                                {detail.type === "movie" ? (
-                                                    <Film className="h-12 w-12 text-zinc-600" />
-                                                ) : (
-                                                    <Tv className="h-12 w-12 text-zinc-600" />
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
+                {/* ── Fiche TMDB en échec : on garde l'aperçu, avec un mot d'explication ── */}
+                {isError && <DetailError error={error} retrying={isFetching} onRetry={() => refetch()} />}
 
-                                {/* Metas & Details */}
-                                <div className="space-y-4">
-                                    {/* Action Bar */}
-                                    <div className="flex flex-wrap items-center gap-3">
-                                        {detail.in_library && detail.library_item ? (
-                                            <Link href={`/media/${detail.library_item.type}/${detail.library_item.id}`}>
-                                                <Button className="bg-emerald-600 hover:bg-emerald-500 text-white gap-2 shadow-lg">
-                                                    <Check className="h-4 w-4" /> Dans votre médiathèque
-                                                    <ExternalLink className="h-3.5 w-3.5 opacity-70" />
-                                                </Button>
-                                            </Link>
-                                        ) : (
-                                            <Button
-                                                onClick={handleAddRequest}
-                                                disabled={createRequest.isPending}
-                                                className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2 shadow-lg shadow-primary/20 font-semibold"
-                                            >
-                                                {createRequest.isPending ? (
-                                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                                ) : (
-                                                    <Plus className="h-4 w-4" />
-                                                )}
-                                                Ajouter à la médiathèque
-                                            </Button>
-                                        )}
-
-                                        {detail.rating != null && detail.rating > 0 && (
-                                            <Badge variant="outline" className="px-3 py-1 bg-yellow-500/10 text-yellow-300 border-yellow-500/30 gap-1 text-xs">
-                                                <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                                                <span>{detail.rating.toFixed(1)} / 10</span>
-                                                <span className="text-[10px] text-zinc-400">({detail.vote_count} votes)</span>
-                                            </Badge>
-                                        )}
-                                    </div>
-
-                                    {/* Genres */}
-                                    {detail.genres && detail.genres.length > 0 && (
-                                        <div className="flex flex-wrap gap-1.5">
-                                            {detail.genres.map((g) => (
-                                                <Badge key={g} variant="secondary" className="bg-zinc-800 text-zinc-300 text-xs">
-                                                    {g}
-                                                </Badge>
-                                            ))}
-                                        </div>
-                                    )}
-
-                                    {/* Director / Creator */}
-                                    {detail.director && (
-                                        <p className="text-xs text-zinc-400">
-                                            <span className="text-zinc-200 font-semibold">Réalisation / Création : </span>
-                                            {detail.director}
-                                        </p>
-                                    )}
-
-                                    {/* Overview */}
-                                    <div className="space-y-1.5">
-                                        <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-400">Synopsis</h4>
-                                        <p className="text-sm text-zinc-300 leading-relaxed font-normal">
-                                            {detail.overview}
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Cast Row */}
-                            {detail.cast && detail.cast.length > 0 && (
-                                <div className="space-y-3 pt-4 border-t border-zinc-800/80">
-                                    <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
-                                        <User className="h-3.5 w-3.5 text-indigo-400" /> Acteurs principaux
-                                    </h4>
-                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                                        {detail.cast.map((actor, i) => (
-                                            <div key={i} className="flex items-center gap-2.5 bg-zinc-900/60 p-2 rounded-lg border border-zinc-800/60">
-                                                <div className="h-10 w-10 rounded-full overflow-hidden shrink-0 bg-zinc-800 border border-zinc-700/50">
-                                                    {actor.profile_path ? (
-                                                        <img src={actor.profile_path} alt={actor.name} className="h-full w-full object-cover" />
-                                                    ) : (
-                                                        <div className="h-full w-full flex items-center justify-center text-zinc-500">
-                                                            <User className="h-5 w-5" />
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                <div className="min-w-0">
-                                                    <p className="text-xs font-semibold text-white truncate">{actor.name}</p>
-                                                    <p className="text-[10px] text-zinc-400 truncate">{actor.character}</p>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
+                {/* ── Genres ── */}
+                {genres.length > 0 ? (
+                    <div className="mt-5 flex flex-wrap gap-1.5">
+                        {genres.map((g) => (
+                            <span key={g} className="chip cursor-default">
+                                {translateGenre(g)}
+                            </span>
+                        ))}
                     </div>
-                ) : null}
-            </DialogContent>
-        </Dialog>
+                ) : (
+                    loading && (
+                        <div className="mt-5 flex gap-1.5">
+                            {Array.from({ length: 3 }).map((_, i) => (
+                                <Shimmer key={i} className="h-6 w-20 rounded-full" />
+                            ))}
+                        </div>
+                    )
+                )}
+
+                {/* ── Synopsis ── */}
+                <section className="mt-6 space-y-2">
+                    <h3 className="eyebrow">Synopsis</h3>
+                    {overview ? (
+                        <p className="text-sm leading-relaxed text-foreground/85">{overview}</p>
+                    ) : loading ? (
+                        <div className="space-y-2">
+                            <Shimmer className="h-3.5 w-full rounded-md" />
+                            <Shimmer className="h-3.5 w-11/12 rounded-md" />
+                            <Shimmer className="h-3.5 w-2/3 rounded-md" />
+                        </div>
+                    ) : (
+                        <p className="text-sm text-muted-foreground">Pas de résumé disponible pour ce titre.</p>
+                    )}
+                </section>
+
+                {/* ── Casting ── */}
+                {cast.length > 0 ? (
+                    <section className="mt-6 space-y-3">
+                        <h3 className="eyebrow flex items-center gap-1.5">
+                            <Users className="h-3.5 w-3.5" /> Têtes d&apos;affiche
+                        </h3>
+                        <motion.ul variants={stagger(0.1, 0.04)} initial="hidden" animate="show" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                            {cast.map((member, i) => (
+                                <motion.li key={`${member.name}-${member.character ?? i}`} variants={scaleIn}>
+                                    <CastTile member={member} />
+                                </motion.li>
+                            ))}
+                        </motion.ul>
+                    </section>
+                ) : (
+                    loading && (
+                        <div className="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                            {Array.from({ length: 4 }).map((_, i) => (
+                                <Shimmer key={i} className="h-14 rounded-xl" />
+                            ))}
+                        </div>
+                    )
+                )}
+            </div>
+        </div>
+    );
+}
+
+/* ════════════════════════════════════════════════════════════════
+   Sous-composants
+   ════════════════════════════════════════════════════════════════ */
+
+/** Bouton principal : Ajouter → Ajouté, ou lien vers la fiche si déjà présent. */
+function AddAction({
+    item,
+    detail,
+    onShowTracking,
+    onNavigate,
+}: {
+    item: AddableItem;
+    detail?: TMDBDetail;
+    onShowTracking?: () => void;
+    onNavigate: () => void;
+}) {
+    const { add, stateOf } = useAdder();
+    const state = stateOf(item.key);
+    const service = item.type === "series" ? "Sonarr" : "Radarr";
+
+    if (item.in_library) {
+        // Lien direct vers la fiche quand le backend connaît l'ID Radarr/Sonarr,
+        // sinon recherche du titre dans la médiathèque.
+        const lib = detail?.library_item;
+        const libType = lib?.type === "series" || lib?.type === "movie" ? lib.type : item.type;
+        const href = lib?.id ? `/media/${libType}/${lib.id}` : `/media?q=${encodeURIComponent(item.title)}`;
+        return (
+            <>
+                <span className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-emerald-500/10 px-3 text-sm text-emerald-300 ring-1 ring-emerald-500/25">
+                    <Check className="h-4 w-4" /> Dans ta médiathèque
+                </span>
+                <Button variant="outline" asChild>
+                    <Link href={href} onClick={onNavigate}>
+                        Voir la fiche <ArrowUpRight />
+                    </Link>
+                </Button>
+            </>
+        );
+    }
+
+    if (state === "added") {
+        return (
+            <>
+                <motion.span
+                    initial={{ scale: 0.9, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-emerald-500/10 px-3 text-sm text-emerald-300 ring-1 ring-emerald-500/25"
+                >
+                    <Check className="h-4 w-4" /> Ajouté — recherche lancée
+                </motion.span>
+                {onShowTracking && (
+                    <Button variant="outline" onClick={onShowTracking}>
+                        Voir le suivi
+                    </Button>
+                )}
+            </>
+        );
+    }
+
+    return (
+        <Button onClick={() => add(item)} disabled={state === "adding"} className="min-w-[11rem]">
+            {state === "adding" ? <Loader2 className="animate-spin" /> : <Plus />}
+            {state === "adding" ? "Ajout en cours…" : `Ajouter à ${service}`}
+        </Button>
+    );
+}
+
+/** Note TMDB /10 en jauge circulaire + nombre de votes. */
+function RatingBlock({ rating, votes }: { rating: number; votes?: number }) {
+    return (
+        <div className="ml-auto flex items-center gap-2.5" title="Note moyenne des spectateurs sur TMDB">
+            <RingGauge value={rating * 10} size={44} stroke={4} tone="amber">
+                <span className="text-xs font-bold tabular-nums">{rating.toFixed(1)}</span>
+            </RingGauge>
+            <div className="leading-tight">
+                <p className="text-xs font-medium">Note TMDB</p>
+                {votes ? <p className="text-[11px] text-muted-foreground">{plural(votes, "vote")}</p> : null}
+            </div>
+        </div>
+    );
+}
+
+/** Petite pastille d'information (type, année, durée…). */
+function MetaChip({
+    icon: Icon,
+    children,
+    title,
+    className,
+}: {
+    icon?: typeof Film;
+    children: ReactNode;
+    title?: string;
+    className?: string;
+}) {
+    return (
+        <span
+            title={title}
+            className={cn(
+                "inline-flex items-center gap-1 rounded-full bg-white/[0.06] px-2 py-0.5 tabular-nums text-foreground/85 ring-1 ring-white/10 backdrop-blur",
+                className,
+            )}
+        >
+            {Icon && <Icon className="h-3 w-3" />}
+            {children}
+        </span>
+    );
+}
+
+/** Vignette d'un acteur : photo ronde (ou initiales) + nom + rôle. */
+function CastTile({ member }: { member: TMDBCastMember }) {
+    const [failed, setFailed] = useState(false);
+    const initials = member.name
+        .split(/\s+/)
+        .map((part) => part[0])
+        .filter(Boolean)
+        .slice(0, 2)
+        .join("")
+        .toUpperCase();
+    return (
+        <div className="flex min-w-0 items-center gap-2.5 rounded-xl bg-white/[0.03] p-2 ring-1 ring-white/[0.06] transition-colors hover:bg-white/[0.06]">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-muted to-primary/20 ring-1 ring-white/10">
+                {member.profile_path && !failed ? (
+                    <img
+                        src={member.profile_path}
+                        alt=""
+                        loading="lazy"
+                        onError={() => setFailed(true)}
+                        className="h-full w-full object-cover"
+                    />
+                ) : (
+                    <span className="text-xs font-semibold text-foreground/70">{initials}</span>
+                )}
+            </span>
+            <span className="min-w-0">
+                <span className="block truncate text-xs font-semibold" title={member.name}>
+                    {member.name}
+                </span>
+                {member.character && (
+                    <span className="block truncate text-[11px] text-muted-foreground" title={member.character}>
+                        {member.character}
+                    </span>
+                )}
+            </span>
+        </div>
+    );
+}
+
+/** Fiche TMDB indisponible alors que l'aperçu est affiché. */
+function DetailError({ error, retrying, onRetry }: { error: unknown; retrying: boolean; onRetry: () => void }) {
+    const message = error instanceof Error ? error.message : "";
+    // Seule erreur « attendue » : la clé TMDB n'est pas configurée (HTTP 400).
+    const noKey = /TMDB_API_KEY/i.test(message);
+    return (
+        <div className="mt-5 flex items-start gap-3 rounded-xl bg-amber-500/10 p-3 text-xs ring-1 ring-amber-500/25">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+            <div className="min-w-0 flex-1">
+                <p className="font-medium text-amber-200">Détails TMDB indisponibles</p>
+                <p className="mt-0.5 break-words text-muted-foreground">
+                    {noKey
+                        ? "Ajoute TMDB_API_KEY au fichier .env du backend pour voir le casting et la bande-annonce."
+                        : message || "Le service TMDB n'a pas répondu."}
+                </p>
+            </div>
+            {!noKey && (
+                <Button variant="ghost" size="sm" onClick={onRetry} disabled={retrying} className="shrink-0">
+                    {retrying ? <Loader2 className="animate-spin" /> : <RotateCcw />} Réessayer
+                </Button>
+            )}
+        </div>
+    );
+}
+
+/** Squelette complet (ouverture sans aperçu). */
+function FullSkeleton() {
+    return (
+        <div aria-busy="true">
+            <DialogTitle className="sr-only">Chargement de la fiche</DialogTitle>
+            <DialogDescription className="sr-only">La fiche TMDB est en cours de chargement.</DialogDescription>
+            <Shimmer className="h-40 w-full rounded-none sm:h-64" />
+            <div className="relative -mt-20 flex gap-4 px-5 pb-6 sm:-mt-28 sm:gap-6 sm:px-7">
+                <Shimmer className="aspect-[2/3] w-24 shrink-0 rounded-2xl ring-1 ring-white/10 sm:w-36" />
+                <div className="flex-1 space-y-3 pt-[4.5rem] sm:pt-24">
+                    <Shimmer className="h-4 w-32 rounded-full" />
+                    <Shimmer className="h-7 w-3/4 rounded-lg" />
+                    <Shimmer className="h-3 w-40 rounded-md" />
+                </div>
+            </div>
+            <div className="space-y-2 px-5 pb-7 sm:px-7">
+                <Shimmer className="h-3.5 w-full rounded-md" />
+                <Shimmer className="h-3.5 w-11/12 rounded-md" />
+                <Shimmer className="h-3.5 w-2/3 rounded-md" />
+            </div>
+        </div>
     );
 }
