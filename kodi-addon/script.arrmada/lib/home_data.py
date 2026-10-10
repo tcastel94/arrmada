@@ -40,6 +40,39 @@ NBSP = " "  # espace insécable : séparateur de milliers « 3 412 »
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+# Écran d'erreur : le serveur qui REFUSE la TV (401/403 : pas appairée, jeton
+# révoqué, pas de mot de passe) n'est pas un serveur « injoignable ». Le dire
+# autrement évite de chercher une panne réseau qui n'existe pas.
+ERROR_AUTH = {
+    "title": "Cette TV n'est pas autorisée",
+    "short": "TV non appairée",
+    "action": "menu ArrMada, puis « Appairer cette TV »",
+    "hint": (
+        "Le serveur répond, mais refuse cette TV. Menu ArrMada, puis « Appairer cette TV », "
+        "et valide le code dans la web app (Paramètres, puis Kodi)."
+    ),
+}
+ERROR_DOWN = {
+    "title": "ArrMada est injoignable",
+    "short": "Serveur injoignable",
+    "action": "vérifie l'adresse dans les réglages de l'add-on (port 8420)",
+    "hint": (
+        "Vérifie que le serveur tourne et l'adresse dans les réglages de l'add-on "
+        "(port de l'API : 8420), puis « Actualiser ». Nouvel essai automatique toutes les 20 s."
+    ),
+}
+
+
+def describe_error(response: Any) -> dict[str, str]:
+    """Titre, résumé, action et conseil de l'écran d'erreur, selon la réponse de l'API.
+
+    `response` : le {"status": "error", "message": …, "code": …} renvoyé par
+    lib/api.py (`code` présent seulement quand le serveur a répondu).
+    """
+    code = response.get("code") if isinstance(response, dict) else None
+    return dict(ERROR_AUTH if code in (401, 403) else ERROR_DOWN)
+
+
 def greeting(hour: int) -> str:
     """Salutation selon l'heure locale de l'appareil."""
     if hour < 5:

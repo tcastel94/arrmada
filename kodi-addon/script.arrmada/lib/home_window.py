@@ -172,6 +172,9 @@ class HomeWindow(xbmcgui.WindowXML):
                 if not failed:
                     message = "ajouts récents indisponibles"
                 self.setProperty("error", message or "Serveur ArrMada injoignable")
+                described = home_data.describe_error(dashboard if failed else None)
+                for key in ("title", "short", "hint"):
+                    self.setProperty(f"error_{key}", described[key])
                 # Âge des données encore affichées (cache), recalculé à chaque essai.
                 self.setProperty(
                     "updated", home_data.age_label(self._last_fetch, datetime.now(timezone.utc))

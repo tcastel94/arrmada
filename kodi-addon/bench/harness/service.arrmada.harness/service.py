@@ -249,5 +249,14 @@ log(f"focus = {focus()} (attendu : 401, Actualiser)")
 press("Back")
 wait(1.5)
 
+# ── 10. Serveur qui répond mais refuse la TV (401) : pas « injoignable » ───
+urllib.request.urlopen(f"{MOCK}/__deny").read()
+run_plugin("home")
+wait(4.0)
+shot("12-tv-refusee")
+log(f"titre de l'erreur : {xbmc.getInfoLabel('Window.Property(error_title)')}")
+press("Back")
+wait(1.5)
+
 log("terminé")
 xbmc.executebuiltin("Quit")

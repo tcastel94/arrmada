@@ -642,7 +642,8 @@
 				<label>Aucun ajout récent dans la médiathèque.</label>
 				<visible>String.IsEqual(Window.Property(ready),1) + String.IsEqual(Window.Property(recent_count),0)</visible>
 			</control>
-			<!-- Serveur injoignable dès la 1re ouverture (aucun cache) : on dit quoi vérifier. -->
+			<!-- Serveur injoignable ou TV refusée dès la 1re ouverture (aucun cache) : on dit
+			     quoi vérifier (textes : home_data.describe_error). -->
 			<control type="group">
 				<left>96</left><top>530</top>
 				<visible>!String.IsEmpty(Window.Property(error)) + String.IsEmpty(Window.Property(recent_count))</visible>
@@ -660,7 +661,7 @@
 					<font>font15_bold</font>
 					<textcolor>FFFCA5A5</textcolor>
 					<aligny>center</aligny>
-					<label>ArrMada est injoignable</label>
+					<label>$INFO[Window.Property(error_title)]</label>
 				</control>
 				<control type="label">
 					<left>36</left><top>80</top><width>1028</width><height>36</height>
@@ -681,7 +682,7 @@
 					<font>font10</font>
 					<textcolor>99C9D3E0</textcolor>
 					<wrapmultiline>true</wrapmultiline>
-					<label>Vérifie que le serveur tourne et l'adresse dans les réglages de l'add-on (port de l'API : 8420), puis « Actualiser ». Nouvel essai automatique toutes les 20 s.</label>
+					<label>$INFO[Window.Property(error_hint)]</label>
 				</control>
 			</control>
 
@@ -906,7 +907,7 @@
 			<font>font10</font>
 			<textcolor>FFFCA5A5</textcolor>
 			<align>right</align><aligny>center</aligny>
-			<label>Serveur injoignable$INFO[Window.Property(updated), · dernière synchro ,]</label>
+			<label>$INFO[Window.Property(error_short)]$INFO[Window.Property(updated), · dernière synchro ,]</label>
 			<visible>!String.IsEmpty(Window.Property(error))</visible>
 			<animation effect="fade" time="250">VisibleChange</animation>
 			<animation effect="fade" start="100" end="55" time="900" tween="sine" pulse="true" condition="true">Conditional</animation>

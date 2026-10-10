@@ -23,6 +23,7 @@ import xbmcgui
 
 import catalog_data
 import feeds
+import home_data
 import listing
 import ui_common as ui
 from api import ArrMadaAPI
@@ -66,6 +67,12 @@ def _entries(feed: str, data, sub: str = "") -> list:
     return []
 
 
+def _empty_after_error() -> str:
+    """Liste vide faute de serveur : dire pourquoi et quoi faire."""
+    described = home_data.describe_error(listing.LAST_ERROR)
+    return f"{described['title']} : {described['action']}"
+
+
 def show_feed(handle: int, base: str, feed: str, widget: bool = False, sub: str = "") -> None:
     """Une liste (dossier ou widget) à partir du cache d'un flux."""
     if feed not in feeds.FEEDS:
@@ -79,7 +86,7 @@ def show_feed(handle: int, base: str, feed: str, widget: bool = False, sub: str 
             base,
             [],
             category=label,
-            empty="Serveur ArrMada injoignable (et rien en cache pour l'instant)",
+            empty=_empty_after_error(),
         )
         return
     listing.add_entries(

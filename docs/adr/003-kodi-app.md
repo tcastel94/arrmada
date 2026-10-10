@@ -274,6 +274,15 @@ pièce. Le choix d'une autre pièce reste possible dans un menu secondaire.
 > Trouvé au passage : les webhooks « Download » réels de Radarr/Sonarr
 > (qualité envoyée en simple chaîne) répondaient 500 ; corrigé et testé.
 >
+> **Suite de l'incident (10/10/2026), add-on 1.7.2** : la 1.7.1 ferme encore
+> Kodi quand elle est installée **par le dépôt** ; le même zip installé depuis
+> un partage réseau fonctionne. Le service n'est donc pas (seul) en cause :
+> c'est le chemin d'installation par dépôt sur Kodi 21 Android. Réponses HTTP
+> du dépôt vérifiées (en-têtes, `HEAD` sans corps, zip standard). En attendant
+> le journal de la Shield : installation par zip sur la Shield, dépôt retiré.
+> La 1.7.2 distingue aussi « TV refusée » (401/403 → appairer) de « serveur
+> injoignable ».
+>
 > Reste : retrait de l'ancien `X-Api-Key` (phase 3), avec les QR codes vers
 > la web app et les notifications enrichies.
 

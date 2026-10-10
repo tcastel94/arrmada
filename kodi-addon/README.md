@@ -253,12 +253,18 @@ cause : chercher `ArrMada`, `Fatal`, `Traceback` et les dernières lignes.
 
 ## 🚀 Installation dans Kodi
 
-### Méthode 1 : Dépôt ArrMada (recommandé, mises à jour automatiques)
+> ⚠️ **NVIDIA Shield (Kodi 21, Android)** : l'installation **par le dépôt** ferme
+> Kodi (incident 1.7.0, cause en cours d'analyse), alors que le même zip
+> installé depuis un partage réseau fonctionne. Sur la Shield, utiliser la
+> **méthode 2** et désinstaller le Dépôt ArrMada (sinon Kodi peut proposer la
+> mise à jour par le dépôt).
+
+### Méthode 1 : Dépôt ArrMada (mises à jour automatiques ; pas sur la Shield pour l'instant)
 Voir § 8 ci-dessus : une source `http://<serveur>:8420/kodi/repo/`, puis
 `repository.arrmada.zip`, puis « Installer depuis un dépôt ».
 
 ### Méthode 2 : Fichier ZIP
-1. Copiez `kodi-addon/script.arrmada.zip` (toujours la dernière version) sur votre appareil Kodi ou un partage réseau.
+1. Copiez `kodi-addon/script.arrmada.zip` (toujours la dernière version) sur votre appareil Kodi ou un partage réseau (SMB/NFS) déjà déclaré comme source dans Kodi.
 2. Dans Kodi, allez dans **Extensions / Add-ons** > **Installer depuis un fichier ZIP**.
 3. Sélectionnez `script.arrmada.zip` et validez. Pour une mise à jour, refaites la même manipulation : Kodi remplace l'ancienne version.
 
@@ -316,7 +322,7 @@ Le script lance un faux backend et un Kodi sans écran (Xvfb) avec les polices
 de SiLVO. Il rejoue un parcours à la télécommande (menu, intro, accueil,
 fiche film et série, téléchargements, salon avec et sans lecture,
 diagnostic, appairage, listes natives, widgets, événement serveur, cache, panne
-serveur) et dépose 35 captures dans
+serveur, TV refusée) et dépose 36 captures dans
 `/tmp/arrmada-kodi-bench/shots/`. Le Kodi du système n'est pas modifié : tout
 se passe dans un profil jetable. Le rendu final reste à valider sur la Shield.
 

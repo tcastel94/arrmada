@@ -34,6 +34,11 @@ def plugin_url(base: str, params: dict) -> str:
     return f"{base}?{urllib.parse.urlencode(params)}"
 
 
+# Dernière réponse d'erreur du serveur (message de liste vide : « TV non
+# appairée » n'appelle pas la même action que « serveur injoignable »).
+LAST_ERROR: dict = {}
+
+
 def read_feed(name: str, allow_fetch: bool = True):
     """Données d'un flux : le cache s'il est utilisable, sinon le serveur."""
     cache = ui.cache_dir()
@@ -45,6 +50,8 @@ def read_feed(name: str, allow_fetch: bool = True):
         return None
     data = ArrMadaAPI.get_feed(feeds.FEEDS[name].path, timeout=10)
     if feeds.is_error(data):
+        LAST_ERROR.clear()
+        LAST_ERROR.update(data)
         return entry["data"] if entry else None  # très ancien, mais mieux que rien
     feeds.save(cache, name, data, now)
     return data

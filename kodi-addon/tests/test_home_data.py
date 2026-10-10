@@ -289,3 +289,35 @@ class TestCache:
         assert home_data.load_cache(str(tmp_path)) is None
         cache_file.write_text(json.dumps({"version": 0}), encoding="utf-8")
         assert home_data.load_cache(str(tmp_path)) is None
+
+
+class TestDescribeError:
+    """Écran d'erreur : « TV refusée » n'est pas « serveur injoignable »."""
+
+    def test_refused_tv_is_not_unreachable(self) -> None:
+        for code in (401, 403):
+            described = home_data.describe_error(
+                {"status": "error", "message": "Not authenticated", "code": code}
+            )
+            assert described["title"] == "Cette TV n'est pas autorisée"
+            assert "Appairer cette TV" in described["action"]
+            assert "Appairer cette TV" in described["hint"]
+
+    def test_network_errors_and_server_errors_are_unreachable(self) -> None:
+        for response in (
+            {"status": "error", "message": "Connexion impossible à http://nas:8420 (refused)."},
+            {"status": "error", "message": "Internal Server Error", "code": 500},
+            None,
+            {},
+        ):
+            described = home_data.describe_error(response)
+            assert described["title"] == "ArrMada est injoignable"
+            assert described["short"] == "Serveur injoignable"
+            assert "8420" in described["hint"]
+
+    def test_texts_use_only_glyphs_of_the_silvo_font(self) -> None:
+        """Ces textes s'affichent tels quels : pas de « → » (carré vide, vu sur le banc)."""
+        missing = {"→", "★", "✓", "✔", "▶", "⏸", "●"}
+        for described in (home_data.ERROR_AUTH, home_data.ERROR_DOWN):
+            for text in described.values():
+                assert not missing & set(text), text

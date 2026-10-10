@@ -12,6 +12,7 @@ Répond comme le vrai backend aux routes lues par l'écran « Accueil » :
   POST /api/kodi/actions/*, /api/kodi/downloads/*/pause|resume
   GET /img/<fichier>            images générées au démarrage (Pillow)
   GET /__down                   simule une panne : toutes les routes API → 503
+  GET /__deny                   simule une TV refusée : toutes les routes API → 401
 
 La progression des téléchargements avance à chaque appel, pour vérifier le
 rafraîchissement en direct. Une latence est simulée (--delay) pour voir les
@@ -54,6 +55,7 @@ BOOT_ID = "banc-1"  # identifiant de démarrage, comme EventBus.boot_id
 STATE = {
     "tick": 0,
     "down": False,
+    "deny": False,  # /__deny : le serveur répond mais refuse la TV (401)
     "qtick": 0,
     "paused": False,
     "pair_polls": 0,
@@ -505,9 +507,9 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
         def log_message(self, fmt, *args):  # journal sur stderr, préfixé
             sys.stderr.write("[mock] " + fmt % args + "\n")
 
-        def _json(self, payload) -> None:
+        def _json(self, payload, status: int = 200) -> None:
             body = json.dumps(payload).encode()
-            self.send_response(200)
+            self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
@@ -566,6 +568,10 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
                 STATE["down"] = True
                 self._json({"down": True})
                 return
+            if path == "/__deny":
+                STATE["down"], STATE["deny"] = False, True
+                self._json({"deny": True})
+                return
             if path == "/__emit":  # le harnais publie un événement temps réel
                 from urllib.parse import parse_qs, urlsplit
 
@@ -578,6 +584,8 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
             self._note_auth()
             if STATE["down"]:
                 self.send_error(503, "ArrMada en maintenance")
+            elif STATE["deny"] and path.startswith("/api/"):
+                self._json({"detail": "Not authenticated"}, status=401)
             elif path == f"/api/devices/pair/qr/{PAIR_CODE}.png":
                 self._qr(head=False)
             elif path == "/api/devices/me":
