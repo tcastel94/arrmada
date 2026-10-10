@@ -19,30 +19,3 @@ export const SERVICE_META: Record<
     jellyfin: { label: "Jellyfin", color: "#00a4dc", icon: "play-circle" },
     sabnzbd: { label: "SABnzbd", color: "#fec72e", icon: "download" },
 };
-
-/** Health status badges */
-export const STATUS_COLORS: Record<string, string> = {
-    online: "bg-green-500",
-    offline: "bg-red-500",
-    degraded: "bg-yellow-500",
-    unknown: "bg-gray-500",
-};
-
-/** Media type labels */
-export const MEDIA_TYPE_LABELS: Record<string, string> = {
-    movie: "Films",
-    series: "Séries",
-    music: "Musique",
-    book: "Livres",
-};
-
-/** Quality profiles commonly used */
-export const QUALITY_PROFILES = [
-    "Any",
-    "SD",
-    "720p",
-    "1080p",
-    "2160p (4K)",
-    "Bluray-1080p",
-    "Bluray-2160p",
-];

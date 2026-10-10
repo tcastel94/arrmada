@@ -287,8 +287,10 @@ ruff format .
 - [x] CI/CD pipeline (GitHub Actions)
 - [x] Security hardening (HSTS, CSP, rate limiting)
 - [x] Docker multi-stage production build
-- [ ] Media detail view with cast & subtitles
-- [ ] Duplicate media detection
+- [x] UI v2 « Neon Armada » (design system, command palette, keyboard shortcuts, real-time toasts)
+- [x] Living-room remote (Kodi, Yamaha, Chromecast)
+- [x] Media detail view with cast & subtitles
+- [x] Duplicate media detection (Santé médiathèque)
 - [ ] AI-powered recommendations (TMDB)
 - [ ] Notification center (Telegram, Discord)
 - [ ] Mobile app (React Native)
