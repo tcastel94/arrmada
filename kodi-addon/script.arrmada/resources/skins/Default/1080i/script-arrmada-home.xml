@@ -986,8 +986,8 @@
 				<control type="label"><width>530</width><height>38</height><font>font12</font><textcolor>FFF5F7FA</textcolor><label>Skin : $INFO[Window.Property(skin)]</label></control>
 				<control type="label"><width>530</width><height>38</height><font>font12</font><textcolor>FFF5F7FA</textcolor><label>Jeu de polices : $INFO[Skin.Font]</label></control>
 				<control type="label"><width>530</width><height>38</height><font>font12</font><textcolor>FFF5F7FA</textcolor><label>Écran : $INFO[System.ScreenResolution]</label></control>
-				<control type="label"><width>530</width><height>38</height><font>font12</font><textcolor>FFF5F7FA</textcolor><label>Images/s : $INFO[System.FPS]</label></control>
-				<control type="label"><width>530</width><height>38</height><font>font12</font><textcolor>FFF5F7FA</textcolor><label>Processeur : $INFO[System.CPUUsage]</label></control>
+				<control type="label"><width>530</width><height>38</height><font>font12</font><textcolor>FFF5F7FA</textcolor><label>Images/s : $INFO[System.FPS] · processeur : $INFO[System.CPUUsage]</label></control>
+				<control type="label"><width>530</width><height>38</height><font>font12</font><textcolor>FFF5F7FA</textcolor><label>Appareil : $INFO[Window.Property(device_label)]</label></control>
 				<control type="label"><width>530</width><height>38</height><font>font12</font><textcolor>FFF5F7FA</textcolor><label>Mémoire utilisée : $INFO[System.Memory(used.percent)]</label></control>
 				<control type="label"><width>530</width><height>38</height><font>font12</font><textcolor>FFF5F7FA</textcolor><label>Add-on : v$INFO[Window.Property(version)]</label></control>
 			</control>

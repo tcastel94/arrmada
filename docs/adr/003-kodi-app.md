@@ -221,6 +221,29 @@ pièce. Le choix d'une autre pièce reste possible dans un menu secondaire.
 >   téléchargement depuis la TV (contraire à la décision 1) : à retirer avec
 >   le nettoyage de la phase 3, ou dès l'appairage (phase 1) côté backend.
 
+> **Avancement phase 1 (10/10/2026)** — Livré dans l'add-on 1.6.0 :
+> - **Appairage** (§ 4) : table `devices`, routes `/api/devices/pair/start`,
+>   `/poll`, `/confirm`, QR code `/pair/qr/{code}.png`, liste / modification /
+>   révocation. Jeton propre à chaque TV (seule son empreinte SHA-256 est
+>   stockée), en-tête `X-Device-Token`, périmètre « TV » en liste blanche
+>   côté serveur, réseau local seulement (y compris `X-Forwarded-For`).
+>   Écran d'appairage Kodi (code en 6 cases + QR code) et panneau
+>   « Appareils » dans la web app. `X-Api-Key` reste accepté (transition).
+> - **Pièce et ampli par appareil** (§ 6) : choisis à l'appairage ; l'écran
+>   Salon et le préréglage de « Lire » visent l'ampli de la pièce de la TV,
+>   imposé par le serveur.
+> - **Dépôt Kodi** (§ 5) : `/kodi/repo/` (liste, `addons.xml`, md5, zips)
+>   construit à la volée depuis `kodi-addon/` monté dans le conteneur (pas
+>   de zip dans l'image : un `git pull` suffit). Installation puis mise à jour
+>   automatique validées sur un vrai Kodi 20.5 (1.5.0 → 9.9.9 en 4 s).
+> - **Volume de la télécommande** : Kodi pour Android ignore les touches
+>   volume (`AndroidKey.cpp`), un add-on ne peut pas les capter. Solution
+>   documentée côté Shield : contrôle du volume par HDMI-CEC (ou IR).
+>
+> Reste pour la phase 1 : service qui préchauffe le cache et écoute le temps
+> réel (SSE), navigation native (listes et widgets SiLVO), retrait de
+> l'ancien `X-Api-Key` (phase 3).
+
 ## Conséquences
 
 ### Positives

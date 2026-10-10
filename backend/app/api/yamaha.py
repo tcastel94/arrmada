@@ -16,6 +16,19 @@ router = APIRouter(
 )
 
 
+def _target_avr(user: dict, requested: int | None) -> int | None:
+    """Ampli visé par la requête.
+
+    Une TV appairée pilote toujours l'ampli de SA pièce (choisi à
+    l'appairage, ADR-003 § 6) : le `service_id` qu'elle enverrait est ignoré.
+    Sans ampli choisi pour l'appareil, ou depuis la web app : celui demandé,
+    sinon le premier ampli actif.
+    """
+    if user.get("role") == "device" and user.get("avr_service_id"):
+        return user["avr_service_id"]
+    return requested
+
+
 @router.get("/discover")
 async def discover(db: AsyncSession = Depends(get_db)) -> list[dict]:
     """Find Yamaha AVRs on the LAN (SSDP + YXC probe of known subnets)."""
@@ -23,9 +36,13 @@ async def discover(db: AsyncSession = Depends(get_db)) -> list[dict]:
 
 
 @router.get("/state")
-async def state(service_id: int | None = None, db: AsyncSession = Depends(get_db)):
+async def state(
+    service_id: int | None = None,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
     """Live power/volume/mute/input of the configured AVR(s)."""
-    return await yamaha_service.get_state(db, service_id)
+    return await yamaha_service.get_state(db, _target_avr(user, service_id))
 
 
 @router.get("/inputs")
@@ -35,7 +52,9 @@ async def inputs(service_id: int | None = None, db: AsyncSession = Depends(get_d
 
 
 @router.post("/control")
-async def control(data: dict, db: AsyncSession = Depends(get_db)):
+async def control(
+    data: dict, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)
+):
     """Send a command: volume | volume_step | mute | power | input."""
     action = (data or {}).get("action")
     if not action:
@@ -44,7 +63,7 @@ async def control(data: dict, db: AsyncSession = Depends(get_db)):
         db,
         action,
         (data or {}).get("value"),
-        service_id=(data or {}).get("service_id"),
+        service_id=_target_avr(user, (data or {}).get("service_id")),
         zone=(data or {}).get("zone", "main"),
     )
 
@@ -64,13 +83,16 @@ async def save_profile(data: dict, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/preset/apply")
-async def apply_preset(data: dict, db: AsyncSession = Depends(get_db)):
+async def apply_preset(
+    data: dict, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)
+):
     """Apply room audio preset (salon / cinema) based on media context."""
-    room = (data or {}).get("room", "salon")
+    # Pièce : celle demandée, sinon celle de la TV appairée, sinon le salon
+    room = (data or {}).get("room") or user.get("room") or "salon"
     media_type = (data or {}).get("media_type", "movie")
     audio_codec = (data or {}).get("audio_codec")
     audio_channels = (data or {}).get("audio_channels")
-    service_id = (data or {}).get("service_id")
+    service_id = _target_avr(user, (data or {}).get("service_id"))
 
     return await yamaha_service.apply_preset(
         db,

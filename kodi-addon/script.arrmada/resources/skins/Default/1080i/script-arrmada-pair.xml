@@ -1,0 +1,429 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ArrMada — écran « Appairer cette TV » (phase 1, ADR-003 § 4).
+
+  Rempli par lib/pair_window.py, via la propriété « state » :
+    loading  demande d'un code au serveur
+    waiting  code en 6 cases + QR code + compte à rebours (on attend la web app)
+    done     TV appairée : nom, pièce, ampli
+    expired  code périmé → bouton « Nouveau code » (901)
+    error    serveur injoignable / refus → bouton « Réessayer » (901)
+  Retour : annuler.
+-->
+<window>
+	<defaultcontrol always="false">901</defaultcontrol>
+	<backgroundcolor>FF0A0E16</backgroundcolor>
+	<animation effect="fade" start="0" end="100" time="300" tween="sine" easing="out">WindowOpen</animation>
+	<animation effect="fade" start="100" end="0" time="250">WindowClose</animation>
+	<controls>
+		<control type="image">
+			<left>0</left><top>0</top><width>1920</width><height>1080</height>
+			<texture colordiffuse="FF0A0E16">arrmada/white.png</texture>
+		</control>
+		<control type="image">
+			<left>860</left><top>-420</top><width>1500</width><height>1100</height>
+			<texture colordiffuse="594A9EFF">arrmada/blob.png</texture>
+			<animation effect="fade" start="100" end="45" time="5000" tween="sine" pulse="true" condition="true">Conditional</animation>
+		</control>
+		<control type="image">
+			<left>-500</left><top>560</top><width>1300</width><height>900</height>
+			<texture colordiffuse="2622D3EE">arrmada/blob.png</texture>
+		</control>
+		<control type="image">
+			<left>0</left><top>620</top><width>1920</width><height>460</height>
+			<texture colordiffuse="CC0A0E16">arrmada/grad-v.png</texture>
+		</control>
+
+		<!-- En-tête : logo + titre -->
+		<control type="group">
+			<animation effect="slide" start="0,-40" end="0,0" time="450" tween="cubic" easing="out">WindowOpen</animation>
+			<control type="group">
+				<left>96</left><top>52</top>
+				<control type="image">
+					<width>76</width><height>76</height>
+					<texture>arrmada/brand-leg-left.png</texture>
+				</control>
+				<control type="image">
+					<width>76</width><height>76</height>
+					<texture>arrmada/brand-leg-right.png</texture>
+				</control>
+				<control type="image">
+					<width>76</width><height>76</height>
+					<texture>arrmada/brand-play.png</texture>
+				</control>
+			</control>
+			<control type="label">
+				<left>186</left><top>66</top><width>600</width><height>48</height>
+				<font>font16_title_bold</font>
+				<textcolor>FFF5F7FA</textcolor>
+				<aligny>center</aligny>
+				<label>ArrMada</label>
+			</control>
+			<control type="label">
+				<left>96</left><top>164</top><width>1100</width><height>80</height>
+				<font>font48_bold</font>
+				<textcolor>FFF5F7FA</textcolor>
+				<aligny>center</aligny>
+				<label>Appairer cette TV</label>
+			</control>
+			<control type="label">
+				<left>96</left><top>240</top><width>1100</width><height>44</height>
+				<font>font15</font>
+				<textcolor>B3DCE3EE</textcolor>
+				<aligny>center</aligny>
+				<label>Valide ce code depuis ton téléphone ou ton ordinateur, en 3 étapes.</label>
+			</control>
+		</control>
+
+		<!-- ═══════════════ Chargement ═══════════════ -->
+		<control type="group">
+			<visible>String.IsEqual(Window.Property(state),loading)</visible>
+			<animation effect="fade" time="250">VisibleChange</animation>
+			<control type="image">
+				<left>96</left><top>420</top><width>56</width><height>56</height>
+				<texture colordiffuse="FF4A9EFF">arrmada/spinner.png</texture>
+				<animation effect="rotate" end="-360" center="auto" time="900" loop="true" condition="true">Conditional</animation>
+			</control>
+			<control type="label">
+				<left>176</left><top>420</top><width>900</width><height>56</height>
+				<font>font16</font>
+				<textcolor>D9F5F7FA</textcolor>
+				<aligny>center</aligny>
+				<label>Demande d'un code au serveur ArrMada…</label>
+			</control>
+		</control>
+
+		<!-- ═══════════════ Code + QR code (en attente de validation) ═══════════════ -->
+		<control type="group">
+			<visible>String.IsEqual(Window.Property(state),waiting)</visible>
+			<animation effect="fade" time="300">VisibleChange</animation>
+
+			<control type="label">
+				<left>96</left><top>330</top><width>1000</width><height>36</height>
+				<font>font12_title</font>
+				<textcolor>FF9CCBFF</textcolor>
+				<aligny>center</aligny>
+				<label>Code d'appairage</label>
+			</control>
+
+			<!-- 6 cases (2 groupes de 3), qui apparaissent l'une après l'autre -->
+			<control type="group">
+				<left>96</left><top>384</top>
+				<animation effect="zoom" start="70" end="100" time="420" delay="0" tween="back" easing="out" center="64,80">Visible</animation>
+				<animation effect="fade" start="0" end="100" time="300" delay="0">Visible</animation>
+				<control type="image">
+					<width>128</width><height>160</height>
+					<texture border="26" colordiffuse="1AFFFFFF">arrmada/rounded-24.png</texture>
+				</control>
+				<control type="image">
+					<width>128</width><height>160</height>
+					<texture border="26" colordiffuse="664A9EFF">arrmada/ring-24.png</texture>
+				</control>
+				<control type="label">
+					<width>128</width><height>160</height>
+					<font>font65</font>
+					<textcolor>FFF5F7FA</textcolor>
+					<align>center</align><aligny>center</aligny>
+					<label>$INFO[Window.Property(code_1)]</label>
+				</control>
+			</control>
+			<control type="group">
+				<left>244</left><top>384</top>
+				<animation effect="zoom" start="70" end="100" time="420" delay="70" tween="back" easing="out" center="64,80">Visible</animation>
+				<animation effect="fade" start="0" end="100" time="300" delay="70">Visible</animation>
+				<control type="image">
+					<width>128</width><height>160</height>
+					<texture border="26" colordiffuse="1AFFFFFF">arrmada/rounded-24.png</texture>
+				</control>
+				<control type="image">
+					<width>128</width><height>160</height>
+					<texture border="26" colordiffuse="664A9EFF">arrmada/ring-24.png</texture>
+				</control>
+				<control type="label">
+					<width>128</width><height>160</height>
+					<font>font65</font>
+					<textcolor>FFF5F7FA</textcolor>
+					<align>center</align><aligny>center</aligny>
+					<label>$INFO[Window.Property(code_2)]</label>
+				</control>
+			</control>
+			<control type="group">
+				<left>392</left><top>384</top>
+				<animation effect="zoom" start="70" end="100" time="420" delay="140" tween="back" easing="out" center="64,80">Visible</animation>
+				<animation effect="fade" start="0" end="100" time="300" delay="140">Visible</animation>
+				<control type="image">
+					<width>128</width><height>160</height>
+					<texture border="26" colordiffuse="1AFFFFFF">arrmada/rounded-24.png</texture>
+				</control>
+				<control type="image">
+					<width>128</width><height>160</height>
+					<texture border="26" colordiffuse="664A9EFF">arrmada/ring-24.png</texture>
+				</control>
+				<control type="label">
+					<width>128</width><height>160</height>
+					<font>font65</font>
+					<textcolor>FFF5F7FA</textcolor>
+					<align>center</align><aligny>center</aligny>
+					<label>$INFO[Window.Property(code_3)]</label>
+				</control>
+			</control>
+			<control type="group">
+				<left>588</left><top>384</top>
+				<animation effect="zoom" start="70" end="100" time="420" delay="210" tween="back" easing="out" center="64,80">Visible</animation>
+				<animation effect="fade" start="0" end="100" time="300" delay="210">Visible</animation>
+				<control type="image">
+					<width>128</width><height>160</height>
+					<texture border="26" colordiffuse="1AFFFFFF">arrmada/rounded-24.png</texture>
+				</control>
+				<control type="image">
+					<width>128</width><height>160</height>
+					<texture border="26" colordiffuse="664A9EFF">arrmada/ring-24.png</texture>
+				</control>
+				<control type="label">
+					<width>128</width><height>160</height>
+					<font>font65</font>
+					<textcolor>FFF5F7FA</textcolor>
+					<align>center</align><aligny>center</aligny>
+					<label>$INFO[Window.Property(code_4)]</label>
+				</control>
+			</control>
+			<control type="group">
+				<left>736</left><top>384</top>
+				<animation effect="zoom" start="70" end="100" time="420" delay="280" tween="back" easing="out" center="64,80">Visible</animation>
+				<animation effect="fade" start="0" end="100" time="300" delay="280">Visible</animation>
+				<control type="image">
+					<width>128</width><height>160</height>
+					<texture border="26" colordiffuse="1AFFFFFF">arrmada/rounded-24.png</texture>
+				</control>
+				<control type="image">
+					<width>128</width><height>160</height>
+					<texture border="26" colordiffuse="664A9EFF">arrmada/ring-24.png</texture>
+				</control>
+				<control type="label">
+					<width>128</width><height>160</height>
+					<font>font65</font>
+					<textcolor>FFF5F7FA</textcolor>
+					<align>center</align><aligny>center</aligny>
+					<label>$INFO[Window.Property(code_5)]</label>
+				</control>
+			</control>
+			<control type="group">
+				<left>884</left><top>384</top>
+				<animation effect="zoom" start="70" end="100" time="420" delay="350" tween="back" easing="out" center="64,80">Visible</animation>
+				<animation effect="fade" start="0" end="100" time="300" delay="350">Visible</animation>
+				<control type="image">
+					<width>128</width><height>160</height>
+					<texture border="26" colordiffuse="1AFFFFFF">arrmada/rounded-24.png</texture>
+				</control>
+				<control type="image">
+					<width>128</width><height>160</height>
+					<texture border="26" colordiffuse="664A9EFF">arrmada/ring-24.png</texture>
+				</control>
+				<control type="label">
+					<width>128</width><height>160</height>
+					<font>font65</font>
+					<textcolor>FFF5F7FA</textcolor>
+					<align>center</align><aligny>center</aligny>
+					<label>$INFO[Window.Property(code_6)]</label>
+				</control>
+			</control>
+
+			<!-- Attente + compte à rebours -->
+			<control type="image">
+				<left>96</left><top>592</top><width>36</width><height>36</height>
+				<texture colordiffuse="FF4A9EFF">arrmada/spinner.png</texture>
+				<animation effect="rotate" end="-360" center="auto" time="900" loop="true" condition="true">Conditional</animation>
+			</control>
+			<control type="label">
+				<left>148</left><top>588</top><width>900</width><height>44</height>
+				<font>font14</font>
+				<textcolor>D9F5F7FA</textcolor>
+				<aligny>center</aligny>
+				<label>En attente de validation · ce code expire dans $INFO[Window.Property(countdown)]</label>
+			</control>
+
+			<!-- Marche à suivre -->
+			<control type="group">
+				<left>96</left><top>676</top>
+				<control type="image">
+					<left>0</left><top>2</top><width>40</width><height>40</height>
+					<texture colordiffuse="334A9EFF">arrmada/circle.png</texture>
+				</control>
+				<control type="label">
+					<left>0</left><top>2</top><width>40</width><height>40</height>
+					<font>font13</font>
+					<textcolor>FF9CCBFF</textcolor>
+					<align>center</align><aligny>center</aligny>
+					<label>$NUMBER[1]</label>
+				</control>
+				<control type="label">
+					<left>60</left><top>0</top><width>900</width><height>44</height>
+					<font>font14</font>
+					<textcolor>E6F5F7FA</textcolor>
+					<aligny>center</aligny>
+					<label>Scanne le QR code, ou ouvre $INFO[Window.Property(web_hint)]</label>
+				</control>
+				<control type="image">
+					<left>0</left><top>74</top><width>40</width><height>40</height>
+					<texture colordiffuse="334A9EFF">arrmada/circle.png</texture>
+				</control>
+				<control type="label">
+					<left>0</left><top>74</top><width>40</width><height>40</height>
+					<font>font13</font>
+					<textcolor>FF9CCBFF</textcolor>
+					<align>center</align><aligny>center</aligny>
+					<label>$NUMBER[2]</label>
+				</control>
+				<control type="label">
+					<left>60</left><top>72</top><width>900</width><height>44</height>
+					<font>font14</font>
+					<textcolor>E6F5F7FA</textcolor>
+					<aligny>center</aligny>
+					<label>Réglages &gt; Kodi &gt; Appairer une TV : saisis le code</label>
+				</control>
+				<control type="image">
+					<left>0</left><top>146</top><width>40</width><height>40</height>
+					<texture colordiffuse="334A9EFF">arrmada/circle.png</texture>
+				</control>
+				<control type="label">
+					<left>0</left><top>146</top><width>40</width><height>40</height>
+					<font>font13</font>
+					<textcolor>FF9CCBFF</textcolor>
+					<align>center</align><aligny>center</aligny>
+					<label>$NUMBER[3]</label>
+				</control>
+				<control type="label">
+					<left>60</left><top>144</top><width>900</width><height>44</height>
+					<font>font14</font>
+					<textcolor>E6F5F7FA</textcolor>
+					<aligny>center</aligny>
+					<label>Choisis la pièce et l'ampli de cette TV : elle se connecte toute seule</label>
+				</control>
+			</control>
+
+			<!-- QR code -->
+			<control type="group">
+				<left>1296</left><top>296</top>
+				<animation effect="zoom" start="85" end="100" time="500" delay="150" tween="cubic" easing="out" center="220,220">Visible</animation>
+				<animation effect="fade" start="0" end="100" time="400" delay="150">Visible</animation>
+				<control type="image">
+					<left>-40</left><top>-40</top><width>520</width><height>520</height>
+					<texture border="56" colordiffuse="664A9EFF">arrmada/glow.png</texture>
+					<animation effect="fade" start="100" end="40" time="2400" tween="sine" pulse="true" condition="true">Conditional</animation>
+				</control>
+				<control type="image">
+					<width>440</width><height>440</height>
+					<texture border="26">arrmada/rounded-24.png</texture>
+				</control>
+				<control type="image">
+					<left>20</left><top>20</top><width>400</width><height>400</height>
+					<aspectratio>keep</aspectratio>
+					<fadetime>300</fadetime>
+					<texture background="true">$INFO[Window.Property(qr)]</texture>
+				</control>
+				<control type="label">
+					<left>0</left><top>468</top><width>440</width><height>36</height>
+					<font>font12</font>
+					<textcolor>B3DCE3EE</textcolor>
+					<align>center</align><aligny>center</aligny>
+					<label>Scanne avec l'appareil photo du téléphone</label>
+				</control>
+			</control>
+		</control>
+
+		<!-- ═══════════════ Appairée ═══════════════ -->
+		<control type="group">
+			<visible>String.IsEqual(Window.Property(state),done)</visible>
+			<animation effect="zoom" start="85" end="100" time="500" tween="back" easing="out" center="960,560">Visible</animation>
+			<animation effect="fade" start="0" end="100" time="350">Visible</animation>
+			<control type="image">
+				<left>790</left><top>330</top><width>340</width><height>340</height>
+				<texture colordiffuse="804A9EFF">arrmada/glow.png</texture>
+				<animation effect="zoom" start="80" end="115" time="1600" tween="sine" pulse="true" center="960,500" condition="true">Conditional</animation>
+			</control>
+			<control type="image">
+				<left>880</left><top>420</top><width>160</width><height>160</height>
+				<texture colordiffuse="FF34D399">arrmada/circle.png</texture>
+			</control>
+			<control type="group">
+				<left>900</left><top>440</top>
+				<control type="image">
+					<width>120</width><height>120</height>
+					<texture colordiffuse="FF0A0E16">arrmada/brand-leg-left.png</texture>
+				</control>
+				<control type="image">
+					<width>120</width><height>120</height>
+					<texture colordiffuse="FF0A0E16">arrmada/brand-leg-right.png</texture>
+				</control>
+				<control type="image">
+					<width>120</width><height>120</height>
+					<texture colordiffuse="FF0A0E16">arrmada/brand-play.png</texture>
+				</control>
+			</control>
+			<control type="label">
+				<left>160</left><top>620</top><width>1600</width><height>80</height>
+				<font>font48_bold</font>
+				<textcolor>FFF5F7FA</textcolor>
+				<align>center</align><aligny>center</aligny>
+				<label>TV appairée</label>
+			</control>
+			<control type="label">
+				<left>160</left><top>700</top><width>1600</width><height>48</height>
+				<font>font16</font>
+				<textcolor>FF9CCBFF</textcolor>
+				<align>center</align><aligny>center</aligny>
+				<label>$INFO[Window.Property(summary)]</label>
+			</control>
+			<control type="label">
+				<left>160</left><top>760</top><width>1600</width><height>40</height>
+				<font>font13</font>
+				<textcolor>99C9D3E0</textcolor>
+				<align>center</align><aligny>center</aligny>
+				<label>Elle pilote désormais l'ampli de sa pièce. Le mot de passe admin peut être retiré des réglages de l'add-on.</label>
+			</control>
+		</control>
+
+		<!-- ═══════════════ Code expiré / erreur ═══════════════ -->
+		<control type="group">
+			<visible>String.IsEqual(Window.Property(state),expired) | String.IsEqual(Window.Property(state),error)</visible>
+			<animation effect="fade" time="300">VisibleChange</animation>
+			<control type="image">
+				<left>96</left><top>360</top><width>1080</width><height>300</height>
+				<texture border="26" colordiffuse="14FFFFFF">arrmada/rounded-24.png</texture>
+			</control>
+			<control type="label">
+				<left>140</left><top>392</top><width>1000</width><height>60</height>
+				<font>font30</font>
+				<textcolor>FFFCD34D</textcolor>
+				<aligny>center</aligny>
+				<label>$INFO[Window.Property(message_title)]</label>
+			</control>
+			<control type="textbox">
+				<left>140</left><top>460</top><width>1000</width><height>90</height>
+				<font>font14</font>
+				<textcolor>D9DCE3EE</textcolor>
+				<label>$INFO[Window.Property(message)]</label>
+			</control>
+			<control type="button" id="901">
+				<left>140</left><top>568</top><width>300</width><height>64</height>
+				<label>$INFO[Window.Property(retry_label)]</label>
+				<font>font13</font>
+				<textcolor>FF8CC4FF</textcolor>
+				<focusedcolor>FF0A0E16</focusedcolor>
+				<align>center</align><aligny>center</aligny>
+				<texturenofocus border="14" colordiffuse="334A9EFF">arrmada/rounded-12.png</texturenofocus>
+				<texturefocus border="14" colordiffuse="FF4A9EFF">arrmada/rounded-12.png</texturefocus>
+				<animation effect="zoom" start="100" end="107" time="160" tween="cubic" easing="out" center="auto">Focus</animation>
+				<animation effect="zoom" start="107" end="100" time="160" tween="cubic" easing="out" center="auto">UnFocus</animation>
+			</control>
+		</control>
+
+		<control type="label">
+			<left>1224</left><top>1012</top><width>600</width><height>30</height>
+			<font>font10</font>
+			<textcolor>66C9D3E0</textcolor>
+			<align>right</align><aligny>center</aligny>
+			<label>Retour : annuler</label>
+		</control>
+	</controls>
+</window>

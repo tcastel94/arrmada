@@ -3,7 +3,8 @@
 Kodi n'affiche aucune erreur visible quand un identifiant, une texture ou une
 police n'existe pas : le contrôle reste vide, ou la police retombe sur font13.
 Ces tests attrapent ces fautes de frappe avant qu'elles n'arrivent sur la TV,
-pour les quatre écrans (Accueil, Fiche média, Téléchargements, Salon).
+pour les écrans sur mesure (Accueil, Fiche média, Téléchargements, Salon,
+Appairage).
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ WINDOWS = {
     "detail": ("script-arrmada-detail.xml", "detail_window.py"),
     "downloads": ("script-arrmada-downloads.xml", "downloads_window.py"),
     "salon": ("script-arrmada-salon.xml", "salon_window.py"),
+    "pair": ("script-arrmada-pair.xml", "pair_window.py"),
 }
 
 # Noms de police présents dans TOUS les jeux de polices (« fontsets ») d'Aeon
@@ -166,6 +168,17 @@ def test_only_the_focused_control_is_solid_accent(window: str) -> None:
         if len(color) == 8 and color.endswith("4A9EFF") and int(color[:2], 16) >= 0x80:
             offenders.append(color)
     assert not offenders, f"bouton non focalisé en bleu plein : {offenders}"
+
+
+@pytest.mark.parametrize("window", WINDOWS)
+def test_no_numeric_label(window: str) -> None:
+    """Un `<label>` purement numérique est lu par Kodi comme un identifiant de
+    texte traduit (« 1 » → « Images »…), pas comme le chiffre : écrire
+    `$NUMBER[1]`. Constaté sur le banc (numéros d'étape de l'appairage)."""
+    numeric = [
+        lbl.text for lbl in _tree(window).iter("label") if (lbl.text or "").strip().isdigit()
+    ]
+    assert not numeric, f"libellés numériques (utiliser $NUMBER[...]) : {numeric}"
 
 
 def test_textures_exist_and_are_used() -> None:

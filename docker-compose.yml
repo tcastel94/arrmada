@@ -9,11 +9,15 @@ services:
     volumes:
       - ./data:/app/data
       - ./backend/app:/app/app
+      # Add-on Kodi servi en dépôt (/kodi/repo) : un `git pull` suffit pour
+      # proposer la nouvelle version aux TV, sans reconstruire l'image.
+      - ./kodi-addon:/app/kodi-addon:ro
       - /mnt/user:/mnt/user:rw
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://arrmada:${POSTGRES_PASSWORD:-arrmada}@arrmada-db:5432/arrmada}
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3420,http://192.168.2.3:3420}
+      - PUBLIC_WEB_URL=${PUBLIC_WEB_URL:-}
       - ARRMADA_AUTH_SECRET=${ARRMADA_AUTH_SECRET:-changeme}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}

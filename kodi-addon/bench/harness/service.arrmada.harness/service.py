@@ -3,7 +3,7 @@
 
 Lancé automatiquement au démarrage de Kodi (add-on de type « service »), il
 rejoue un parcours complet sur l'appli ArrMada (Accueil, Fiche média,
-Téléchargements, Salon), puis quitte Kodi.
+Téléchargements, Salon, Appairage), puis quitte Kodi.
 Variables d'environnement (posées par run.sh) : SHOT_DIR, MOCK_URL, PACE, DEMO_VIDEO.
 """
 
@@ -153,6 +153,14 @@ press("Back")
 wait(1.0)
 press("Back")  # ferme l'accueil
 wait(2.0)
+
+# ── 6b. Appairage de la TV (le faux serveur valide au 3e poll, ~9 s) ───────
+run_plugin("pair")
+wait(2.0)
+shot("07b-appairage-code")
+wait(9.0)
+shot("07c-appairage-ok")
+wait(5.0)  # l'écran se ferme seul ; la suite utilise le jeton d'appareil
 
 # ── 7. Réouverture (cache), panne serveur ──────────────────────────────────
 run_plugin("home")

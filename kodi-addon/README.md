@@ -118,11 +118,70 @@ télécommande. Phase 0 : **Accueil**. Phase 2 : **Fiche média**,
 > Les temps mesurés sont aussi écrits dans `kodi.log` (lignes `[ArrMada] Accueil : …`,
 > `[ArrMada] Fiche : …`).
 
+### 7. 🔗 Appairage de la TV : pièce et ampli par appareil (phase 1 de l'ADR-003)
+Chaque TV reçoit **son propre accès**, comme « connecter la TV » de Netflix :
+plus de mot de passe admin dans Kodi, et un appareil se révoque d'un clic.
+
+1. Sur la TV : **ArrMada → [NOUVEAU] Appairer cet appareil**. L'écran affiche un code à 6 caractères et un QR code.
+2. Sur le téléphone : scanne le QR code (ou web app → **Réglages → Kodi → Appairer une TV** et saisis le code).
+3. Choisis le **nom**, la **pièce** (Salon / Salle de cinéma) et l'**ampli** de cette TV. La TV se connecte toute seule en quelques secondes.
+
+Ensuite :
+- l'écran **Salon** et le préréglage appliqué par **Lire** visent **toujours l'ampli de la pièce de cette TV**. Le serveur l'impose : une TV ne peut pas piloter l'ampli d'une autre pièce ;
+- la pièce choisie remplace le réglage « Profil de la pièce » de l'add-on ;
+- le **mot de passe admin peut être retiré** des réglages de l'add-on ;
+- périmètre « TV » imposé par le serveur : lecture, recherche, ajout, sous-titres, file (lecture seule + pause/reprise), ampli. **Aucune suppression ni configuration** depuis une TV appairée (même dans les anciens menus) ;
+- appairage et jeton acceptés **uniquement depuis le réseau local** ;
+- Diagnostic (Accueil) : ligne « Appareil » ; web app : liste des TV, dernière activité, modifier, révoquer.
+
+> Une TV révoquée (ou une base serveur remise à zéro) oublie son jeton à la
+> première requête refusée : relance simplement l'appairage.
+
+### 8. 🔄 Mises à jour automatiques : le dépôt ArrMada
+ArrMada sert un **dépôt Kodi** (`http://<serveur>:8420/kodi/repo/`). Installé une
+fois sur chaque TV, il permet à Kodi de mettre l'appli à jour **tout seul**
+(au démarrage, puis toutes les 24 h). Plus de zip à copier.
+
+1. Kodi : Paramètres → Système → Extensions → active **Sources inconnues**.
+2. Gestionnaire de fichiers → **Ajouter une source** → `http://<serveur>:8420/kodi/repo/` → nomme-la « ArrMada ».
+3. Extensions → **Installer depuis un fichier zip** → ArrMada → `repository.arrmada.zip`.
+4. Extensions → **Installer depuis un dépôt** → Dépôt ArrMada → ArrMada (si l'appli est déjà installée, rien à faire).
+
+L'adresse exacte est affichée dans la web app (Réglages → Kodi → « Mises à
+jour de l'appli Kodi »). Côté serveur, le conteneur lit le dossier
+`kodi-addon/` du dépôt Git (`./kodi-addon:/app/kodi-addon:ro` dans
+`docker-compose.yml`) : après un `git pull`, la nouvelle version est proposée
+aux TV, **sans reconstruire l'image Docker**. Forcer la vérification : Extensions
+→ Mes extensions → Dépôts d'extensions → Dépôt ArrMada → Mettre à jour.
+
+> Kodi signale dans son journal que le dépôt est en HTTP (pas HTTPS) : c'est
+> attendu, il n'est joignable que depuis le réseau local.
+
+### 9. 🔊 Boutons volume de la télécommande → ampli de la pièce
+Kodi pour Android **ne reçoit pas** les touches volume : il les laisse au
+système Android (vérifié dans le code source de Kodi, `AndroidKey.cpp`).
+Aucun add-on ne peut donc les intercepter. La bonne solution est **dans la
+Shield**, et elle marche dans toutes les applis (Kodi, Netflix…) :
+
+| Méthode | Réglage | Condition |
+|---|---|---|
+| **HDMI-CEC** (recommandée) | Shield : Paramètres → Préférences de l'appareil → Écran et son → **Contrôle du volume** → HDMI-CEC. Ampli Yamaha : Configuration → HDMI → **Contrôle HDMI : Activé** | La Shield est branchée en HDMI sur l'ampli (ou sur la TV reliée à l'ampli en ARC/eARC) |
+| **Infrarouge** | Même menu → **IR**, puis « Configurer l'IR » et choisir l'ampli Yamaha | Télécommande Shield 2019 (émetteur IR) pointée vers l'ampli |
+
+Les libellés exacts des menus varient selon la version du firmware (Shield
+et Yamaha). Chaque Shield pilote ainsi **l'ampli de sa propre pièce**, sans
+réseau et sans délai. Dans Kodi, l'écran **Salon** reste disponible pour le volume fin, le
+muet, la mise en veille et les préréglages.
+
 ---
 
 ## 🚀 Installation dans Kodi
 
-### Méthode 1 : Fichier ZIP (Recommandé)
+### Méthode 1 : Dépôt ArrMada (recommandé, mises à jour automatiques)
+Voir § 8 ci-dessus : une source `http://<serveur>:8420/kodi/repo/`, puis
+`repository.arrmada.zip`, puis « Installer depuis un dépôt ».
+
+### Méthode 2 : Fichier ZIP
 1. Copiez `kodi-addon/script.arrmada.zip` (toujours la dernière version) sur votre appareil Kodi ou un partage réseau.
 2. Dans Kodi, allez dans **Extensions / Add-ons** > **Installer depuis un fichier ZIP**.
 3. Sélectionnez `script.arrmada.zip` et validez. Pour une mise à jour, refaites la même manipulation : Kodi remplace l'ancienne version.
@@ -132,7 +191,7 @@ télécommande. Phase 0 : **Accueil**. Phase 2 : **Fiche média**,
 > Le script produit aussi `script.arrmada-<version>.zip` (non suivi par Git),
 > pratique pour revenir à une version précédente.
 
-### Méthode 2 : Copie directe
+### Méthode 3 : Copie directe
 Copiez le dossier `script.arrmada/` dans le dossier des extensions de Kodi :
 - **LibreELEC / CoreELEC** : `/storage/.kodi/addons/`
 - **Linux** : `~/.kodi/addons/`
@@ -146,12 +205,14 @@ Copiez le dossier `script.arrmada/` dans le dossier des extensions de Kodi :
 1. Ouvrez Kodi > **Extensions** > **Extensions Programmes** > **ArrMada** (ou faites Clic droit > **Paramètres**).
 2. Renseignez :
    - **URL du serveur ArrMada** : `http://<IP_DE_VOTRE_SERVEUR>:8420` (port du backend ; le port 3420 de l'interface est converti automatiquement).
-   - **Clé API / Mot de passe** : Votre mot de passe de connexion ArrMada (`ARRMADA_AUTH_SECRET`).
-     Il n'y a **aucune valeur par défaut** : sans ce mot de passe, l'add-on est refusé (401).
+   - **Clé API / Mot de passe** : **inutile une fois la TV appairée** (§ 7). Sinon (ancien mode,
+     toléré une version) : votre mot de passe de connexion ArrMada (`ARRMADA_AUTH_SECRET`).
+     Il n'y a **aucune valeur par défaut** : sans mot de passe ni appairage, l'add-on est refusé (401).
      Le champ est masqué à la saisie.
    - **Nom de l'appareil** : Ex: `Kodi Salon`.
    - **Langue des sous-titres** : `fr` (ou selon votre choix).
 3. Validez ! Le service démarre automatiquement en arrière-plan.
+4. Appairez la TV (§ 7) : ArrMada → **Appairer cet appareil**.
 
 ---
 
@@ -159,10 +220,12 @@ Copiez le dossier `script.arrmada/` dans le dossier des extensions de Kodi :
 
 | Élément | Emplacement |
 |---|---|
-| Mise en page (XML Kodi, repère 1920 × 1080) | `script.arrmada/resources/skins/Default/1080i/script-arrmada-{home,detail,downloads,salon}.xml` |
-| Remplissage des écrans, fils d'arrière-plan | `script.arrmada/lib/{home,detail,downloads,salon}_window.py` |
+| Mise en page (XML Kodi, repère 1920 × 1080) | `script.arrmada/resources/skins/Default/1080i/script-arrmada-{home,detail,downloads,salon,pair}.xml` |
+| Remplissage des écrans, fils d'arrière-plan | `script.arrmada/lib/{home,detail,downloads,salon,pair}_window.py` |
+| Appairage : jeton de la TV, logique pure | `script.arrmada/lib/device.py`, `script.arrmada/lib/pairing_data.py` |
 | Outils communs (lecture, préréglage ampli, notifications) | `script.arrmada/lib/ui_common.py` |
 | Logique pure (mise en forme, cache) — sans Kodi | `script.arrmada/lib/home_data.py`, `script.arrmada/lib/screens_data.py` |
+| Dépôt Kodi servi par le backend | `backend/app/services/kodi_repo.py`, `backend/app/api/kodi_repo.py` |
 | Textures (coins arrondis, halo, dégradés, barres de progression) | générées par `python3 kodi-addon/tools/make_textures.py` |
 | Tests (sans Kodi, lancés en CI) | `pytest kodi-addon/tests` |
 | Banc de test visuel (vrai Kodi sous écran virtuel) | `kodi-addon/bench/run.sh` |
@@ -172,7 +235,7 @@ Copiez le dossier `script.arrmada/` dans le dossier des extensions de Kodi :
 Le script lance un faux backend et un Kodi sans écran (Xvfb) avec les polices
 de SiLVO. Il rejoue un parcours à la télécommande (menu, intro, accueil,
 fiche film et série, téléchargements, salon avec et sans lecture,
-diagnostic, cache, panne serveur) et dépose 25 captures dans
+diagnostic, appairage, cache, panne serveur) et dépose 27 captures dans
 `/tmp/arrmada-kodi-bench/shots/`. Le Kodi du système n'est pas modifié : tout
 se passe dans un profil jetable. Le rendu final reste à valider sur la Shield.
 
@@ -189,4 +252,6 @@ Pièges connus, chacun couvert par un test :
 - **Retour d'un sous-écran** : `<defaultcontrol always="false">`, sinon Kodi remet le focus sur le contrôle par défaut à chaque retour (fiche → accueil).
 - **Barres de progression dans une liste** : le contrôle `progress` de Kodi ne lit pas les propriétés d'un élément de liste. Les barres sont donc des images toutes prêtes (`media/arrmada/progress/bar-000.png` … `bar-100.png`, pas de 2 %).
 - **Groupes de boutons** (`grouplist`) : Python ne peut pas changer leur navigation (`controlDown` lève « Unknown control type »). Rediriger la touche dans `onAction`.
+- **Libellé numérique** : `<label>1</label>` est lu comme l'identifiant d'un texte traduit de Kodi, pas comme « 1 ». Écrire `$NUMBER[1]`.
+- **Image servie par une URL** : Kodi l'interroge d'abord en `HEAD` et se fie à l'extension. Servir `…/qr/K7P4QX.png` (pas `…/qr.png?code=…`) et accepter `HEAD`, sinon l'image reste vide.
 - **Textures** : après une modification de `make_textures.py`, relancer le script et committer les PNG. Le test compare les PNG du dépôt à ceux que le script produit.

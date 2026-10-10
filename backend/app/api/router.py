@@ -13,6 +13,8 @@ from app.api.calendar import router as calendar_router
 from app.api.cast import router as cast_router
 from app.api.cleanup import router as cleanup_router
 from app.api.dashboard import router as dashboard_router
+from app.api.devices import public_router as devices_public_router
+from app.api.devices import router as devices_router
 from app.api.downloads import router as downloads_router
 from app.api.duplicates import router as duplicates_router
 
@@ -20,6 +22,7 @@ from app.api.duplicates import router as duplicates_router
 from app.api.events import router as events_router
 from app.api.files import router as files_router
 from app.api.kodi import router as kodi_router
+from app.api.kodi_repo import router as kodi_repo_router
 from app.api.media import router as media_router
 from app.api.notifications import router as notifications_router
 from app.api.profile_overrides import router as profile_overrides_router
@@ -45,6 +48,8 @@ api_router = APIRouter()
 api_router.include_router(auth_router)
 api_router.include_router(setup_router)
 api_router.include_router(webhooks_router)  # Webhooks are unauthenticated (from internal services)
+api_router.include_router(devices_public_router)  # Appairage des TV (réseau local seulement)
+api_router.include_router(kodi_repo_router)  # Dépôt Kodi /kodi/repo (réseau local seulement)
 
 # Protected routes
 api_router.include_router(services_router)
@@ -67,6 +72,7 @@ api_router.include_router(kodi_router)
 api_router.include_router(yamaha_router)
 api_router.include_router(activity_timeline_router)
 api_router.include_router(cast_router)
+api_router.include_router(devices_router)
 
 # New feature routes
 api_router.include_router(events_router)

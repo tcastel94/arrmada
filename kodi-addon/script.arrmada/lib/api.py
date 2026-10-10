@@ -13,6 +13,8 @@ import urllib.error
 import xbmc
 import xbmcaddon
 
+import device
+
 ADDON = xbmcaddon.Addon("script.arrmada")
 
 
@@ -59,7 +61,12 @@ class ArrMadaAPI:
             "Content-Type": "application/json",
             "User-Agent": "ArrMada-Kodi-Addon/1.0.0",
         }
-        if config["api_key"]:
+        # TV appairée : son propre jeton (ADR-003 § 4). Sinon, ancien mode :
+        # le mot de passe admin saisi dans les réglages (toléré une version).
+        device_token = device.token_for(config["url"])
+        if device_token:
+            headers["X-Device-Token"] = device_token
+        elif config["api_key"]:
             headers["X-Api-Key"] = config["api_key"]
             headers["Authorization"] = f"Bearer {config['api_key']}"
 
@@ -79,6 +86,10 @@ class ArrMadaAPI:
             except Exception:
                 msg = str(err)
             xbmc.log(f"[ArrMada] HTTPError on {path}: {err.code} - {msg}", level=xbmc.LOGERROR)
+            if err.code == 401 and device_token:
+                # Appareil révoqué dans la web app (ou base du serveur remise à
+                # zéro) : on oublie le jeton, l'écran d'appairage le proposera.
+                device.clear()
             return {"status": "error", "message": msg, "code": err.code}
         except urllib.error.URLError as err:
             reason = getattr(err, "reason", str(err))
@@ -89,6 +100,28 @@ class ArrMadaAPI:
             xbmc.log(f"[ArrMada] Request failed on {path}: {exc}", level=xbmc.LOGERROR)
             return {"status": "error", "message": str(exc)}
 
+
+    # ── Appairage (ADR-003 § 4) ─────────────────────────────────────────
+
+    @classmethod
+    def pair_start(cls, platform: str) -> dict:
+        """Demande un code d'appairage (route publique, réseau local)."""
+        return cls._request("/api/devices/pair/start", method="POST", data={"platform": platform}, timeout=10)
+
+    @classmethod
+    def pair_poll(cls, device_code: str) -> dict:
+        """« Le code a-t-il été validé ? » → jeton de l'appareil, une seule fois."""
+        return cls._request("/api/devices/pair/poll", method="POST", data={"device_code": device_code}, timeout=10)
+
+    @classmethod
+    def device_me(cls) -> dict:
+        """Nom, pièce et ampli de cette TV, tels que réglés dans la web app."""
+        return cls._request("/api/devices/me", method="GET", timeout=8)
+
+    @classmethod
+    def absolute_url(cls, path: str) -> str:
+        """URL complète d'une route du serveur (image du QR code)."""
+        return f"{cls.get_config()['url']}{path}"
 
     @classmethod
     def trigger_subtitles(cls, payload: dict) -> dict:

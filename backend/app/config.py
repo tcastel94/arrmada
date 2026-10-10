@@ -29,6 +29,16 @@ class Settings(BaseSettings):
     # ── CORS ──────────────────────────────────────────────────
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:3420,http://192.168.2.3:3420"
 
+    # ── Web app vue depuis le réseau local ────────────────────
+    # Sert aux QR codes affichés sur les TV (appairage). Vide = déduite de
+    # l'adresse utilisée par Kodi, en remplaçant le port 8420 par 3420.
+    PUBLIC_WEB_URL: str = ""
+
+    # ── Dépôt Kodi (mises à jour de l'add-on) ─────────────────
+    # Dossier `kodi-addon/` du dépôt Git. Vide = /app/kodi-addon (monté par
+    # docker-compose.yml) ou, en développement, celui du dépôt.
+    KODI_ADDON_DIR: str = ""
+
     # ── Telegram ──────────────────────────────────────────────
     TELEGRAM_BOT_TOKEN: str = ""
     TELEGRAM_CHAT_ID: str = ""

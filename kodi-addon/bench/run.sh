@@ -57,8 +57,10 @@ mkdir -p "$BENCH_DIR/assets" "$SHOT_DIR" "$KODI_DIR/addons" "$KODI_DIR/media/Fon
          "$KODI_DIR/userdata/addon_data/script.arrmada"
 cd "$BENCH_DIR"
 rm -f "$SHOT_DIR"/*.png
-# Chaque passage repart sans cache ni miniatures (on teste aussi le 1er affichage).
+# Chaque passage repart sans cache, sans miniatures et NON appairé (on teste
+# aussi le 1er affichage et le passage du mot de passe admin au jeton).
 rm -rf "$KODI_DIR/userdata/addon_data/script.arrmada/cache" \
+       "$KODI_DIR/userdata/addon_data/script.arrmada/device.json" \
        "$KODI_DIR/userdata/Thumbnails" "$KODI_DIR/userdata/Database/Textures13.db"
 
 # ── 1. Polices de SiLVO (téléchargées une fois) ──────────────────────────────

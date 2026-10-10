@@ -13,6 +13,7 @@ class Base(DeclarativeBase):
 from app.models.activity import ActivityEvent  # noqa: E402, F401
 from app.models.analytics import AnalyticsSnapshot  # noqa: E402, F401
 from app.models.cast import CastDevice  # noqa: E402, F401
+from app.models.device import Device  # noqa: E402, F401
 from app.models.duplicate import DuplicateGroup  # noqa: E402, F401
 from app.models.media import MediaItem  # noqa: E402, F401
 from app.models.notification import Notification  # noqa: E402, F401
@@ -34,4 +35,5 @@ __all__ = [
     "ProfileOverride",
     "ActivityEvent",
     "CastDevice",
+    "Device",
 ]

@@ -98,6 +98,7 @@ class HomeWindow(xbmcgui.WindowXML):
         self.setProperty("skin", xbmc.getSkinDir())
         self.setProperty("server_url", ArrMadaAPI.get_config()["url"])
         self.setProperty("greeting", home_data.greeting(datetime.now().hour))
+        self.setProperty("device_label", _device_label())
 
         if xbmcgui.Window(10000).getProperty(INTRO_SEEN):
             self._revealed.set()  # pas d'intro : la cascade « WindowOpen » suffit
@@ -490,6 +491,17 @@ class HomeWindow(xbmcgui.WindowXML):
         """Panneau « Diagnostic » : polices, système, temps mesurés."""
         self.setProperty("diag", "1" if visible else "")
         ui.focus_when_visible(self, DIAG_CLOSE if visible else BTN_DIAG)
+
+
+def _device_label() -> str:
+    """Ligne « Appareil » du Diagnostic : TV appairée ou ancien mode."""
+    import device
+    import pairing_data
+
+    info = device.load()
+    if not device.token_for(ArrMadaAPI.get_config()["url"]):
+        return "non appairé (mot de passe admin)"
+    return pairing_data.device_summary(info) or "appairé"
 
 
 def open_home() -> None:

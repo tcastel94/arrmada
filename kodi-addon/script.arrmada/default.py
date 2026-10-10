@@ -119,6 +119,15 @@ def show_root_menu():
     add_dir("[NOUVEAU]        Accueil ArrMada (apercu v2)", "home", is_folder=False)
     # Écran Salon en accès direct (aussi en favori Kodi : action=salon)
     add_dir("[NOUVEAU]        Salon : ampli et lecture en cours", "salon", is_folder=False)
+    # Appairage (ADR-003 § 4) : jeton propre à cette TV, pièce et ampli
+    import device
+    paired = device.token_for(ArrMadaAPI.get_config()["url"])
+    pair_label = (
+        f"Appareil appairé : {device.load().get('name') or 'cette TV'} (refaire l'appairage)"
+        if paired
+        else "Appairer cet appareil (code + QR code)"
+    )
+    add_dir(f"[NOUVEAU]        {pair_label}", "pair", is_folder=False)
     add_dir("[RECHERCHE]      Rechercher un film ou une serie...", "search_input", is_folder=False)
     add_dir("[DECOUVERTE]     Tendances TMDB & Ajout 1-Clic", "discovery", is_folder=False)
     add_dir("[FILMS]          Films Tendances & Populaires", "trending_movies")
@@ -434,6 +443,13 @@ def main():
         #   RunPlugin(plugin://script.arrmada/?action=salon)
         import salon_window
         salon_window.open_salon()
+    elif action == "pair":
+        # Appairage de la TV : RunPlugin(plugin://script.arrmada/?action=pair)
+        import pair_window
+        import pairing_data
+        paired = pair_window.open_pairing()
+        if paired:
+            show_notification("ArrMada", f"TV appairée : {pairing_data.device_summary(paired)}", time_ms=5000)
     elif action == "queue":
         # Écran Téléchargements : RunPlugin(plugin://script.arrmada/?action=queue)
         import downloads_window

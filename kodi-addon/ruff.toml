@@ -9,4 +9,7 @@ target-version = "py38"
 select = ["E", "F", "W", "I", "B"]
 
 [lint.isort]
-known-first-party = ["home_data", "home_window", "screens_data", "ui_common", "api", "make_textures"]
+known-first-party = [
+    "home_data", "home_window", "screens_data", "ui_common", "api", "make_textures",
+    "device", "pairing_data", "pair_window",
+]

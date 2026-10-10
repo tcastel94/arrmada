@@ -125,7 +125,16 @@ def find_in_library(entry: dict) -> int | None:
 
 
 def room() -> str:
-    """Pièce de cet appareil (réglage de l'add-on) : « salon » ou « cinema »."""
+    """Pièce de cet appareil : « salon » ou « cinema ».
+
+    Celle choisie à l'appairage dans la web app si la TV est appairée,
+    sinon le réglage « Profil de la pièce » de l'add-on.
+    """
+    import device  # import local : ui_common reste léger à charger
+
+    paired = device.room()
+    if paired:
+        return paired
     value = (ADDON.getSetting("room_profile") or "cinema").strip().lower()
     return value if value in ("salon", "cinema") else "cinema"
 

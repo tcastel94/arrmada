@@ -54,6 +54,8 @@ STATE = {
     "down": False,
     "qtick": 0,
     "paused": False,
+    "pair_polls": 0,  # l'appairage est « validé dans la web app » au 3e poll
+    "auth": "",  # dernier mode d'authentification vu (journal du banc)
     "amp": {"power": "on", "volume": 84, "mute": False, "input": "hdmi1", "sound_program": "surr_decoder"},
 }
 CAST = [
@@ -381,6 +383,42 @@ def yamaha_state() -> dict:
     }]}
 
 
+PAIR_CODE = "K7P4QX"
+PAIRED_DEVICE = {"id": 1, "name": "Shield Salon", "room": "salon", "avr_name": "Yamaha RX-A2080"}
+
+
+def make_qr(path: Path, text: str) -> None:
+    """QR code de la page d'appairage (segno si présent, sinon un faux motif)."""
+    try:
+        import segno
+
+        segno.make(text, error="m").save(str(path), kind="png", scale=10, border=4)
+        return
+    except ImportError:
+        pass
+    rng = random.Random(7)
+    size, cell = 33, 10
+    img = Image.new("RGB", ((size + 8) * cell,) * 2, "white")
+    draw = ImageDraw.Draw(img)
+
+    def finder(x: int, y: int) -> bool | None:
+        """Les 3 carrés de repérage d'un QR code (anneau clair à distance 2)."""
+        for fx, fy in ((0, 0), (size - 7, 0), (0, size - 7)):
+            if fx <= x < fx + 7 and fy <= y < fy + 7:
+                return max(abs(x - fx - 3), abs(y - fy - 3)) != 2
+        return None
+
+    for y in range(size):
+        for x in range(size):
+            dark = finder(x, y)
+            if dark is None:
+                dark = rng.random() < 0.5
+            if dark:
+                x0, y0 = (x + 4) * cell, (y + 4) * cell
+                draw.rectangle([x0, y0, x0 + cell - 1, y0 + cell - 1], fill="black")
+    img.save(path)
+
+
 def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):  # journal sur stderr, préfixé
@@ -393,6 +431,34 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+
+        def _note_auth(self) -> None:
+            """Journalise le passage du mot de passe admin au jeton d'appareil."""
+            mode = (
+                "device"
+                if self.headers.get("X-Device-Token")
+                else "api_key"
+                if self.headers.get("X-Api-Key")
+                else "none"
+            )
+            if mode != STATE["auth"]:
+                sys.stderr.write(f"[mock] authentification : {mode}\n")
+                STATE["auth"] = mode
+
+        def _qr(self, head: bool) -> None:
+            data = (images / "pair-qr.png").read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            if not head:
+                self.wfile.write(data)
+
+        def do_HEAD(self):  # noqa: N802 — Kodi interroge les images en HEAD
+            if self.path.split("?")[0] == f"/api/devices/pair/qr/{PAIR_CODE}.png":
+                self._qr(head=True)
+            else:
+                self.send_error(404)
 
         def do_GET(self):  # noqa: N802 (nom imposé par http.server)
             path = self.path.split("?")[0]
@@ -413,8 +479,14 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
                 self._json({"down": True})
                 return
             time.sleep(delay)
+            self._note_auth()
             if STATE["down"]:
                 self.send_error(503, "ArrMada en maintenance")
+            elif path == f"/api/devices/pair/qr/{PAIR_CODE}.png":
+                self._qr(head=False)
+            elif path == "/api/devices/me":
+                paired = STATE["auth"] == "device"
+                self._json({"paired": paired, **(PAIRED_DEVICE if paired else {})})
             elif path == "/api/kodi/addon-status":
                 self._json({"status": "ok", "downloads": [], "downloads_count": 0, "recent_events": []})
             elif path == "/api/kodi/dashboard":
@@ -448,6 +520,22 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
             amp = STATE["amp"]
             if STATE["down"]:
                 self.send_error(503, "ArrMada en maintenance")
+            elif path == "/api/devices/pair/start":
+                STATE["pair_polls"] = 0
+                self._json({
+                    "device_code": "code-secret-du-banc",
+                    "user_code": PAIR_CODE,
+                    "verification_url": f"http://192.168.2.3:3420/settings/kodi?pair={PAIR_CODE}",
+                    "qr_url": f"/api/devices/pair/qr/{PAIR_CODE}.png",
+                    "expires_in": 600,
+                    "interval": 3,
+                })
+            elif path == "/api/devices/pair/poll":
+                STATE["pair_polls"] += 1
+                if STATE["pair_polls"] < 3:
+                    self._json({"status": "pending", "interval": 3})
+                else:
+                    self._json({"status": "ok", "token": "jeton-du-banc", "device": PAIRED_DEVICE})
             elif path == "/api/yamaha/control":
                 action, value = data.get("action"), data.get("value")
                 if action == "volume_step":
@@ -482,6 +570,7 @@ def main() -> None:
 
     images = Path(args.images)
     make_images(images, args.font)
+    make_qr(images / "pair-qr.png", f"http://192.168.2.3:3420/settings/kodi?pair={PAIR_CODE}")
     server = ThreadingHTTPServer(("0.0.0.0", args.port), make_handler(args.base_url, images, args.delay))
     server.serve_forever()
 
