@@ -33,6 +33,10 @@ class RequestCreate(BaseModel):
     year: int | None = None
     poster_url: str | None = None
     quality_profile: str | None = None
+    # ID TVDB (séries trouvées via le lookup Sonarr). `tmdb_id` reste un vrai
+    # ID TMDB : avant, l'ID TMDB d'une série « tendance » était pris pour un
+    # ID TVDB et Sonarr ajoutait une autre série.
+    tvdb_id: int | None = None
 
 
 async def _bg_sync_requests() -> None:
@@ -84,6 +88,7 @@ async def lookup_media(
                     "title": item.get("title"),
                     "year": item.get("year"),
                     "tmdb_id": item.get("tmdbId"),
+                    "tvdb_id": None,
                     "overview": item.get("overview"),
                     "poster_url": poster,
                     "type": "movie",
@@ -105,7 +110,10 @@ async def lookup_media(
                 results.append({
                     "title": item.get("title"),
                     "year": item.get("year"),
-                    "tmdb_id": item.get("tvdbId"),  # Sonarr uses TVDB ID
+                    # IDs distincts : Sonarr est indexé sur TVDB, mais renvoie
+                    # aussi l'ID TMDB (v4) quand il le connaît.
+                    "tmdb_id": item.get("tmdbId") or None,
+                    "tvdb_id": item.get("tvdbId"),
                     "overview": item.get("overview"),
                     "poster_url": poster,
                     "type": "series",
@@ -158,6 +166,7 @@ async def submit_request(payload: RequestCreate, db: AsyncSession = Depends(get_
         year=payload.year,
         poster_url=payload.poster_url,
         quality_profile=payload.quality_profile,
+        tvdb_id=payload.tvdb_id,
     )
     return {
         "id": req.id,

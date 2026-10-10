@@ -50,8 +50,16 @@ def _normalise_movie(raw: dict[str, Any], service_name: str) -> dict[str, Any]:
     }
 
 
-def _normalise_series(raw: dict[str, Any], service_name: str) -> dict[str, Any]:
-    """Normalise a Sonarr series to a unified media item."""
+def _normalise_series(
+    raw: dict[str, Any], service_name: str, profile_names: dict[int, str] | None = None
+) -> dict[str, Any]:
+    """Normalise a Sonarr series to a unified media item.
+
+    ``quality`` is the quality *profile name* (Sonarr has no single file
+    quality per series). It used to be the raw numeric profile id, which
+    showed up as a meaningless "8" badge and polluted the quality facets.
+    """
+    profile_id = raw.get("qualityProfileId")
     images = raw.get("images") or []
     poster = next((img["remoteUrl"] for img in images if img.get("coverType") == "poster" and img.get("remoteUrl")), None)
 
@@ -64,7 +72,7 @@ def _normalise_series(raw: dict[str, Any], service_name: str) -> dict[str, Any]:
         "type": "series",
         "year": raw.get("year"),
         "genres": raw.get("genres", []),
-        "quality": raw.get("qualityProfileId"),
+        "quality": (profile_names or {}).get(profile_id) if profile_id is not None else None,
         "size_bytes": stats.get("sizeOnDisk", 0),
         "poster_url": poster,
         "source_service": service_name,
@@ -107,8 +115,14 @@ async def fetch_all_media(db: AsyncSession) -> list[dict[str, Any]]:
                 client = SonarrClient(url=svc.url, api_key=api_key)
                 try:
                     series = await client.get_series()
+                    try:
+                        profiles = await client.get_quality_profiles()
+                        profile_names = {p["id"]: p.get("name", "") for p in profiles if "id" in p}
+                    except Exception as exc:  # profiles are cosmetic: never block the library
+                        logger.debug("Sonarr quality profiles unavailable: %s", exc)
+                        profile_names = {}
                     for s in series:
-                        all_media.append(_normalise_series(s, svc.name))
+                        all_media.append(_normalise_series(s, svc.name, profile_names))
                 finally:
                     await client.close()
 

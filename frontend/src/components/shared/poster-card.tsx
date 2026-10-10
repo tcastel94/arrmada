@@ -128,8 +128,8 @@ export function PosterCard({
                 )}
 
                 {/* Badges */}
-                {badges && <div className="absolute left-2 top-2 z-[3] flex flex-col items-start gap-1">{badges}</div>}
-                {corner && !selectable && <div className="absolute right-2 top-2 z-[3]">{corner}</div>}
+                {badges && <div className="absolute left-2 top-2 z-[11] flex flex-col items-start gap-1">{badges}</div>}
+                {corner && !selectable && <div className="absolute right-2 top-2 z-[11]">{corner}</div>}
 
                 {/* Case de sélection */}
                 {selectable && (
@@ -137,7 +137,7 @@ export function PosterCard({
                         initial={false}
                         animate={{ scale: selected ? 1 : 0.9 }}
                         className={cn(
-                            "absolute right-2 top-2 z-[5] flex h-6 w-6 items-center justify-center rounded-full border-2 backdrop-blur",
+                            "absolute right-2 top-2 z-[11] flex h-6 w-6 items-center justify-center rounded-full border-2 backdrop-blur",
                             selected ? "border-primary bg-primary text-primary-foreground" : "border-white/60 bg-black/40",
                         )}
                     >
@@ -145,8 +145,6 @@ export function PosterCard({
                     </motion.div>
                 )}
 
-                {/* Action flottante */}
-                {action && !selectable && <div className="absolute bottom-2 right-2 z-[6]">{action}</div>}
             </div>
         </TiltCard>
     );
@@ -173,11 +171,21 @@ export function PosterCard({
         </div>
     );
 
+    // L'action flottante (ex: « + Ajouter ») est une SŒUR du lien, pas un
+    // enfant : un <button> imbriqué dans un <a> est invalide et casse la
+    // navigation clavier / lecteurs d'écran.
+    const withAction = (
+        <div className="relative">
+            {wrapped}
+            {action && !selectable && <div className="absolute bottom-2 right-2 z-[12]">{action}</div>}
+        </div>
+    );
+
     return noEntrance ? (
-        <div className={className}>{wrapped}</div>
+        <div className={className}>{withAction}</div>
     ) : (
         <motion.div variants={scaleIn} className={className}>
-            {wrapped}
+            {withAction}
         </motion.div>
     );
 }

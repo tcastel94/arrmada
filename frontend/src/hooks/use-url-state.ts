@@ -26,7 +26,10 @@ export function useUrlState<T extends string>(key: string, defaultValue: T) {
             const url = new URL(window.location.href);
             if (next === defaultValue || next === "") url.searchParams.delete(key);
             else url.searchParams.set(key, next);
-            window.history.replaceState(window.history.state, "", url.toString());
+            // `null` et non window.history.state : Next ≥ 14.1 intercepte
+            // replaceState et ne resynchronise son routeur que si l'état passé
+            // n'est pas déjà un état interne Next (il recopie ses données lui-même).
+            window.history.replaceState(null, "", url.toString());
         },
         [key, defaultValue],
     );

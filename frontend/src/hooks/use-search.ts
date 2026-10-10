@@ -1,6 +1,15 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+/**
+ * Hooks de recherche (page « Rechercher & Ajouter »).
+ * ----------------------------------------------------------------
+ *  - useUnifiedSearch  : titres déjà présents dans la bibliothèque
+ *  - useAISearch       : recherche en langage naturel (filtres déduits par l'IA)
+ *  - useDiscoverLookup : titres AJOUTABLES (lookup Radarr + Sonarr)
+ * `keepPreviousData` garde les résultats affichés pendant la frappe :
+ * pas de « flash » de squelettes à chaque lettre.
+ */
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api-client";
 import type { MediaItem } from "@/hooks/use-media";
 
@@ -34,6 +43,8 @@ export function useUnifiedSearch(query: string) {
         queryKey: ["search", query],
         queryFn: () => apiFetch(`/api/search?q=${encodeURIComponent(query)}`),
         enabled: query.length >= 2,
+        placeholderData: keepPreviousData,
+        staleTime: 30_000,
     });
 }
 
@@ -77,7 +88,13 @@ export function useAISearch(query: string) {
 export interface LookupItem {
     title: string;
     year: number | null;
+    /** Vrai ID TMDB (films ; séries quand Sonarr v4 le connaît). */
     tmdb_id: number | null;
+    /**
+     * ID TVDB (séries). Absent des anciennes versions du backend, qui
+     * renvoyaient l'ID TVDB d'une série… dans `tmdb_id` (voir `fromLookup`).
+     */
+    tvdb_id?: number | null;
     overview: string;
     poster_url: string | null;
     type: "movie" | "series";
@@ -85,7 +102,11 @@ export interface LookupItem {
     arr_id: number | null;
 }
 
-/** Look up addable movies AND series matching the query (both *arr services). */
+/**
+ * Titres ajoutables (films ET séries) correspondant à la requête.
+ * Chaque service est interrogé en parallèle ; si l'un des deux est absent
+ * ou en panne, on garde quand même les résultats de l'autre.
+ */
 export function useDiscoverLookup(query: string, enabled = true) {
     return useQuery<LookupItem[]>({
         queryKey: ["lookup", "discover", query],
@@ -100,5 +121,6 @@ export function useDiscoverLookup(query: string, enabled = true) {
         enabled: enabled && query.length >= 2,
         staleTime: 60_000,
         retry: false,
+        placeholderData: keepPreviousData,
     });
 }
