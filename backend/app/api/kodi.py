@@ -36,7 +36,8 @@ async def play_on_kodi(data: dict, db: AsyncSession = Depends(get_db)):
     tmdb_id = data.get("tmdb_id")
     if not tmdb_id:
         return {"status": "error", "detail": "tmdb_id requis"}
-    result = await kodi_service.play_movie(db, int(tmdb_id), data.get("service_id"))
+    room = data.get("room") or "salon"
+    result = await kodi_service.play_movie(db, int(tmdb_id), data.get("service_id"), room=room)
 
     from app.services.activity_log import log_event
     ok = result.get("status") == "ok"
@@ -161,3 +162,126 @@ async def delete_kodi_setting(service_id: int, db: AsyncSession = Depends(get_db
         await db.delete(svc)
         await db.commit()
     return {"status": "deleted"}
+
+
+# ── Kodi Add-on Endpoints ─────────────────────────────────────
+@router.post("/actions/subtitles")
+async def addon_subtitles_action(data: dict, db: AsyncSession = Depends(get_db)):
+    """Trigger Bazarr subtitle search & download from Kodi add-on."""
+    return await kodi_service.handle_addon_subtitles(db, data)
+
+
+@router.post("/actions/subtitles/sync")
+async def addon_subtitles_sync_action(data: dict, db: AsyncSession = Depends(get_db)):
+    """Trigger Bazarr FFsubsync audio-aligned subtitle synchronization from Kodi add-on."""
+    return await kodi_service.handle_addon_sync_subtitles(db, data)
+
+
+
+@router.post("/actions/search")
+async def addon_search_action(data: dict, db: AsyncSession = Depends(get_db)):
+    """Trigger Radarr/Sonarr release search from Kodi add-on."""
+    return await kodi_service.handle_addon_search(db, data)
+
+
+@router.post("/scrobble")
+async def addon_scrobble(data: dict, db: AsyncSession = Depends(get_db)):
+    """Receive live playback status & scrobbles from Kodi add-on service."""
+    return await kodi_service.handle_addon_scrobble(db, data)
+
+
+@router.get("/addon-status")
+async def addon_status(db: AsyncSession = Depends(get_db)):
+    """Get active downloads queue and dashboard stats for Kodi add-on."""
+    return await kodi_service.get_addon_dashboard_status(db)
+
+
+@router.get("/dashboard")
+async def addon_dashboard(db: AsyncSession = Depends(get_db)):
+    """Get complete stack health, disk space, services, and activity history for Kodi UI."""
+    return await kodi_service.get_addon_full_dashboard(db)
+
+
+
+# ── Kodi Media Discovery & Releases ───────────────────────────
+@router.get("/media/lookup")
+async def addon_media_lookup(q: str, type: str = "all", db: AsyncSession = Depends(get_db)):
+    """Lookup movies and series for Kodi UI."""
+    return await kodi_service.lookup_media_for_addon(db, q, type)
+
+
+@router.get("/media/recommendations")
+async def addon_media_recommendations(db: AsyncSession = Depends(get_db)):
+    """Get trending and recommended movies/series for Kodi."""
+    return await kodi_service.get_recommendations_for_addon(db)
+
+
+
+@router.get("/media/options")
+async def addon_media_options(type: str = "movie", db: AsyncSession = Depends(get_db)):
+    """Get quality profiles and root folders for media type."""
+    return await kodi_service.get_media_options_for_addon(db, type)
+
+
+@router.post("/media/add")
+async def addon_media_add(data: dict, db: AsyncSession = Depends(get_db)):
+    """Add a movie or series to Radarr/Sonarr from Kodi."""
+    return await kodi_service.add_media_for_addon(db, data)
+
+
+@router.get("/media/{type}/{id}/releases")
+async def addon_media_releases(type: str, id: int, db: AsyncSession = Depends(get_db)):
+    """List available releases (Usenet & Torrent) for interactive picking."""
+    return await kodi_service.list_releases_for_addon(db, type, id)
+
+
+@router.post("/media/{type}/{id}/grab")
+async def addon_media_grab(type: str, id: int, data: dict, db: AsyncSession = Depends(get_db)):
+    """Grab a selected release and send to SABnzbd / Torrent client."""
+    data["type"] = type
+    data["arr_id"] = id
+    return await kodi_service.grab_release_for_addon(db, data)
+
+
+# ── Kodi Queue Control ───────────────────────────────────────
+@router.post("/downloads/{type}/{id}/remove")
+async def addon_queue_remove(
+    type: str, id: int, data: dict | None = None, db: AsyncSession = Depends(get_db)
+):
+    """Cancel / remove download from Kodi."""
+    payload = data or {}
+    return await kodi_service.remove_queue_item_for_addon(
+        db, type, id,
+        remove_from_client=payload.get("remove_from_client", True),
+        blocklist=payload.get("blocklist", False),
+    )
+
+
+@router.post("/downloads/{type}/{id}/resume")
+async def addon_queue_resume(type: str, id: int, db: AsyncSession = Depends(get_db)):
+    """Resume / unpause download from Kodi."""
+    return await kodi_service.resume_queue_item_for_addon(db, type, id)
+
+
+@router.post("/downloads/{type}/{id}/pause")
+async def addon_queue_pause(type: str, id: int, db: AsyncSession = Depends(get_db)):
+    """Pause download from Kodi."""
+    return await kodi_service.pause_queue_item_for_addon(db, type, id)
+
+
+
+# ── Kodi Maintenance & Cleanup ────────────────────────────────
+@router.post("/maintenance/clean-orphans")
+async def addon_clean_orphans(db: AsyncSession = Depends(get_db)):
+    """Trigger clean of empty directories and orphan non-media files."""
+    return await kodi_service.clean_orphans_for_addon(db)
+
+
+# ── Kodi Widgets ──────────────────────────────────────────────
+@router.get("/widgets/recent")
+async def addon_widgets_recent(db: AsyncSession = Depends(get_db)):
+    """Return recently added items for Kodi home screen widgets."""
+    return await kodi_service.get_recent_media_for_addon(db)
+
+
+

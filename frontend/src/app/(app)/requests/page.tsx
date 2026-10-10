@@ -81,7 +81,7 @@ export default function RequestsPage() {
             setIsSearching(true);
             try {
                 const results = await apiFetch(`/api/requests/lookup?q=${encodeURIComponent(title.trim())}&type=${type}`);
-                setSearchResults(results);
+                setSearchResults(Array.isArray(results) ? results : []);
             } catch {
                 setSearchResults([]);
             } finally {

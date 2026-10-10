@@ -18,6 +18,7 @@ from app.services.media_mover import (
     trigger_manual_import,
 )
 from app.database import async_session_factory
+from app.services.docker_logs import get_aggregated_logs, analyze_logs
 
 router = APIRouter(
     prefix="/api/files",
@@ -62,6 +63,25 @@ async def run_docker_action(payload: DockerActionPayload):
     """Start/stop/restart a Docker container on Unraid."""
     result = await docker_action(payload.container_id, payload.action)
     return {"result": result, "container_id": payload.container_id, "action": payload.action}
+
+
+@router.get("/docker/logs")
+async def docker_logs(
+    tail: int = Query(60, ge=10, le=300),
+    db: AsyncSession = Depends(get_db),
+):
+    """Aggregated, level-classified logs across registered-service containers."""
+    logs = await get_aggregated_logs(db, tail=tail)
+    return {"logs": logs, "count": len(logs)}
+
+
+@router.post("/docker/logs/analyze")
+async def analyze_docker_logs(
+    tail: int = Query(150, ge=20, le=400),
+    db: AsyncSession = Depends(get_db),
+):
+    """Ask the LLM to group the problems in recent logs and propose fixes."""
+    return await analyze_logs(db, tail=tail)
 
 
 # ── Media Mover ───────────────────────────────────────────────

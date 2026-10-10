@@ -29,9 +29,12 @@ class RadarrClient(ArrBaseClient):
         """Add a new movie to Radarr."""
         return await self.post("/movie", data=data)
 
-    async def delete_movie(self, movie_id: int, delete_files: bool = False) -> None:
-        """Delete a movie from Radarr."""
-        url = f"/movie/{movie_id}?deleteFiles={str(delete_files).lower()}"
+    async def delete_movie(self, movie_id: int, delete_files: bool = False, add_exclusion: bool = False) -> None:
+        """Delete a movie from Radarr, optionally adding it to the import-list exclusions."""
+        url = (
+            f"/movie/{movie_id}?deleteFiles={str(delete_files).lower()}"
+            f"&addImportExclusion={str(add_exclusion).lower()}"
+        )
         resp = await self.client.delete(f"{self.API_PREFIX}{url}")
         resp.raise_for_status()
 

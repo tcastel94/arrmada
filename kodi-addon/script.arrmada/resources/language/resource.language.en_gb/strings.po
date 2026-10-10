@@ -1,0 +1,137 @@
+# Kodi Media Center language file
+# Addon Name: ArrMada
+# Addon id: script.arrmada
+msgid ""
+msgstr ""
+"Project-Id-Version: ArrMada Kodi Addon\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: \n"
+"PO-Revision-Date: \n"
+"Last-Translator: ArrMada Team\n"
+"Language-Team: English\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: en_GB\n"
+
+# Context Menu
+msgctxt "#30000"
+msgid "ArrMada: Quick Actions..."
+msgstr "🏴‍☠️ ArrMada (Quick Actions)..."
+
+msgctxt "#30001"
+msgid "ArrMada: Download Subtitles (Bazarr)"
+msgstr "ArrMada: Download Subtitles (Bazarr)"
+
+
+msgctxt "#30002"
+msgid "ArrMada: Search / Upgrade Release"
+msgstr "ArrMada: Search / Upgrade Release"
+
+msgctxt "#30003"
+msgid "ArrMada: Re-sync Subtitles (FFsubsync)"
+msgstr "ArrMada: Re-sync Subtitles (FFsubsync)"
+
+
+# Settings General
+msgctxt "#30100"
+msgid "General"
+msgstr "General"
+
+msgctxt "#30101"
+msgid "Connection"
+msgstr "Connection"
+
+msgctxt "#30102"
+msgid "ArrMada Server URL"
+msgstr "ArrMada Server URL"
+
+msgctxt "#30103"
+msgid "Example: http://192.168.2.3:3420"
+msgstr "Example: http://192.168.2.3:3420"
+
+msgctxt "#30104"
+msgid "API Key / Auth Secret"
+msgstr "API Key / Auth Secret"
+
+msgctxt "#30105"
+msgid "Password or API key configured in ArrMada"
+msgstr "Password or API key configured in ArrMada"
+
+msgctxt "#30106"
+msgid "Kodi Device Name"
+msgstr "Kodi Device Name"
+
+# Settings Features
+msgctxt "#30120"
+msgid "Features"
+msgstr "Features"
+
+msgctxt "#30121"
+msgid "Automation & Notifications"
+msgstr "Automation & Notifications"
+
+msgctxt "#30122"
+msgid "Subtitle Language"
+msgstr "Subtitle Language"
+
+msgctxt "#30123"
+msgid "Preferred language for automatic subtitle download"
+msgstr "Preferred language for automatic subtitle download"
+
+msgctxt "#30124"
+msgid "Enable Playback Scrobbling"
+msgstr "Enable Playback Scrobbling"
+
+msgctxt "#30125"
+msgid "Send playback progress and watched status to ArrMada"
+msgstr "Send playback progress and watched status to ArrMada"
+
+msgctxt "#30126"
+msgid "Enable TV Notifications"
+msgstr "Enable TV Notifications"
+
+msgctxt "#30127"
+msgid "Show OSD notification when downloads complete"
+msgstr "Show OSD notification when downloads complete"
+
+msgctxt "#30128"
+msgid "Notification check interval (seconds)"
+msgstr "Notification check interval (seconds)"
+
+# UI & Actions
+msgctxt "#30200"
+msgid "Active Downloads"
+msgstr "Active Downloads"
+
+msgctxt "#30201"
+msgid "Trigger Kodi Library Scan"
+msgstr "Trigger Kodi Library Scan"
+
+msgctxt "#30202"
+msgid "Clean Kodi Video Library"
+msgstr "Clean Kodi Video Library"
+
+msgctxt "#30203"
+msgid "Settings"
+msgstr "Settings"
+
+msgctxt "#30204"
+msgid "No active downloads"
+msgstr "No active downloads"
+
+msgctxt "#30205"
+msgid "ArrMada is unreachable. Check your settings."
+msgstr "ArrMada is unreachable. Check your settings."
+
+msgctxt "#30206"
+msgid "Trigger release search for '%s'?"
+msgstr "Trigger release search for '%s'?"
+
+msgctxt "#30207"
+msgid "Subtitles requested"
+msgstr "Subtitles requested"
+
+msgctxt "#30208"
+msgid "Release search triggered"
+msgstr "Release search triggered"

@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker exec *)",
+      "Bash(systemctl list-units *)",
+      "Bash(curl -s -m 8 -o /dev/null -w \"HTTP %{http_code}\\\\n\" \"http://192.168.2.3:7878/api/v3/system/status?apikey=fbde4c8384c644a1bb5a3a585f15c1dc\")",
+      "Bash(curl -s -m 8 -o /dev/null -w \"HTTP %{http_code}\\\\n\" \"http://192.168.2.3:8989/api/v3/system/status?apikey=f6e2adda941e4af483691774fc1936c2\")",
+      "Bash(timeout 8 ssh -o BatchMode=yes -o ConnectTimeout=5 root@192.168.2.3 \"docker ps --filter name=searcharr --format '{{.Names}}\\\\t{{.Status}}'\")",
+      "Bash(docker image *)",
+      "Bash(docker pull *)",
+      "Bash(docker create *)",
+      "Bash(docker export *)",
+      "Bash(tar -tf -)",
+      "Bash(docker cp *)",
+      "Bash(findmnt -T /mnt/nas_appdata/searcharr)",
+      "Bash(touch /mnt/nas_appdata/.wtest)",
+      "Bash(rm -f /mnt/nas_appdata/.wtest)",
+      "Bash(python3 -m py_compile /mnt/nas_appdata/_searcharr-patch/searcharr_bot.py)",
+      "Bash(cp -r /tmp/claude-1000/-mnt-nas-appdata-arrmada/32edfa32-0355-49ea-8e0a-1058848d72e3/scratchpad/test/data /tmp/claude-1000/-mnt-nas-appdata-arrmada/32edfa32-0355-49ea-8e0a-1058848d72e3/scratchpad/test-ok/data)",
+      "Bash(sed -i -e 's#^sonarr_url = .*#sonarr_url = \"http://192.168.2.3:8989\"#' -e 's#^radarr_url = .*#radarr_url = \"http://192.168.2.3:7878\"#' /tmp/claude-1000/-mnt-nas-appdata-arrmada/32edfa32-0355-49ea-8e0a-1058848d72e3/scratchpad/test-ok/data/settings.py)",
+      "Bash(timeout 60 docker run --rm --network host -v /mnt/nas_appdata/_searcharr-patch/searcharr_bot.py:/app/bot/searcharr_bot.py:ro -v /tmp/claude-1000/-mnt-nas-appdata-arrmada/32edfa32-0355-49ea-8e0a-1058848d72e3/scratchpad/test-ok/data:/app/data -v /tmp/claude-1000/-mnt-nas-appdata-arrmada/32edfa32-0355-49ea-8e0a-1058848d72e3/scratchpad/test-ok/logs:/app/logs toddrob/searcharr:latest python3 searcharr.py -c)",
+      "Bash(pkill -f lateproxy.py)",
+      "Bash(docker rm *)",
+      "Bash(xargs -I{} echo \"conteneurs sr-inspect restants: {}\")",
+      "Bash(echo \"rc_pgrep=$?\")",
+      "Bash(echo \"rc_grep=$?\")",
+      "Bash(python3 -c ' *)",
+      "Bash(python3 -m py_compile /mnt/nas_appdata/_searcharr-patch/api_client.py)",
+      "Bash(grep -vE \"^\\\\+#|^\\\\+$\")",
+      "Bash(docker rmi *)",
+      "Bash(grep -E \"^python:3.12-slim$|^postgres:16-alpine$\")",
+      "Bash(timeout 900 ssh -i ~/.ssh/nas_homarr -o BatchMode=yes root@192.168.2.3 'cd /mnt/user/appdata/arrmada && docker compose build arrmada-backend 2>&1 | tail -25')"
+    ]
+  }
+}

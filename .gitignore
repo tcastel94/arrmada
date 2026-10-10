@@ -52,3 +52,9 @@ htmlcov/
 
 # Misc
 *.log
+
+# Copies de .env : mêmes secrets que l'original
+.env.*
+!.env.example
+*.bak
+*.bak-*

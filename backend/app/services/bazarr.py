@@ -18,6 +18,10 @@ class BazarrClient(ArrBaseClient):
     API_PREFIX: str = "/api"
     STATUS_ENDPOINT: str = "/system/status"
 
+    def __init__(self, url: str, api_key: str, *, timeout: int = 60) -> None:
+        """Initialize BazarrClient with a higher default timeout (60s) for slow subtitle downloads."""
+        super().__init__(url, api_key, timeout=timeout)
+
     # Override to use Bazarr-specific auth header
     @property
     def client(self):

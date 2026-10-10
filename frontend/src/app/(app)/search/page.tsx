@@ -22,6 +22,7 @@ import {
     Flame,
     Trash2,
     Sparkles,
+    Info,
 } from "lucide-react";
 import {
     useUnifiedSearch,
@@ -30,6 +31,7 @@ import {
     type LookupItem,
 } from "@/hooks/use-search";
 import { useCreateRequest, useRequests, useDeleteRequest } from "@/hooks/use-requests";
+import { RecommendationDetailModal } from "@/components/media/recommendation-detail-modal";
 import { apiFetch } from "@/lib/api-client";
 import type { MediaItem } from "@/hooks/use-media";
 import { cn } from "@/lib/utils";
@@ -40,8 +42,8 @@ interface DiscoverItem {
     tmdb_id: number | null;
     title: string;
     type: "movie" | "series";
-    year: number | string | null;
-    poster_url: string | null;
+    year?: number | string | null;
+    poster_url?: string | null;
     in_library?: boolean;
 }
 
@@ -57,36 +59,58 @@ function PosterTile({
     href,
     owned,
     onAdd,
+    onInspect,
     addState,
 }: {
     title: string;
     subtitle?: string;
-    poster: string | null;
+    poster?: string | null;
     type: string;
     href?: string;
     owned?: boolean;
     onAdd?: () => void;
+    onInspect?: () => void;
     addState?: "idle" | "adding" | "added";
 }) {
+    const handleTileClick = (e: React.MouseEvent) => {
+        if (onInspect) {
+            e.preventDefault();
+            onInspect();
+        }
+    };
+
     const inner = (
-        <Card className="overflow-hidden border-0 ring-1 ring-white/5 bg-card/40 hover:ring-white/15 transition h-full">
+        <Card className="group overflow-hidden border-0 ring-1 ring-white/5 bg-card/40 hover:ring-primary/50 transition h-full cursor-pointer">
             <div className="relative aspect-[2/3] bg-muted/20">
                 {poster ? (
-                    <img src={poster} alt={title} loading="lazy" className="w-full h-full object-cover" />
+                    <img
+                        src={poster}
+                        alt={title}
+                        loading="lazy"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
                 ) : (
                     <div className="w-full h-full flex items-center justify-center">
                         <TypeIcon type={type} className="h-8 w-8 text-muted-foreground/25" />
                     </div>
                 )}
-                <Badge className="absolute top-1.5 left-1.5 text-[9px] bg-black/60 border-0 text-white gap-1">
+                <Badge className="absolute top-1.5 left-1.5 text-[9px] bg-black/60 border-0 text-white gap-1 backdrop-blur-sm">
                     <TypeIcon type={type} className="h-2.5 w-2.5" />
                     {type === "series" ? "Série" : "Film"}
                 </Badge>
                 {owned && (
-                    <Badge className="absolute top-1.5 right-1.5 text-[9px] bg-emerald-600/85 border-0 text-white">
+                    <Badge className="absolute top-1.5 right-1.5 text-[9px] bg-emerald-600/85 border-0 text-white shadow-md">
                         ✓
                     </Badge>
                 )}
+
+                {/* Hover overlay hint */}
+                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30 backdrop-blur-[2px]">
+                    <span className="bg-black/60 text-white text-[10px] px-2 py-1 rounded-full font-semibold flex items-center gap-1 backdrop-blur-md border border-white/20">
+                        <Info className="h-3 w-3" /> Info
+                    </span>
+                </div>
+
                 {onAdd && (
                     <button
                         onClick={(e) => {
@@ -96,7 +120,7 @@ function PosterTile({
                         }}
                         disabled={addState !== "idle"}
                         title="Ajouter et lancer la recherche"
-                        className="absolute bottom-1.5 right-1.5 rounded-md bg-primary/90 hover:bg-primary text-primary-foreground p-1.5 disabled:opacity-80"
+                        className="absolute bottom-1.5 right-1.5 z-10 rounded-md bg-primary/90 hover:bg-primary text-primary-foreground p-1.5 disabled:opacity-80 shadow-md"
                     >
                         {addState === "adding" ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -109,13 +133,26 @@ function PosterTile({
                 )}
             </div>
             <CardContent className="p-2">
-                <p className="text-xs font-medium truncate" title={title}>{title}</p>
+                <p className="text-xs font-medium truncate group-hover:text-primary transition-colors" title={title}>
+                    {title}
+                </p>
                 {subtitle && <p className="text-[10px] text-muted-foreground truncate">{subtitle}</p>}
             </CardContent>
         </Card>
     );
+
+    if (onInspect) {
+        return (
+            <div onClick={handleTileClick} className="h-full">
+                {inner}
+            </div>
+        );
+    }
+
     return href ? (
-        <Link href={href} className="block h-full hover:opacity-95 transition-opacity">{inner}</Link>
+        <Link href={href} className="block h-full hover:opacity-95 transition-opacity">
+            {inner}
+        </Link>
     ) : (
         <div className="h-full">{inner}</div>
     );
@@ -156,7 +193,7 @@ function useAdder() {
 const GRID = "grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3";
 
 /* ── Tab 1: Search (library + add) ─────────────────────────── */
-function SearchTab() {
+function SearchTab({ onInspect }: { onInspect: (item: { tmdb_id: number; type: string }) => void }) {
     const [mode, setMode] = useState<"standard" | "ai">("standard");
     const [query, setQuery] = useState("");
     const [submitted, setSubmitted] = useState("");
@@ -263,6 +300,7 @@ function SearchTab() {
                                         subtitle={it.year ? String(it.year) : undefined}
                                         poster={it.poster_url}
                                         type={it.type}
+                                        onInspect={it.tmdb_id ? () => onInspect({ tmdb_id: it.tmdb_id!, type: it.type }) : undefined}
                                         onAdd={() => add(it)}
                                         addState={stateOf(it)}
                                     />
@@ -343,12 +381,26 @@ function TrackingTab() {
 interface DiscoveryData {
     trending_movies: DiscoverItem[];
     trending_series: DiscoverItem[];
-    because_you_have: DiscoverItem[];
+    because_you_have: {
+        base_title: string;
+        base_poster?: string;
+        recommendations: DiscoverItem[];
+    }[];
     wanted: { title: string; type: string; year: number | null; poster_url: string | null }[];
     tmdb_available: boolean;
 }
 
-function SuggestionRow({ title, icon, items }: { title: string; icon: React.ReactNode; items: DiscoverItem[] }) {
+function SuggestionRow({
+    title,
+    icon,
+    items,
+    onInspect,
+}: {
+    title: string;
+    icon: React.ReactNode;
+    items: DiscoverItem[];
+    onInspect: (item: { tmdb_id: number; type: string }) => void;
+}) {
     const { add, stateOf } = useAdder();
     if (!items || items.length === 0) return null;
     return (
@@ -363,6 +415,7 @@ function SuggestionRow({ title, icon, items }: { title: string; icon: React.Reac
                         poster={it.poster_url}
                         type={it.type}
                         owned={it.in_library}
+                        onInspect={it.tmdb_id ? () => onInspect({ tmdb_id: it.tmdb_id!, type: it.type }) : undefined}
                         onAdd={it.in_library ? undefined : () => add(it)}
                         addState={stateOf(it)}
                     />
@@ -372,7 +425,7 @@ function SuggestionRow({ title, icon, items }: { title: string; icon: React.Reac
     );
 }
 
-function SuggestionsTab() {
+function SuggestionsTab({ onInspect }: { onInspect: (item: { tmdb_id: number; type: string }) => void }) {
     const { data, isLoading } = useQuery<DiscoveryData>({
         queryKey: ["recommendations"],
         queryFn: () => apiFetch("/api/recommendations"),
@@ -393,9 +446,33 @@ function SuggestionsTab() {
     }
     return (
         <div className="space-y-6">
-            <SuggestionRow title="Parce que tu as aimé" icon={<Sparkles className="h-4 w-4 text-violet-400" />} items={data.because_you_have} />
-            <SuggestionRow title="Films tendance" icon={<Flame className="h-4 w-4 text-orange-400" />} items={data.trending_movies} />
-            <SuggestionRow title="Séries tendance" icon={<Flame className="h-4 w-4 text-orange-400" />} items={data.trending_series} />
+            {/* Parce que tu as aimé groups */}
+            {data.because_you_have && data.because_you_have.length > 0 && (
+                <div className="space-y-6">
+                    {data.because_you_have.map((group, idx) => (
+                        <SuggestionRow
+                            key={idx}
+                            title={`Parce que tu as aimé ${group.base_title}`}
+                            icon={<Sparkles className="h-4 w-4 text-violet-400" />}
+                            items={group.recommendations}
+                            onInspect={onInspect}
+                        />
+                    ))}
+                </div>
+            )}
+
+            <SuggestionRow
+                title="Films tendance"
+                icon={<Flame className="h-4 w-4 text-orange-400" />}
+                items={data.trending_movies}
+                onInspect={onInspect}
+            />
+            <SuggestionRow
+                title="Séries tendance"
+                icon={<Flame className="h-4 w-4 text-cyan-400" />}
+                items={data.trending_series}
+                onInspect={onInspect}
+            />
         </div>
     );
 }
@@ -403,6 +480,7 @@ function SuggestionsTab() {
 /* ── Page ──────────────────────────────────────────────────── */
 export default function SearchHubPage() {
     const { data: reqData } = useRequests();
+    const [selectedModalItem, setSelectedModalItem] = useState<{ tmdb_id: number; type: string } | null>(null);
     const activeCount = reqData?.items.filter((r) => r.status !== "available" && r.status !== "failed").length ?? 0;
 
     return (
@@ -420,11 +498,25 @@ export default function SearchHubPage() {
                         </TabsTrigger>
                         <TabsTrigger value="discover"><Flame className="h-4 w-4 mr-1.5" /> Suggestions</TabsTrigger>
                     </TabsList>
-                    <TabsContent value="search" className="mt-4"><SearchTab /></TabsContent>
-                    <TabsContent value="tracking" className="mt-4"><TrackingTab /></TabsContent>
-                    <TabsContent value="discover" className="mt-4"><SuggestionsTab /></TabsContent>
+                    <TabsContent value="search" className="mt-4">
+                        <SearchTab onInspect={(it) => setSelectedModalItem(it)} />
+                    </TabsContent>
+                    <TabsContent value="tracking" className="mt-4">
+                        <TrackingTab />
+                    </TabsContent>
+                    <TabsContent value="discover" className="mt-4">
+                        <SuggestionsTab onInspect={(it) => setSelectedModalItem(it)} />
+                    </TabsContent>
                 </Tabs>
             </div>
+
+            {/* Recommendation / Media Details Modal */}
+            <RecommendationDetailModal
+                tmdbId={selectedModalItem?.tmdb_id || null}
+                mediaType={selectedModalItem?.type || "movie"}
+                isOpen={!!selectedModalItem}
+                onClose={() => setSelectedModalItem(null)}
+            />
         </>
     );
 }

@@ -18,7 +18,16 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
     ArrowLeft,
+    ChevronDown,
     Calendar,
     Clock,
     Download,
@@ -93,6 +102,9 @@ import {
     type EpisodeSubtitleInfo,
     type ProviderSubtitle,
 } from "@/hooks/use-subtitles";
+import { MediaTechBadges } from "@/components/media/media-tech-badges";
+import { StudioNetworkLogo } from "@/components/media/studio-network-logo";
+import { TrailerModal } from "@/components/media/trailer-modal";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { useState } from "react";
@@ -128,9 +140,9 @@ function FileInfoCard({ file }: { file: FileInfo }) {
     return (
         <Card className="bg-card/50 border-border/50">
             <CardContent className="p-4 space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-2">
                     <span className="text-sm font-medium truncate flex-1 mr-2">{file.relative_path}</span>
-                    <Badge variant="outline" className="shrink-0">{file.quality}</Badge>
+                    <MediaTechBadges specs={file} variant="hero" />
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3  text-sm">
                     <div className="space-y-0.5">
@@ -590,13 +602,14 @@ function SeasonSection({ seasons, seriesId }: { seasons: SeasonDetail[]; seriesI
                                     </Button>
                                 )
                             )}
-                            <Eye
-                                title={season.monitored ? "Surveillée" : "Non surveillée"}
-                                className={cn(
-                                    "h-3.5 w-3.5",
-                                    season.monitored ? "text-emerald-400" : "text-muted-foreground/50",
-                                )}
-                            />
+                            <span title={season.monitored ? "Surveillée" : "Non surveillée"}>
+                                <Eye
+                                    className={cn(
+                                        "h-3.5 w-3.5",
+                                        season.monitored ? "text-emerald-400" : "text-muted-foreground/50",
+                                    )}
+                                />
+                            </span>
                             <Switch
                                 checked={!!season.monitored}
                                 disabled={pendingSeason === season.season_number}
@@ -1029,21 +1042,42 @@ export default function MediaDetailPage() {
                             transition={{ delay: 0.1 }}
                             className="flex-1 min-w-0 space-y-4"
                         >
-                            {/* Title */}
-                            <div>
-                                <div className="flex items-center gap-3 flex-wrap">
-                                    <h1 className="text-3xl lg:text-4xl font-bold tracking-tight">
-                                        {media.title}
-                                    </h1>
-                                    {media.certification && (
-                                        <Badge variant="outline" className="text-xs border-muted-foreground/30">
-                                            {media.certification}
-                                        </Badge>
-                                    )}
-                                </div>
-                                {media.original_title && media.original_title !== media.title && (
-                                    <p className="text-muted-foreground mt-1">{media.original_title}</p>
+                            {/* ClearLogo or Title */}
+                            <div className="space-y-2">
+                                {(media.images?.clearlogo || media.images?.logo) ? (
+                                    <div className="max-w-xs md:max-w-md max-h-24 my-2">
+                                        <img
+                                            src={media.images.clearlogo || media.images.logo || ""}
+                                            alt={media.title}
+                                            className="max-h-24 object-contain filter drop-shadow-lg"
+                                        />
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-3 flex-wrap">
+                                        <h1 className="text-3xl lg:text-4xl font-bold tracking-tight">
+                                            {media.title}
+                                        </h1>
+                                        {media.certification && (
+                                            <Badge variant="outline" className="text-xs border-muted-foreground/30">
+                                                {media.certification}
+                                            </Badge>
+                                        )}
+                                    </div>
                                 )}
+                                {media.original_title && media.original_title !== media.title && (
+                                    <p className="text-muted-foreground text-sm">{media.original_title}</p>
+                                )}
+                            </div>
+
+                            {/* Studio / Network & Tech Definition Badges */}
+                            <div className="flex flex-wrap items-center gap-2 py-1">
+                                <StudioNetworkLogo name={media.studio || media.network} variant="hero" />
+                                <MediaTechBadges
+                                    specs={media.file || {
+                                        quality: media.quality_profile_id ? String(media.quality_profile_id) : undefined,
+                                    }}
+                                    variant="hero"
+                                />
                             </div>
 
                             {/* Meta tags */}
@@ -1094,7 +1128,7 @@ export default function MediaDetailPage() {
                             </div>
 
                             {/* Genres */}
-                            {media.genres.length > 0 && (
+                            {Array.isArray(media.genres) && media.genres.length > 0 && (
                                 <div className="flex flex-wrap gap-2">
                                     {media.genres.map((g) => (
                                         <Badge key={g} variant="outline" className="text-xs">
@@ -1127,33 +1161,77 @@ export default function MediaDetailPage() {
 
                             {/* Action buttons */}
                             <div className="flex flex-wrap gap-2 pt-2">
+                                <TrailerModal youtubeId={media.youtube_trailer_id} title={media.title} />
                                 {isMovie && media.has_file && media.tmdb_id && (
-                                    <Button
-                                        variant="default"
-                                        size="sm"
-                                        className="bg-violet-600 hover:bg-violet-500 text-white"
-                                        disabled={kodiPlay.isPending}
-                                        title="Lancer la lecture sur Kodi (Salon)"
-                                        onClick={() =>
-                                            kodiPlay.mutate(
-                                                { tmdb_id: media.tmdb_id! },
-                                                {
-                                                    onSuccess: (r) =>
-                                                        r.status === "ok"
-                                                            ? toast.success(`Lecture lancée sur ${r.kodi ?? "Kodi"} 📺`)
-                                                            : toast.error(r.detail || "Lecture impossible"),
-                                                    onError: (e) => toast.error("Erreur : " + e.message),
-                                                },
-                                            )
-                                        }
-                                    >
-                                        {kodiPlay.isPending ? (
-                                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                        ) : (
-                                            <Play className="h-4 w-4 mr-2" />
-                                        )}
-                                        Lire sur Kodi
-                                    </Button>
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button
+                                                variant="default"
+                                                size="sm"
+                                                className="bg-violet-600 hover:bg-violet-500 text-white gap-1.5"
+                                                disabled={kodiPlay.isPending}
+                                                title="Lancer la lecture sur Kodi & régler l'ampli"
+                                            >
+                                                {kodiPlay.isPending ? (
+                                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                                ) : (
+                                                    <Play className="h-4 w-4" />
+                                                )}
+                                                Lire sur Kodi
+                                                <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="start" className="w-64">
+                                            <DropdownMenuLabel className="text-xs text-muted-foreground">
+                                                Lancer la lecture & régler l'ampli :
+                                            </DropdownMenuLabel>
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuItem
+                                                className="cursor-pointer flex flex-col items-start gap-0.5"
+                                                onClick={() =>
+                                                    kodiPlay.mutate(
+                                                        { tmdb_id: media.tmdb_id!, room: "salon" },
+                                                        {
+                                                            onSuccess: (r) =>
+                                                                r.status === "ok"
+                                                                    ? toast.success(`Lecture lancée — Salon 🛋️ (${r.kodi ?? "Kodi"})`)
+                                                                    : toast.error(r.detail || "Lecture impossible"),
+                                                            onError: (e) => toast.error("Erreur : " + e.message),
+                                                        },
+                                                    )
+                                                }
+                                            >
+                                                <div className="font-semibold flex items-center gap-1.5">
+                                                    🛋️ Salon
+                                                </div>
+                                                <span className="text-[11px] text-muted-foreground">
+                                                    Vol. 40% • Dialogues boosted • Ampli polyvalent
+                                                </span>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                className="cursor-pointer flex flex-col items-start gap-0.5"
+                                                onClick={() =>
+                                                    kodiPlay.mutate(
+                                                        { tmdb_id: media.tmdb_id!, room: "cinema" },
+                                                        {
+                                                            onSuccess: (r) =>
+                                                                r.status === "ok"
+                                                                    ? toast.success(`Lecture lancée — Salle de cinéma 🍿 (${r.kodi ?? "Kodi"})`)
+                                                                    : toast.error(r.detail || "Lecture impossible"),
+                                                            onError: (e) => toast.error("Erreur : " + e.message),
+                                                        },
+                                                    )
+                                                }
+                                            >
+                                                <div className="font-semibold flex items-center gap-1.5">
+                                                    🍿 Salle de Cinéma
+                                                </div>
+                                                <span className="text-[11px] text-muted-foreground">
+                                                    Vol. 60% • Dynamic Direct • Immersion Atmos/DTS:X
+                                                </span>
+                                            </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
                                 )}
                                 {isMovie && media.has_file && media.tmdb_id && (
                                     <CastButton
@@ -2299,7 +2377,7 @@ function SeriesSubtitlePanel({ media }: { media: MediaDetail }) {
         if (!bySeason.has(e.season)) bySeason.set(e.season, []);
         bySeason.get(e.season)!.push(e);
     }
-    const seasons = [...bySeason.keys()].sort((a, b) => a - b);
+    const seasons = Array.from(bySeason.keys()).sort((a, b) => a - b);
 
     const runEpAuto = (e: EpisodeSubtitleInfo) => {
         setAutoEp(e.episode_id);

@@ -154,8 +154,13 @@ async def _rpc(client: httpx.AsyncClient, base_url: str, auth, method: str, para
 
 
 # ── Feature: play a movie on Kodi ─────────────────────────────
-async def play_movie(db: AsyncSession, tmdb_id: int, service_id: int | None = None) -> dict[str, Any]:
-    """Start playback of a movie (matched by TMDB uniqueid) on a Kodi instance."""
+async def play_movie(
+    db: AsyncSession,
+    tmdb_id: int,
+    service_id: int | None = None,
+    room: str = "salon",
+) -> dict[str, Any]:
+    """Start playback of a movie (matched by TMDB uniqueid) on a Kodi instance and tune AVR."""
     kodi = await _pick(db, service_id)
     if not kodi:
         return {"status": "error", "detail": "Aucun Kodi configuré"}
@@ -171,7 +176,22 @@ async def play_movie(db: AsyncSession, tmdb_id: int, service_id: int | None = No
             if movieid is None:
                 return {"status": "not_found", "detail": "Film absent de la bibliothèque Kodi (à scanner ?)"}
             await _rpc(client, kodi.url, auth, "Player.Open", {"item": {"movieid": movieid}})
-            return {"status": "ok", "kodi": kodi.name, "movieid": movieid}
+
+            # Auto-tune AVR sound settings for the target room (Salon vs Salle de cinéma)
+            avr_res = None
+            try:
+                from app.services import yamaha as yamaha_service
+                avr_res = await yamaha_service.apply_preset(db, room=room, media_type="movie")
+            except Exception as avr_exc:
+                logger.debug("Yamaha auto-preset failed during Kodi play: %s", avr_exc)
+
+            return {
+                "status": "ok",
+                "kodi": kodi.name,
+                "movieid": movieid,
+                "room": room,
+                "avr": avr_res,
+            }
     except Exception as exc:
         logger.error("Kodi play failed: %s", exc)
         return {"status": "error", "detail": f"Kodi injoignable : {type(exc).__name__}"}
@@ -471,4 +491,1013 @@ async def get_drift(db: AsyncSession) -> dict[str, Any]:
         "missing_in_kodi": sorted(missing_in_kodi, key=lambda x: x.get("year") or 0, reverse=True),
         "missing_count": len(missing_in_kodi),
     }
+
+
+# ── Feature: Kodi Add-on integration ─────────────────────────
+async def _get_radarr_client(db: AsyncSession):
+    from app.services.radarr import RadarrClient
+    stmt = select(Service).where(Service.is_enabled == True, Service.type == "radarr")
+    svc = (await db.execute(stmt)).scalars().first()
+    if not svc:
+        return None
+    return RadarrClient(url=svc.url, api_key=decrypt_api_key(svc.api_key))
+
+
+async def _get_sonarr_client(db: AsyncSession):
+    from app.services.sonarr import SonarrClient
+    stmt = select(Service).where(Service.is_enabled == True, Service.type == "sonarr")
+    svc = (await db.execute(stmt)).scalars().first()
+    if not svc:
+        return None
+    return SonarrClient(url=svc.url, api_key=decrypt_api_key(svc.api_key))
+
+
+async def _get_bazarr_client(db: AsyncSession):
+    from app.services.bazarr import BazarrClient
+    stmt = select(Service).where(Service.is_enabled == True, Service.type == "bazarr")
+    svc = (await db.execute(stmt)).scalars().first()
+    if not svc:
+        return None
+    return BazarrClient(url=svc.url, api_key=decrypt_api_key(svc.api_key))
+
+
+async def handle_addon_subtitles(db: AsyncSession, data: dict[str, Any]) -> dict[str, Any]:
+    """Trigger Bazarr subtitle download from Kodi context action."""
+    from app.services.activity_log import log_event
+
+    media_type = data.get("media_type") or ("episode" if data.get("season") is not None else "movie")
+    tmdb_id = data.get("tmdb_id")
+    imdb_id = data.get("imdb_id")
+    tvdb_id = data.get("tvdb_id")
+    title = data.get("title") or ""
+    season = data.get("season")
+    episode = data.get("episode")
+    language = (data.get("language") or "fr").lower()
+
+    bazarr = await _get_bazarr_client(db)
+    if not bazarr:
+        return {"status": "error", "message": "Bazarr n'est pas configuré dans ArrMada"}
+
+    try:
+        if media_type == "movie":
+            radarr = await _get_radarr_client(db)
+            if not radarr:
+                return {"status": "error", "message": "Radarr n'est pas configuré"}
+            
+            movies = await radarr.get_movies()
+            match = None
+            for m in movies:
+                if tmdb_id and str(m.get("tmdbId")) == str(tmdb_id):
+                    match = m
+                    break
+                if imdb_id and str(m.get("imdbId", "")).lower() == str(imdb_id).lower():
+                    match = m
+                    break
+                if title and m.get("title", "").strip().lower() == title.strip().lower():
+                    match = m
+                    break
+
+            if not match:
+                return {"status": "error", "message": f"Film '{title}' introuvable dans Radarr"}
+
+            radarr_id = match["id"]
+            await bazarr.download_movie_subtitle(radarr_id=radarr_id, language=language)
+            
+            await log_event(
+                category="subtitle",
+                action="kodi_sub_search",
+                status="ok",
+                source="kodi",
+                media_type="movie",
+                title=match.get("title", title),
+                tmdb_id=match.get("tmdbId"),
+                detail=f"Recherche auto sous-titre ({language.upper()}) via Kodi Add-on",
+            )
+            return {
+                "status": "ok",
+                "message": f"Recherche de sous-titres {language.upper()} lancée pour {match.get('title')}",
+                "title": match.get("title"),
+            }
+
+        else:  # episode
+            sonarr = await _get_sonarr_client(db)
+            if not sonarr:
+                return {"status": "error", "message": "Sonarr n'est pas configuré"}
+
+            series_list = await sonarr.get_series()
+            match_series = None
+            for s in series_list:
+                if tvdb_id and str(s.get("tvdbId")) == str(tvdb_id):
+                    match_series = s
+                    break
+                if imdb_id and str(s.get("imdbId", "")).lower() == str(imdb_id).lower():
+                    match_series = s
+                    break
+                if title and s.get("title", "").strip().lower() == title.strip().lower():
+                    match_series = s
+                    break
+
+            if not match_series:
+                return {"status": "error", "message": f"Série '{title}' introuvable dans Sonarr"}
+
+            series_id = match_series["id"]
+            episodes = await sonarr.get(f"/episode?seriesId={series_id}")
+            match_ep = None
+            for ep in episodes:
+                if int(ep.get("seasonNumber", -1)) == int(season or 0) and int(ep.get("episodeNumber", -1)) == int(episode or 0):
+                    match_ep = ep
+                    break
+
+            if not match_ep:
+                return {"status": "error", "message": f"Épisode S{season:02d}E{episode:02d} introuvable dans Sonarr"}
+
+            episode_id = match_ep["id"]
+            await bazarr.download_episode_subtitle(series_id=series_id, episode_id=episode_id, language=language)
+
+            await log_event(
+                category="subtitle",
+                action="kodi_sub_search",
+                status="ok",
+                source="kodi",
+                media_type="series",
+                title=f"{match_series.get('title')} S{season:02d}E{episode:02d}",
+                detail=f"Recherche auto sous-titre ({language.upper()}) via Kodi Add-on",
+            )
+            return {
+                "status": "ok",
+                "message": f"Recherche de sous-titres {language.upper()} lancée pour {match_series.get('title')} S{int(season):02d}E{int(episode):02d}",
+                "title": match_series.get("title"),
+            }
+
+    except Exception as exc:
+        logger.error(f"Error handling kodi subtitle action: {exc}", exc_info=True)
+        return {"status": "error", "message": f"Erreur Bazarr : {str(exc)}"}
+
+
+async def handle_addon_sync_subtitles(db: AsyncSession, data: dict[str, Any]) -> dict[str, Any]:
+    """Trigger Bazarr FFsubsync audio-aligned subtitle synchronization."""
+    from app.services.activity_log import log_event
+
+    media_type = data.get("media_type") or ("episode" if data.get("season") is not None else "movie")
+    tmdb_id = data.get("tmdb_id")
+    imdb_id = data.get("imdb_id")
+    tvdb_id = data.get("tvdb_id")
+    title = data.get("title") or ""
+    season = data.get("season")
+    episode = data.get("episode")
+    language = (data.get("language") or "fr").lower()
+
+    bazarr = await _get_bazarr_client(db)
+    if not bazarr:
+        return {"status": "error", "message": "Bazarr n'est pas configuré dans ArrMada"}
+
+    try:
+        if media_type == "movie":
+            radarr = await _get_radarr_client(db)
+            if not radarr:
+                return {"status": "error", "message": "Radarr n'est pas configuré"}
+
+            movies = await radarr.get_movies()
+            match = None
+            for m in movies:
+                if tmdb_id and str(m.get("tmdbId")) == str(tmdb_id):
+                    match = m
+                    break
+                if imdb_id and str(m.get("imdbId", "")).lower() == str(imdb_id).lower():
+                    match = m
+                    break
+                if title and m.get("title", "").strip().lower() == title.strip().lower():
+                    match = m
+                    break
+
+            if not match:
+                return {"status": "error", "message": f"Film '{title}' introuvable dans Radarr"}
+
+            radarr_id = match["id"]
+            
+            # Fetch subtitles from Bazarr for this movie
+            b_movies = await bazarr.get("/movies", params={"radarrid[]": radarr_id})
+            movie_data = (b_movies.get("data") or [{}])[0] if isinstance(b_movies, dict) else {}
+            subtitles = movie_data.get("subtitles") or []
+
+            target_sub = next((s for s in subtitles if s.get("code2") == language and s.get("path")), None)
+            if not target_sub:
+                target_sub = next((s for s in subtitles if s.get("path")), None)
+
+            if not target_sub or not target_sub.get("path"):
+                return {
+                    "status": "error",
+                    "message": f"Aucun sous-titre trouvé pour {match.get('title')}. Téléchargez-en un d'abord.",
+                }
+
+            sub_path = target_sub["path"]
+            sub_lang = target_sub.get("code2") or language
+            sub_forced = target_sub.get("forced", False)
+            sub_hi = target_sub.get("hi", False)
+
+            await bazarr.sync_subtitle(
+                media_type="movie",
+                media_id=radarr_id,
+                path=sub_path,
+                language=sub_lang,
+                forced=sub_forced,
+                hi=sub_hi,
+                reference="a:0",
+            )
+
+            await log_event(
+                category="subtitle",
+                action="kodi_sub_sync",
+                status="ok",
+                source="kodi",
+                media_type="movie",
+                title=match.get("title", title),
+                tmdb_id=match.get("tmdbId"),
+                detail=f"Re-synchronisation audio (FFsubsync) via Kodi Add-on",
+            )
+
+            return {
+                "status": "ok",
+                "message": f"Synchronisation FFsubsync lancée pour {match.get('title')}",
+                "title": match.get("title"),
+            }
+
+        else:  # Episode
+            sonarr = await _get_sonarr_client(db)
+            if not sonarr:
+                return {"status": "error", "message": "Sonarr n'est pas configuré"}
+
+            series_list = await sonarr.get_series()
+            match_series = None
+            for s in series_list:
+                if tvdb_id and str(s.get("tvdbId")) == str(tvdb_id):
+                    match_series = s
+                    break
+                if imdb_id and str(s.get("imdbId", "")).lower() == str(imdb_id).lower():
+                    match_series = s
+                    break
+                if title and s.get("title", "").strip().lower() == title.strip().lower():
+                    match_series = s
+                    break
+
+            if not match_series:
+                return {"status": "error", "message": f"Série '{title}' introuvable dans Sonarr"}
+
+            series_id = match_series["id"]
+            episodes = await sonarr.get(f"/episode?seriesId={series_id}")
+            match_ep = None
+            for ep in episodes:
+                if int(ep.get("seasonNumber", -1)) == int(season or 0) and int(ep.get("episodeNumber", -1)) == int(episode or 0):
+                    match_ep = ep
+                    break
+
+            if not match_ep:
+                return {"status": "error", "message": f"Épisode S{season:02d}E{episode:02d} introuvable dans Sonarr"}
+
+            episode_id = match_ep["id"]
+
+            b_eps = await bazarr.get("/episodes", params={"episodeid[]": episode_id})
+            ep_data = (b_eps.get("data") or [{}])[0] if isinstance(b_eps, dict) else {}
+            subtitles = ep_data.get("subtitles") or []
+
+            target_sub = next((s for s in subtitles if s.get("code2") == language and s.get("path")), None)
+            if not target_sub:
+                target_sub = next((s for s in subtitles if s.get("path")), None)
+
+            if not target_sub or not target_sub.get("path"):
+                return {
+                    "status": "error",
+                    "message": f"Aucun sous-titre trouvé pour S{int(season):02d}E{int(episode):02d}.",
+                }
+
+            sub_path = target_sub["path"]
+            sub_lang = target_sub.get("code2") or language
+            sub_forced = target_sub.get("forced", False)
+            sub_hi = target_sub.get("hi", False)
+
+            await bazarr.sync_subtitle(
+                media_type="episode",
+                media_id=episode_id,
+                path=sub_path,
+                language=sub_lang,
+                forced=sub_forced,
+                hi=sub_hi,
+                reference="a:0",
+            )
+
+            await log_event(
+                category="subtitle",
+                action="kodi_sub_sync",
+                status="ok",
+                source="kodi",
+                media_type="series",
+                title=f"{match_series.get('title')} S{season:02d}E{episode:02d}",
+                detail=f"Re-synchronisation audio (FFsubsync) via Kodi Add-on",
+            )
+
+            return {
+                "status": "ok",
+                "message": f"Synchronisation FFsubsync lancée pour {match_series.get('title')} S{int(season):02d}E{int(episode):02d}",
+                "title": match_series.get("title"),
+            }
+
+    except Exception as exc:
+        logger.error(f"Error handling kodi subtitle sync: {exc}", exc_info=True)
+        return {"status": "error", "message": f"Erreur FFsubsync : {str(exc)}"}
+
+
+async def handle_addon_search(db: AsyncSession, data: dict[str, Any]) -> dict[str, Any]:
+    """Trigger Radarr/Sonarr media search from Kodi context action."""
+    from app.services.activity_log import log_event
+
+    media_type = data.get("media_type") or ("episode" if data.get("season") is not None else "movie")
+    tmdb_id = data.get("tmdb_id")
+    imdb_id = data.get("imdb_id")
+    tvdb_id = data.get("tvdb_id")
+    title = data.get("title") or ""
+    season = data.get("season")
+    episode = data.get("episode")
+
+    try:
+        if media_type == "movie":
+            radarr = await _get_radarr_client(db)
+            if not radarr:
+                return {"status": "error", "message": "Radarr n'est pas configuré"}
+
+            movies = await radarr.get_movies()
+            match = None
+            for m in movies:
+                if tmdb_id and str(m.get("tmdbId")) == str(tmdb_id):
+                    match = m
+                    break
+                if imdb_id and str(m.get("imdbId", "")).lower() == str(imdb_id).lower():
+                    match = m
+                    break
+                if title and m.get("title", "").strip().lower() == title.strip().lower():
+                    match = m
+                    break
+
+            if not match:
+                return {"status": "error", "message": f"Film '{title}' introuvable dans Radarr"}
+
+            await radarr.search_movie(match["id"])
+            await log_event(
+                category="media",
+                action="kodi_media_search",
+                status="ok",
+                source="kodi",
+                media_type="movie",
+                title=match.get("title", title),
+                tmdb_id=match.get("tmdbId"),
+                detail="Recherche de release Radarr déclenchée depuis Kodi",
+            )
+            return {
+                "status": "ok",
+                "message": f"Recherche de release lancée pour {match.get('title')}",
+                "title": match.get("title"),
+            }
+
+        else:  # episode / series
+            sonarr = await _get_sonarr_client(db)
+            if not sonarr:
+                return {"status": "error", "message": "Sonarr n'est pas configuré"}
+
+            series_list = await sonarr.get_series()
+            match_series = None
+            for s in series_list:
+                if tvdb_id and str(s.get("tvdbId")) == str(tvdb_id):
+                    match_series = s
+                    break
+                if imdb_id and str(s.get("imdbId", "")).lower() == str(imdb_id).lower():
+                    match_series = s
+                    break
+                if title and s.get("title", "").strip().lower() == title.strip().lower():
+                    match_series = s
+                    break
+
+            if not match_series:
+                return {"status": "error", "message": f"Série '{title}' introuvable dans Sonarr"}
+
+            series_id = match_series["id"]
+            if season is not None and episode is not None:
+                episodes = await sonarr.get(f"/episode?seriesId={series_id}")
+                match_ep = None
+                for ep in episodes:
+                    if int(ep.get("seasonNumber", -1)) == int(season) and int(ep.get("episodeNumber", -1)) == int(episode):
+                        match_ep = ep
+                        break
+
+                if not match_ep:
+                    return {"status": "error", "message": f"Épisode S{int(season):02d}E{int(episode):02d} introuvable"}
+
+                await sonarr.search_episodes([match_ep["id"]])
+                desc = f"Recherche épisode S{int(season):02d}E{int(episode):02d}"
+            elif season is not None:
+                await sonarr.search_season(series_id, int(season))
+                desc = f"Recherche saison {int(season)}"
+            else:
+                await sonarr.search_series(series_id)
+                desc = "Recherche série complète"
+
+            await log_event(
+                category="media",
+                action="kodi_media_search",
+                status="ok",
+                source="kodi",
+                media_type="series",
+                title=match_series.get("title", title),
+                detail=f"{desc} déclenchée depuis Kodi",
+            )
+            return {
+                "status": "ok",
+                "message": f"{desc} lancée pour {match_series.get('title')}",
+                "title": match_series.get("title"),
+            }
+
+    except Exception as exc:
+        logger.error(f"Error handling kodi search action: {exc}", exc_info=True)
+        return {"status": "error", "message": f"Erreur de recherche : {str(exc)}"}
+
+
+async def handle_addon_scrobble(db: AsyncSession, data: dict[str, Any]) -> dict[str, Any]:
+    """Handle live playback scrobble from Kodi addon service."""
+    from app.utils.event_bus import event_bus
+    from app.services.activity_log import log_event
+
+    event_type = data.get("event", "progress")  # play, pause, stop, progress
+    title = data.get("title", "Inconnu")
+    percentage = data.get("percentage", 0)
+    kodi_device = data.get("device_name", "Kodi")
+
+    # Broadcast to websocket/SSE listeners
+    await event_bus.publish(
+        event_type="kodi_scrobble",
+        data={
+            **data,
+            "device": kodi_device,
+        }
+    )
+
+    if event_type == "stop" and float(percentage or 0) >= 90:
+        await log_event(
+            category="playback",
+            action="kodi_watched",
+            status="ok",
+            source="kodi",
+            media_type=data.get("media_type", "movie"),
+            title=title,
+            device=kodi_device,
+            detail=f"Visionnage terminé ({percentage}%)",
+        )
+
+    return {"status": "ok"}
+
+
+async def get_addon_dashboard_status(db: AsyncSession) -> dict[str, Any]:
+    """Return download queue, recent events and quick summary for Kodi addon background service."""
+    from app.services import media_aggregator
+    from app.models.activity import ActivityEvent
+    from sqlalchemy import select
+
+    queue_items = await media_aggregator.get_queue_items(db)
+    formatted_queue = []
+    for it in queue_items:
+        formatted_queue.append({
+            "title": it.get("title") or it.get("name") or "Téléchargement",
+            "status": it.get("status", "downloading"),
+            "progress": round(it.get("progress", 0), 1),
+            "size": it.get("size", 0),
+            "timeleft": it.get("timeleft") or it.get("eta") or "",
+            "service": it.get("service_type") or it.get("service") or "",
+        })
+
+    # Recent import events for auto-scan trigger
+    recent_events = []
+    try:
+        stmt = select(ActivityEvent).where(
+            ActivityEvent.category.in_(["download", "media"]),
+            ActivityEvent.status == "ok"
+        ).order_by(ActivityEvent.id.desc()).limit(8)
+        res = await db.execute(stmt)
+        for ev in res.scalars().all():
+            recent_events.append({
+                "id": ev.id,
+                "action": ev.action,
+                "title": ev.title,
+                "detail": ev.detail,
+                "timestamp": ev.created_at.timestamp() if ev.created_at else 0,
+            })
+    except Exception:
+        pass
+
+    return {
+        "status": "ok",
+        "downloads_count": len(formatted_queue),
+        "downloads": formatted_queue,
+        "recent_events": recent_events,
+    }
+
+
+async def get_addon_full_dashboard(db: AsyncSession) -> dict[str, Any]:
+    """Return complete system health, storage, services, and activity history for Kodi (parallel & cached)."""
+    import asyncio
+    from app.services import media_aggregator
+    from app.models.service import Service
+    from app.models.activity import ActivityEvent
+    from app.utils.helpers import format_bytes
+    from app.utils.cache import cache
+    from sqlalchemy import select
+
+    async def _fetch():
+        # 1. Services & Activities from DB
+        stmt_svc = select(Service)
+        stmt_act = select(ActivityEvent).order_by(ActivityEvent.id.desc()).limit(15)
+
+        res_svc, res_act = await asyncio.gather(
+            db.execute(stmt_svc),
+            db.execute(stmt_act),
+            return_exceptions=True
+        )
+
+        services_list = []
+        if not isinstance(res_svc, Exception):
+            for s in res_svc.scalars().all():
+                services_list.append({
+                    "id": s.id,
+                    "name": s.name,
+                    "type": s.type,
+                    "is_enabled": s.is_enabled,
+                    "url": s.url,
+                    "status": "online" if s.is_enabled else "disabled",
+                })
+
+        recent_activities = []
+        if not isinstance(res_act, Exception):
+            for ev in res_act.scalars().all():
+                time_str = ev.created_at.strftime("%H:%M") if ev.created_at else ""
+                recent_activities.append({
+                    "id": ev.id,
+                    "time": time_str,
+                    "category": ev.category,
+                    "action": ev.action,
+                    "status": ev.status,
+                    "title": ev.title,
+                    "subtitle": ev.subtitle or "",
+                    "detail": ev.detail or "",
+                })
+
+        # 2. Parallel fetch stats, disks, and queue
+        async def _safe_stats():
+            try:
+                return await media_aggregator.get_dashboard_stats(db)
+            except Exception:
+                return {}
+
+        async def _safe_disks():
+            try:
+                from app.api.system import _fetch_disk_space
+                return await _fetch_disk_space(db)
+            except Exception:
+                return []
+
+        async def _safe_queue():
+            try:
+                return await media_aggregator.get_queue_items(db)
+            except Exception:
+                return []
+
+        raw_stats, disks, queue_items = await asyncio.gather(
+            _safe_stats(),
+            _safe_disks(),
+            _safe_queue(),
+        )
+
+        # get_dashboard_stats returns nested structure: {movies: {total:..}, series: {total:.., total_episodes:..}}
+        movies_block = raw_stats.get("movies") or {}
+        series_block = raw_stats.get("series") or {}
+        stats = {
+            "movies_count": movies_block.get("total", 0) or raw_stats.get("total_movies", 0),
+            "series_count": series_block.get("total", 0) or raw_stats.get("total_series", 0),
+            "episodes_count": series_block.get("total_episodes", 0) or raw_stats.get("total_episodes", 0),
+            "total_size_bytes": raw_stats.get("total_size_bytes", 0),
+            "total_size_human": format_bytes(raw_stats.get("total_size_bytes", 0)),
+        }
+
+
+        formatted_queue = []
+        for it in (queue_items if isinstance(queue_items, list) else []):
+            formatted_queue.append({
+                "title": it.get("title") or it.get("name") or "Téléchargement",
+                "status": it.get("status", "downloading"),
+                "progress": round(it.get("progress", 0), 1),
+                "size": it.get("size", 0),
+                "timeleft": it.get("timeleft") or it.get("eta") or "",
+                "service": it.get("service_type") or it.get("service") or "",
+            })
+
+        return {
+            "status": "ok",
+            "services": services_list,
+            "stats": stats,
+            "disks": disks if isinstance(disks, list) else [],
+            "downloads": formatted_queue,
+            "downloads_count": len(formatted_queue),
+            "recent_activities": recent_activities,
+        }
+
+    return await cache.get_or_set("kodi_addon_full_dashboard", _fetch, ttl_seconds=15)
+
+
+
+
+# ── Feature: Kodi Media Discovery & Interactive Release Grab ──
+async def lookup_media_for_addon(db: AsyncSession, q: str, media_type: str = "all") -> list[dict[str, Any]]:
+    """Lookup movies and series across Radarr/Sonarr for Kodi UI."""
+    results: list[dict[str, Any]] = []
+
+    # 1. Movies (Radarr)
+    if media_type in ("all", "movie"):
+        radarr = await _get_radarr_client(db)
+        if radarr:
+            try:
+                raw_movies = await radarr.lookup_movie(q)
+                for item in raw_movies[:10]:
+                    images = item.get("images", [])
+                    poster = next((img["remoteUrl"] for img in images if img.get("coverType") == "poster" and img.get("remoteUrl")), None)
+                    arr_id = item.get("id") or 0
+                    results.append({
+                        "title": item.get("title", ""),
+                        "year": item.get("year"),
+                        "type": "movie",
+                        "tmdb_id": item.get("tmdbId"),
+                        "imdb_id": item.get("imdbId"),
+                        "overview": item.get("overview") or "",
+                        "poster_url": poster,
+                        "in_library": arr_id > 0,
+                        "arr_id": arr_id or None,
+                    })
+            except Exception as exc:
+                logger.error("Addon Radarr lookup failed: %s", exc)
+
+    # 2. Series (Sonarr)
+    if media_type in ("all", "series", "tvshow"):
+        sonarr = await _get_sonarr_client(db)
+        if sonarr:
+            try:
+                raw_series = await sonarr.lookup_series(q)
+                for item in raw_series[:10]:
+                    images = item.get("images", [])
+                    poster = next((img["remoteUrl"] for img in images if img.get("coverType") == "poster" and img.get("remoteUrl")), None)
+                    arr_id = item.get("id") or 0
+                    results.append({
+                        "title": item.get("title", ""),
+                        "year": item.get("year"),
+                        "type": "series",
+                        "tvdb_id": item.get("tvdbId"),
+                        "imdb_id": item.get("imdbId"),
+                        "overview": item.get("overview") or "",
+                        "poster_url": poster,
+                        "in_library": arr_id > 0,
+                        "arr_id": arr_id or None,
+                    })
+            except Exception as exc:
+                logger.error("Addon Sonarr lookup failed: %s", exc)
+
+    return results
+
+
+async def get_media_options_for_addon(db: AsyncSession, media_type: str = "movie") -> dict[str, Any]:
+    """Get available quality profiles and root folders for media type."""
+    profiles: list[dict[str, Any]] = []
+    root_folders: list[dict[str, Any]] = []
+
+    if media_type == "movie":
+        radarr = await _get_radarr_client(db)
+        if radarr:
+            try:
+                raw_p = await radarr.get_quality_profiles()
+                profiles = [{"id": p["id"], "name": p["name"]} for p in raw_p]
+                raw_f = await radarr.get_root_folders()
+                root_folders = [{"id": f.get("id"), "path": f.get("path"), "free_space": f.get("freeSpace", 0)} for f in raw_f]
+            except Exception as exc:
+                logger.error("Failed to get Radarr options: %s", exc)
+    else:
+        sonarr = await _get_sonarr_client(db)
+        if sonarr:
+            try:
+                raw_p = await sonarr.get_quality_profiles()
+                profiles = [{"id": p["id"], "name": p["name"]} for p in raw_p]
+                raw_f = await sonarr.get_root_folders()
+                root_folders = [{"id": f.get("id"), "path": f.get("path"), "free_space": f.get("freeSpace", 0)} for f in raw_f]
+            except Exception as exc:
+                logger.error("Failed to get Sonarr options: %s", exc)
+
+    # Sort profiles so our Cinema Ultra-HD profile is first by default
+    def _profile_priority(p: dict) -> int:
+        n = p.get("name", "").lower()
+        if "👑" in p.get("name", "") or "cinema" in n:
+            return 0
+        if "ultra" in n:
+            return 1
+        if "1080" in n:
+            return 2
+        return 3
+
+    profiles.sort(key=_profile_priority)
+    return {"profiles": profiles, "root_folders": root_folders}
+
+
+
+async def add_media_for_addon(db: AsyncSession, data: dict[str, Any]) -> dict[str, Any]:
+    """Add a movie or series to Radarr/Sonarr with quality and destination choices."""
+    from app.services.activity_log import log_event
+
+    media_type = data.get("type", "movie")
+    title = data.get("title", "")
+    tmdb_id = data.get("tmdb_id")
+    tvdb_id = data.get("tvdb_id")
+    profile_id = data.get("quality_profile_id")
+    root_folder = data.get("root_folder_path")
+    search_now = bool(data.get("search_now", False))
+
+    if media_type == "movie":
+        radarr = await _get_radarr_client(db)
+        if not radarr:
+            return {"status": "error", "message": "Radarr n'est pas configuré"}
+
+        try:
+            payload = {
+                "title": title,
+                "tmdbId": int(tmdb_id) if tmdb_id else None,
+                "qualityProfileId": int(profile_id) if profile_id else 1,
+                "rootFolderPath": root_folder,
+                "monitored": True,
+                "addOptions": {"searchForMovie": search_now},
+            }
+            res = await radarr.add_movie(payload)
+            arr_id = res.get("id")
+
+            await log_event(
+                category="media",
+                action="kodi_add_media",
+                status="ok",
+                source="kodi",
+                media_type="movie",
+                title=title,
+                tmdb_id=int(tmdb_id) if tmdb_id else None,
+                detail=f"Ajouté via Kodi (Search={search_now})",
+            )
+            return {"status": "ok", "arr_id": arr_id, "title": title, "type": "movie"}
+        except Exception as exc:
+            logger.error("Add movie from Kodi failed: %s", exc)
+            return {"status": "error", "message": f"Erreur Radarr : {str(exc)}"}
+
+    else:  # series
+        sonarr = await _get_sonarr_client(db)
+        if not sonarr:
+            return {"status": "error", "message": "Sonarr n'est pas configuré"}
+
+        try:
+            payload = {
+                "title": title,
+                "tvdbId": int(tvdb_id) if tvdb_id else None,
+                "qualityProfileId": int(profile_id) if profile_id else 1,
+                "rootFolderPath": root_folder,
+                "monitored": True,
+                "addOptions": {"searchForMissingEpisodes": search_now},
+            }
+            res = await sonarr.add_series(payload)
+            arr_id = res.get("id")
+
+            await log_event(
+                category="media",
+                action="kodi_add_media",
+                status="ok",
+                source="kodi",
+                media_type="series",
+                title=title,
+                detail=f"Ajouté via Kodi (Search={search_now})",
+            )
+            return {"status": "ok", "arr_id": arr_id, "title": title, "type": "series"}
+        except Exception as exc:
+            logger.error("Add series from Kodi failed: %s", exc)
+            return {"status": "error", "message": f"Erreur Sonarr : {str(exc)}"}
+
+
+def _format_size(size_bytes: int | None) -> str:
+    """Format bytes to human readable GB/MB."""
+    if not size_bytes:
+        return "0 Mo"
+    gb = size_bytes / (1024 * 1024 * 1024)
+    if gb >= 1.0:
+        return f"{gb:.1f} Go"
+    mb = size_bytes / (1024 * 1024)
+    return f"{mb:.0f} Mo"
+
+
+async def list_releases_for_addon(db: AsyncSession, media_type: str, arr_id: int) -> dict[str, Any]:
+    """Fetch releases for a media item from Radarr/Sonarr indexers."""
+    client = await _get_radarr_client(db) if media_type == "movie" else await _get_sonarr_client(db)
+    if not client:
+        return {"status": "error", "message": f"{media_type.capitalize()} n'est pas configuré", "releases": []}
+
+    try:
+        raw_releases = await client.get_releases(arr_id)
+        formatted: list[dict[str, Any]] = []
+
+        for r in (raw_releases or []):
+            if not isinstance(r, dict):
+                continue
+            proto = (r.get("protocol") or "torrent").lower()
+            quality_info = (r.get("quality") or {}).get("quality", {})
+            quality_name = quality_info.get("name") or "Inconnu"
+            size_bytes = r.get("size") or 0
+
+            formatted.append({
+                "guid": r.get("guid"),
+                "indexer_id": r.get("indexerId"),
+                "indexer": r.get("indexer", "Indexeur"),
+                "title": r.get("title", ""),
+                "protocol": proto,
+                "protocol_icon": "⚡ USENET" if proto == "usenet" else f"📥 TORRENT ({r.get('seeders', 0)} seeds)",
+                "quality": quality_name,
+                "size_bytes": size_bytes,
+                "size_human": _format_size(size_bytes),
+                "seeders": r.get("seeders", 0),
+                "rejected": bool(r.get("rejected", False)),
+                "rejections": r.get("rejections") or [],
+            })
+
+        # Sort: Non-rejected first, then higher seeders/size
+        formatted.sort(key=lambda x: (x["rejected"], -(x["seeders"] or 0), -(x["size_bytes"] or 0)))
+
+        return {"status": "ok", "releases": formatted, "count": len(formatted)}
+    except Exception as exc:
+        logger.error(f"Failed to fetch releases for Kodi: {exc}", exc_info=True)
+        return {"status": "error", "message": f"Erreur de recherche : {str(exc)}", "releases": []}
+
+
+async def grab_release_for_addon(db: AsyncSession, data: dict[str, Any]) -> dict[str, Any]:
+    """Send grab release order to Radarr/Sonarr (SABnzbd / Torrent)."""
+    from app.services.activity_log import log_event
+
+    media_type = data.get("type", "movie")
+    arr_id = data.get("arr_id")
+    guid = data.get("guid")
+    indexer_id = data.get("indexer_id")
+    release_title = data.get("release_title", "Release")
+    media_title = data.get("media_title", "")
+
+    client = await _get_radarr_client(db) if media_type == "movie" else await _get_sonarr_client(db)
+    if not client:
+        return {"status": "error", "message": "Client non configuré"}
+
+    try:
+        await client.grab_release(guid, indexer_id)
+        await log_event(
+            category="download",
+            action="kodi_grab",
+            status="ok",
+            source="kodi",
+            media_type=media_type,
+            media_id=arr_id,
+            title=media_title or release_title,
+            subtitle=release_title,
+            detail="Release saisie manuellement depuis Kodi",
+        )
+        return {"status": "ok", "message": f"Téléchargement lancé pour {release_title}"}
+    except Exception as exc:
+        logger.error(f"Failed to grab release from Kodi: {exc}", exc_info=True)
+        return {"status": "error", "message": f"Erreur lors de l'envoi au client : {str(exc)}"}
+
+
+async def get_recommendations_for_addon(db: AsyncSession) -> dict[str, Any]:
+    """Fetch trending movies, trending series and smart recommendations for Kodi."""
+    from app.api.recommendations import get_recommendations
+    try:
+        res = await get_recommendations(db)
+        return {"status": "ok", "data": res}
+    except Exception as exc:
+        logger.error(f"Failed to get recommendations for Kodi: {exc}", exc_info=True)
+        return {"status": "error", "message": str(exc), "data": {}}
+
+
+async def remove_queue_item_for_addon(
+    db: AsyncSession, service_type: str, item_id: int, remove_from_client: bool = True, blocklist: bool = False
+) -> dict[str, Any]:
+    """Remove a download queue item via Radarr or Sonarr."""
+    from app.api.downloads import _get_arr_client_for_service
+    try:
+        client = await _get_arr_client_for_service(db, service_type)
+        await client.remove_queue_item(item_id, remove_from_client=remove_from_client, blocklist=blocklist)
+        await client.close()
+        return {"status": "ok", "message": f"Téléchargement #{item_id} supprimé (blocklist={blocklist})"}
+    except Exception as exc:
+        logger.error("Failed to remove queue item from Kodi: %s", exc)
+        return {"status": "error", "message": str(exc)}
+
+
+async def resume_queue_item_for_addon(
+    db: AsyncSession, service_type: str, item_id: int
+) -> dict[str, Any]:
+    """Resume / unpause a download."""
+    from app.services.sabnzbd import SabnzbdClient
+    from app.models.service import Service
+    from app.services.encryption import decrypt_api_key
+    from sqlalchemy import select
+
+    # 1. Unpause SABnzbd if present
+    try:
+        stmt = select(Service).where(Service.is_enabled == True, Service.type == "sabnzbd")
+        res = await db.execute(stmt)
+        sab = res.scalars().first()
+        if sab:
+            sab_client = SabnzbdClient(url=sab.url, api_key=decrypt_api_key(sab.api_key))
+            await sab_client.resume()
+            await sab_client.close()
+    except Exception as exc:
+        logger.warning("Resume SABnzbd failed: %s", exc)
+
+    # 2. Trigger Sonarr / Radarr refresh
+    from app.api.downloads import _get_arr_client_for_service
+    try:
+        client = await _get_arr_client_for_service(db, service_type)
+        try:
+            await client._post("command", json={"name": "RefreshMonitoredDownloads"})
+        except Exception:
+            pass
+        await client.close()
+        return {"status": "ok", "message": f"Reprise envoyée pour le téléchargement #{item_id}"}
+    except Exception as exc:
+        logger.error("Failed to resume item from Kodi: %s", exc)
+        return {"status": "error", "message": str(exc)}
+
+
+async def pause_queue_item_for_addon(
+    db: AsyncSession, service_type: str, item_id: int
+) -> dict[str, Any]:
+    """Pause a download."""
+    from app.services.sabnzbd import SabnzbdClient
+    from app.models.service import Service
+    from app.services.encryption import decrypt_api_key
+    from sqlalchemy import select
+
+    try:
+        stmt = select(Service).where(Service.is_enabled == True, Service.type == "sabnzbd")
+        res = await db.execute(stmt)
+        sab = res.scalars().first()
+        if sab:
+            sab_client = SabnzbdClient(url=sab.url, api_key=decrypt_api_key(sab.api_key))
+            await sab_client.pause()
+            await sab_client.close()
+        return {"status": "ok", "message": f"Téléchargement #{item_id} mis en pause"}
+    except Exception as exc:
+        logger.error("Failed to pause item from Kodi: %s", exc)
+        return {"status": "error", "message": str(exc)}
+
+
+
+
+async def clean_orphans_for_addon(db: AsyncSession) -> dict[str, Any]:
+    """Clean empty folders and non-media orphan files in download directories."""
+    import asyncio
+    from pathlib import Path
+    try:
+        from scripts.import_orphans import clean_empty_and_orphans, DOWNLOAD_SOURCES
+        # Execute in thread pool to avoid blocking async event loop
+        loop = asyncio.get_running_loop()
+        deleted_dirs, deleted_files = await loop.run_in_executor(
+            None, clean_empty_and_orphans, DOWNLOAD_SOURCES, False
+        )
+        return {
+            "status": "ok",
+            "message": f"Nettoyage terminé : {deleted_dirs} dossiers et {deleted_files} fichiers orphelins supprimés.",
+            "deleted_dirs": deleted_dirs,
+            "deleted_files": deleted_files,
+        }
+    except Exception as exc:
+        logger.error("Failed to clean orphans: %s", exc)
+        return {"status": "error", "message": str(exc)}
+
+
+async def get_recent_media_for_addon(db: AsyncSession) -> list[dict[str, Any]]:
+    """Return recently added movies and series for Kodi widgets."""
+    from app.services.media_aggregator import fetch_all_media
+    try:
+        all_media = await fetch_all_media(db)
+        # Sort by added date or id descending
+        sorted_media = sorted(
+            [m for m in all_media if m.get("has_file")],
+            key=lambda x: x.get("added_at") or "",
+            reverse=True,
+        )
+        return sorted_media[:20]
+    except Exception as exc:
+        logger.error("Failed to fetch recent media for Kodi: %s", exc)
+        return []
+
+
+
+
+
 

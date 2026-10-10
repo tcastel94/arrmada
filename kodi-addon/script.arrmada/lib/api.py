@@ -1,0 +1,212 @@
+# -*- coding: utf-8 -*-
+"""ArrMada API client for Kodi add-on.
+
+Uses standard Python urllib to remain 100% dependency-free across any Kodi environment.
+"""
+
+from __future__ import annotations
+
+import json
+import urllib.request
+import urllib.parse
+import urllib.error
+import xbmc
+import xbmcaddon
+
+ADDON = xbmcaddon.Addon("script.arrmada")
+
+
+class ArrMadaAPI:
+    @staticmethod
+    def get_config():
+        url = (ADDON.getSetting("server_url") or "").strip().rstrip("/")
+        if not url or "127.0.0.1" in url or "localhost" in url:
+            url = "http://192.168.2.3:8420"
+            try:
+                ADDON.setSetting("server_url", url)
+            except Exception:
+                pass
+
+        if not url.startswith("http://") and not url.startswith("https://"):
+            url = f"http://{url}"
+
+        # If user accidentally configured the web frontend port (3420), auto-switch to backend API (8420)
+        if ":3420" in url:
+            url = url.replace(":3420", ":8420")
+
+        api_key = (ADDON.getSetting("api_key") or "").strip()
+        if not api_key:
+            api_key = "elegance"
+            try:
+                ADDON.setSetting("api_key", api_key)
+            except Exception:
+                pass
+
+        device_name = (ADDON.getSetting("device_name") or "Kodi").strip()
+        language = (ADDON.getSetting("sub_language") or "fr").strip()
+        return {
+            "url": url,
+            "api_key": api_key,
+            "device_name": device_name,
+            "language": language,
+        }
+
+
+
+    @classmethod
+    def _request(cls, path: str, method: str = "GET", data: dict | None = None, timeout: int = 15) -> dict:
+        config = cls.get_config()
+        full_url = f"{config['url']}{path}"
+
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": "ArrMada-Kodi-Addon/1.0.0",
+        }
+        if config["api_key"]:
+            headers["X-Api-Key"] = config["api_key"]
+            headers["Authorization"] = f"Bearer {config['api_key']}"
+
+        req_body = json.dumps(data).encode("utf-8") if data is not None else None
+        req = urllib.request.Request(full_url, data=req_body, headers=headers, method=method)
+
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as response:
+                body = response.read().decode("utf-8")
+                return json.loads(body) if body else {"status": "ok"}
+        except urllib.error.HTTPError as err:
+            err_body = ""
+            try:
+                err_body = err.read().decode("utf-8")
+                err_json = json.loads(err_body)
+                msg = err_json.get("detail") or err_json.get("message") or str(err)
+            except Exception:
+                msg = str(err)
+            xbmc.log(f"[ArrMada] HTTPError on {path}: {err.code} - {msg}", level=xbmc.LOGERROR)
+            return {"status": "error", "message": msg, "code": err.code}
+        except urllib.error.URLError as err:
+            reason = getattr(err, "reason", str(err))
+            msg = f"Connexion impossible à {config['url']} ({reason})."
+            xbmc.log(f"[ArrMada] URLError on {path}: {msg}", level=xbmc.LOGERROR)
+            return {"status": "error", "message": msg}
+        except Exception as exc:
+            xbmc.log(f"[ArrMada] Request failed on {path}: {exc}", level=xbmc.LOGERROR)
+            return {"status": "error", "message": str(exc)}
+
+
+    @classmethod
+    def trigger_subtitles(cls, payload: dict) -> dict:
+        """Trigger Bazarr subtitle download."""
+        config = cls.get_config()
+        if "language" not in payload:
+            payload["language"] = config["language"]
+        return cls._request("/api/kodi/actions/subtitles", method="POST", data=payload, timeout=30)
+
+    @classmethod
+    def trigger_subtitles_sync(cls, payload: dict) -> dict:
+        """Trigger Bazarr FFsubsync audio-aligned subtitle synchronization."""
+        config = cls.get_config()
+        if "language" not in payload:
+            payload["language"] = config["language"]
+        return cls._request("/api/kodi/actions/subtitles/sync", method="POST", data=payload, timeout=45)
+
+    @classmethod
+    def trigger_search(cls, payload: dict) -> dict:
+        """Trigger Radarr/Sonarr release search."""
+        return cls._request("/api/kodi/actions/search", method="POST", data=payload, timeout=25)
+
+
+    @classmethod
+    def send_scrobble(cls, payload: dict) -> dict:
+        """Send live playback scrobble."""
+        config = cls.get_config()
+        payload["device_name"] = config["device_name"]
+        return cls._request("/api/kodi/scrobble", method="POST", data=payload, timeout=5)
+
+    @classmethod
+    def get_addon_status(cls) -> dict:
+        """Fetch download queue and service status."""
+        return cls._request("/api/kodi/addon-status", method="GET", timeout=10)
+
+    @classmethod
+    def trigger_sync(cls) -> dict:
+        """Trigger Kodi scan in ArrMada."""
+        return cls._request("/api/kodi/sync", method="POST", timeout=15)
+
+    @classmethod
+    def trigger_clean(cls) -> dict:
+        """Trigger Kodi clean in ArrMada."""
+        return cls._request("/api/kodi/clean", method="POST", timeout=15)
+
+    # ── Media Discovery & Releases ────────────────────────────
+    @classmethod
+    def lookup_media(cls, query: str, media_type: str = "all") -> list:
+        """Search for movies and series across Radarr/Sonarr."""
+        encoded = urllib.parse.quote(query)
+        res = cls._request(f"/api/kodi/media/lookup?q={encoded}&type={media_type}", method="GET", timeout=20)
+        return res if isinstance(res, list) else []
+
+    @classmethod
+    def get_media_options(cls, media_type: str = "movie") -> dict:
+        """Get quality profiles and root folders."""
+        return cls._request(f"/api/kodi/media/options?type={media_type}", method="GET", timeout=15)
+
+    @classmethod
+    def add_media(cls, payload: dict) -> dict:
+        """Add movie/series to Radarr/Sonarr."""
+        return cls._request("/api/kodi/media/add", method="POST", data=payload, timeout=30)
+
+    @classmethod
+    def get_releases(cls, media_type: str, arr_id: int) -> dict:
+        """Fetch candidate releases from indexers."""
+        return cls._request(f"/api/kodi/media/{media_type}/{arr_id}/releases", method="GET", timeout=60)
+
+    @classmethod
+    def grab_release(cls, media_type: str, arr_id: int, payload: dict) -> dict:
+        """Grab a selected release."""
+        return cls._request(f"/api/kodi/media/{media_type}/{arr_id}/grab", method="POST", data=payload, timeout=30)
+
+    @classmethod
+    def get_recommendations(cls) -> dict:
+        """Get trending and recommended movies/series from ArrMada backend."""
+        res = cls._request("/api/kodi/media/recommendations", method="GET", timeout=20)
+        return res.get("data", {}) if isinstance(res, dict) else {}
+
+    @classmethod
+    def get_dashboard(cls) -> dict:
+        """Get full system dashboard, storage, services, and activities from ArrMada."""
+        return cls._request("/api/kodi/dashboard", method="GET", timeout=35)
+
+    # ── Queue Management & Actions ────────────────────────────
+    @classmethod
+    def remove_queue_item(cls, service_type: str, item_id: int, remove_from_client: bool = True, blocklist: bool = False) -> dict:
+        """Cancel/remove a download item."""
+        payload = {"remove_from_client": remove_from_client, "blocklist": blocklist}
+        return cls._request(f"/api/kodi/downloads/{service_type}/{item_id}/remove", method="POST", data=payload, timeout=20)
+
+    @classmethod
+    def resume_queue_item(cls, service_type: str, item_id: int) -> dict:
+        """Resume/unpause a download."""
+        return cls._request(f"/api/kodi/downloads/{service_type}/{item_id}/resume", method="POST", timeout=20)
+
+    @classmethod
+    def pause_queue_item(cls, service_type: str, item_id: int) -> dict:
+        """Pause a download."""
+        return cls._request(f"/api/kodi/downloads/{service_type}/{item_id}/pause", method="POST", timeout=20)
+
+
+    # ── Maintenance & Widgets ─────────────────────────────────
+    @classmethod
+    def clean_orphans(cls) -> dict:
+        """Trigger orphan files and empty folders cleanup."""
+        return cls._request("/api/kodi/maintenance/clean-orphans", method="POST", timeout=60)
+
+    @classmethod
+    def get_recent_media(cls) -> list:
+        """Fetch recently added media for Kodi widgets."""
+        res = cls._request("/api/kodi/widgets/recent", method="GET", timeout=15)
+        return res if isinstance(res, list) else []
+
+
+
+
+

@@ -34,14 +34,28 @@ def _utcnow() -> datetime:
 def _resolve_quality_profile_id(profiles: list[dict], name: str | None) -> int:
     """Return the id of the profile matching ``name`` (case-insensitive).
 
-    Falls back to the first available profile when no name is given or no
-    match is found, mirroring the previous ``profiles[0]`` behaviour.
+    If no name is given, defaults to the '👑 Ultra-HD Cinema & Auto-Upgrade' profile,
+    or any Ultra-HD profile, before falling back to profiles[0].
     """
+    if not profiles:
+        return 1
+
     if name:
         for p in profiles:
             if str(p.get("name", "")).strip().lower() == name.strip().lower():
                 return p["id"]
+
+    # Default: prioritize our Cinema / Ultra-HD profile
+    for p in profiles:
+        pname = str(p.get("name", "")).lower()
+        if "👑" in p.get("name", "") or "cinema" in pname:
+            return p["id"]
+    for p in profiles:
+        if "ultra" in str(p.get("name", "")).lower():
+            return p["id"]
+
     return profiles[0]["id"]
+
 
 
 
