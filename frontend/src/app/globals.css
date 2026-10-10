@@ -84,6 +84,13 @@
     color: hsl(var(--foreground));
   }
 
+  /* Les enfants d'une grille peuvent rétrécir : sans ça, un texte non coupé
+     (nom de release, chemin…) élargit la colonne et la page déborde sur
+     mobile. Les utilitaires min-w-* restent prioritaires (couche suivante). */
+  .grid > * {
+    min-width: 0;
+  }
+
   /* Chiffres alignés partout où on affiche des compteurs. */
   .tabular-nums {
     font-variant-numeric: tabular-nums;

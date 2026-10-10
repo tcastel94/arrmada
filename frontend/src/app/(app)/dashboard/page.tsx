@@ -88,7 +88,7 @@ export default function DashboardPage() {
                     variants={stagger(0.2, 0.08)}
                     initial="hidden"
                     animate="show"
-                    className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
+                    className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"
                 >
                     <KpiCard
                         label="Films"
@@ -137,7 +137,10 @@ export default function DashboardPage() {
                 <RecentAdditions />
 
                 {/* ── Activité | Téléchargements + À venir ─────── */}
-                <motion.div variants={stagger(0.1, 0.1)} initial="hidden" animate="show" className="grid gap-6 lg:grid-cols-12">
+                {/* grid-cols-1 explicite : sans lui, la colonne implicite prend la
+                    largeur du plus long texte non coupé (noms de releases) et la
+                    page déborde horizontalement sur mobile. */}
+                <motion.div variants={stagger(0.1, 0.1)} initial="hidden" animate="show" className="grid grid-cols-1 gap-6 lg:grid-cols-12">
                     <motion.div variants={fadeUp} className="lg:col-span-7">
                         <ActivityFeedCard />
                     </motion.div>
@@ -148,7 +151,7 @@ export default function DashboardPage() {
                 </motion.div>
 
                 {/* ── Stockage + TRaSH ─────────────────────────── */}
-                <motion.div variants={stagger(0.1, 0.1)} initial="hidden" animate="show" className="grid gap-6 lg:grid-cols-2">
+                <motion.div variants={stagger(0.1, 0.1)} initial="hidden" animate="show" className="grid grid-cols-1 gap-6 lg:grid-cols-2">
                     <motion.div variants={fadeUp}>
                         <StoragePanel />
                     </motion.div>
