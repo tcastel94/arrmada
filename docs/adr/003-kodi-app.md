@@ -2,7 +2,8 @@
 
 ## Statut
 
-Proposé, à valider avant la phase 1.
+**Accepté** le 10/10/2026. Les quatre questions ouvertes sont tranchées
+(voir « Décisions complémentaires »).
 
 ## Contexte
 
@@ -135,8 +136,9 @@ Le modèle est celui de « connecter la TV » de Netflix (norme OAuth 2.0
 
 Le jeton a un **périmètre « TV »** : lecture, ajout, recherche, sous-titres,
 lecture avec ampli. Les actions destructrices (suppression de média,
-redémarrage de conteneurs, configuration) **ne sont pas proposées sur la TV**
-(voir Questions ouvertes).
+redémarrage de conteneurs, configuration) **n'existent pas sur la TV**. Le
+backend les refuse aussi pour un jeton d'appareil, donc l'interface n'est pas
+la seule barrière.
 
 Pour la transition, l'ancien en-tête `X-Api-Key` reste accepté pendant une
 version, puis il est retiré.
@@ -157,7 +159,9 @@ intégrés à l'image Docker du backend.
 
 ### 6. Pièce et ampli par appareil
 
-Chaque appareil appairé a une **pièce par défaut**. « Lire » sur la fiche
+Chaque appareil appairé a une **pièce par défaut**, choisie dans une liste
+fixe : **Salon** ou **Salle de cinéma**. Ce sont les deux profils audio
+Yamaha existants (`salon`, `cinema`). « Lire » sur la fiche
 lance la lecture sur **ce** Kodi et applique le préréglage Yamaha de **sa**
 pièce. Le choix d'une autre pièce reste possible dans un menu secondaire.
 
@@ -204,12 +208,11 @@ pièce. Le choix d'une autre pièce reste possible dans un menu secondaire.
   rendu validé par captures sur la Shield.
 - **Travail backend en plus** : appairage, dépôt Kodi.
 
-## Questions ouvertes
+## Décisions complémentaires (questions ouvertes tranchées)
 
-1. **Actions destructrices sur la TV** : aucune (proposé), ou derrière un code PIN ?
-2. **Bandes-annonces** : la lecture YouTube dans Kodi passe par l'add-on
-   `plugin.video.youtube`, qui demande sa propre clé API Google. Faut-il
-   l'utiliser, ou laisser les bandes-annonces à la web app ?
-3. **Pièces** : la liste est-elle fixe (salon, cinéma, chambre) ou libre ?
-4. **Accès hors domicile** : les appareils restent-ils sur le réseau local
-   seulement (proposé) ?
+| # | Question | Décision |
+|---|---|---|
+| 1 | Actions destructrices sur la TV | **Aucune.** Ni suppression de média, ni redémarrage de conteneur, ni configuration. C'est appliqué aussi côté backend via le périmètre du jeton d'appareil. |
+| 2 | Bandes-annonces dans Kodi | **Oui**, via l'add-on `plugin.video.youtube` (`plugin://plugin.video.youtube/play/?video_id=…`). L'add-on YouTube doit être installé et configuré avec **ta propre clé API Google** (projet Google Cloud personnel, API « YouTube Data v3 »). Sinon, l'appli Kodi affiche un message expliquant quoi faire et un QR code vers la bande-annonce sur le téléphone. |
+| 3 | Pièces | **Liste fixe** : Salon, Salle de cinéma. Elle correspond aux profils audio Yamaha existants. |
+| 4 | Accès | **Réseau local uniquement.** L'appairage et le jeton d'appareil ne sont acceptés que depuis une IP privée (RFC 1918). Aucun accès à l'appli Kodi depuis l'extérieur. |
