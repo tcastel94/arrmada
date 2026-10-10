@@ -1,599 +1,888 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+/**
+ * Assistant d'installation (premier lancement, hors coquille applicative).
+ * ----------------------------------------------------------------
+ * 4 étapes : Bienvenue → Découverte réseau → Services → Terminé.
+ * Corrections par rapport à l'ancienne version :
+ *  - libellés d'étapes enfin affichés, stepper animé ;
+ *  - liste des types dérivée de SERVICE_META (plus de copie locale) ;
+ *  - lignes incomplètes signalées (avant : ignorées EN SILENCE à l'envoi) ;
+ *  - bouton « Tester » par ligne ; port pré-rempli selon le type ;
+ *  - erreurs du backend traduites ; identifiants de ligne stables (plus
+ *    de key={index}) ; plus de `any` ;
+ *  - le bouton final mène à la connexion et s'appelle « Se connecter ».
+ */
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { AnimatePresence, motion, type Variants } from "framer-motion";
+import {
+    AlertCircle,
+    ArrowRight,
+    Check,
+    CheckCircle2,
+    ChevronLeft,
+    KeyRound,
+    Loader2,
+    LogIn,
+    Network,
+    Plus,
+    Radar,
+    RefreshCw,
+    Rocket,
+    Server,
+    ShieldCheck,
+    Sparkles,
+    Trash2,
+    XCircle,
+    Zap,
+    type LucideIcon,
+} from "lucide-react";
+import { AuroraBackground } from "@/components/fx/aurora-background";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { FormField, SecretInput, validateHttpUrl } from "@/components/settings/form-field";
+import { TypeIcon } from "@/components/services/service-config";
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Separator } from "@/components/ui/separator";
+    API_KEY_HINTS,
+    SERVICE_TYPE_OPTIONS,
+    exampleUrl,
+    serviceVisual,
+    swapDefaultPort,
+} from "@/components/services/service-meta";
 import {
-    Skull,
-    Radar,
-    Loader2,
-    CheckCircle2,
-    Plus,
-    Trash2,
-    ChevronRight,
-    ChevronLeft,
-    Sparkles,
-    Server,
-    Network,
-    Zap,
-    Shield,
-} from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
-import { cn } from "@/lib/utils";
-import {
-    useSetupStatus,
-    discoverServices,
     completeSetup,
+    discoverServices,
+    testSetupService,
+    useSetupStatus,
     type DiscoveredService,
     type ServiceSetupItem,
+    type SetupTestResult,
 } from "@/hooks/use-setup";
-import { SERVICE_META } from "@/lib/constants";
+import { plural } from "@/lib/format";
+import { EASE_OUT, SPRING, fadeUp, stagger } from "@/lib/motion";
+import { cn } from "@/lib/utils";
 
-const SERVICE_TYPES = [
-    { value: "sonarr", label: "Sonarr", port: 8989 },
-    { value: "radarr", label: "Radarr", port: 7878 },
-    { value: "lidarr", label: "Lidarr", port: 8686 },
-    { value: "readarr", label: "Readarr", port: 8787 },
-    { value: "prowlarr", label: "Prowlarr", port: 9696 },
-    { value: "bazarr", label: "Bazarr", port: 6767 },
-    { value: "jellyfin", label: "Jellyfin", port: 8096 },
-    { value: "sabnzbd", label: "SABnzbd", port: 8080 },
-];
+/* ── Étapes ─────────────────────────────────────────────────── */
 
-const STEPS = [
-    { title: "Bienvenue", icon: Skull },
+const STEPS: { title: string; icon: LucideIcon }[] = [
+    { title: "Bienvenue", icon: Sparkles },
     { title: "Découverte", icon: Radar },
-    { title: "Configuration", icon: Server },
-    { title: "Terminé", icon: CheckCircle2 },
+    { title: "Services", icon: Server },
+    { title: "Terminé", icon: Rocket },
 ];
+
+/** Glissement horizontal selon le sens de navigation (suivant / retour). */
+const slide: Variants = {
+    enter: (dir: number) => ({ opacity: 0, x: dir >= 0 ? 48 : -48, filter: "blur(4px)" }),
+    center: { opacity: 1, x: 0, filter: "blur(0px)", transition: { duration: 0.45, ease: EASE_OUT } },
+    exit: (dir: number) => ({ opacity: 0, x: dir >= 0 ? -48 : 48, filter: "blur(4px)", transition: { duration: 0.25 } }),
+};
+
+/** Une ligne de service en cours de saisie (id stable pour React). */
+interface Row extends ServiceSetupItem {
+    id: string;
+    /** Vrai dès que l'utilisateur a tapé un nom (sinon le nom suit le type). */
+    nameTouched: boolean;
+}
+
+interface RowErrors {
+    name?: string;
+    url?: string;
+    api_key?: string;
+}
+
+function validateRow(r: Row): RowErrors {
+    const e: RowErrors = {};
+    if (!r.name.trim()) e.name = "Nom obligatoire.";
+    const urlErr = validateHttpUrl(r.url, exampleUrl(r.type));
+    if (urlErr) e.url = urlErr;
+    if (!r.api_key.trim()) e.api_key = "Clé API obligatoire.";
+    return e;
+}
 
 export default function SetupPage() {
     const router = useRouter();
-    const { data: status, isLoading } = useSetupStatus();
-    const [step, setStep] = useState(0);
+    const { data: status, isLoading, isError, error, refetch, isFetching } = useSetupStatus();
+    const [[step, direction], setStepState] = useState<[number, number]>([0, 0]);
+    const goTo = (next: number) => setStepState(([cur]) => [next, next > cur ? 1 : -1]);
+
+    // Découverte
     const [scanning, setScanning] = useState(false);
-    const [discovered, setDiscovered] = useState<DiscoveredService[]>([]);
-    const [services, setServices] = useState<ServiceSetupItem[]>([]);
+    const [scanError, setScanError] = useState("");
+    const [discovered, setDiscovered] = useState<DiscoveredService[] | null>(null);
+    const [picked, setPicked] = useState<Set<string>>(new Set());
+
+    // Saisie des services
+    const idCounter = useRef(0);
+    const newId = () => `row-${++idCounter.current}`;
+    const [rows, setRows] = useState<Row[]>([]);
+    const [showErrors, setShowErrors] = useState(false);
+    const [tests, setTests] = useState<Record<string, { pending: boolean; result?: SetupTestResult }>>({});
     const [submitting, setSubmitting] = useState(false);
-    const [error, setError] = useState("");
+    const [submitError, setSubmitError] = useState("");
+    const [added, setAdded] = useState(0);
 
-    // Redirect if already configured
+    // Déjà configuré → direction le tableau de bord (qui renverra au login si besoin).
     useEffect(() => {
-        if (status?.is_configured) {
-            router.replace("/dashboard");
-        }
-    }, [status, router]);
+        if (status?.is_configured && step !== 3) router.replace("/dashboard");
+    }, [status, router, step]);
 
-    // ── Network scan ────────────────────────────────────────
+    const discoveredKey = (d: DiscoveredService) => `${d.type}:${d.url}`;
+
+    /* ── Découverte réseau ──────────────────────────────────── */
     const handleScan = useCallback(async () => {
         setScanning(true);
-        setError("");
+        setScanError("");
         try {
             const results = await discoverServices();
             setDiscovered(results);
-
-            // Auto-create service entries from discovered ones
-            const autoServices: ServiceSetupItem[] = results.map((d) => ({
-                name: d.name,
-                type: d.type,
-                url: d.url,
-                api_key: "",
-                is_enabled: true,
-            }));
-            setServices((prev) =>
-                prev.length > 0 ? prev : autoServices
-            );
-        } catch {
-            setError("Échec de la détection réseau");
+            // Tout est coché par défaut : l'utilisateur décoche ce qu'il ne veut pas.
+            setPicked(new Set(results.map(discoveredKey)));
+        } catch (e) {
+            setScanError(e instanceof Error ? e.message : "La détection réseau a échoué.");
         } finally {
             setScanning(false);
         }
     }, []);
 
-    // ── Add manual service ──────────────────────────────────
-    const addService = () => {
-        setServices((prev) => [
-            ...prev,
-            { name: "", type: "sonarr", url: "", api_key: "", is_enabled: true },
-        ]);
+    const blankRow = (type = "sonarr"): Row => ({
+        id: newId(),
+        name: serviceVisual(type).label,
+        type,
+        url: "",
+        api_key: "",
+        is_enabled: true,
+        nameTouched: false,
+    });
+
+    /** Passe à l'étape 2 en ajoutant les services cochés (sans doublon). */
+    const continueToServices = () => {
+        const chosen = (discovered ?? []).filter((d) => picked.has(discoveredKey(d)));
+        setRows((prev) => {
+            const existing = new Set(prev.map((r) => `${r.type}:${r.url}`));
+            const fresh: Row[] = chosen
+                .filter((d) => !existing.has(discoveredKey(d)))
+                .map((d) => ({
+                    id: newId(),
+                    name: d.name,
+                    type: d.type,
+                    url: d.url,
+                    api_key: "",
+                    is_enabled: true,
+                    nameTouched: true,
+                }));
+            const next = [...prev, ...fresh];
+            return next.length > 0 ? next : [blankRow()];
+        });
+        goTo(2);
     };
 
-    const removeService = (index: number) => {
-        setServices((prev) => prev.filter((_, i) => i !== index));
+    /* ── Édition des lignes ─────────────────────────────────── */
+    const updateRow = <K extends keyof Row>(id: string, field: K, value: Row[K]) => {
+        setRows((prev) => prev.map((r) => (r.id === id ? { ...r, [field]: value } : r)));
+        // Toute modification invalide le résultat de test précédent.
+        setTests((t) => {
+            if (!t[id]) return t;
+            const copy = { ...t };
+            delete copy[id];
+            return copy;
+        });
     };
 
-    const updateService = (index: number, field: string, value: any) => {
-        setServices((prev) =>
-            prev.map((s, i) => (i === index ? { ...s, [field]: value } : s))
+    const changeType = (id: string, type: string) => {
+        setRows((prev) =>
+            prev.map((r) =>
+                r.id === id
+                    ? {
+                          ...r,
+                          type,
+                          url: swapDefaultPort(r.url, r.type, type),
+                          name: r.nameTouched ? r.name : serviceVisual(type).label,
+                      }
+                    : r,
+            ),
         );
+        setTests((t) => {
+            const copy = { ...t };
+            delete copy[id];
+            return copy;
+        });
     };
 
-    // ── Submit setup ────────────────────────────────────────
-    const handleComplete = async () => {
-        const valid = services.filter(
-            (s) => s.name && s.url && s.api_key && s.type
-        );
-        if (valid.length === 0) {
-            setError("Ajoutez au moins un service avec une clé API");
+    const removeRow = (id: string) => setRows((prev) => prev.filter((r) => r.id !== id));
+
+    const testRow = async (row: Row) => {
+        if (validateHttpUrl(row.url)) {
+            setTests((t) => ({ ...t, [row.id]: { pending: false, result: { ok: false, label: "Saisis d'abord une adresse valide." } } }));
             return;
         }
-
-        setSubmitting(true);
-        setError("");
+        setTests((t) => ({ ...t, [row.id]: { pending: true } }));
         try {
-            await completeSetup(valid);
-            setStep(3); // Success step
-        } catch (e: any) {
-            setError(e.message || "Erreur lors de la configuration");
+            const result = await testSetupService(row);
+            setTests((t) => ({ ...t, [row.id]: { pending: false, result } }));
+        } catch (e) {
+            setTests((t) => ({
+                ...t,
+                [row.id]: { pending: false, result: { ok: false, label: e instanceof Error ? e.message : "Test impossible." } },
+            }));
+        }
+    };
+
+    const errorsById = useMemo(() => Object.fromEntries(rows.map((r) => [r.id, validateRow(r)])), [rows]);
+    const invalidCount = rows.filter((r) => Object.keys(errorsById[r.id] ?? {}).length > 0).length;
+    const readyCount = rows.length - invalidCount;
+
+    /* ── Envoi ──────────────────────────────────────────────── */
+    const handleComplete = async () => {
+        setShowErrors(true);
+        setSubmitError("");
+        if (rows.length === 0) {
+            setSubmitError("Ajoute au moins un service.");
+            return;
+        }
+        if (invalidCount > 0) {
+            setSubmitError(
+                `${plural(invalidCount, "service incomplet", "services incomplets")} : complète les champs en rouge ou retire la ligne.`,
+            );
+            return;
+        }
+        setSubmitting(true);
+        try {
+            const res = await completeSetup(
+                rows.map(({ name, type, url, api_key, is_enabled }) => ({
+                    name: name.trim(),
+                    type,
+                    url: url.trim().replace(/\/+$/, ""),
+                    api_key: api_key.trim(),
+                    is_enabled,
+                })),
+            );
+            setAdded(res?.services_added ?? rows.length);
+            goTo(3);
+        } catch (e) {
+            setSubmitError(e instanceof Error ? e.message : "La configuration a échoué.");
         } finally {
             setSubmitting(false);
         }
     };
 
-    if (isLoading) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-background">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-        );
-    }
-
+    /* ── Rendu ──────────────────────────────────────────────── */
     return (
-        <div className="min-h-screen bg-background flex items-center justify-center px-4 py-8">
-            <div className="w-full max-w-2xl space-y-6">
-                {/* ── Progress bar ───────────────────────────── */}
-                <div className="flex items-center justify-center gap-2">
-                    {STEPS.map((s, i) => {
-                        const Icon = s.icon;
-                        const isActive = i === step;
-                        const isDone = i < step;
-                        return (
-                            <div key={i} className="flex items-center gap-2">
-                                <motion.div
-                                    initial={false}
-                                    animate={{
-                                        scale: isActive ? 1.1 : 1,
-                                        backgroundColor: isDone
-                                            ? "hsl(var(--primary))"
-                                            : isActive
-                                                ? "hsl(var(--primary))"
-                                                : "hsl(var(--muted))",
-                                    }}
-                                    className={cn(
-                                        "flex h-10 w-10 items-center justify-center rounded-full transition-colors",
-                                        (isActive || isDone) ? "text-primary-foreground" : "text-muted-foreground"
-                                    )}
+        <div className="relative min-h-screen overflow-x-hidden">
+            <AuroraBackground intense />
+            <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col items-center px-4 pb-10 pt-8 sm:pt-12">
+                <BrandMark />
+
+                {isLoading ? (
+                    <div className="mt-10 flex items-center gap-2 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin text-primary" /> Préparation de l&apos;équipage…
+                    </div>
+                ) : isError ? (
+                    <div className="glass-strong mt-10 w-full max-w-md rounded-3xl p-6 text-center">
+                        <AlertCircle className="mx-auto h-8 w-8 text-red-400" />
+                        <p className="mt-3 font-semibold">Backend injoignable</p>
+                        <p className="mt-1 text-sm text-muted-foreground">{error instanceof Error ? error.message : ""}</p>
+                        <Button className="mt-5" onClick={() => refetch()} disabled={isFetching}>
+                            <RefreshCw className={isFetching ? "animate-spin" : ""} /> Réessayer
+                        </Button>
+                    </div>
+                ) : (
+                    <>
+                        <Stepper step={step} />
+                        <div className="relative mt-6 w-full">
+                            <AnimatePresence mode="wait" custom={direction} initial={false}>
+                                <motion.section
+                                    key={step}
+                                    custom={direction}
+                                    variants={slide}
+                                    initial="enter"
+                                    animate="center"
+                                    exit="exit"
+                                    className="glass-strong border-gradient w-full rounded-3xl p-5 sm:p-8"
                                 >
-                                    {isDone ? (
-                                        <CheckCircle2 className="h-5 w-5" />
-                                    ) : (
-                                        <Icon className="h-5 w-5" />
-                                    )}
-                                </motion.div>
-                                {i < STEPS.length - 1 && (
-                                    <div
-                                        className={cn(
-                                            "h-0.5 w-8 rounded-full transition-colors",
-                                            i < step ? "bg-primary" : "bg-muted"
-                                        )}
-                                    />
-                                )}
-                            </div>
-                        );
-                    })}
-                </div>
+                                    {step === 0 && <WelcomeStep databaseType={status?.database_type} onStart={() => goTo(1)} />}
 
-                {/* ── Step content ───────────────────────────── */}
-                <AnimatePresence mode="wait">
-                    <motion.div
-                        key={step}
-                        initial={{ opacity: 0, x: 30 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -30 }}
-                        transition={{ duration: 0.25 }}
-                    >
-                        {/* STEP 0: Welcome */}
-                        {step === 0 && (
-                            <Card className="border-primary/20">
-                                <CardHeader className="text-center space-y-4 pb-2">
-                                    <motion.div
-                                        initial={{ scale: 0 }}
-                                        animate={{ scale: 1 }}
-                                        transition={{ type: "spring", duration: 0.5 }}
-                                        className="mx-auto flex h-24 w-24 items-center justify-center overflow-hidden rounded-2xl ring-1 ring-primary/25 shadow-[0_0_32px_-4px] shadow-primary/40"
-                                    >
-                                        <Image
-                                            src="/logo-mark.png"
-                                            alt="ArrMada"
-                                            width={96}
-                                            height={96}
-                                            priority
-                                            className="h-full w-full object-cover"
+                                    {step === 1 && (
+                                        <DiscoveryStep
+                                            scanning={scanning}
+                                            scanError={scanError}
+                                            discovered={discovered}
+                                            picked={picked}
+                                            keyOf={discoveredKey}
+                                            onScan={handleScan}
+                                            onToggle={(k) =>
+                                                setPicked((prev) => {
+                                                    const next = new Set(prev);
+                                                    if (next.has(k)) next.delete(k);
+                                                    else next.add(k);
+                                                    return next;
+                                                })
+                                            }
+                                            onBack={() => goTo(0)}
+                                            onContinue={continueToServices}
                                         />
-                                    </motion.div>
-                                    <div>
-                                        <CardTitle className="text-3xl font-bold tracking-tight">
-                                            Bienvenue sur ArrMada
-                                        </CardTitle>
-                                        <p className="text-muted-foreground mt-2">
-                                            L&apos;interface unifiée pour votre stack *arr
-                                        </p>
-                                    </div>
-                                </CardHeader>
-                                <CardContent className="space-y-6 pt-4">
-                                    <div className="grid gap-3 sm:grid-cols-2">
-                                        {[
-                                            { icon: Network, label: "Détection automatique", desc: "Scanne votre réseau pour trouver vos services" },
-                                            { icon: Server, label: "Tableau de bord unifié", desc: "Gérez tous vos services en un seul endroit" },
-                                            { icon: Sparkles, label: "Recommandations IA", desc: "Suggestions basées sur vos goûts" },
-                                            { icon: Shield, label: "Sécurisé", desc: "Clés API chiffrées, JWT, rate limiting" },
-                                        ].map((feat) => (
-                                            <div
-                                                key={feat.label}
-                                                className="flex items-start gap-3 p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
-                                            >
-                                                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 shrink-0">
-                                                    <feat.icon className="h-4 w-4 text-primary" />
-                                                </div>
-                                                <div>
-                                                    <p className="text-sm font-medium">{feat.label}</p>
-                                                    <p className="text-xs text-muted-foreground">{feat.desc}</p>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-
-                                    {status && (
-                                        <div className="text-center">
-                                            <Badge variant="outline" className="text-xs">
-                                                Base de données : {status.database_type === "postgresql" ? "PostgreSQL" : "SQLite"}
-                                            </Badge>
-                                        </div>
                                     )}
 
-                                    <Button
-                                        onClick={() => setStep(1)}
-                                        className="w-full h-11"
-                                        size="lg"
-                                    >
-                                        Commencer la configuration
-                                        <ChevronRight className="h-4 w-4 ml-2" />
-                                    </Button>
-                                </CardContent>
-                            </Card>
-                        )}
-
-                        {/* STEP 1: Discovery */}
-                        {step === 1 && (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle className="flex items-center gap-2">
-                                        <Radar className="h-5 w-5 text-primary" />
-                                        Découverte réseau
-                                    </CardTitle>
-                                    <p className="text-sm text-muted-foreground">
-                                        ArrMada peut scanner votre réseau local pour détecter automatiquement
-                                        vos services Sonarr, Radarr, Prowlarr, etc.
-                                    </p>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
-                                    <Button
-                                        onClick={handleScan}
-                                        disabled={scanning}
-                                        variant="outline"
-                                        className="w-full h-11"
-                                    >
-                                        {scanning ? (
-                                            <>
-                                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                                Scan en cours…
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Zap className="h-4 w-4 mr-2" />
-                                                {discovered.length > 0
-                                                    ? "Relancer le scan"
-                                                    : "Scanner le réseau"}
-                                            </>
-                                        )}
-                                    </Button>
-
-                                    {/* Discovered services */}
-                                    {discovered.length > 0 && (
-                                        <div className="space-y-2">
-                                            <p className="text-sm font-medium">
-                                                {discovered.length} service(s) détecté(s) :
-                                            </p>
-                                            {discovered.map((svc, i) => {
-                                                const meta = SERVICE_META[svc.type as keyof typeof SERVICE_META];
-                                                return (
-                                                    <motion.div
-                                                        key={`${svc.type}-${svc.url}`}
-                                                        initial={{ opacity: 0, y: 10 }}
-                                                        animate={{ opacity: 1, y: 0 }}
-                                                        transition={{ delay: i * 0.1 }}
-                                                        className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border/50"
-                                                    >
-                                                        <div className="flex items-center gap-3">
-                                                            <div
-                                                                className="h-2.5 w-2.5 rounded-full"
-                                                                style={{ backgroundColor: meta?.color || "#888" }}
-                                                            />
-                                                            <div>
-                                                                <p className="text-sm font-medium">{svc.name}</p>
-                                                                <p className="text-xs text-muted-foreground font-mono">
-                                                                    {svc.url}
-                                                                </p>
-                                                            </div>
-                                                        </div>
-                                                        <div className="flex items-center gap-2">
-                                                            {svc.version && (
-                                                                <Badge variant="outline" className="text-xs font-mono">
-                                                                    v{svc.version}
-                                                                </Badge>
-                                                            )}
-                                                            <Badge
-                                                                variant={svc.needs_api_key ? "secondary" : "default"}
-                                                                className="text-xs"
-                                                            >
-                                                                {svc.needs_api_key ? "Clé requise" : "Accessible"}
-                                                            </Badge>
-                                                        </div>
-                                                    </motion.div>
-                                                );
-                                            })}
-                                        </div>
-                                    )}
-
-                                    {scanning && discovered.length === 0 && (
-                                        <div className="text-center py-8">
-                                            <div className="relative mx-auto w-16 h-16">
-                                                <motion.div
-                                                    animate={{ scale: [1, 1.5, 1], opacity: [0.5, 0, 0.5] }}
-                                                    transition={{ repeat: Infinity, duration: 2 }}
-                                                    className="absolute inset-0 rounded-full bg-primary/20"
-                                                />
-                                                <div className="absolute inset-0 flex items-center justify-center">
-                                                    <Radar className="h-8 w-8 text-primary" />
-                                                </div>
-                                            </div>
-                                            <p className="text-sm text-muted-foreground mt-4">
-                                                Scan des ports 6767–9696 sur le réseau local…
-                                            </p>
-                                        </div>
-                                    )}
-
-                                    <Separator />
-
-                                    <div className="flex gap-3">
-                                        <Button
-                                            variant="ghost"
-                                            onClick={() => setStep(0)}
-                                        >
-                                            <ChevronLeft className="h-4 w-4 mr-1" />
-                                            Retour
-                                        </Button>
-                                        <Button
-                                            onClick={() => {
-                                                if (services.length === 0) addService();
-                                                setStep(2);
-                                            }}
-                                            className="flex-1"
-                                        >
-                                            {discovered.length > 0
-                                                ? "Configurer les services"
-                                                : "Configuration manuelle"}
-                                            <ChevronRight className="h-4 w-4 ml-1" />
-                                        </Button>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        )}
-
-                        {/* STEP 2: Configuration */}
-                        {step === 2 && (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle className="flex items-center gap-2">
-                                        <Server className="h-5 w-5 text-primary" />
-                                        Configuration des services
-                                    </CardTitle>
-                                    <p className="text-sm text-muted-foreground">
-                                        Renseignez l&apos;URL et la clé API de chaque service.
-                                        Vous pouvez trouver la clé API dans{" "}
-                                        <span className="font-medium">Settings → General</span> de chaque
-                                        application.
-                                    </p>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
-                                    {services.map((svc, i) => {
-                                        const meta = SERVICE_META[svc.type as keyof typeof SERVICE_META];
-                                        return (
-                                            <motion.div
-                                                key={i}
-                                                initial={{ opacity: 0, y: 10 }}
-                                                animate={{ opacity: 1, y: 0 }}
-                                                className="p-4 rounded-lg border border-border/50 bg-muted/10 space-y-3"
-                                            >
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex items-center gap-2">
-                                                        <div
-                                                            className="h-3 w-3 rounded-full"
-                                                            style={{ backgroundColor: meta?.color || "#888" }}
+                                    {step === 2 && (
+                                        <div className="space-y-5">
+                                            <StepTitle
+                                                icon={Server}
+                                                title="Tes services"
+                                                description="Renseigne l'adresse et la clé API de chaque application. Tu pourras en ajouter d'autres plus tard dans Paramètres."
+                                            />
+                                            <motion.div layout className="space-y-3">
+                                                <AnimatePresence initial={false}>
+                                                    {rows.map((row, i) => (
+                                                        <ServiceRow
+                                                            key={row.id}
+                                                            index={i}
+                                                            row={row}
+                                                            errors={showErrors ? errorsById[row.id] : undefined}
+                                                            test={tests[row.id]}
+                                                            canRemove={rows.length > 1}
+                                                            onChange={updateRow}
+                                                            onTypeChange={changeType}
+                                                            onRemove={removeRow}
+                                                            onTest={testRow}
                                                         />
-                                                        <span className="text-sm font-medium">
-                                                            Service {i + 1}
-                                                        </span>
-                                                    </div>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                                                        onClick={() => removeService(i)}
-                                                    >
-                                                        <Trash2 className="h-3.5 w-3.5" />
-                                                    </Button>
-                                                </div>
-
-                                                <div className="grid gap-3 sm:grid-cols-2">
-                                                    <div className="space-y-1.5">
-                                                        <Label className="text-xs">Type</Label>
-                                                        <Select
-                                                            value={svc.type}
-                                                            onValueChange={(v) =>
-                                                                updateService(i, "type", v)
-                                                            }
-                                                        >
-                                                            <SelectTrigger>
-                                                                <SelectValue />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                {SERVICE_TYPES.map((t) => (
-                                                                    <SelectItem
-                                                                        key={t.value}
-                                                                        value={t.value}
-                                                                    >
-                                                                        {t.label} (:{t.port})
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </div>
-                                                    <div className="space-y-1.5">
-                                                        <Label className="text-xs">Nom</Label>
-                                                        <Input
-                                                            placeholder="Mon Sonarr"
-                                                            value={svc.name}
-                                                            onChange={(e) =>
-                                                                updateService(i, "name", e.target.value)
-                                                            }
-                                                        />
-                                                    </div>
-                                                </div>
-
-                                                <div className="space-y-1.5">
-                                                    <Label className="text-xs">URL</Label>
-                                                    <Input
-                                                        placeholder="http://192.168.1.100:8989"
-                                                        value={svc.url}
-                                                        onChange={(e) =>
-                                                            updateService(i, "url", e.target.value)
-                                                        }
-                                                        className="font-mono text-sm"
-                                                    />
-                                                </div>
-
-                                                <div className="space-y-1.5">
-                                                    <Label className="text-xs">Clé API</Label>
-                                                    <Input
-                                                        placeholder="abc123def456..."
-                                                        value={svc.api_key}
-                                                        onChange={(e) =>
-                                                            updateService(i, "api_key", e.target.value)
-                                                        }
-                                                        className="font-mono text-sm"
-                                                        type="password"
-                                                    />
-                                                </div>
+                                                    ))}
+                                                </AnimatePresence>
                                             </motion.div>
-                                        );
-                                    })}
 
-                                    <Button
-                                        variant="outline"
-                                        onClick={addService}
-                                        className="w-full border-dashed"
-                                    >
-                                        <Plus className="h-4 w-4 mr-2" />
-                                        Ajouter un service
-                                    </Button>
+                                            <Button variant="outline" onClick={() => setRows((p) => [...p, blankRow()])} className="w-full border-dashed">
+                                                <Plus /> Ajouter un service
+                                            </Button>
 
-                                    {error && (
-                                        <p className="text-sm text-destructive text-center">
-                                            {error}
-                                        </p>
+                                            <div className="flex flex-wrap items-center gap-2 text-xs">
+                                                <span className="chip">
+                                                    <CheckCircle2 className="h-3 w-3 text-emerald-400" /> {plural(readyCount, "prêt", "prêts")}
+                                                </span>
+                                                {invalidCount > 0 && (
+                                                    <span className="chip">
+                                                        <AlertCircle className="h-3 w-3 text-amber-400" /> {plural(invalidCount, "incomplet", "incomplets")}
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            <AnimatePresence>
+                                                {submitError && (
+                                                    <motion.p
+                                                        initial={{ opacity: 0, y: -4 }}
+                                                        animate={{ opacity: 1, y: 0 }}
+                                                        exit={{ opacity: 0 }}
+                                                        role="alert"
+                                                        className="flex items-start gap-2 rounded-xl border border-red-500/25 bg-red-500/10 px-3.5 py-2.5 text-sm text-red-300"
+                                                    >
+                                                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> {submitError}
+                                                    </motion.p>
+                                                )}
+                                            </AnimatePresence>
+
+                                            <div className="flex flex-col-reverse gap-2 border-t border-white/[0.06] pt-5 sm:flex-row">
+                                                <Button variant="ghost" onClick={() => goTo(1)}>
+                                                    <ChevronLeft /> Retour
+                                                </Button>
+                                                <Button onClick={handleComplete} disabled={submitting} size="lg" className="sm:ml-auto">
+                                                    {submitting ? <Loader2 className="animate-spin" /> : <Check />}
+                                                    {submitting ? "Installation…" : "Terminer l'installation"}
+                                                </Button>
+                                            </div>
+                                        </div>
                                     )}
 
-                                    <Separator />
+                                    {step === 3 && <DoneStep added={added} onLogin={() => router.push("/login")} />}
+                                </motion.section>
+                            </AnimatePresence>
+                        </div>
+                    </>
+                )}
+            </main>
+        </div>
+    );
+}
 
-                                    <div className="flex gap-3">
-                                        <Button
-                                            variant="ghost"
-                                            onClick={() => setStep(1)}
-                                        >
-                                            <ChevronLeft className="h-4 w-4 mr-1" />
-                                            Retour
-                                        </Button>
-                                        <Button
-                                            onClick={handleComplete}
-                                            disabled={submitting || services.length === 0}
-                                            className="flex-1"
-                                        >
-                                            {submitting ? (
-                                                <>
-                                                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                                    Configuration…
-                                                </>
-                                            ) : (
-                                                <>
-                                                    Terminer la configuration
-                                                    <CheckCircle2 className="h-4 w-4 ml-2" />
-                                                </>
-                                            )}
-                                        </Button>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        )}
+/* ── Logo lumineux ──────────────────────────────────────────── */
 
-                        {/* STEP 3: Success */}
-                        {step === 3 && (
-                            <Card className="border-green-500/20">
-                                <CardContent className="pt-8 pb-8 text-center space-y-6">
-                                    <motion.div
-                                        initial={{ scale: 0 }}
-                                        animate={{ scale: 1 }}
-                                        transition={{ type: "spring", duration: 0.6 }}
-                                        className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-green-500/10"
-                                    >
-                                        <CheckCircle2 className="h-10 w-10 text-green-500" />
-                                    </motion.div>
-                                    <div>
-                                        <h2 className="text-2xl font-bold tracking-tight">
-                                            Configuration terminée !
-                                        </h2>
-                                        <p className="text-muted-foreground mt-2">
-                                            ArrMada est prêt. Vos services ont été configurés avec succès.
-                                        </p>
-                                    </div>
-                                    <Button
-                                        onClick={() => router.push("/login")}
-                                        size="lg"
-                                        className="h-11"
-                                    >
-                                        <Skull className="h-4 w-4 mr-2" />
-                                        Aller au tableau de bord
-                                    </Button>
-                                </CardContent>
-                            </Card>
-                        )}
-                    </motion.div>
-                </AnimatePresence>
+function BrandMark() {
+    return (
+        <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ type: "spring", stiffness: 200, damping: 18 }}
+            className="flex flex-col items-center gap-3"
+        >
+            <div className="relative">
+                {/* Halo en radial-gradient (et non `blur`) : l'animation pulse-glow
+                    réécrit la propriété CSS `filter`, ce qui annulerait un flou. */}
+                <div
+                    aria-hidden
+                    className="absolute inset-0 -m-10 animate-pulse-glow rounded-full"
+                    style={{ background: "radial-gradient(closest-side, hsl(var(--primary) / 0.45), transparent)" }}
+                />
+                <div className="border-beam relative h-16 w-16 rounded-2xl p-[2px] sm:h-20 sm:w-20">
+                    <div className="h-full w-full overflow-hidden rounded-[14px] sm:rounded-[18px]">
+                        <Image src="/logo-mark.png" alt="ArrMada" width={80} height={80} priority className="h-full w-full object-cover" />
+                    </div>
+                </div>
             </div>
+            <p className="text-lg font-bold tracking-tight">
+                Arr<span className="text-gradient">Mada</span>
+            </p>
+        </motion.div>
+    );
+}
+
+/* ── Stepper ────────────────────────────────────────────────── */
+
+function Stepper({ step }: { step: number }) {
+    return (
+        <ol aria-label="Étapes de l'installation" className="mt-6 flex w-full max-w-xl items-start">
+            {STEPS.map((s, i) => {
+                const done = i < step;
+                const active = i === step;
+                const Icon = s.icon;
+                return (
+                    <li key={s.title} className="flex flex-1 items-start last:flex-none" aria-current={active ? "step" : undefined}>
+                        <div className="flex w-16 flex-col items-center gap-1.5 sm:w-20">
+                            <motion.div
+                                initial={false}
+                                animate={{ scale: active ? 1.08 : 1 }}
+                                transition={SPRING}
+                                className={cn(
+                                    "relative flex h-10 w-10 items-center justify-center rounded-full border transition-colors duration-300",
+                                    done && "border-primary/60 bg-primary text-primary-foreground",
+                                    active && "border-primary/60 bg-primary/15 text-primary shadow-[0_0_24px_-4px_hsl(var(--primary)/0.8)]",
+                                    !done && !active && "border-white/10 bg-white/[0.04] text-muted-foreground",
+                                )}
+                            >
+                                {active && <span aria-hidden className="absolute inset-0 animate-pulse-ring rounded-full bg-primary/30" />}
+                                <AnimatePresence mode="wait" initial={false}>
+                                    <motion.span
+                                        key={done ? "done" : "icon"}
+                                        initial={{ scale: 0.4, opacity: 0 }}
+                                        animate={{ scale: 1, opacity: 1 }}
+                                        exit={{ scale: 0.4, opacity: 0 }}
+                                        transition={{ duration: 0.2 }}
+                                        className="relative"
+                                    >
+                                        {done ? <Check className="h-4 w-4" strokeWidth={3} /> : <Icon className="h-4 w-4" />}
+                                    </motion.span>
+                                </AnimatePresence>
+                            </motion.div>
+                            <span
+                                className={cn(
+                                    "text-center text-[11px] font-medium transition-colors",
+                                    active ? "text-foreground" : done ? "text-primary" : "text-muted-foreground",
+                                )}
+                            >
+                                {s.title}
+                            </span>
+                        </div>
+                        {i < STEPS.length - 1 && (
+                            <div aria-hidden className="relative mx-1 mt-5 h-0.5 flex-1 overflow-hidden rounded-full bg-white/10">
+                                <motion.div
+                                    className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-primary to-brand"
+                                    initial={false}
+                                    animate={{ width: done ? "100%" : "0%" }}
+                                    transition={{ duration: 0.6, ease: EASE_OUT }}
+                                />
+                            </div>
+                        )}
+                    </li>
+                );
+            })}
+        </ol>
+    );
+}
+
+function StepTitle({ icon: Icon, title, description }: { icon: LucideIcon; title: string; description: string }) {
+    return (
+        <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary ring-1 ring-primary/25">
+                <Icon className="h-5 w-5" />
+            </span>
+            <div>
+                <h2 className="text-xl font-bold tracking-tight">{title}</h2>
+                <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>
+            </div>
+        </div>
+    );
+}
+
+/* ── Étape 0 : Bienvenue ────────────────────────────────────── */
+
+const FEATURES: { icon: LucideIcon; label: string; desc: string }[] = [
+    { icon: Network, label: "Détection automatique", desc: "ArrMada scanne ton réseau pour trouver tes services." },
+    { icon: Server, label: "Un seul tableau de bord", desc: "Sonarr, Radarr, Prowlarr, SABnzbd… réunis au même endroit." },
+    { icon: Sparkles, label: "Recommandations", desc: "Des suggestions basées sur ta médiathèque." },
+    { icon: ShieldCheck, label: "Sécurisé", desc: "Clés API chiffrées, session protégée par mot de passe." },
+];
+
+function WelcomeStep({ databaseType, onStart }: { databaseType?: string; onStart: () => void }) {
+    return (
+        <div className="space-y-7 text-center">
+            <div>
+                <h1 className="text-balance text-3xl font-bold tracking-tight sm:text-4xl">
+                    Bienvenue à bord <span className="text-gradient-animated">d&apos;ArrMada</span>
+                </h1>
+                <p className="mx-auto mt-2 max-w-md text-balance text-muted-foreground">
+                    Le poste de commandement de ta stack *arr. Trois minutes pour tout connecter.
+                </p>
+            </div>
+            <motion.div variants={stagger(0.15, 0.07)} initial="hidden" animate="show" className="grid grid-cols-1 gap-3 text-left sm:grid-cols-2">
+                {FEATURES.map((f) => (
+                    <motion.div key={f.label} variants={fadeUp} className="glass glass-hover flex items-start gap-3 rounded-2xl p-3.5">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary">
+                            <f.icon className="h-4 w-4" />
+                        </span>
+                        <div>
+                            <p className="text-sm font-semibold">{f.label}</p>
+                            <p className="text-xs text-muted-foreground">{f.desc}</p>
+                        </div>
+                    </motion.div>
+                ))}
+            </motion.div>
+            {databaseType && (
+                <p className="text-xs text-muted-foreground">
+                    Base de données : <span className="font-medium text-foreground">{databaseType === "postgresql" ? "PostgreSQL" : "SQLite"}</span>
+                </p>
+            )}
+            <Button onClick={onStart} size="lg" className="w-full sm:w-auto sm:px-10">
+                Commencer <ArrowRight />
+            </Button>
+        </div>
+    );
+}
+
+/* ── Étape 1 : Découverte ───────────────────────────────────── */
+
+function DiscoveryStep({
+    scanning,
+    scanError,
+    discovered,
+    picked,
+    keyOf,
+    onScan,
+    onToggle,
+    onBack,
+    onContinue,
+}: {
+    scanning: boolean;
+    scanError: string;
+    discovered: DiscoveredService[] | null;
+    picked: Set<string>;
+    keyOf: (d: DiscoveredService) => string;
+    onScan: () => void;
+    onToggle: (key: string) => void;
+    onBack: () => void;
+    onContinue: () => void;
+}) {
+    const count = discovered?.filter((d) => picked.has(keyOf(d))).length ?? 0;
+    return (
+        <div className="space-y-5">
+            <StepTitle
+                icon={Radar}
+                title="Découverte réseau"
+                description="ArrMada peut scanner ton réseau local pour trouver Sonarr, Radarr, Prowlarr, SABnzbd… Tu peux aussi passer cette étape."
+            />
+
+            {/* Radar animé pendant le scan */}
+            <AnimatePresence initial={false}>
+                {scanning && (
+                    <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="overflow-hidden"
+                    >
+                        <div className="flex flex-col items-center py-6">
+                            <div className="relative h-32 w-32">
+                                {[0, 1, 2].map((i) => (
+                                    <motion.span
+                                        key={i}
+                                        className="absolute inset-0 rounded-full border border-primary/40"
+                                        initial={{ scale: 0.3, opacity: 0.9 }}
+                                        animate={{ scale: 1.1, opacity: 0 }}
+                                        transition={{ duration: 2.4, repeat: Infinity, delay: i * 0.8, ease: "easeOut" }}
+                                    />
+                                ))}
+                                <div
+                                    className="absolute inset-0 animate-spin rounded-full"
+                                    style={{
+                                        background: "conic-gradient(from 0deg, transparent 0deg, hsl(var(--primary) / 0.45) 50deg, transparent 90deg)",
+                                        animationDuration: "2.2s",
+                                    }}
+                                />
+                                <div className="absolute inset-[38%] flex items-center justify-center rounded-full bg-primary/20 ring-1 ring-primary/40">
+                                    <Radar className="h-5 w-5 text-primary" />
+                                </div>
+                            </div>
+                            <p className="mt-4 text-sm text-muted-foreground">Exploration du réseau local (une vingtaine de secondes)…</p>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {!scanning && (
+                <Button onClick={onScan} variant={discovered ? "outline" : "default"} size="lg" className="w-full">
+                    {discovered ? <RefreshCw /> : <Zap />}
+                    {discovered ? "Relancer le scan" : "Scanner mon réseau"}
+                </Button>
+            )}
+
+            {scanError && (
+                <p role="alert" className="flex items-start gap-2 rounded-xl border border-red-500/25 bg-red-500/10 px-3.5 py-2.5 text-sm text-red-300">
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> {scanError}
+                </p>
+            )}
+
+            {discovered && !scanning && (
+                discovered.length === 0 ? (
+                    <p className="rounded-xl border border-white/[0.06] bg-background/30 px-4 py-3 text-sm text-muted-foreground">
+                        Aucun service trouvé automatiquement. Pas de souci : tu vas pouvoir les saisir à la main.
+                    </p>
+                ) : (
+                    <div className="space-y-2">
+                        <p className="eyebrow">{plural(discovered.length, "service détecté", "services détectés")} — décoche ceux à ignorer</p>
+                        <motion.ul variants={stagger(0, 0.05)} initial="hidden" animate="show" className="space-y-2">
+                            {discovered.map((svc) => {
+                                const k = keyOf(svc);
+                                const on = picked.has(k);
+                                return (
+                                    <motion.li key={k} variants={fadeUp}>
+                                        <button
+                                            type="button"
+                                            role="checkbox"
+                                            aria-checked={on}
+                                            onClick={() => onToggle(k)}
+                                            className={cn(
+                                                "flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition-all",
+                                                on ? "border-primary/35 bg-primary/[0.08]" : "border-white/[0.06] bg-background/30 opacity-60 hover:opacity-100",
+                                            )}
+                                        >
+                                            <span
+                                                className={cn(
+                                                    "flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors",
+                                                    on ? "border-primary bg-primary text-primary-foreground" : "border-white/20",
+                                                )}
+                                            >
+                                                {on && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
+                                            </span>
+                                            <TypeIcon type={svc.type} className="h-9 w-9" />
+                                            <span className="min-w-0 flex-1">
+                                                <span className="block truncate text-sm font-semibold">{svc.name}</span>
+                                                <span className="block truncate font-mono text-xs text-muted-foreground">{svc.url}</span>
+                                            </span>
+                                            <span className="hidden shrink-0 flex-col items-end gap-1 sm:flex">
+                                                {svc.version && <span className="font-mono text-[10px] text-muted-foreground">v{svc.version}</span>}
+                                                <span
+                                                    className={cn(
+                                                        "rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                                                        svc.needs_api_key ? "bg-amber-500/15 text-amber-300" : "bg-emerald-500/15 text-emerald-300",
+                                                    )}
+                                                >
+                                                    {svc.needs_api_key ? "Clé requise" : "Accessible"}
+                                                </span>
+                                            </span>
+                                        </button>
+                                    </motion.li>
+                                );
+                            })}
+                        </motion.ul>
+                    </div>
+                )
+            )}
+
+            <div className="flex flex-col-reverse gap-2 border-t border-white/[0.06] pt-5 sm:flex-row">
+                <Button variant="ghost" onClick={onBack}>
+                    <ChevronLeft /> Retour
+                </Button>
+                <Button onClick={onContinue} disabled={scanning} className="sm:ml-auto">
+                    {count > 0 ? `Continuer avec ${plural(count, "service")}` : "Configurer à la main"}
+                    <ArrowRight />
+                </Button>
+            </div>
+        </div>
+    );
+}
+
+/* ── Étape 2 : une ligne de service ─────────────────────────── */
+
+function ServiceRow({
+    index,
+    row,
+    errors,
+    test,
+    canRemove,
+    onChange,
+    onTypeChange,
+    onRemove,
+    onTest,
+}: {
+    index: number;
+    row: Row;
+    errors?: RowErrors;
+    test?: { pending: boolean; result?: SetupTestResult };
+    canRemove: boolean;
+    onChange: <K extends keyof Row>(id: string, field: K, value: Row[K]) => void;
+    onTypeChange: (id: string, type: string) => void;
+    onRemove: (id: string) => void;
+    onTest: (row: Row) => void;
+}) {
+    const hasErrors = !!errors && Object.keys(errors).length > 0;
+    const id = (f: string) => `${row.id}-${f}`;
+    return (
+        <motion.div
+            layout
+            initial={{ opacity: 0, y: 12, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, x: -24, transition: { duration: 0.2 } }}
+            transition={{ duration: 0.35, ease: EASE_OUT }}
+            className={cn(
+                "glass space-y-4 rounded-2xl p-4 transition-shadow",
+                hasErrors && "shadow-[inset_0_0_0_1px_rgb(239_68_68/0.35)]",
+            )}
+        >
+            <div className="flex items-center gap-3">
+                <TypeIcon type={row.type} className="h-9 w-9" />
+                <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold">{row.name || serviceVisual(row.type).label}</p>
+                    <p className="text-[11px] text-muted-foreground">Service n°{index + 1}</p>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => onTest(row)} disabled={test?.pending}>
+                    {test?.pending ? <Loader2 className="animate-spin" /> : <Zap />}
+                    Tester
+                </Button>
+                {canRemove && (
+                    <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        className="text-muted-foreground hover:bg-red-500/10 hover:text-red-400"
+                        onClick={() => onRemove(row.id)}
+                        aria-label={`Retirer le service n°${index + 1}`}
+                    >
+                        <Trash2 />
+                    </Button>
+                )}
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <FormField id={id("type")} label="Application">
+                    <Select value={row.type} onValueChange={(v) => onTypeChange(row.id, v)}>
+                        <SelectTrigger id={id("type")}>
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {SERVICE_TYPE_OPTIONS.map((t) => (
+                                <SelectItem key={t.value} value={t.value}>
+                                    {t.label} <span className="text-muted-foreground">· port {t.port}</span>
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </FormField>
+                <FormField id={id("name")} label="Nom" error={errors?.name}>
+                    <Input
+                        id={id("name")}
+                        value={row.name}
+                        placeholder={`Mon ${serviceVisual(row.type).label}`}
+                        onChange={(e) => {
+                            onChange(row.id, "name", e.target.value);
+                            onChange(row.id, "nameTouched", true);
+                        }}
+                        aria-invalid={!!errors?.name}
+                    />
+                </FormField>
+                <FormField id={id("url")} label="Adresse" error={errors?.url}>
+                    <Input
+                        id={id("url")}
+                        value={row.url}
+                        placeholder={exampleUrl(row.type)}
+                        inputMode="url"
+                        spellCheck={false}
+                        autoComplete="off"
+                        className="font-mono text-sm"
+                        onChange={(e) => onChange(row.id, "url", e.target.value)}
+                        aria-invalid={!!errors?.url}
+                    />
+                </FormField>
+                <FormField id={id("key")} label="Clé API" error={errors?.api_key} hint={API_KEY_HINTS[row.type as keyof typeof API_KEY_HINTS]}>
+                    <SecretInput
+                        id={id("key")}
+                        icon={KeyRound}
+                        value={row.api_key}
+                        placeholder="Colle la clé ici"
+                        onChange={(e) => onChange(row.id, "api_key", e.target.value)}
+                        aria-invalid={!!errors?.api_key}
+                    />
+                </FormField>
+            </div>
+
+            <AnimatePresence initial={false}>
+                {test?.result && (
+                    <motion.p
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        aria-live="polite"
+                        className={cn(
+                            "flex items-start gap-2 overflow-hidden text-xs font-medium",
+                            test.result.ok ? "text-emerald-400" : "text-red-400",
+                        )}
+                    >
+                        {test.result.ok ? <CheckCircle2 className="mt-px h-3.5 w-3.5 shrink-0" /> : <XCircle className="mt-px h-3.5 w-3.5 shrink-0" />}
+                        {test.result.label}
+                    </motion.p>
+                )}
+            </AnimatePresence>
+        </motion.div>
+    );
+}
+
+/* ── Étape 3 : Terminé ──────────────────────────────────────── */
+
+function DoneStep({ added, onLogin }: { added: number; onLogin: () => void }) {
+    return (
+        <div className="space-y-6 py-4 text-center">
+            <div className="relative mx-auto h-24 w-24">
+                {/* Éclats qui jaillissent autour de la coche */}
+                {Array.from({ length: 12 }).map((_, i) => {
+                    const angle = (i / 12) * Math.PI * 2;
+                    return (
+                        <motion.span
+                            key={i}
+                            aria-hidden
+                            className={cn("absolute left-1/2 top-1/2 h-1.5 w-1.5 rounded-full", i % 2 ? "bg-brand" : "bg-primary")}
+                            initial={{ x: 0, y: 0, opacity: 1, scale: 1 }}
+                            animate={{ x: Math.cos(angle) * 70, y: Math.sin(angle) * 70, opacity: 0, scale: 0.4 }}
+                            transition={{ duration: 1.1, ease: EASE_OUT, delay: 0.25 }}
+                        />
+                    );
+                })}
+                <motion.div
+                    initial={{ scale: 0, rotate: -40 }}
+                    animate={{ scale: 1, rotate: 0 }}
+                    transition={{ type: "spring", stiffness: 260, damping: 16 }}
+                    className="relative flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400/30 to-teal-500/10 ring-1 ring-emerald-400/40 shadow-[0_0_48px_-6px_rgb(52_211_153/0.7)]"
+                >
+                    <CheckCircle2 className="h-12 w-12 text-emerald-300" strokeWidth={1.6} />
+                </motion.div>
+            </div>
+            <div>
+                <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Tout est prêt !</h2>
+                <p className="mt-2 text-muted-foreground">
+                    {plural(added, "service ajouté", "services ajoutés")}. Ta flotte est prête à appareiller.
+                </p>
+            </div>
+            <p className="mx-auto max-w-sm rounded-xl border border-white/[0.06] bg-background/30 px-4 py-3 text-xs text-muted-foreground">
+                Connecte-toi avec le mot de passe défini dans <code className="font-mono text-foreground">ARRMADA_AUTH_SECRET</code> (fichier .env du backend).
+            </p>
+            <Button onClick={onLogin} size="lg" className="w-full sm:w-auto sm:px-10">
+                <LogIn /> Se connecter
+            </Button>
         </div>
     );
 }

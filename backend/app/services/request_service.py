@@ -9,6 +9,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models.request import MediaRequest
 from app.models.service import Service
 from app.services.encryption import decrypt_api_key
@@ -33,6 +34,67 @@ def _resolve_quality_profile_id(profiles: list[dict], name: str | None) -> int:
     return profiles[0]["id"]
 
 
+TMDB_BASE = "https://api.themoviedb.org/3"
+
+
+async def _tmdb_series_to_tvdb(tmdb_id: int) -> int | None:
+    """Résout l'ID TVDB d'une série à partir de son ID TMDB.
+
+    Pourquoi : les suggestions (tendances TMDB) fournissent un ID **TMDB**,
+    alors que Sonarr est indexé sur **TVDB**. Avant ce correctif, l'ID TMDB
+    était envoyé tel quel en ``tvdb:{id}`` → Sonarr ajoutait une AUTRE série.
+    On interroge ``/tv/{id}/external_ids`` (nécessite TMDB_API_KEY, toujours
+    présente quand des tendances TMDB sont affichées).
+    """
+    if not settings.TMDB_API_KEY:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=10) as http:
+            resp = await http.get(
+                f"{TMDB_BASE}/tv/{tmdb_id}/external_ids",
+                params={"api_key": settings.TMDB_API_KEY},
+            )
+            resp.raise_for_status()
+            tvdb = resp.json().get("tvdb_id")
+            return int(tvdb) if tvdb else None
+    except Exception as exc:
+        logger.warning("TMDB external_ids failed for tv/%s: %s", tmdb_id, exc)
+        return None
+
+
+def _pick_series(
+    results: list[dict[str, Any]],
+    title: str,
+    year: int | None,
+    tmdb_id: int | None,
+) -> dict[str, Any] | None:
+    """Choisit la bonne série parmi les résultats d'un lookup Sonarr par titre.
+
+    Ordre de confiance : même ID TMDB (Sonarr v4 le renvoie) > même titre ET
+    même année > premier résultat de la même année. Si un ID TMDB était fourni
+    mais qu'aucun résultat ne correspond, on préfère échouer plutôt que
+    d'ajouter une série au hasard. Sans ID du tout (ajout manuel par titre),
+    on garde le comportement historique : le premier résultat.
+    """
+    if not results:
+        return None
+    if tmdb_id:
+        for r in results:
+            if r.get("tmdbId") == tmdb_id:
+                return r
+    wanted = title.strip().casefold()
+    if year:
+        for r in results:
+            if r.get("year") == year and str(r.get("title", "")).strip().casefold() == wanted:
+                return r
+        for r in results:
+            if r.get("year") == year:
+                return r
+    for r in results:
+        if str(r.get("title", "")).strip().casefold() == wanted:
+            return r
+    return None if tmdb_id else results[0]
+
 
 async def create_request(
     db: AsyncSession,
@@ -42,14 +104,24 @@ async def create_request(
     year: int | None = None,
     poster_url: str | None = None,
     quality_profile: str | None = None,
+    tvdb_id: int | None = None,
 ) -> MediaRequest:
-    """Create a new media request and attempt to add it to the target service."""
+    """Create a new media request and attempt to add it to the target service.
+
+    Identifiants : ``tmdb_id`` est toujours un vrai ID TMDB ; ``tvdb_id`` un
+    ID TVDB (séries trouvées via le lookup Sonarr). Pour une série, la colonne
+    ``MediaRequest.tmdb_id`` contient historiquement l'ID **TVDB** (Sonarr est
+    indexé sur TVDB, et la synchro ``sync_active_requests`` s'appuie dessus) :
+    on conserve cette convention et on garde l'ID TMDB à part pour la
+    résolution TMDB → TVDB.
+    """
     target = "radarr" if media_type == "movie" else "sonarr"
+    is_movie = media_type == "movie"
 
     req = MediaRequest(
         title=title,
         type=media_type,
-        tmdb_id=tmdb_id,
+        tmdb_id=tmdb_id if is_movie else tvdb_id,
         year=year,
         poster_url=poster_url,
         quality_profile=quality_profile,
@@ -61,7 +133,7 @@ async def create_request(
 
     # Try to auto-add to the target *arr service
     try:
-        await _send_to_arr(db, req)
+        await _send_to_arr(db, req, series_tmdb_id=None if is_movie else tmdb_id)
     except Exception as exc:
         logger.error("Failed to auto-add request %s: %s", title, exc)
         req.status = "failed"
@@ -78,8 +150,14 @@ async def create_request(
     return req
 
 
-async def _send_to_arr(db: AsyncSession, req: MediaRequest) -> None:
-    """Send the request to the appropriate *arr service."""
+async def _send_to_arr(
+    db: AsyncSession, req: MediaRequest, series_tmdb_id: int | None = None
+) -> None:
+    """Send the request to the appropriate *arr service.
+
+    ``series_tmdb_id`` : ID TMDB d'une série (suggestions TMDB), à convertir
+    en ID TVDB avant de l'envoyer à Sonarr.
+    """
     stmt = select(Service).where(
         Service.is_enabled == True,  # noqa: E712
         Service.type == req.target_service,
@@ -148,16 +226,38 @@ async def _send_to_arr(db: AsyncSession, req: MediaRequest) -> None:
     elif req.target_service == "sonarr":
         client = SonarrClient(url=service.url, api_key=api_key)
         try:
-            if req.tmdb_id:
-                results = await client.lookup_series(f"tvdb:{req.tmdb_id}")
-            else:
-                results = await client.lookup_series(req.title)
+            # Convention : pour une série, req.tmdb_id contient l'ID TVDB.
+            tvdb_id = req.tmdb_id
+            if not tvdb_id and series_tmdb_id:
+                tvdb_id = await _tmdb_series_to_tvdb(series_tmdb_id)
 
-            if not results:
+            if tvdb_id:
+                results = await client.lookup_series(f"tvdb:{tvdb_id}")
+                series_data = results[0] if results else None
+            else:
+                # Pas d'ID TVDB : recherche par titre, puis on vérifie que le
+                # résultat correspond (ID TMDB / titre + année) au lieu de
+                # prendre aveuglément le premier.
+                results = await client.lookup_series(req.title)
+                series_data = _pick_series(results or [], req.title, req.year, series_tmdb_id)
+
+            if not series_data or not series_data.get("tvdbId"):
                 req.status = "failed"
+                logger.warning("Sonarr: no matching series for request %s", req.title)
                 return
 
-            series_data = results[0]
+            tvdb_id = series_data["tvdbId"]
+            req.tmdb_id = tvdb_id
+
+            # ── Doublon : la série est déjà dans Sonarr → on la suit simplement ──
+            for existing in await client.get_series():
+                if existing.get("tvdbId") == tvdb_id:
+                    stats = existing.get("statistics") or {}
+                    req.arr_id = existing.get("id")
+                    has_files = stats.get("episodeFileCount", 0) > 0
+                    req.status = "available" if has_files else "searching"
+                    logger.info("Series %s already exists in Sonarr (id=%s)", req.title, req.arr_id)
+                    return
 
             root_folders = await client.get_root_folders()
             quality_profiles = await client.get_quality_profiles()
@@ -168,7 +268,7 @@ async def _send_to_arr(db: AsyncSession, req: MediaRequest) -> None:
 
             add_payload = {
                 "title": series_data.get("title", req.title),
-                "tvdbId": series_data.get("tvdbId"),
+                "tvdbId": tvdb_id,
                 "year": series_data.get("year", req.year),
                 "qualityProfileId": _resolve_quality_profile_id(quality_profiles, req.quality_profile),
                 "rootFolderPath": root_folders[0]["path"],

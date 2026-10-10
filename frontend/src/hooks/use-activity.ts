@@ -1,42 +1,15 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+/**
+ * Journal d'activité.
+ * ----------------------------------------------------------------
+ * `useActivityTimeline(filters)` : flux unifié (évènements ArrMada
+ * persistés + historique Radarr/Sonarr en direct), filtrable. Utilisé par
+ * /activity et le dashboard. (L'ancien `useActivityFeed`, qui ne lisait que
+ * l'historique *arr, a été retiré : plus aucun écran ne l'utilisait.)
+ */
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api-client";
-
-/* ── Dashboard activity feed (Radarr/Sonarr history widget) ──── */
-
-export interface ActivityItem {
-    id: string;
-    event_type: string;
-    event_label: string;
-    source: "sonarr" | "radarr";
-    title: string;
-    subtitle: string;
-    quality: string | null;
-    languages: string | null;
-    date: string;
-    timestamp: number;
-    icon_type: string;
-    status: "success" | "warning" | "error" | "info";
-    size_bytes: number | null;
-    indexer: string | null;
-    download_client: string | null;
-    poster_url: string | null;
-}
-
-export interface ActivityFeed {
-    items: ActivityItem[];
-    total: number;
-    has_more: boolean;
-}
-
-export function useActivityFeed(limit: number = 30) {
-    return useQuery<ActivityFeed>({
-        queryKey: ["dashboard", "activity", limit],
-        queryFn: () => apiFetch(`/api/dashboard/activity?limit=${limit}`),
-        refetchInterval: 30_000,
-    });
-}
 
 /* ── Unified activity timeline (persisted events + *arr history) ─ */
 
@@ -44,7 +17,7 @@ export interface TimelineItem {
     id: string;
     ts: number; // epoch seconds
     category: string; // download | subtitle | playback | library | telegram | system
-    action: string;
+    action: string; // grab | grabbed | imported | sub_download | kodi_play | cast_play | …
     status: "ok" | "ko" | "info";
     source: string; // arrmada | kodi | radarr | sonarr | bazarr | telegram
     media_type: string | null;
@@ -57,6 +30,8 @@ export interface TimelineItem {
     device: string | null;
     size_bytes?: number | null;
     poster_url?: string | null;
+    /** Données libres attachées à l'évènement (évènements persistés). */
+    meta?: Record<string, unknown> | null;
 }
 
 export interface TimelineGroup {
@@ -84,6 +59,7 @@ export interface TimelineFilters {
     source?: string;
     search?: string;
     group?: "none" | "media";
+    /** Nombre max d'évènements (backend : 1 → 500, défaut ici 200). */
     limit?: number;
 }
 
@@ -100,5 +76,8 @@ export function useActivityTimeline(filters: TimelineFilters) {
         queryKey: ["activity", "timeline", filters],
         queryFn: () => apiFetch(`/api/activity/timeline?${qs.toString()}`),
         refetchInterval: 20_000,
+        // Changer un filtre ou « Charger plus » garde la liste actuelle à
+        // l'écran pendant la requête (au lieu de repasser par les squelettes).
+        placeholderData: keepPreviousData,
     });
 }

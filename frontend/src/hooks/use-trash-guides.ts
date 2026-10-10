@@ -1,5 +1,10 @@
 "use client";
 
+/**
+ * TRaSH Guides : synchronisation des données, recommandations de profils
+ * selon le matériel de l'utilisateur, application aux Sonarr/Radarr et
+ * score de conformité (utilisé aussi par le Dashboard).
+ */
 import { apiFetch } from "@/lib/api-client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -15,10 +20,12 @@ export interface TrashSyncStatus {
     is_stale: boolean;
 }
 
+/** Résumé d'un « Custom Format » (format personnalisé) TRaSH. */
 export interface TrashCFSummary {
     trash_id: string;
     name: string;
     scores: Record<string, number> | null;
+    /** hdr | audio | language | anime | unwanted | quality | autre… */
     category: string;
 }
 
@@ -40,6 +47,7 @@ export interface MediaPreferences {
     watches_french_series: boolean;
 }
 
+/** Résultat d'une application (ou d'un aperçu `dry_run`) sur un service. */
 export interface ApplyResult {
     success: boolean;
     cfs_created: number;
@@ -49,39 +57,36 @@ export interface ApplyResult {
     errors: string[];
 }
 
+export interface ApplyPayload {
+    service_id: number;
+    /** IDs de profils TRaSH (= nom de fichier source). */
+    recommendations: string[];
+    /** true = simulation : le backend compte ce qui changerait sans rien écrire. */
+    dry_run?: boolean;
+}
+
 // ── Queries ──────────────────────────────────────────────────
 
 export function useTrashStatus() {
     return useQuery<TrashSyncStatus>({
         queryKey: ["trash-guides", "status"],
-        queryFn: () => apiFetch("/api/trash-guides/status"),
+        queryFn: () => apiFetch<TrashSyncStatus>("/api/trash-guides/status"),
         staleTime: 60_000,
         retry: 1,
         retryDelay: 1000,
     });
 }
 
-export function useTrashCustomFormats(service = "sonarr", category?: string) {
-    return useQuery<TrashCFSummary[]>({
-        queryKey: ["trash-guides", "custom-formats", service, category],
-        queryFn: () => {
-            const params = new URLSearchParams({ service });
-            if (category) params.set("category", category);
-            return apiFetch(`/api/trash-guides/custom-formats?${params}`);
-        },
-        staleTime: 300_000, // 5min
-    });
-}
-
 // ── Mutations ────────────────────────────────────────────────
 
+/** Re-télécharge les données TRaSH depuis GitHub (force = ignore le cache 24 h). */
 export function useTrashSync() {
     const qc = useQueryClient();
-    return useMutation({
-        mutationFn: (force: boolean = false) =>
+    return useMutation<unknown, Error, boolean | void>({
+        mutationFn: (force) =>
             apiFetch("/api/trash-guides/sync", {
                 method: "POST",
-                body: JSON.stringify({ force }),
+                body: JSON.stringify({ force: force ?? false }),
             }),
         onSuccess: () => {
             qc.invalidateQueries({ queryKey: ["trash-guides"] });
@@ -92,20 +97,29 @@ export function useTrashSync() {
 export function useTrashRecommend() {
     return useMutation<RecommendedProfile[], Error, MediaPreferences>({
         mutationFn: (prefs) =>
-            apiFetch("/api/trash-guides/recommend", {
+            apiFetch<RecommendedProfile[]>("/api/trash-guides/recommend", {
                 method: "POST",
                 body: JSON.stringify(prefs),
             }),
     });
 }
 
+/**
+ * Applique (ou simule avec `dry_run`) des profils sur un service.
+ * Après une vraie application, le score de conformité affiché sur le
+ * Dashboard change → on invalide `["trash-guides","compliance"]`.
+ */
 export function useTrashApply() {
-    return useMutation<ApplyResult, Error, { service_id: number; recommendations: string[]; dry_run?: boolean }>({
+    const qc = useQueryClient();
+    return useMutation<ApplyResult, Error, ApplyPayload>({
         mutationFn: (body) =>
-            apiFetch("/api/trash-guides/apply", {
+            apiFetch<ApplyResult>("/api/trash-guides/apply", {
                 method: "POST",
                 body: JSON.stringify(body),
             }),
+        onSuccess: (_res, body) => {
+            if (!body.dry_run) qc.invalidateQueries({ queryKey: ["trash-guides", "compliance"] });
+        },
     });
 }
 
@@ -124,8 +138,8 @@ export interface ComplianceItem {
 export function useTrashCompliance() {
     return useQuery<ComplianceItem[]>({
         queryKey: ["trash-guides", "compliance"],
-        queryFn: () => apiFetch("/api/trash-guides/compliance"),
-        staleTime: 300_000, // 5min
+        queryFn: () => apiFetch<ComplianceItem[]>("/api/trash-guides/compliance"),
+        staleTime: 300_000, // 5 min
         retry: 1,
     });
 }

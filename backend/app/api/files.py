@@ -2,22 +2,23 @@
 
 from __future__ import annotations
 
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel
-from fastapi import APIRouter, Depends, Query, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
+from app.database import async_session_factory
 from app.services.file_manager import (
-    get_sabnzbd_history,
-    get_docker_containers,
     docker_action,
+    get_docker_containers,
+    get_sabnzbd_history,
 )
 from app.services.media_mover import (
     get_path_mappings,
     get_stuck_downloads,
     trigger_manual_import,
 )
-from app.database import async_session_factory
+from app.services.unraid import DockerActionError
 
 router = APIRouter(
     prefix="/api/files",
@@ -59,8 +60,20 @@ class DockerActionPayload(BaseModel):
 
 @router.post("/docker/action")
 async def run_docker_action(payload: DockerActionPayload):
-    """Start/stop/restart a Docker container on Unraid."""
-    result = await docker_action(payload.container_id, payload.action)
+    """Start/stop/restart a Docker container on Unraid.
+
+    Errors are real HTTP errors: 400 for an unknown action, 502 when
+    Unraid fails the action (it used to answer 200 "Failed: …").
+    """
+    try:
+        result = await docker_action(payload.container_id, payload.action)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except DockerActionError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Unraid n'a pas pu exécuter « {payload.action} » : {exc}",
+        ) from exc
     return {"result": result, "container_id": payload.container_id, "action": payload.action}
 
 

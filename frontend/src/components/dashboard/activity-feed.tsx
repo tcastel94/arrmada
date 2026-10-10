@@ -1,247 +1,134 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+/**
+ * Fil d'activité du Dashboard : les 12 derniers évènements de la timeline
+ * unifiée (téléchargements, imports, sous-titres, lectures…), avec lien
+ * vers le Journal complet.
+ * (Avant : historique Radarr/Sonarr seul, sans lien « Tout voir ».)
+ */
+/* eslint-disable @next/next/no-img-element */
+import Link from "next/link";
+import { motion } from "framer-motion";
 import {
-    Download,
-    ArrowDownToLine,
-    ArrowUpCircle,
-    XCircle,
-    Trash2,
-    FileCheck,
-    FileEdit,
     Activity,
-    Film,
-    Tv,
-    RefreshCw,
-    Clock,
-    Zap,
+    Download,
+    CheckCircle2,
+    XCircle,
+    Captions,
+    Play,
+    Library,
+    Send,
+    Cpu,
+    type LucideIcon,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
-import { useActivityFeed, type ActivityItem } from "@/hooks/use-activity";
+import { useActivityTimeline, type TimelineItem } from "@/hooks/use-activity";
+import { Panel } from "@/components/shared/panel";
+import { Shimmer } from "@/components/shared/loading-skeleton";
+import { EmptyState, ErrorState } from "@/components/shared/empty-state";
+import { timeAgo, formatBytes } from "@/lib/format";
+import { stagger, slideIn } from "@/lib/motion";
+import { cn } from "@/lib/utils";
 
-const ICON_MAP: Record<string, any> = {
-    grab: Download,
-    download: ArrowDownToLine,
-    import: FileCheck,
-    upgrade: ArrowUpCircle,
-    fail: XCircle,
-    delete: Trash2,
-    rename: FileEdit,
+const CATEGORY: Record<string, { icon: LucideIcon; cls: string }> = {
+    download: { icon: Download, cls: "text-sky-300 bg-sky-500/10 ring-sky-500/25" },
+    subtitle: { icon: Captions, cls: "text-blue-300 bg-blue-500/10 ring-blue-500/25" },
+    playback: { icon: Play, cls: "text-violet-300 bg-violet-500/10 ring-violet-500/25" },
+    library: { icon: Library, cls: "text-amber-300 bg-amber-500/10 ring-amber-500/25" },
+    telegram: { icon: Send, cls: "text-cyan-300 bg-cyan-500/10 ring-cyan-500/25" },
+    system: { icon: Cpu, cls: "text-slate-300 bg-slate-500/10 ring-slate-500/25" },
 };
 
-const STATUS_CONFIG: Record<string, { gradient: string; dot: string; text: string; border: string }> = {
-    success: {
-        gradient: "from-emerald-500/20 to-emerald-500/5",
-        dot: "bg-emerald-400",
-        text: "text-emerald-400",
-        border: "border-l-emerald-500/60",
-    },
-    warning: {
-        gradient: "from-amber-500/20 to-amber-500/5",
-        dot: "bg-amber-400",
-        text: "text-amber-400",
-        border: "border-l-amber-500/60",
-    },
-    error: {
-        gradient: "from-red-500/20 to-red-500/5",
-        dot: "bg-red-400",
-        text: "text-red-400",
-        border: "border-l-red-500/60",
-    },
-    info: {
-        gradient: "from-blue-500/20 to-blue-500/5",
-        dot: "bg-blue-400",
-        text: "text-blue-400",
-        border: "border-l-blue-500/60",
-    },
+const ACTION_LABELS: Record<string, string> = {
+    grabbed: "Téléchargement lancé",
+    grab: "Téléchargement lancé",
+    imported: "Importé",
+    downloadFolderImported: "Importé",
+    downloadFailed: "Échec du téléchargement",
+    failed: "Échec",
+    sub_download: "Sous-titre téléchargé",
+    sub_sync: "Sous-titre synchronisé",
+    kodi_play: "Lecture Kodi",
+    cast_play: "Lecture Cast",
+    search: "Recherche lancée",
+    delete: "Supprimé",
+    add: "Ajouté",
+    episodeFileDeleted: "Fichier supprimé",
+    movieFileDeleted: "Fichier supprimé",
+    movieDeleted: "Film supprimé",
+    seriesDeleted: "Série supprimée",
+    episodeFileRenamed: "Renommé",
+    movieFileRenamed: "Renommé",
 };
 
-function timeAgo(dateStr: string): string {
-    try {
-        const date = new Date(dateStr);
-        const now = new Date();
-        const diffMs = now.getTime() - date.getTime();
-        const diffMin = Math.floor(diffMs / 60000);
-
-        if (diffMin < 1) return "À l'instant";
-        if (diffMin < 60) return `${diffMin}min`;
-        const diffH = Math.floor(diffMin / 60);
-        if (diffH < 24) return `${diffH}h`;
-        const diffD = Math.floor(diffH / 24);
-        if (diffD < 7) return `${diffD}j`;
-        return date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
-    } catch {
-        return "";
-    }
-}
-
-function formatSize(bytes: number | null): string {
-    if (!bytes || bytes <= 0) return "";
-    const gb = bytes / (1024 * 1024 * 1024);
-    if (gb >= 1) return `${gb.toFixed(1)} GB`;
-    const mb = bytes / (1024 * 1024);
-    return `${mb.toFixed(0)} MB`;
+function hrefOf(it: TimelineItem) {
+    return it.media_type && it.media_id ? `/media/${it.media_type}/${it.media_id}` : undefined;
 }
 
 export function ActivityFeedCard() {
-    const { data, isLoading, isFetching } = useActivityFeed(25);
+    const { data, isLoading, isError, error, refetch } = useActivityTimeline({ limit: 12 });
+    const items = data?.items ?? [];
 
     return (
-        <Card className="bg-card/50 border-border/50 overflow-hidden">
-            <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center justify-between">
-                    <span className="flex items-center gap-2">
-                        <Zap className="h-4 w-4 text-amber-400" />
-                        Activité récente
-                    </span>
-                    <div className="flex items-center gap-2">
-                        {isFetching && (
-                            <RefreshCw className="h-3 w-3 animate-spin text-muted-foreground" />
-                        )}
-                        {data && (
-                            <Badge
-                                variant="outline"
-                                className="text-[10px] px-1.5 h-5 font-mono tabular-nums"
-                            >
-                                {data.total} évènements
-                            </Badge>
-                        )}
-                    </div>
-                </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0 pb-2">
-                {isLoading ? (
-                    <div className="space-y-2 py-2">
-                        {[...Array(6)].map((_, i) => (
-                            <div
-                                key={i}
-                                className="flex items-center gap-3 p-3 rounded-lg"
-                            >
-                                <div className="w-8 h-8 rounded-full bg-muted/40 animate-pulse" />
-                                <div className="flex-1 space-y-1.5">
-                                    <div className="h-3.5 w-32 bg-muted/40 rounded animate-pulse" />
-                                    <div className="h-3 w-48 bg-muted/30 rounded animate-pulse" />
+        <Panel title="Activité récente" icon={Activity} iconClassName="text-emerald-300" href="/activity" hrefLabel="Journal complet" bodyClassName="p-2">
+            {isLoading ? (
+                <div className="space-y-2 p-3">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                        <Shimmer key={i} className="h-12" />
+                    ))}
+                </div>
+            ) : isError ? (
+                <ErrorState compact error={error} onRetry={() => refetch()} />
+            ) : items.length === 0 ? (
+                <EmptyState compact icon={Activity} title="Calme plat" description="Les téléchargements, imports et lectures apparaîtront ici." />
+            ) : (
+                <motion.ol variants={stagger(0.05, 0.04)} initial="hidden" animate="show" className="relative">
+                    {/* Ligne de temps */}
+                    <span aria-hidden className="absolute bottom-6 left-[27px] top-6 w-px bg-gradient-to-b from-primary/40 via-white/10 to-transparent" />
+                    {items.map((it) => {
+                        const cat = CATEGORY[it.category] ?? CATEGORY.system;
+                        const Icon = cat.icon;
+                        const label = ACTION_LABELS[it.action] ?? it.action;
+                        const href = hrefOf(it);
+                        const inner = (
+                            <>
+                                <span className={cn("relative z-[1] flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ring-1 backdrop-blur", cat.cls)}>
+                                    <Icon className="h-3.5 w-3.5" />
+                                    {it.status !== "info" && (
+                                        <span className="absolute -bottom-1 -right-1 rounded-full bg-background">
+                                            {it.status === "ok" ? (
+                                                <CheckCircle2 className="h-3 w-3 text-emerald-400" />
+                                            ) : (
+                                                <XCircle className="h-3 w-3 text-red-400" />
+                                            )}
+                                        </span>
+                                    )}
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                    <p className="truncate text-sm font-medium">{it.title ?? label}</p>
+                                    <p className="truncate text-[11px] text-muted-foreground">
+                                        <span className={it.status === "ko" ? "text-red-400" : ""}>{label}</span>
+                                        {it.subtitle ? ` · ${it.subtitle}` : ""}
+                                        {it.size_bytes ? ` · ${formatBytes(it.size_bytes)}` : ""}
+                                        {it.device ? ` · ${it.device}` : ""}
+                                    </p>
                                 </div>
-                                <div className="h-3 w-12 bg-muted/30 rounded animate-pulse" />
-                            </div>
-                        ))}
-                    </div>
-                ) : !data?.items.length ? (
-                    <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                        <Activity className="h-8 w-8 mb-3 opacity-30" />
-                        <p className="text-sm">Aucune activité récente</p>
-                        <p className="text-xs opacity-50 mt-1">
-                            Les grabs, imports et upgrades apparaîtront ici
-                        </p>
-                    </div>
-                ) : (
-                    <div className="relative">
-                        {/* Timeline line */}
-                        <div className="absolute left-[19px] top-4 bottom-4 w-px bg-gradient-to-b from-muted-foreground/20 via-muted-foreground/10 to-transparent" />
-
-                        <div className="space-y-0.5 max-h-[520px] overflow-y-auto scrollbar-thin pr-1">
-                            <AnimatePresence mode="popLayout">
-                                {data.items.map((item, idx) => (
-                                    <ActivityRow
-                                        key={item.id}
-                                        item={item}
-                                        index={idx}
-                                    />
-                                ))}
-                            </AnimatePresence>
-                        </div>
-                    </div>
-                )}
-            </CardContent>
-        </Card>
-    );
-}
-
-function ActivityRow({ item, index }: { item: ActivityItem; index: number }) {
-    const Icon = ICON_MAP[item.icon_type] || Download;
-    const SourceIcon = item.source === "sonarr" ? Tv : Film;
-    const config = STATUS_CONFIG[item.status] || STATUS_CONFIG.info;
-    const sizeStr = formatSize(item.size_bytes);
-
-    return (
-        <motion.div
-            layout
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ duration: 0.25, delay: Math.min(index * 0.02, 0.3) }}
-            className="flex items-start gap-3 py-2 px-1 group relative"
-        >
-            {/* Timeline dot + icon */}
-            <div className="relative z-10 shrink-0">
-                <div
-                    className={`w-9 h-9 rounded-full flex items-center justify-center bg-gradient-to-br ${config.gradient} ring-1 ring-white/5`}
-                >
-                    <Icon className={`h-4 w-4 ${config.text}`} />
-                </div>
-            </div>
-
-            {/* Content */}
-            <div className="flex-1 min-w-0 pt-0.5">
-                {/* Title row */}
-                <div className="flex items-center gap-1.5 mb-0.5">
-                    <SourceIcon className="h-3 w-3 text-muted-foreground/60 shrink-0" />
-                    <p className="text-sm font-medium truncate leading-tight">
-                        {item.title}
-                    </p>
-                </div>
-
-                {/* Subtitle + badges */}
-                <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className={`text-xs font-medium ${config.text}`}>
-                        {item.event_label}
-                    </span>
-                    {item.subtitle && (
-                        <span className="text-xs text-muted-foreground truncate">
-                            · {item.subtitle}
-                        </span>
-                    )}
-                </div>
-
-                {/* Tags row */}
-                <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                    {item.quality && (
-                        <Badge
-                            variant="outline"
-                            className="text-[10px] px-1 py-0 h-4 border-muted-foreground/20"
-                        >
-                            {item.quality}
-                        </Badge>
-                    )}
-                    {item.languages && (
-                        <Badge
-                            variant="outline"
-                            className="text-[10px] px-1 py-0 h-4 border-muted-foreground/20"
-                        >
-                            {item.languages}
-                        </Badge>
-                    )}
-                    {item.indexer && (
-                        <span className="text-[10px] text-muted-foreground/50">
-                            via {item.indexer}
-                        </span>
-                    )}
-                </div>
-            </div>
-
-            {/* Right side — time + size */}
-            <div className="text-right shrink-0 pt-1">
-                <div className="flex items-center gap-1 justify-end text-[11px] text-muted-foreground">
-                    <Clock className="h-3 w-3 opacity-40" />
-                    <span className="tabular-nums">{timeAgo(item.date)}</span>
-                </div>
-                {sizeStr && (
-                    <p className="text-[10px] text-muted-foreground/50 mt-0.5 tabular-nums">
-                        {sizeStr}
-                    </p>
-                )}
-            </div>
-        </motion.div>
+                                <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground/70">{timeAgo(it.ts * 1000, { short: true })}</span>
+                            </>
+                        );
+                        return (
+                            <motion.li key={it.id} variants={slideIn}>
+                                {href ? (
+                                    <Link href={href} className="flex items-center gap-3 rounded-xl px-3 py-2 transition-colors hover:bg-white/[0.04]">
+                                        {inner}
+                                    </Link>
+                                ) : (
+                                    <div className="flex items-center gap-3 px-3 py-2">{inner}</div>
+                                )}
+                            </motion.li>
+                        );
+                    })}
+                </motion.ol>
+            )}
+        </Panel>
     );
 }

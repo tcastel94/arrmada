@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -210,8 +210,14 @@ async def _scan_cleanup_opportunities(db: AsyncSession) -> dict[str, Any]:
 
 
 @router.get("")
-async def get_cleanup_opportunities(db: AsyncSession = Depends(get_db)):
+async def get_cleanup_opportunities(
+    refresh: bool = Query(False, description="Ignore the 10 min cache (UI « Rescanner » button)"),
+    db: AsyncSession = Depends(get_db),
+):
     """Scan library for cleanup opportunities and reclaimable space."""
+    if refresh:
+        cache.invalidate("cleanup:scan")
+
     async def _fetch():
         return await _scan_cleanup_opportunities(db)
 

@@ -1,7 +1,19 @@
 "use client";
 
+/**
+ * Cast (Chromecast / Google Cast) d'un film via Jellyfin.
+ * ----------------------------------------------------------------
+ * - `CastDialog` : la boîte de choix d'appareil, contrôlable de l'extérieur
+ *   (utilisée par le bouton « Lire » scindé de la fiche média).
+ * - `CastButton` : bouton autonome « Caster » + boîte (rétro-compatible).
+ *
+ * Corrigé : avant, `play.isPending` était partagé par tous les appareils →
+ * un spinner tournait sur CHAQUE ligne. L'état « en cours » est maintenant
+ * suivi par appareil, et chaque commande affiche un toast en cas d'échec.
+ */
 import { useState } from "react";
 import { toast } from "sonner";
+import { AnimatePresence, motion } from "framer-motion";
 import {
     Dialog,
     DialogContent,
@@ -9,19 +21,13 @@ import {
     DialogTitle,
     DialogDescription,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import {
-    Cast,
-    Tv,
-    Speaker,
-    Loader2,
-    Radar,
-    Pause,
-    Play,
-    Square,
-} from "lucide-react";
+import { Button, type ButtonProps } from "@/components/ui/button";
+import { Cast, Tv, Speaker, Loader2, Radar, Pause, Play, Square, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { EmptyState, ErrorState } from "@/components/shared/empty-state";
+import { Shimmer } from "@/components/shared/loading-skeleton";
+import { StatusDot } from "@/components/fx/status-dot";
+import { EASE_OUT } from "@/lib/motion";
 import {
     useCastDevices,
     useCastDiscover,
@@ -30,20 +36,23 @@ import {
     type CastDevice,
 } from "@/hooks/use-cast";
 
-export function CastButton({
-    tmdbId,
-    mediaId,
-    title,
-    className,
-}: {
+interface CastTarget {
     tmdbId: number;
     mediaId?: string;
     title?: string;
-    className?: string;
-}) {
-    const [open, setOpen] = useState(false);
+}
+
+export function CastDialog({
+    open,
+    onOpenChange,
+    tmdbId,
+    mediaId,
+    title,
+}: CastTarget & { open: boolean; onOpenChange: (open: boolean) => void }) {
     const [castingOn, setCastingOn] = useState<CastDevice | null>(null);
-    const { data: devices, isLoading } = useCastDevices();
+    // Appareil sur lequel un lancement est en cours (spinner sur CETTE ligne seulement).
+    const [pendingId, setPendingId] = useState<number | null>(null);
+    const { data: devices, isLoading, isError, error, refetch } = useCastDevices();
     const discover = useCastDiscover();
     const play = useCastPlay();
     const control = useCastControl();
@@ -52,6 +61,7 @@ export function CastButton({
     const audio = (devices ?? []).filter((d) => !d.video_capable);
 
     const castTo = (d: CastDevice) => {
+        setPendingId(d.id);
         play.mutate(
             { tmdb_id: tmdbId, device_id: d.id, media_id: mediaId, title },
             {
@@ -66,6 +76,7 @@ export function CastButton({
                     }
                 },
                 onError: (e) => toast.error("Échec du cast", { description: e.message }),
+                onSettled: () => setPendingId(null),
             },
         );
     };
@@ -75,7 +86,11 @@ export function CastButton({
         control.mutate(
             { device_id: castingOn.id, action },
             {
-                onSuccess: () => {
+                onSuccess: (r) => {
+                    if (r.status === "error") {
+                        toast.error("Commande refusée", { description: r.detail });
+                        return;
+                    }
                     if (action === "stop") setCastingOn(null);
                 },
                 onError: (e) => toast.error("Commande échouée", { description: e.message }),
@@ -83,124 +98,155 @@ export function CastButton({
         );
     };
 
+    const scan = () =>
+        discover.mutate(undefined, {
+            onSuccess: (list) =>
+                toast.success(
+                    list.length > 0 ? `${list.length} appareil${list.length > 1 ? "s" : ""} détecté${list.length > 1 ? "s" : ""}` : "Aucun appareil détecté",
+                ),
+            onError: (e) => toast.error("Scan du réseau échoué", { description: e.message }),
+        });
+
     return (
-        <>
-            <Button
-                variant="outline"
-                className={cn("gap-2 border-white/10", className)}
-                onClick={() => setOpen(true)}
-            >
-                <Cast className="h-4 w-4" />
-                Caster
-            </Button>
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-sky-500/15 text-sky-300 ring-1 ring-sky-400/30">
+                            <Cast className="h-4 w-4" />
+                        </span>
+                        Caster sur un appareil
+                    </DialogTitle>
+                    <DialogDescription>
+                        La lecture passe par Jellyfin (transcodage à la volée) pour rester compatible Chromecast.
+                    </DialogDescription>
+                </DialogHeader>
 
-            <Dialog open={open} onOpenChange={setOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2">
-                            <Cast className="h-5 w-5 text-sky-400" /> Caster sur un appareil
-                        </DialogTitle>
-                        <DialogDescription>
-                            La lecture passe par Jellyfin (transcodage à la volée) pour être compatible Chromecast.
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    {/* Casting controls */}
+                {/* Télécommande du cast en cours */}
+                <AnimatePresence initial={false}>
                     {castingOn && (
-                        <div className="rounded-lg border border-sky-500/30 bg-sky-500/5 p-3 space-y-2">
-                            <p className="text-sm font-medium flex items-center gap-2">
-                                <Cast className="h-4 w-4 text-sky-400 animate-pulse" />
-                                En cours sur {castingOn.name}
-                            </p>
-                            <div className="flex items-center gap-2">
-                                <Button size="sm" variant="secondary" onClick={() => doControl("play")}>
-                                    <Play className="h-4 w-4" />
-                                </Button>
-                                <Button size="sm" variant="secondary" onClick={() => doControl("pause")}>
-                                    <Pause className="h-4 w-4" />
-                                </Button>
-                                <Button size="sm" variant="destructive" onClick={() => doControl("stop")}>
-                                    <Square className="h-4 w-4 mr-1" /> Arrêter
-                                </Button>
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="space-y-3 max-h-[50vh] overflow-y-auto">
-                        {isLoading ? (
-                            <div className="h-16 rounded-lg bg-muted/15 animate-pulse" />
-                        ) : (devices?.length ?? 0) === 0 ? (
-                            <div className="text-center py-6 space-y-3">
-                                <p className="text-sm text-muted-foreground">Aucun appareil Cast enregistré.</p>
-                                <Button
-                                    variant="outline"
-                                    className="border-white/10"
-                                    disabled={discover.isPending}
-                                    onClick={() =>
-                                        discover.mutate(undefined, {
-                                            onSuccess: (list) =>
-                                                toast.success(`${list.length} appareil(s) détecté(s).`),
-                                            onError: (e) => toast.error("Scan échoué", { description: e.message }),
-                                        })
-                                    }
-                                >
-                                    {discover.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Radar className="h-4 w-4 mr-2" />}
-                                    Scanner le réseau
-                                </Button>
-                            </div>
-                        ) : (
-                            <>
-                                {video.map((d) => (
-                                    <button
-                                        key={d.id}
-                                        onClick={() => castTo(d)}
-                                        disabled={play.isPending}
-                                        className="w-full flex items-center gap-3 rounded-lg border border-white/10 bg-card/40 p-3 text-left transition-colors hover:bg-white/5 disabled:opacity-60"
-                                    >
-                                        <Tv className="h-5 w-5 text-sky-400 shrink-0" />
-                                        <div className="min-w-0 flex-1">
-                                            <p className="text-sm font-medium truncate">{d.name}</p>
-                                            <p className="text-[11px] text-muted-foreground truncate">{d.model ?? "Cast"}</p>
-                                        </div>
-                                        {play.isPending ? (
-                                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                                        ) : (
-                                            <Cast className="h-4 w-4 text-muted-foreground" />
-                                        )}
-                                    </button>
-                                ))}
-                                {audio.length > 0 && (
-                                    <div className="pt-1">
-                                        <p className="text-[11px] text-muted-foreground/60 mb-1.5 px-1">Audio uniquement (pas de vidéo)</p>
-                                        {audio.map((d) => (
-                                            <div key={d.id} className="flex items-center gap-3 rounded-lg border border-white/5 p-2.5 opacity-50">
-                                                <Speaker className="h-4 w-4 shrink-0" />
-                                                <span className="text-sm truncate">{d.name}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                                <div className="flex justify-end pt-1">
-                                    <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        className="text-muted-foreground gap-1.5"
-                                        disabled={discover.isPending}
-                                        onClick={() =>
-                                            discover.mutate(undefined, {
-                                                onSuccess: (list) => toast.success(`${list.length} appareil(s).`),
-                                            })
-                                        }
-                                    >
-                                        {discover.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Radar className="h-3.5 w-3.5" />}
-                                        Re-scanner
+                        <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.3, ease: EASE_OUT }}
+                            className="overflow-hidden"
+                        >
+                            <div className="glass rounded-2xl p-3">
+                                <p className="flex items-center gap-2 text-sm font-medium">
+                                    <StatusDot tone="brand" />
+                                    En cours sur {castingOn.name}
+                                </p>
+                                <div className="mt-2.5 flex items-center gap-2">
+                                    <Button size="icon-sm" variant="outline" aria-label="Reprendre la lecture" onClick={() => doControl("play")}>
+                                        <Play />
+                                    </Button>
+                                    <Button size="icon-sm" variant="outline" aria-label="Mettre en pause" onClick={() => doControl("pause")}>
+                                        <Pause />
+                                    </Button>
+                                    <Button size="sm" variant="destructive" onClick={() => doControl("stop")}>
+                                        <Square /> Arrêter
                                     </Button>
                                 </div>
-                            </>
-                        )}
-                    </div>
-                </DialogContent>
-            </Dialog>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                <div className="max-h-[50vh] space-y-2 overflow-y-auto">
+                    {isLoading ? (
+                        <div className="space-y-2">
+                            <Shimmer className="h-14 w-full" />
+                            <Shimmer className="h-14 w-full" />
+                        </div>
+                    ) : isError ? (
+                        <ErrorState compact error={error} onRetry={() => refetch()} title="Appareils indisponibles" />
+                    ) : (devices?.length ?? 0) === 0 ? (
+                        <EmptyState
+                            compact
+                            icon={Radar}
+                            title="Aucun appareil Cast enregistré"
+                            description="Lance un scan : les Chromecast et TV compatibles de ton réseau seront détectés."
+                            action={{ label: discover.isPending ? "Scan en cours…" : "Scanner le réseau", onClick: scan }}
+                        />
+                    ) : (
+                        <>
+                            {video.map((d) => {
+                                const pending = pendingId === d.id;
+                                const active = castingOn?.id === d.id;
+                                return (
+                                    <button
+                                        key={d.id}
+                                        type="button"
+                                        onClick={() => castTo(d)}
+                                        disabled={pendingId !== null}
+                                        className={cn(
+                                            "glass glass-hover flex w-full items-center gap-3 rounded-xl p-3 text-left transition-opacity disabled:opacity-60",
+                                            active && "border-sky-400/40",
+                                        )}
+                                    >
+                                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sky-500/10 text-sky-300">
+                                            <Tv className="h-4 w-4" />
+                                        </span>
+                                        <span className="min-w-0 flex-1">
+                                            <span className="block truncate text-sm font-medium">{d.name}</span>
+                                            <span className="block truncate text-[11px] text-muted-foreground">{d.model ?? "Google Cast"}</span>
+                                        </span>
+                                        {pending ? (
+                                            <Loader2 className="h-4 w-4 animate-spin text-sky-300" aria-label="Lancement en cours" />
+                                        ) : active ? (
+                                            <Check className="h-4 w-4 text-emerald-400" aria-label="Cast en cours" />
+                                        ) : (
+                                            <Cast className="h-4 w-4 text-muted-foreground" aria-hidden />
+                                        )}
+                                    </button>
+                                );
+                            })}
+                            {audio.length > 0 && (
+                                <div className="pt-1">
+                                    <p className="eyebrow mb-1.5 px-1">Audio uniquement (pas de vidéo)</p>
+                                    {audio.map((d) => (
+                                        <div key={d.id} className="flex items-center gap-3 rounded-xl px-3 py-2 text-muted-foreground/70">
+                                            <Speaker className="h-4 w-4 shrink-0" aria-hidden />
+                                            <span className="truncate text-sm">{d.name}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            <div className="flex justify-end pt-1">
+                                <Button size="sm" variant="ghost" className="text-muted-foreground" disabled={discover.isPending} onClick={scan}>
+                                    {discover.isPending ? <Loader2 className="animate-spin" /> : <Radar />}
+                                    Re-scanner
+                                </Button>
+                            </div>
+                        </>
+                    )}
+                </div>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+export function CastButton({
+    tmdbId,
+    mediaId,
+    title,
+    className,
+    variant = "outline",
+    size,
+}: CastTarget & {
+    className?: string;
+    variant?: ButtonProps["variant"];
+    size?: ButtonProps["size"];
+}) {
+    const [open, setOpen] = useState(false);
+    return (
+        <>
+            <Button variant={variant} size={size} className={className} onClick={() => setOpen(true)}>
+                <Cast />
+                Caster
+            </Button>
+            <CastDialog open={open} onOpenChange={setOpen} tmdbId={tmdbId} mediaId={mediaId} title={title} />
         </>
     );
 }

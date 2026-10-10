@@ -101,7 +101,12 @@ async def get_recommendations(db: AsyncSession = Depends(get_db)):
         # 1. Fetch library for context
         media = await fetch_all_media(db)
         existing_titles = {m.get("title", "").lower() for m in media}
-        existing_tmdb_ids = {m.get("tmdb_id") for m in media if m.get("tmdb_id")}
+        # Uniquement les FILMS : pour les séries, le champ `tmdb_id` de
+        # l'agrégateur contient en réalité l'ID TVDB (Sonarr) ; mélanger les
+        # deux espaces d'IDs marquait à tort des films comme « déjà présents ».
+        existing_tmdb_ids = {
+            m.get("tmdb_id") for m in media if m.get("type") == "movie" and m.get("tmdb_id")
+        }
 
         # 2. Wanted (monitored, no file)
         result["wanted"] = [

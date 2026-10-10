@@ -77,7 +77,16 @@ export function useJellyfinConfig() {
 export function useSetJellyfin() {
     const qc = useQueryClient();
     return useMutation<{ status: string; detail?: string }, Error, { url: string; api_key: string; name?: string }>({
-        mutationFn: (body) => apiFetch("/api/cast/jellyfin", { method: "POST", body: JSON.stringify(body) }),
+        mutationFn: async (body) => {
+            const res = await apiFetch<{ status: string; detail?: string }>("/api/cast/jellyfin", {
+                method: "POST",
+                body: JSON.stringify(body),
+            });
+            // Le backend répond 200 {status:"error"} (ex: clé API manquante) :
+            // on le remonte en vraie erreur pour ne pas afficher « enregistré ».
+            if (res?.status === "error") throw new Error(res.detail || "Configuration Jellyfin refusée");
+            return res;
+        },
         onSuccess: () => qc.invalidateQueries({ queryKey: ["cast", "jellyfin"] }),
     });
 }

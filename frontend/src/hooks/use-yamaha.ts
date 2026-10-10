@@ -1,6 +1,16 @@
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+/**
+ * Ampli Yamaha (API « YamahaExtendedControl » / MusicCast).
+ * ----------------------------------------------------------------
+ * - useYamahaState : état en direct (marche, volume, entrée…) interrogé
+ *   toutes les 4 s tant que la télécommande est affichée.
+ * - useYamahaControl : envoie une commande avec mise à jour OPTIMISTE :
+ *   le bouton change d'état tout de suite (sensation « télécommande
+ *   physique »), puis l'état réel est relu ; en cas de refus, on revient
+ *   en arrière et on affiche une erreur.
+ */
+import { useQuery, useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api-client";
 
 /* ── Live state ─────────────────────────────────────────────── */
@@ -37,21 +47,75 @@ export function useYamahaState(enabled = true, serviceId?: number) {
     });
 }
 
+export type YamahaAction = "volume" | "volume_step" | "mute" | "power" | "input";
+
+export interface YamahaControlVars {
+    action: YamahaAction;
+    value?: number | string | boolean;
+    service_id?: number;
+    zone?: string;
+}
+
+/** Applique localement l'effet attendu d'une commande sur un appareil. */
+function applyOptimistic(device: YamahaDevice, vars: YamahaControlVars): YamahaDevice {
+    const max = device.max_volume ?? 161;
+    const pct = (v: number) => Math.round((v / max) * 100);
+    switch (vars.action) {
+        case "power":
+            return { ...device, power: vars.value === "on" ? "on" : "standby" };
+        case "mute":
+            return { ...device, mute: Boolean(vars.value) };
+        case "input":
+            return { ...device, input: String(vars.value) };
+        case "volume": {
+            const v = Math.max(0, Math.min(max, Number(vars.value) || 0));
+            return { ...device, volume: v, volume_pct: pct(v) };
+        }
+        case "volume_step": {
+            const v = Math.max(0, Math.min(max, (device.volume ?? 0) + (Number(vars.value) || 0)));
+            return { ...device, volume: v, volume_pct: pct(v) };
+        }
+        default:
+            return device;
+    }
+}
+
 export function useYamahaControl() {
     const qc = useQueryClient();
     return useMutation<
         { status: string; detail?: string },
         Error,
-        {
-            action: "volume" | "volume_step" | "mute" | "power" | "input";
-            value?: number | string | boolean;
-            service_id?: number;
-            zone?: string;
-        }
+        YamahaControlVars,
+        { snapshots: [QueryKey, YamahaState | undefined][] }
     >({
-        mutationFn: (body) =>
-            apiFetch("/api/yamaha/control", { method: "POST", body: JSON.stringify(body) }),
-        onSuccess: () => qc.invalidateQueries({ queryKey: ["yamaha", "state"] }),
+        mutationFn: async (body) => {
+            const res = await apiFetch<{ status: string; detail?: string }>("/api/yamaha/control", {
+                method: "POST",
+                body: JSON.stringify(body),
+            });
+            // Le backend répond 200 + {status:"error"} quand l'ampli refuse.
+            if (res?.status === "error") throw new Error(res.detail || "L'ampli n'a pas accepté la commande");
+            return res;
+        },
+        onMutate: async (vars) => {
+            // On fige les requêtes en vol (sinon un vieux résultat écraserait l'état optimiste).
+            await qc.cancelQueries({ queryKey: ["yamaha", "state"] });
+            const snapshots = qc.getQueriesData<YamahaState>({ queryKey: ["yamaha", "state"] });
+            qc.setQueriesData<YamahaState>({ queryKey: ["yamaha", "state"] }, (old) =>
+                old
+                    ? {
+                          devices: old.devices.map((d) =>
+                              vars.service_id === undefined || d.id === vars.service_id ? applyOptimistic(d, vars) : d,
+                          ),
+                      }
+                    : old,
+            );
+            return { snapshots };
+        },
+        onError: (_err, _vars, ctx) => {
+            ctx?.snapshots.forEach(([key, data]) => qc.setQueryData(key, data));
+        },
+        onSettled: () => qc.invalidateQueries({ queryKey: ["yamaha", "state"] }),
     });
 }
 
@@ -81,19 +145,34 @@ export function useYamahaSettings() {
     });
 }
 
+/** Le backend renvoie parfois 200 + {status:"error"} (ex: URL vide). */
+async function checkedYamahaWrite(path: string, method: string, body: unknown) {
+    const res = await apiFetch<{ id?: number; message?: string; status?: string; detail?: string }>(path, {
+        method,
+        body: JSON.stringify(body),
+    });
+    if (res?.status === "error") throw new Error(res.detail || "Enregistrement refusé");
+    return res as { id: number; message: string };
+}
+
 export function useAddYamaha() {
+    const qc = useQueryClient();
+    return useMutation<{ id: number; message: string }, Error, { name: string; url: string; is_enabled?: boolean }>({
+        mutationFn: (body) => checkedYamahaWrite("/api/yamaha/settings", "POST", body),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ["yamaha"] }),
+    });
+}
+
+/** Modifier un ampli (nom, URL) sans créer de doublon. */
+export function useUpdateYamaha() {
     const qc = useQueryClient();
     return useMutation<
         { id: number; message: string },
         Error,
-        { name: string; url: string; is_enabled?: boolean }
+        { id: number; name: string; url: string; is_enabled?: boolean }
     >({
-        mutationFn: (body) =>
-            apiFetch("/api/yamaha/settings", { method: "POST", body: JSON.stringify(body) }),
-        onSuccess: () => {
-            qc.invalidateQueries({ queryKey: ["yamaha", "settings"] });
-            qc.invalidateQueries({ queryKey: ["yamaha", "state"] });
-        },
+        mutationFn: ({ id, ...body }) => checkedYamahaWrite(`/api/yamaha/settings/${id}`, "PUT", body),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ["yamaha"] }),
     });
 }
 
@@ -101,10 +180,7 @@ export function useDeleteYamaha() {
     const qc = useQueryClient();
     return useMutation<{ status: string }, Error, number>({
         mutationFn: (id) => apiFetch(`/api/yamaha/settings/${id}`, { method: "DELETE" }),
-        onSuccess: () => {
-            qc.invalidateQueries({ queryKey: ["yamaha", "settings"] });
-            qc.invalidateQueries({ queryKey: ["yamaha", "state"] });
-        },
+        onSuccess: () => qc.invalidateQueries({ queryKey: ["yamaha"] }),
     });
 }
 

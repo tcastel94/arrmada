@@ -21,6 +21,39 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+# Key crew roles shown on the media sheet (Radarr exposes them via ``job``).
+_KEY_JOBS = (
+    "Director",
+    "Screenplay",
+    "Writer",
+    "Novel",
+    "Story",
+    "Original Music Composer",
+    "Director of Photography",
+)
+
+
+def _key_crew(crew: list[dict]) -> list[dict]:
+    """Keep the notable crew members (director, writers, composer…), deduplicated."""
+    seen: set[tuple[str, str]] = set()
+    result: list[dict] = []
+    for person in crew:
+        job = person.get("job") or ""
+        legacy = person.get("type") in ("director", "writer")
+        if job not in _KEY_JOBS and not legacy:
+            continue
+        key = (person.get("name", ""), job or person.get("type", ""))
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(person)
+    # Director first, then the order of _KEY_JOBS.
+    result.sort(
+        key=lambda p: _KEY_JOBS.index(p["job"]) if p.get("job") in _KEY_JOBS else len(_KEY_JOBS)
+    )
+    return result[:10]
+
+
 def _extract_images(raw: dict[str, Any]) -> dict[str, str | None]:
     """Extract poster, fanart, banner from images list."""
     images = raw.get("images") or []
@@ -120,6 +153,9 @@ async def get_movie_detail(
             "name": c.get("personName", ""),
             "character": c.get("character", ""),
             "type": c.get("type", ""),
+            # Radarr credits use type="crew" and carry the role in job/department.
+            "job": c.get("job", ""),
+            "department": c.get("department", ""),
             # TMDB person id enables the actor filmography lookup on click.
             "tmdb_id": c.get("personTmdbId"),
             "order": c.get("order", 999),
@@ -171,7 +207,7 @@ async def get_movie_detail(
         "images": images,
         "file": file_info,
         "cast": cast[:20],  # Top 20 cast members
-        "crew": [c for c in crew if c.get("type") in ("director", "writer")][:10],
+        "crew": _key_crew(crew),
         "tags": raw.get("tags", []),
         "subtitles": [],  # Filled by Bazarr below
     }

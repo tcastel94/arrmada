@@ -1,488 +1,157 @@
 "use client";
 
+/**
+ * Téléchargements — hub à onglets synchronisés à l'URL :
+ *   /downloads              → « File » : file Radarr + Sonarr en direct
+ *   /downloads?tab=imports  → « Imports » : imports bloqués, chemins NAS,
+ *                             historiques SABnzbd et auto-import
+ *                             (ex-page /fichiers, qui redirige ici).
+ *
+ * Le héros résume la file : éléments actifs, débit estimé (sinon volume
+ * restant), fin estimée du plus long et répartition par client.
+ */
+import { RefreshCw, Download, ArrowDownToLine, Gauge, HardDriveDownload, Timer, ListOrdered, FolderInput } from "lucide-react";
 import { Header } from "@/components/layout/header";
-import { EmptyState } from "@/components/shared/empty-state";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
+import { PageContainer } from "@/components/shared/page-container";
+import { PageHeader, StatPill } from "@/components/shared/page-header";
+import { getClientMeta } from "@/components/shared/download-client";
+import { AnimatedNumber } from "@/components/fx/animated-number";
 import { Button } from "@/components/ui/button";
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog";
-import {
-    Download,
-    ArrowDownToLine,
-    Pause,
-    Clock,
-    AlertTriangle,
-    CheckCircle2,
-    XCircle,
-    HardDrive,
-    Zap,
-    RefreshCw,
-    Trash2,
-    Ban,
-    RotateCw,
-    Loader2,
-} from "lucide-react";
-import {
-    useDownloads,
-    useRemoveQueueItem,
-    useRetryQueueItem,
-    type DownloadItem,
-} from "@/hooks/use-downloads";
-import { ClientBadge, getClientMeta } from "@/components/shared/download-client";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useDownloads } from "@/hooks/use-downloads";
+import { useStuckDownloads } from "@/hooks/use-files";
+import { useUrlState } from "@/hooks/use-url-state";
+import { QueueTab } from "@/components/downloads/queue-tab";
+import { ImportsTab } from "@/components/downloads/imports-tab";
+import { bucketOf, parseTimeLeft } from "@/components/downloads/queue-meta";
+import { useCachedPosters, useThroughput } from "@/components/downloads/use-queue-insights";
+import { formatBytes, formatDuration, formatSpeed } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { motion } from "framer-motion";
-import { useMemo, useState } from "react";
-import { toast } from "sonner";
+import { useMemo } from "react";
 
-type PendingAction =
-    | { kind: "remove"; item: DownloadItem }
-    | { kind: "blocklist"; item: DownloadItem }
-    | { kind: "retry"; item: DownloadItem };
-
-const ACTION_COPY: Record<PendingAction["kind"], { title: string; description: string; confirm: string }> = {
-    remove: {
-        title: "Supprimer de la queue",
-        description: "Le téléchargement sera retiré du client et de la queue *arr. Le release n'est pas blocklisté.",
-        confirm: "Supprimer",
-    },
-    blocklist: {
-        title: "Supprimer + Blocklist",
-        description: "Le téléchargement sera supprimé ET le release blocklisté pour ne plus être re-grabé.",
-        confirm: "Supprimer + Blocklist",
-    },
-    retry: {
-        title: "Relancer (Retry)",
-        description: "Le release actuel sera blocklisté puis retiré, et une nouvelle recherche automatique sera lancée.",
-        confirm: "Relancer",
-    },
-};
-
-function formatBytes(bytes: number): string {
-    if (!bytes) return "—";
-    const k = 1024;
-    const sizes = ["B", "KB", "MB", "GB", "TB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
-}
-
-/** Human hint for the *arr tracked-download state (why an item sits at 100%). */
-const TRACKED_STATE_HINTS: Record<string, string> = {
-    importpending: "Import en attente",
-    importing: "Import en cours",
-    importblocked: "Import bloqué",
-    failedpending: "Échec — en attente",
-    downloadfailed: "Échec du téléchargement",
-    ignored: "Ignoré",
-};
-function trackedStateHint(state?: string): string | null {
-    if (!state) return null;
-    return TRACKED_STATE_HINTS[state.toLowerCase()] ?? null;
-}
-
-const STATUS_CONFIGS: Record<string, { icon: any; color: string; gradient: string; label: string }> = {
-    downloading: {
-        icon: ArrowDownToLine,
-        color: "text-blue-400",
-        gradient: "from-blue-500/20 to-cyan-500/10",
-        label: "Téléchargement",
-    },
-    completed: {
-        icon: CheckCircle2,
-        color: "text-emerald-400",
-        gradient: "from-emerald-500/20 to-green-500/10",
-        label: "Terminé",
-    },
-    paused: {
-        icon: Pause,
-        color: "text-amber-400",
-        gradient: "from-amber-500/20 to-yellow-500/10",
-        label: "En pause",
-    },
-    queued: {
-        icon: Clock,
-        color: "text-slate-400",
-        gradient: "from-slate-500/20 to-slate-500/10",
-        label: "En attente",
-    },
-    warning: {
-        icon: AlertTriangle,
-        color: "text-orange-400",
-        gradient: "from-orange-500/20 to-orange-500/10",
-        label: "Avertissement",
-    },
-    failed: {
-        icon: XCircle,
-        color: "text-red-400",
-        gradient: "from-red-500/20 to-red-500/10",
-        label: "Échec",
-    },
-};
-
-const container = {
-    hidden: { opacity: 0 },
-    show: { opacity: 1, transition: { staggerChildren: 0.05 } },
-};
-const fadeUp = {
-    hidden: { opacity: 0, y: 14 },
-    show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" } },
-};
+type Tab = "queue" | "imports";
 
 export default function DownloadsPage() {
-    const { data, isLoading, isFetching } = useDownloads();
-    const removeItem = useRemoveQueueItem();
-    const retryItem = useRetryQueueItem();
-    const [pending, setPending] = useState<PendingAction | null>(null);
-    const [clientFilter, setClientFilter] = useState<string | null>(null);
+    const [tab, setTab] = useUrlState<Tab>("tab", "queue");
+    const downloads = useDownloads();
+    // Compteur du badge « Imports » (même clé de cache que l'onglet : pas de double requête).
+    const stuck = useStuckDownloads();
 
-    const isBusy = removeItem.isPending || retryItem.isPending;
+    const items = downloads.data?.items;
+    const throughput = useThroughput(items, downloads.dataUpdatedAt);
+    const posters = useCachedPosters(items);
 
-    // Breakdown by download client (SABnzbd / Deluge / …) for the summary + filter.
-    const clientSummary = useMemo(() => {
-        const counts = new Map<string, number>();
-        for (const it of data?.items ?? []) {
-            const key = it.download_client || "?";
-            counts.set(key, (counts.get(key) ?? 0) + 1);
+    const summary = useMemo(() => {
+        const list = items ?? [];
+        let left = 0;
+        let longest = 0;
+        let active = 0;
+        const clients = new Map<string, number>();
+        for (const it of list) {
+            left += it.size_left_bytes || 0;
+            if (bucketOf(it) === "downloading") active += 1;
+            const eta = parseTimeLeft(it.time_left);
+            if (eta && eta > longest) longest = eta;
+            const c = it.download_client || "?";
+            clients.set(c, (clients.get(c) ?? 0) + 1);
         }
-        return [...counts.entries()].sort((a, b) => b[1] - a[1]);
-    }, [data]);
+        return {
+            total: list.length,
+            active,
+            left,
+            longest,
+            clients: Array.from(clients.entries()).sort((a, b) => b[1] - a[1]),
+        };
+    }, [items]);
 
-    const visibleItems = useMemo(
-        () => (data?.items ?? []).filter((it) => !clientFilter || it.download_client === clientFilter),
-        [data, clientFilter],
-    );
-
-    const runAction = async () => {
-        if (!pending) return;
-        const { kind, item } = pending;
-        const type = item.service_type; // "radarr" | "sonarr"
-        try {
-            if (kind === "retry") {
-                await retryItem.mutateAsync({
-                    type,
-                    id: item.id,
-                    movie_id: item.movie_id,
-                    series_id: item.series_id,
-                });
-                toast.success("Relance lancée — nouvelle recherche en cours.");
-            } else {
-                await removeItem.mutateAsync({
-                    type,
-                    id: item.id,
-                    removeFromClient: true,
-                    blocklist: kind === "blocklist",
-                });
-                toast.success(kind === "blocklist" ? "Supprimé et blocklisté." : "Supprimé de la queue.");
-            }
-            setPending(null);
-        } catch (e) {
-            toast.error("Erreur : " + (e as Error).message);
-        }
-    };
+    const stuckCount = stuck.data?.total ?? stuck.data?.items?.length ?? 0;
+    const currentTab: Tab = tab === "imports" ? "imports" : "queue";
 
     return (
         <>
-            <Header title="Downloads" />
-            <motion.div
-                className="p-4 md:p-6 space-y-5 max-w-[1400px] mx-auto"
-                variants={container}
-                initial="hidden"
-                animate="show"
-            >
-                {/* Hero Header */}
-                <motion.div variants={fadeUp}>
-                    <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-cyan-600/20 via-blue-600/10 to-transparent ring-1 ring-white/5 p-6">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                                <div className="rounded-xl bg-cyan-500/20 p-3">
-                                    <Download className="h-6 w-6 text-cyan-400" />
-                                </div>
-                                <div>
-                                    <h2 className="text-2xl font-bold tracking-tight">
-                                        Téléchargements
-                                    </h2>
-                                    <p className="text-sm text-muted-foreground mt-0.5">
-                                        Queue de téléchargement unifiée de tous vos services
-                                    </p>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                                {isFetching && (
-                                    <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
-                                )}
-                                {data && data.total > 0 && (
-                                    <Badge className="bg-cyan-500/20 text-cyan-400 border-0 gap-1.5 px-3 py-1">
-                                        <Zap className="h-3 w-3" />
-                                        {data.total} actif{data.total > 1 ? "s" : ""}
-                                    </Badge>
-                                )}
-                            </div>
-                        </div>
-                        <div className="absolute -top-16 -right-16 w-48 h-48 rounded-full bg-cyan-500/10 blur-3xl" />
-                    </div>
-                </motion.div>
-
-                {/* Par client (SABnzbd / Deluge / …) — résumé + filtre */}
-                {clientSummary.length > 0 && (
-                    <motion.div variants={fadeUp} className="flex flex-wrap items-center gap-2">
-                        <button
-                            onClick={() => setClientFilter(null)}
-                            className={cn(
-                                "rounded-full px-3 py-1 text-xs font-medium ring-1 transition-colors",
-                                clientFilter === null
-                                    ? "bg-foreground/10 ring-white/20 text-foreground"
-                                    : "ring-white/5 text-muted-foreground hover:text-foreground hover:ring-white/10",
-                            )}
-                        >
-                            Tous · {data?.total ?? 0}
-                        </button>
-                        {clientSummary.map(([client, count]) => {
-                            const m = getClientMeta(client);
-                            const Icon = m.icon;
-                            const active = clientFilter === client;
-                            return (
-                                <button
-                                    key={client}
-                                    onClick={() => setClientFilter(active ? null : client)}
-                                    className={cn(
-                                        "flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ring-1 transition-colors",
-                                        active
-                                            ? cn(m.bg, m.ring, m.color)
-                                            : "ring-white/5 text-muted-foreground hover:text-foreground hover:ring-white/10",
-                                    )}
-                                >
-                                    <Icon className={cn("h-3 w-3", active ? m.color : "")} />
-                                    {client} · {count}
-                                </button>
-                            );
-                        })}
-                    </motion.div>
-                )}
-
-                {/* Downloads List */}
-                {isLoading ? (
-                    <div className="space-y-3">
-                        {[...Array(5)].map((_, i) => (
-                            <div
-                                key={i}
-                                className="h-24 rounded-xl bg-muted/20 animate-pulse ring-1 ring-white/5"
-                            />
-                        ))}
-                    </div>
-                ) : !data || data.items.length === 0 ? (
-                    <motion.div variants={fadeUp}>
-                        <div className="rounded-xl ring-1 ring-white/5 bg-card/30 p-12">
-                            <EmptyState
-                                icon={Download}
-                                title="Aucun téléchargement en cours"
-                                description="La queue est vide — les téléchargements actifs apparaîtront ici"
-                            />
-                        </div>
-                    </motion.div>
-                ) : (
-                    <motion.div className="space-y-2" variants={container}>
-                        {visibleItems.map((dl) => {
-                            const cfg =
-                                STATUS_CONFIGS[dl.status.toLowerCase()] ||
-                                STATUS_CONFIGS.queued;
-                            const StatusIcon = cfg.icon;
-
-                            return (
-                                <motion.div key={dl.id} variants={fadeUp}>
-                                    <Card className="border-0 ring-1 ring-white/5 bg-card/40 backdrop-blur-sm overflow-hidden hover:ring-white/10 transition-all">
-                                        <CardContent className="p-0">
-                                            <div className="flex items-center gap-4 p-4">
-                                                {/* Status icon */}
-                                                <div
-                                                    className={cn(
-                                                        "rounded-lg p-2.5 bg-gradient-to-br shrink-0",
-                                                        cfg.gradient
-                                                    )}
-                                                >
-                                                    <StatusIcon
-                                                        className={cn(
-                                                            "h-4 w-4",
-                                                            cfg.color
-                                                        )}
-                                                    />
-                                                </div>
-
-                                                {/* Content */}
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-sm font-semibold truncate">
-                                                        {dl.title}
-                                                    </p>
-                                                    <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                                        <Badge
-                                                            variant="outline"
-                                                            className={cn(
-                                                                "text-[10px] px-1.5 py-0 h-4 gap-1 border-0",
-                                                                cfg.color,
-                                                                cfg.gradient.replace("from-", "bg-").split(" ")[0] + "/20"
-                                                            )}
-                                                        >
-                                                            {cfg.label}
-                                                        </Badge>
-                                                        <span className="text-xs text-muted-foreground">
-                                                            {dl.source_service}
-                                                        </span>
-                                                        <ClientBadge
-                                                            client={dl.download_client}
-                                                            protocol={dl.protocol}
-                                                        />
-                                                        {dl.quality && (
-                                                            <Badge
-                                                                variant="outline"
-                                                                className="text-[10px] px-1.5 h-4"
-                                                            >
-                                                                {dl.quality}
-                                                            </Badge>
-                                                        )}
-                                                        {dl.indexer && (
-                                                            <span className="text-[10px] text-muted-foreground/50">
-                                                                via {dl.indexer}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    {(() => {
-                                                        const hint = trackedStateHint(dl.tracked_state);
-                                                        const isError = !!dl.error;
-                                                        const text = dl.error || hint || dl.detail;
-                                                        if (!text) return null;
-                                                        return (
-                                                            <p
-                                                                className={cn(
-                                                                    "text-[10px] mt-1 truncate flex items-center gap-1",
-                                                                    isError ? "text-red-400/80" : "text-amber-400/80",
-                                                                )}
-                                                                title={dl.detail || dl.error || undefined}
-                                                            >
-                                                                {isError ? (
-                                                                    <AlertTriangle className="h-2.5 w-2.5 shrink-0" />
-                                                                ) : (
-                                                                    <Clock className="h-2.5 w-2.5 shrink-0" />
-                                                                )}
-                                                                <span className="truncate">
-                                                                    {text}
-                                                                    {!isError && hint && dl.detail ? ` — ${dl.detail}` : ""}
-                                                                </span>
-                                                            </p>
-                                                        );
-                                                    })()}
-                                                </div>
-
-                                                {/* Size */}
-                                                <div className="text-right shrink-0 hidden sm:block">
-                                                    <p className="text-xs text-muted-foreground flex items-center gap-1 justify-end">
-                                                        <HardDrive className="h-3 w-3" />
-                                                        {formatBytes(
-                                                            dl.size_bytes -
-                                                            dl.size_left_bytes
-                                                        )}{" "}
-                                                        / {formatBytes(dl.size_bytes)}
-                                                    </p>
-                                                    {dl.time_left && (
-                                                        <p className="text-[10px] text-muted-foreground/60 mt-0.5 flex items-center gap-1 justify-end">
-                                                            <Clock className="h-2.5 w-2.5" />
-                                                            {dl.time_left}
-                                                        </p>
-                                                    )}
-                                                </div>
-
-                                                {/* Progress */}
-                                                <div className="w-14 flex flex-col items-end gap-1 shrink-0">
-                                                    <span className="text-sm font-bold tabular-nums">
-                                                        {dl.progress.toFixed(0)}%
-                                                    </span>
-                                                </div>
-
-                                                {/* Actions */}
-                                                <div className="flex items-center gap-1 shrink-0">
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="h-8 w-8 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
-                                                        title="Relancer (blocklist + recherche)"
-                                                        onClick={() => setPending({ kind: "retry", item: dl })}
-                                                    >
-                                                        <RotateCw className="h-4 w-4" />
-                                                    </Button>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="h-8 w-8 text-orange-400 hover:text-orange-300 hover:bg-orange-500/10"
-                                                        title="Supprimer + Blocklist"
-                                                        onClick={() => setPending({ kind: "blocklist", item: dl })}
-                                                    >
-                                                        <Ban className="h-4 w-4" />
-                                                    </Button>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                                                        title="Supprimer de la queue"
-                                                        onClick={() => setPending({ kind: "remove", item: dl })}
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
-                                                </div>
-                                            </div>
-
-                                            {/* Progress bar — full width bottom */}
-                                            <div className="relative h-1">
-                                                <div className="absolute inset-0 bg-muted/20" />
-                                                <div
-                                                    className="absolute inset-y-0 left-0 bg-gradient-to-r from-blue-500 via-cyan-400 to-emerald-400 transition-all duration-500"
-                                                    style={{
-                                                        width: `${dl.progress}%`,
-                                                    }}
-                                                />
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                </motion.div>
-                            );
-                        })}
-                    </motion.div>
-                )}
-            </motion.div>
-
-            {/* Confirmation dialog */}
-            <Dialog open={!!pending} onOpenChange={(open) => !open && !isBusy && setPending(null)}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>{pending ? ACTION_COPY[pending.kind].title : ""}</DialogTitle>
-                        <DialogDescription>
-                            {pending ? ACTION_COPY[pending.kind].description : ""}
-                        </DialogDescription>
-                    </DialogHeader>
-                    {pending && (
-                        <p className="text-sm text-muted-foreground truncate">
-                            <span className="font-medium text-foreground">{pending.item.title}</span>
-                        </p>
-                    )}
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setPending(null)} disabled={isBusy}>
-                            Annuler
-                        </Button>
+            <Header title="Téléchargements" />
+            <PageContainer>
+                <PageHeader
+                    icon={Download}
+                    accent="primary"
+                    eyebrow="Activité"
+                    title="Téléchargements"
+                    description="La file Radarr & Sonarr en direct, et les imports à débloquer quand un téléchargement reste coincé."
+                    actions={
                         <Button
-                            variant={pending?.kind === "retry" ? "default" : "destructive"}
-                            onClick={runAction}
-                            disabled={isBusy}
+                            variant="outline"
+                            size="icon"
+                            aria-label="Rafraîchir la file"
+                            onClick={() => {
+                                downloads.refetch();
+                                stuck.refetch();
+                            }}
                         >
-                            {isBusy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                            {pending ? ACTION_COPY[pending.kind].confirm : ""}
+                            <RefreshCw className={cn(downloads.isFetching && "animate-spin")} />
                         </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                    }
+                >
+                    <StatPill
+                        label={summary.active > 1 ? "actifs" : "actif"}
+                        value={<AnimatedNumber value={summary.active} />}
+                        icon={ArrowDownToLine}
+                        tone="primary"
+                    />
+                    <StatPill label="dans la file" value={<AnimatedNumber value={summary.total} />} icon={ListOrdered} />
+                    {throughput.total > 0 ? (
+                        <StatPill label="débit estimé" value={formatSpeed(throughput.total)} icon={Gauge} tone="success" />
+                    ) : (
+                        summary.left > 0 && <StatPill label="restants" value={formatBytes(summary.left)} icon={HardDriveDownload} />
+                    )}
+                    {summary.longest > 0 && (
+                        <StatPill label="avant la fin" value={formatDuration(summary.longest)} icon={Timer} />
+                    )}
+                    {summary.clients.map(([client, count]) => {
+                        const m = getClientMeta(client === "?" ? null : client);
+                        return <StatPill key={client} label={m.label} value={count} icon={m.icon} />;
+                    })}
+                    {stuckCount > 0 && (
+                        <StatPill label={stuckCount > 1 ? "imports bloqués" : "import bloqué"} value={stuckCount} icon={FolderInput} tone="warning" />
+                    )}
+                </PageHeader>
+
+                <Tabs value={currentTab} onValueChange={(v) => setTab(v as Tab)}>
+                    <TabsList aria-label="Sections des téléchargements">
+                        <TabsTrigger value="queue">
+                            <ArrowDownToLine className="h-4 w-4" />
+                            File
+                            {summary.total > 0 && (
+                                <span className="rounded-md bg-white/[0.08] px-1.5 text-[10px] tabular-nums leading-4">{summary.total}</span>
+                            )}
+                        </TabsTrigger>
+                        <TabsTrigger value="imports">
+                            <FolderInput className="h-4 w-4" />
+                            Imports
+                            {stuckCount > 0 && (
+                                <span className="rounded-md bg-amber-500/20 px-1.5 text-[10px] tabular-nums leading-4 text-amber-300">
+                                    {stuckCount}
+                                </span>
+                            )}
+                        </TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="queue" className="mt-4">
+                        <QueueTab
+                            data={downloads.data}
+                            isLoading={downloads.isLoading}
+                            isError={downloads.isError}
+                            error={downloads.error}
+                            refetch={() => downloads.refetch()}
+                            throughput={throughput}
+                            posters={posters}
+                            onShowImports={() => setTab("imports")}
+                        />
+                    </TabsContent>
+                    <TabsContent value="imports" className="mt-4">
+                        <ImportsTab />
+                    </TabsContent>
+                </Tabs>
+            </PageContainer>
         </>
     );
 }

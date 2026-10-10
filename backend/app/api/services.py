@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from typing import Literal
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,8 +19,7 @@ from app.schemas.service import (
     ServiceUpdate,
     TestConnectionResponse,
 )
-from app.services import encryption
-from app.services import health_checker
+from app.services import encryption, health_checker
 
 router = APIRouter(
     prefix="/api/services",
@@ -26,13 +28,83 @@ router = APIRouter(
 )
 
 
+# ── Catégories ────────────────────────────────────────────────
+# La table `services` stocke aussi des APPAREILS du salon (Kodi, ampli
+# Yamaha) qui ont leurs propres routes (/api/kodi, /api/yamaha). Ils ne
+# sont pas des services *arr : sans filtre, le dashboard et la page
+# Services les affichaient comme des *arr « inconnus » toujours hors ligne.
+#
+# Comportement retenu (rétro-compatible) :
+#   GET /api/services                    → services *arr uniquement (défaut)
+#   GET /api/services?category=devices   → appareils uniquement
+#   GET /api/services?category=all       → tout (ancien comportement)
+# Même paramètre sur /api/services/health/all.
+DEVICE_TYPES = frozenset({"kodi", "yamaha"})
+Category = Literal["arr", "devices", "all"]
+
+
+def _in_category(service_type: str, category: Category) -> bool:
+    is_device = (service_type or "").lower() in DEVICE_TYPES
+    if category == "devices":
+        return is_device
+    if category == "arr":
+        return not is_device
+    return True
+
+
 # ── List ──────────────────────────────────────────────────────
 @router.get("", response_model=list[ServiceResponse])
-async def list_services(db: AsyncSession = Depends(get_db)) -> list[ServiceResponse]:
-    """List all configured services."""
+async def list_services(
+    category: Category = Query("arr", description="arr (défaut) | devices | all"),
+    db: AsyncSession = Depends(get_db),
+) -> list[ServiceResponse]:
+    """List configured services (*arr only by default, see `category`)."""
     result = await db.execute(select(Service).order_by(Service.name))
-    services = result.scalars().all()
+    services = [s for s in result.scalars().all() if _in_category(s.type, category)]
     return [ServiceResponse.model_validate(s) for s in services]
+
+
+# ── Test a configuration BEFORE saving it ─────────────────────
+class ServiceDraftTest(BaseModel):
+    """Connection parameters to validate before creating/updating a service."""
+
+    type: str = Field(pattern=r"^(sonarr|radarr|lidarr|readarr|prowlarr|bazarr|jellyfin|sabnzbd)$")
+    url: str = Field(min_length=1, max_length=500)
+    api_key: str | None = Field(None, max_length=200)
+    # When editing, an empty api_key means "reuse the stored key of this service".
+    service_id: int | None = None
+
+
+@router.post("/test", response_model=TestConnectionResponse)
+async def test_draft_connection(
+    body: ServiceDraftTest,
+    db: AsyncSession = Depends(get_db),
+) -> TestConnectionResponse:
+    """Test URL + API key without saving anything (« Tester avant d'enregistrer »)."""
+    api_key = (body.api_key or "").strip()
+    if not api_key and body.service_id is not None:
+        existing = await db.get(Service, body.service_id)
+        if existing and existing.api_key:
+            api_key = encryption.decrypt_api_key(existing.api_key)
+    if not api_key:
+        return TestConnectionResponse(success=False, status="unknown", error="Clé API manquante")
+
+    # Objet transitoire : jamais ajouté à la session, donc jamais enregistré.
+    draft = Service(
+        name="draft",
+        type=body.type,
+        url=body.url.strip().rstrip("/"),
+        api_key=encryption.encrypt_api_key(api_key),
+        is_enabled=True,
+    )
+    result = await health_checker.check_service(draft)
+    return TestConnectionResponse(
+        success=result.status == "online",
+        status=result.status,
+        latency_ms=result.latency_ms,
+        version=result.version,
+        error=result.error,
+    )
 
 
 # ── Create ────────────────────────────────────────────────────
@@ -132,11 +204,12 @@ async def test_connection(
 # ── Global health ────────────────────────────────────────────
 @router.get("/health/all", response_model=list[ServiceHealthResponse])
 async def global_health(
+    category: Category = Query("arr", description="arr (défaut) | devices | all"),
     db: AsyncSession = Depends(get_db),
 ) -> list[ServiceHealthResponse]:
-    """Run health checks on all enabled services."""
+    """Run health checks on all enabled services (*arr only by default)."""
     results = await health_checker.check_all_services(db)
-    return [ServiceHealthResponse(**r) for r in results]
+    return [ServiceHealthResponse(**r) for r in results if _in_category(r.get("service_type", ""), category)]
 
 
 # ── Health history for a service ──────────────────────────────

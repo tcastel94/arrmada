@@ -1,269 +1,257 @@
 "use client";
 
+/**
+ * Notifications — alertes de services, synchros TRaSH, imports…
+ * ----------------------------------------------------------------
+ * - Regroupées par jour (« Aujourd'hui », « Hier », date), filtres
+ *   Toutes / Non lues / Erreurs / Avertissements (?filtre=… dans l'URL).
+ * - Types techniques traduits (« service_down » → « Service hors ligne »).
+ * - « Marquer comme lue » / « Tout marquer lu » : effet immédiat (mise à
+ *   jour optimiste, y compris la cloche du header), toast si l'API échoue.
+ */
+import { useMemo, useState } from "react";
+import { AnimatePresence } from "framer-motion";
+import { AlertCircle, AlertTriangle, Bell, BellDot, CheckCheck, FilterX, Inbox, Layers, Loader2, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 import { Header } from "@/components/layout/header";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { PageContainer } from "@/components/shared/page-container";
+import { PageHeader, StatPill } from "@/components/shared/page-header";
+import { EmptyState, ErrorState } from "@/components/shared/empty-state";
+import { Shimmer } from "@/components/shared/loading-skeleton";
+import { SpotlightCard } from "@/components/fx/spotlight-card";
+import { AnimatedNumber } from "@/components/fx/animated-number";
 import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/shared/empty-state";
-import { PageSkeleton } from "@/components/shared/loading-skeleton";
-import {
-    Bell,
-    CheckCheck,
-    AlertTriangle,
-    AlertCircle,
-    CheckCircle2,
-    Info,
-    Server,
-    Inbox,
-} from "lucide-react";
-import {
-    useNotifications,
-    useMarkRead,
-    useMarkAllRead,
-} from "@/hooks/use-notifications";
+import { useMarkAllRead, useMarkRead, useNotifications, type NotificationItem } from "@/hooks/use-notifications";
+import { useUrlState } from "@/hooks/use-url-state";
+import { Segmented } from "@/components/activity/segmented";
+import { NotificationCard } from "@/components/activity/notification-card";
+import { groupByDay } from "@/components/activity/day-groups";
+import { parseApiDate, plural } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { motion } from "framer-motion";
 
-const SEVERITY_CONFIG: Record<
-    string,
-    { icon: typeof Info; color: string; gradient: string; dot: string }
-> = {
-    info: {
-        icon: Info,
-        color: "text-blue-400",
-        gradient: "from-blue-500/20 to-blue-500/5",
-        dot: "bg-blue-400",
-    },
-    success: {
-        icon: CheckCircle2,
-        color: "text-emerald-400",
-        gradient: "from-emerald-500/20 to-emerald-500/5",
-        dot: "bg-emerald-400",
-    },
-    warning: {
-        icon: AlertTriangle,
-        color: "text-amber-400",
-        gradient: "from-amber-500/20 to-amber-500/5",
-        dot: "bg-amber-400",
-    },
-    error: {
-        icon: AlertCircle,
-        color: "text-red-400",
-        gradient: "from-red-500/20 to-red-500/5",
-        dot: "bg-red-400",
-    },
-};
+type Filter = "all" | "unread" | "error" | "warning";
 
-function timeAgo(dateStr: string): string {
-    const now = new Date();
-    const date = new Date(dateStr);
-    const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+const PAGE = 100;
 
-    if (seconds < 60) return "À l'instant";
-    if (seconds < 3600) return `Il y a ${Math.floor(seconds / 60)}min`;
-    if (seconds < 86400) return `Il y a ${Math.floor(seconds / 3600)}h`;
-    if (seconds < 604800) return `Il y a ${Math.floor(seconds / 86400)}j`;
-    return date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+/** Compteur compact, aligné sur la cloche du header (« 99+ »). */
+function capCount(n: number): string {
+    return n > 99 ? "99+" : String(n);
 }
 
-const container = {
-    hidden: { opacity: 0 },
-    show: { opacity: 1, transition: { staggerChildren: 0.04 } },
-};
-const fadeUp = {
-    hidden: { opacity: 0, y: 12 },
-    show: { opacity: 1, y: 0, transition: { duration: 0.3, ease: "easeOut" } },
-};
-
 export default function NotificationsPage() {
-    const { data, isLoading } = useNotifications(100);
+    const [filter, setFilter] = useUrlState<Filter>("filtre", "all");
+    const [limit, setLimit] = useState(PAGE);
+    const { data, isLoading, isError, error, refetch, isFetching } = useNotifications(limit);
     const markRead = useMarkRead();
     const markAllRead = useMarkAllRead();
 
-    if (isLoading) {
-        return (
-            <>
-                <Header title="Notifications" />
-                <div className="p-6">
-                    <PageSkeleton />
-                </div>
-            </>
-        );
-    }
-
-    const notifications = data?.items ?? [];
+    const all = useMemo(() => data?.items ?? [], [data]);
     const unreadCount = data?.unread_count ?? 0;
+
+    const counts = useMemo(
+        () => ({
+            unread: all.filter((n) => !n.is_read).length,
+            error: all.filter((n) => n.severity === "error").length,
+            warning: all.filter((n) => n.severity === "warning").length,
+        }),
+        [all],
+    );
+
+    const filtered = useMemo(() => {
+        const keep = (n: NotificationItem) => {
+            switch (filter) {
+                case "unread":
+                    return !n.is_read;
+                case "error":
+                    return n.severity === "error";
+                case "warning":
+                    return n.severity === "warning";
+                default:
+                    return true;
+            }
+        };
+        return all.filter(keep);
+    }, [all, filter]);
+
+    const groups = useMemo(() => groupByDay(filtered, (n) => parseApiDate(n.created_at)), [filtered]);
+
+    const handleMarkRead = (id: number) =>
+        markRead.mutate(id, {
+            onError: (e) => toast.error("Impossible de marquer la notification comme lue", { description: e.message }),
+        });
+
+    const handleMarkAll = () =>
+        markAllRead.mutate(undefined, {
+            onSuccess: () => toast.success("Toutes les notifications sont lues"),
+            onError: (e) => toast.error("Impossible de tout marquer comme lu", { description: e.message }),
+        });
+
+    const canLoadMore = all.length >= limit;
+
+    // Index global (cascade d'entrée limitée aux premières cartes).
+    let running = 0;
 
     return (
         <>
             <Header title="Notifications" />
-            <motion.div
-                className="p-4 md:p-6 max-w-3xl mx-auto space-y-5"
-                variants={container}
-                initial="hidden"
-                animate="show"
-            >
-                {/* Hero Header */}
-                <motion.div variants={fadeUp}>
-                    <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-rose-600/20 via-pink-600/10 to-transparent ring-1 ring-white/5 p-6">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                                <div className="relative">
-                                    <div className="rounded-xl bg-rose-500/20 p-3">
-                                        <Bell className="h-6 w-6 text-rose-400" />
-                                    </div>
-                                    {unreadCount > 0 && (
-                                        <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-background">
-                                            {unreadCount > 9 ? "9+" : unreadCount}
-                                        </span>
-                                    )}
-                                </div>
-                                <div>
-                                    <h2 className="text-2xl font-bold tracking-tight">
-                                        Notifications
-                                    </h2>
-                                    <p className="text-sm text-muted-foreground mt-0.5">
-                                        {unreadCount > 0
-                                            ? `${unreadCount} non lue${unreadCount > 1 ? "s" : ""}`
-                                            : "Tout est lu ✨"}
-                                    </p>
-                                </div>
-                            </div>
+            <PageContainer size="narrow">
+                <PageHeader
+                    icon={Bell}
+                    accent="rose"
+                    eyebrow="Activité"
+                    title="Notifications"
+                    description={
+                        unreadCount > 0
+                            ? `${plural(unreadCount, "notification non lue", "notifications non lues")} : alertes de services, synchros, imports…`
+                            : "Tout est lu. Les alertes de services, synchros TRaSH et imports apparaîtront ici."
+                    }
+                    actions={
+                        <>
+                            <Button variant="outline" size="icon" aria-label="Rafraîchir les notifications" onClick={() => refetch()}>
+                                <RefreshCw className={cn(isFetching && "animate-spin")} />
+                            </Button>
                             {unreadCount > 0 && (
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => markAllRead.mutate()}
-                                    className="gap-1.5 border-white/10 hover:bg-white/5"
-                                >
-                                    <CheckCheck className="h-3.5 w-3.5" />
+                                <Button variant="glow" onClick={handleMarkAll} disabled={markAllRead.isPending}>
+                                    {markAllRead.isPending ? <Loader2 className="animate-spin" /> : <CheckCheck />}
                                     Tout marquer lu
                                 </Button>
                             )}
-                        </div>
-                        <div className="absolute -top-16 -right-16 w-48 h-48 rounded-full bg-rose-500/10 blur-3xl" />
-                    </div>
-                </motion.div>
+                        </>
+                    }
+                >
+                    <StatPill
+                        label={unreadCount > 1 ? "non lues" : "non lue"}
+                        value={unreadCount > 99 ? capCount(unreadCount) : <AnimatedNumber value={unreadCount} />}
+                        icon={BellDot}
+                        tone={unreadCount > 0 ? "primary" : "default"}
+                    />
+                    <StatPill
+                        label={counts.error > 1 ? "erreurs" : "erreur"}
+                        value={<AnimatedNumber value={counts.error} />}
+                        icon={AlertCircle}
+                        tone={counts.error > 0 ? "danger" : "default"}
+                    />
+                    <StatPill
+                        label={counts.warning > 1 ? "avertissements" : "avertissement"}
+                        value={<AnimatedNumber value={counts.warning} />}
+                        icon={AlertTriangle}
+                        tone={counts.warning > 0 ? "warning" : "default"}
+                    />
+                    <StatPill label="au total" value={<AnimatedNumber value={all.length} />} icon={Layers} />
+                </PageHeader>
 
-                {/* Notifications List */}
-                {notifications.length === 0 ? (
-                    <motion.div variants={fadeUp}>
-                        <div className="rounded-xl ring-1 ring-white/5 bg-card/30 p-12">
-                            <EmptyState
-                                icon={Inbox}
-                                title="Aucune notification"
-                                description="Les alertes de services, syncs TRaSH et autres événements apparaîtront ici"
-                            />
-                        </div>
-                    </motion.div>
+                <Segmented<Filter>
+                    ariaLabel="Filtrer les notifications"
+                    value={filter}
+                    onChange={setFilter}
+                    options={[
+                        { value: "all", label: "Toutes", count: all.length },
+                        { value: "unread", label: "Non lues", count: counts.unread, icon: BellDot, tone: "text-rose-300" },
+                        { value: "error", label: "Erreurs", count: counts.error, icon: AlertCircle, tone: "text-red-300" },
+                        {
+                            value: "warning",
+                            // Libellé court sur mobile : les 4 options tiennent sans défilement.
+                            label: (
+                                <>
+                                    <span className="sm:hidden">Avert.</span>
+                                    <span className="hidden sm:inline">Avertissements</span>
+                                </>
+                            ),
+                            count: counts.warning,
+                            icon: AlertTriangle,
+                            tone: "text-amber-300",
+                        },
+                    ]}
+                />
+
+                {isLoading ? (
+                    <NotificationsSkeleton />
+                ) : isError ? (
+                    <SpotlightCard interactive={false}>
+                        <ErrorState error={error} onRetry={() => refetch()} title="Impossible de charger les notifications" />
+                    </SpotlightCard>
+                ) : all.length === 0 ? (
+                    <SpotlightCard interactive={false}>
+                        <EmptyState
+                            icon={Inbox}
+                            title="Aucune notification"
+                            description="Les alertes de services, synchros TRaSH et autres évènements apparaîtront ici."
+                        />
+                    </SpotlightCard>
+                ) : filtered.length === 0 ? (
+                    <SpotlightCard interactive={false}>
+                        <EmptyState
+                            compact
+                            tone={filter === "unread" ? "success" : "default"}
+                            icon={filter === "unread" ? CheckCheck : FilterX}
+                            title={
+                                filter === "unread"
+                                    ? "Tout est lu"
+                                    : filter === "error"
+                                      ? "Aucune erreur"
+                                      : "Aucun avertissement"
+                            }
+                            description="Rien ne correspond à ce filtre parmi les notifications récentes."
+                            action={{ label: "Voir toutes les notifications", onClick: () => setFilter("all") }}
+                        />
+                    </SpotlightCard>
                 ) : (
-                    <motion.div className="space-y-2" variants={container}>
-                        {notifications.map((notif) => {
-                            const config =
-                                SEVERITY_CONFIG[notif.severity] ??
-                                SEVERITY_CONFIG.info;
-                            const Icon = config.icon;
-
-                            return (
-                                <motion.div key={notif.id} variants={fadeUp}>
-                                    <Card
-                                        className={cn(
-                                            "border-0 ring-1 ring-white/5 bg-card/40 backdrop-blur-sm cursor-pointer overflow-hidden",
-                                            "hover:ring-white/10 transition-all duration-200",
-                                            !notif.is_read && "ring-primary/30"
-                                        )}
-                                        onClick={() => {
-                                            if (!notif.is_read)
-                                                markRead.mutate(notif.id);
-                                        }}
-                                    >
-                                        <CardContent className="flex items-start gap-3 p-4">
-                                            {/* Icon */}
-                                            <div
-                                                className={cn(
-                                                    "rounded-lg p-2 shrink-0 bg-gradient-to-br",
-                                                    config.gradient
-                                                )}
-                                            >
-                                                <Icon
-                                                    className={cn(
-                                                        "h-4 w-4",
-                                                        config.color
-                                                    )}
+                    <div className="space-y-6">
+                        {groups.map((g) => (
+                            <section key={g.key} aria-label={g.label}>
+                                <div className="mb-2.5 flex items-center gap-3 px-1">
+                                    <h2 className="text-sm font-semibold tracking-tight">{g.label}</h2>
+                                    <span className="text-[11px] tabular-nums text-muted-foreground">{plural(g.items.length, "notification")}</span>
+                                    <span aria-hidden className="h-px flex-1 bg-gradient-to-r from-white/10 to-transparent" />
+                                </div>
+                                <ul className="space-y-2">
+                                    <AnimatePresence initial={true} mode="popLayout">
+                                        {g.items.map((n) => {
+                                            const index = running++;
+                                            return (
+                                                <NotificationCard
+                                                    key={n.id}
+                                                    notif={n}
+                                                    index={index}
+                                                    pending={markRead.isPending && markRead.variables === n.id}
+                                                    onMarkRead={() => handleMarkRead(n.id)}
                                                 />
-                                            </div>
+                                            );
+                                        })}
+                                    </AnimatePresence>
+                                </ul>
+                            </section>
+                        ))}
 
-                                            {/* Content */}
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-center justify-between gap-2">
-                                                    <p
-                                                        className={cn(
-                                                            "text-sm truncate",
-                                                            !notif.is_read
-                                                                ? "font-semibold"
-                                                                : "font-medium text-muted-foreground"
-                                                        )}
-                                                    >
-                                                        {notif.title}
-                                                    </p>
-                                                    <span className="text-[10px] text-muted-foreground/60 whitespace-nowrap tabular-nums">
-                                                        {timeAgo(
-                                                            notif.created_at
-                                                        )}
-                                                    </span>
-                                                </div>
-                                                {notif.message && (
-                                                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-                                                        {notif.message}
-                                                    </p>
-                                                )}
-                                                <div className="flex gap-1.5 mt-2">
-                                                    {notif.service_name && (
-                                                        <Badge
-                                                            variant="outline"
-                                                            className="text-[10px] gap-1 h-4 px-1.5 border-white/10"
-                                                        >
-                                                            <Server className="h-2.5 w-2.5" />
-                                                            {notif.service_name}
-                                                        </Badge>
-                                                    )}
-                                                    <Badge
-                                                        variant="outline"
-                                                        className="text-[10px] h-4 px-1.5 border-white/10"
-                                                    >
-                                                        {notif.type.replace(
-                                                            /_/g,
-                                                            " "
-                                                        )}
-                                                    </Badge>
-                                                </div>
-                                            </div>
-
-                                            {/* Unread dot */}
-                                            {!notif.is_read && (
-                                                <div className="relative shrink-0 mt-1.5">
-                                                    <div
-                                                        className={cn(
-                                                            "h-2 w-2 rounded-full",
-                                                            config.dot
-                                                        )}
-                                                    />
-                                                    <div
-                                                        className={cn(
-                                                            "absolute inset-0 rounded-full animate-ping opacity-40",
-                                                            config.dot
-                                                        )}
-                                                    />
-                                                </div>
-                                            )}
-                                        </CardContent>
-                                    </Card>
-                                </motion.div>
-                            );
-                        })}
-                    </motion.div>
+                        {canLoadMore && (
+                            <div className="flex justify-center">
+                                <Button variant="outline" onClick={() => setLimit((l) => l + PAGE)} disabled={isFetching}>
+                                    {isFetching && <Loader2 className="animate-spin" />}
+                                    Charger plus
+                                </Button>
+                            </div>
+                        )}
+                    </div>
                 )}
-            </motion.div>
+            </PageContainer>
         </>
+    );
+}
+
+function NotificationsSkeleton() {
+    return (
+        <div className="space-y-2" aria-busy aria-label="Chargement des notifications">
+            <Shimmer className="mb-3 h-4 w-28 rounded-md" />
+            {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="glass flex items-start gap-3 rounded-2xl p-4">
+                    <Shimmer className="h-10 w-10 rounded-xl" />
+                    <div className="flex-1 space-y-2">
+                        <Shimmer className="h-3.5 w-2/3 rounded-md" />
+                        <Shimmer className="h-3 w-full rounded-md" />
+                        <Shimmer className="h-3 w-1/3 rounded-md" />
+                    </div>
+                </div>
+            ))}
+        </div>
     );
 }

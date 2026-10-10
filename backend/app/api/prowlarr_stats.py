@@ -66,11 +66,14 @@ async def _fetch_prowlarr_stats(db: AsyncSession) -> dict[str, Any]:
                 failed_queries = s.get("numberOfFailedQueries", 0)
                 failed_grabs = s.get("numberOfFailedGrabs", 0)
 
-                success_rate = 0
+                # None (et non 0) quand il n'y a rien à mesurer : un indexer
+                # jamais interrogé n'a pas « 0 % de succès », il n'a pas de
+                # taux du tout (l'UI affichait sinon un faux 0 % rouge).
+                success_rate: float | None = None
                 if total_queries > 0:
                     success_rate = round(((total_queries - failed_queries) / total_queries) * 100, 1)
 
-                grab_rate = 0
+                grab_rate: float | None = None
                 if total_grabs > 0:
                     grab_rate = round(((total_grabs - failed_grabs) / total_grabs) * 100, 1)
 
@@ -95,8 +98,9 @@ async def _fetch_prowlarr_stats(db: AsyncSession) -> dict[str, Any]:
         finally:
             await client.close()
 
-    # Sort by success rate (worst first = needs attention)
-    all_stats.sort(key=lambda s: s["success_rate"])
+    # Sort by success rate (worst first = needs attention); indexers
+    # without any query (rate None) go last.
+    all_stats.sort(key=lambda s: (s["success_rate"] is None, s["success_rate"] or 0))
 
     # Compute aggregates
     total_queries = sum(s["queries"] for s in all_stats)
@@ -117,7 +121,10 @@ async def _fetch_prowlarr_stats(db: AsyncSession) -> dict[str, Any]:
             "total_grabs": total_grabs,
             "total_failed_queries": total_failed,
             "average_success_rate": avg_success,
-            "problematic": [s for s in all_stats if s["success_rate"] < 80],
+            "problematic": [
+                s for s in all_stats
+                if s["success_rate"] is not None and s["success_rate"] < 80
+            ],
         },
     }
 
@@ -183,7 +190,11 @@ async def test_prowlarr_indexer(indexer_id: int, db: AsyncSession = Depends(get_
     """Test connectivity/credentials of an existing indexer."""
     client = await _get_prowlarr_client_for_indexer(db, indexer_id)
     try:
-        return await client.test_indexer(indexer_id)
+        result = await client.test_indexer(indexer_id)
+        # A test can change the indexer health in Prowlarr (status messages,
+        # auto re-enable): drop the cached stats so the UI sees it.
+        cache.invalidate("prowlarr:stats")
+        return result
     except HTTPException:
         raise
     except Exception as exc:

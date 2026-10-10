@@ -1,215 +1,202 @@
 "use client";
 
+/**
+ * Carte « En lecture » (Dashboard) — visible uniquement pendant une lecture
+ * Kodi. Ambiance cinéma : affiche floutée en fond, égaliseur animé,
+ * progression lumineuse, badges techniques (4K, HDR, codec, 5.1…).
+ */
+/* eslint-disable @next/next/no-img-element */
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
-import { Play, Pause, Square, Tv, Film, Star, Clock, Volume2, VolumeX, ArrowUpRight } from "lucide-react";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Play, Pause, Square, Tv, Film, Star, Clock, Volume2, VolumeX, ArrowUpRight, Sofa } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useKodiNowPlaying, useKodiControl } from "@/hooks/use-kodi";
-import { cn } from "@/lib/utils";
+import { formatClock } from "@/lib/format";
+import { EASE_OUT } from "@/lib/motion";
+import { translateGenre } from "@/lib/genres";
 
-function fmtTime(sec?: number): string {
-    const s = Math.max(0, Math.floor(sec || 0));
-    const h = Math.floor(s / 3600);
-    const m = Math.floor((s % 3600) / 60);
-    const ss = s % 60;
-    const pad = (n: number) => String(n).padStart(2, "0");
-    return h > 0 ? `${h}:${pad(m)}:${pad(ss)}` : `${m}:${pad(ss)}`;
-}
-
+/** Nombre de canaux audio → notation home-cinéma. */
 function fmtChannels(ch?: number | null): string | null {
     if (!ch) return null;
     if (ch <= 1) return "Mono";
-    if (ch === 2) return "2.0";
+    if (ch === 2) return "Stéréo";
     if (ch === 6) return "5.1";
     if (ch === 8) return "7.1";
-    return `${ch}ch`;
+    return `${ch} canaux`;
 }
 
-/** Prominent card showing what's currently playing on Kodi — only visible while playing. */
 export function NowPlayingCard() {
-    const { data } = useKodiNowPlaying(true);
+    const { data: np } = useKodiNowPlaying(true);
     const control = useKodiControl();
-    const np = data;
 
     const visible = !!np?.playing;
     const remaining = np ? Math.max(0, (np.total || 0) - (np.position || 0)) : 0;
-
+    const pct = np?.total ? Math.min(100, ((np.position || 0) / np.total) * 100) : np?.percentage ?? 0;
     const techBadges = np
-        ? [
-              np.resolution,
-              np.hdr,
-              np.video_codec,
-              np.audio_codec,
-              fmtChannels(np.audio_channels),
-          ].filter(Boolean)
+        ? [np.resolution, np.hdr, np.video_codec, np.audio_codec, fmtChannels(np.audio_channels)].filter(Boolean)
         : [];
+
+    const send = (action: "playpause" | "stop") =>
+        control.mutate({ action }, { onError: (e) => toast.error("Commande Kodi refusée", { description: e.message }) });
 
     return (
         <AnimatePresence>
             {visible && np && (
-                <motion.div
-                    initial={{ opacity: 0, y: -12, height: 0 }}
-                    animate={{ opacity: 1, y: 0, height: "auto" }}
-                    exit={{ opacity: 0, y: -12, height: 0 }}
-                    transition={{ duration: 0.35, ease: "easeOut" }}
+                <motion.section
+                    initial={{ opacity: 0, height: 0, y: -10 }}
+                    animate={{ opacity: 1, height: "auto", y: 0 }}
+                    exit={{ opacity: 0, height: 0, y: -10 }}
+                    transition={{ duration: 0.5, ease: EASE_OUT }}
+                    className="overflow-hidden"
                 >
-                    <Card className="relative overflow-hidden border-0 ring-1 ring-white/10 bg-card/40 backdrop-blur-sm">
-                        {/* Blurred poster backdrop */}
+                    <div className="glass border-gradient relative overflow-hidden rounded-3xl">
+                        {/* Affiche floutée en arrière-plan */}
                         {np.poster && (
                             <div
-                                className="absolute inset-0 opacity-20 blur-2xl scale-110"
+                                aria-hidden
+                                className="absolute inset-0 scale-125 opacity-30 blur-3xl saturate-150"
                                 style={{
-                                    backgroundImage: `url(${np.poster})`,
+                                    backgroundImage: `url("${np.poster}")`,
                                     backgroundSize: "cover",
                                     backgroundPosition: "center 30%",
                                 }}
                             />
                         )}
-                        <div className="absolute inset-0 bg-gradient-to-r from-background/80 via-background/60 to-background/30" />
+                        <div aria-hidden className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/70 to-background/30" />
 
-                        <div className="relative flex gap-4 p-4 sm:p-5">
-                            {/* Poster */}
-                            <div className="shrink-0">
+                        <div className="relative flex gap-4 p-4 sm:gap-6 sm:p-6">
+                            {/* Affiche */}
+                            <motion.div
+                                initial={{ rotate: -4, scale: 0.9, opacity: 0 }}
+                                animate={{ rotate: 0, scale: 1, opacity: 1 }}
+                                transition={{ type: "spring", stiffness: 200, damping: 18, delay: 0.15 }}
+                                className="relative shrink-0"
+                            >
+                                <div className="absolute -inset-2 rounded-2xl bg-primary/30 blur-xl animate-pulse-glow" aria-hidden />
                                 {np.poster ? (
-                                    // eslint-disable-next-line @next/next/no-img-element
                                     <img
                                         src={np.poster}
                                         alt={np.title || ""}
-                                        className="h-36 w-24 sm:h-44 sm:w-28 rounded-lg object-cover ring-1 ring-white/10 shadow-lg"
+                                        className="relative h-36 w-24 rounded-xl object-cover shadow-2xl ring-1 ring-white/15 sm:h-48 sm:w-32"
                                     />
                                 ) : (
-                                    <div className="h-36 w-24 sm:h-44 sm:w-28 rounded-lg bg-muted/30 ring-1 ring-white/10 flex items-center justify-center">
-                                        {np.type === "episode" ? (
-                                            <Tv className="h-8 w-8 text-muted-foreground/40" />
-                                        ) : (
-                                            <Film className="h-8 w-8 text-muted-foreground/40" />
-                                        )}
+                                    <div className="relative flex h-36 w-24 items-center justify-center rounded-xl bg-muted/50 ring-1 ring-white/10 sm:h-48 sm:w-32">
+                                        {np.type === "episode" ? <Tv className="h-8 w-8 opacity-40" /> : <Film className="h-8 w-8 opacity-40" />}
                                     </div>
                                 )}
-                            </div>
+                            </motion.div>
 
-                            {/* Info */}
-                            <div className="min-w-0 flex-1 flex flex-col">
-                                {/* Now-playing chip */}
-                                <div className="flex items-center gap-2 mb-1.5">
-                                    <span className="relative flex h-2 w-2">
-                                        {!np.paused && (
-                                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-                                        )}
-                                        <span className={cn("relative inline-flex h-2 w-2 rounded-full", np.paused ? "bg-amber-400" : "bg-emerald-400")} />
+                            {/* Infos */}
+                            <div className="flex min-w-0 flex-1 flex-col">
+                                <div className="mb-2 flex items-center gap-2">
+                                    {/* Égaliseur */}
+                                    <span className="flex h-3.5 items-end gap-[3px]" aria-hidden>
+                                        {[0, 1, 2, 3].map((i) => (
+                                            <motion.span
+                                                key={i}
+                                                className="w-[3px] rounded-full bg-gradient-to-t from-primary to-brand"
+                                                animate={np.paused ? { height: 3 } : { height: [3, 14, 6, 12, 4] }}
+                                                transition={{ duration: 1.1, repeat: Infinity, delay: i * 0.12, ease: "easeInOut" }}
+                                            />
+                                        ))}
                                     </span>
-                                    <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                                    <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
                                         {np.paused ? "En pause" : "En lecture"}
-                                        {np.kodi ? ` · ${np.kodi}` : ""}
                                     </span>
+                                    {np.kodi && (
+                                        <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                                            <Sofa className="h-3 w-3" /> {np.kodi}
+                                        </span>
+                                    )}
                                 </div>
 
-                                {/* Title */}
-                                <h3 className="text-lg sm:text-xl font-bold leading-tight truncate">{np.title}</h3>
-                                {np.subtitle && (
-                                    <p className="text-sm text-muted-foreground truncate">{np.subtitle}</p>
-                                )}
+                                <h2 className="truncate text-xl font-bold leading-tight tracking-tight sm:text-3xl">{np.title}</h2>
+                                {np.subtitle && <p className="truncate text-sm text-muted-foreground">{np.subtitle}</p>}
 
-                                {/* Meta row */}
-                                <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                                     {np.year ? <span className="tabular-nums">{np.year}</span> : null}
                                     {np.runtime ? (
                                         <span className="flex items-center gap-1">
-                                            <Clock className="h-3 w-3" />
-                                            {np.runtime} min
+                                            <Clock className="h-3 w-3" /> {np.runtime} min
                                         </span>
                                     ) : null}
                                     {np.rating ? (
                                         <span className="flex items-center gap-1">
-                                            <Star className="h-3 w-3 text-amber-400" />
-                                            {np.rating}
+                                            <Star className="h-3 w-3 fill-amber-400 text-amber-400" /> {np.rating.toFixed(1)}
                                         </span>
                                     ) : null}
-                                    {np.genres && np.genres.length > 0 && (
-                                        <span className="truncate">{np.genres.slice(0, 3).join(" · ")}</span>
-                                    )}
+                                    {np.genres && np.genres.length > 0 && <span className="truncate">{np.genres.slice(0, 3).map(translateGenre).join(" · ")}</span>}
                                 </div>
 
-                                {/* Tech badges */}
                                 {techBadges.length > 0 && (
-                                    <div className="mt-2 flex flex-wrap gap-1.5">
-                                        {techBadges.map((b, i) => (
-                                            <Badge
-                                                key={i}
-                                                variant="outline"
-                                                className="text-[10px] px-1.5 py-0 h-5 border-white/10 text-muted-foreground font-mono"
+                                    <div className="mt-3 hidden flex-wrap gap-1.5 sm:flex">
+                                        {techBadges.map((b) => (
+                                            <span
+                                                key={String(b)}
+                                                className="rounded-md border border-white/10 bg-black/30 px-1.5 py-0.5 font-mono text-[10px] text-foreground/80 backdrop-blur"
                                             >
                                                 {b}
-                                            </Badge>
+                                            </span>
                                         ))}
-                                        {np.muted ? (
-                                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 border-white/10 text-muted-foreground">
-                                                <VolumeX className="h-3 w-3" />
-                                            </Badge>
-                                        ) : (
-                                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 border-white/10 text-muted-foreground gap-1">
-                                                <Volume2 className="h-3 w-3" />
-                                                {np.volume}
-                                            </Badge>
-                                        )}
+                                        <span className="flex items-center gap-1 rounded-md border border-white/10 bg-black/30 px-1.5 py-0.5 font-mono text-[10px] text-foreground/80 backdrop-blur">
+                                            {np.muted ? <VolumeX className="h-3 w-3" /> : <Volume2 className="h-3 w-3" />}
+                                            {np.muted ? "muet" : `${np.volume ?? 0} %`}
+                                        </span>
                                     </div>
                                 )}
 
-                                {/* Spacer pushes progress + controls to the bottom */}
                                 <div className="flex-1" />
 
-                                {/* Progress */}
-                                <div className="mt-3 space-y-1">
-                                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted/30">
-                                        <div
-                                            className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-cyan-400 to-blue-400 transition-[width] duration-1000 ease-linear"
-                                            style={{ width: `${np.percentage ?? 0}%` }}
+                                {/* Progression */}
+                                <div className="mt-4 space-y-1.5">
+                                    <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                                        <motion.div
+                                            className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-primary via-sky-400 to-brand shadow-[0_0_14px_hsl(var(--primary))]"
+                                            animate={{ width: `${pct}%` }}
+                                            transition={{ duration: 1, ease: "linear" }}
                                         />
                                     </div>
                                     <div className="flex items-center justify-between text-[11px] tabular-nums text-muted-foreground">
-                                        <span>{fmtTime(np.position)}</span>
-                                        <span>-{fmtTime(remaining)}</span>
+                                        <span>{formatClock(np.position)}</span>
+                                        <span>-{formatClock(remaining)}</span>
                                     </div>
                                 </div>
 
-                                {/* Controls */}
-                                <div className="mt-2.5 flex items-center gap-2">
-                                    <Button
-                                        size="sm"
-                                        variant="secondary"
-                                        className="h-8 gap-1.5"
-                                        disabled={control.isPending}
-                                        onClick={() => control.mutate({ action: "playpause" })}
-                                    >
-                                        {np.paused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+                                {/* Commandes */}
+                                <div className="mt-3 flex min-w-0 items-center gap-2">
+                                    <Button size="sm" onClick={() => send("playpause")} disabled={control.isPending}>
+                                        {np.paused ? <Play className="fill-current" /> : <Pause className="fill-current" />}
                                         {np.paused ? "Reprendre" : "Pause"}
                                     </Button>
                                     <Button
-                                        size="icon"
+                                        size="icon-sm"
                                         variant="ghost"
-                                        className="h-8 w-8 text-muted-foreground hover:text-red-400"
+                                        onClick={() => send("stop")}
                                         disabled={control.isPending}
-                                        onClick={() => control.mutate({ action: "stop" })}
-                                        title="Arrêter"
+                                        aria-label="Arrêter la lecture"
+                                        className="hover:text-red-400"
                                     >
-                                        <Square className="h-4 w-4" />
+                                        <Square className="fill-current" />
                                     </Button>
-                                    {np.media_id && np.media_type && (
-                                        <Link
-                                            href={`/media/${np.media_type}/${np.media_id}`}
-                                            className="ml-auto text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
-                                        >
-                                            Fiche
-                                            <ArrowUpRight className="h-3.5 w-3.5" />
+                                    <div className="ml-auto flex items-center gap-3 text-xs">
+                                        <Link href="/remote" className="hidden text-muted-foreground transition-colors hover:text-primary sm:inline">
+                                            Télécommande
                                         </Link>
-                                    )}
+                                        {np.media_id && np.media_type && (
+                                            <Link
+                                                href={`/media/${np.media_type}/${np.media_id}`}
+                                                className="flex items-center gap-1 text-muted-foreground transition-colors hover:text-primary"
+                                            >
+                                                Fiche <ArrowUpRight className="h-3.5 w-3.5" />
+                                            </Link>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </Card>
-                </motion.div>
+                    </div>
+                </motion.section>
             )}
         </AnimatePresence>
     );

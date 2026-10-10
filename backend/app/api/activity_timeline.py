@@ -10,7 +10,8 @@ grouping-by-média view.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+import re
+from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,7 +31,7 @@ router = APIRouter(
 )
 
 
-def _split(v: Optional[str]) -> Optional[list[str]]:
+def _split(v: str | None) -> list[str] | None:
     if not v:
         return None
     return [p.strip() for p in v.split(",") if p.strip()]
@@ -71,6 +72,71 @@ def _group_key(item: dict[str, Any]) -> str:
         return f"{item['media_type']}:{item['media_id']}"
     t = (item.get("title") or "").strip().lower()
     return f"title:{t}" if t else "misc"
+
+
+# ── Dé-duplication des imports ───────────────────────────────────────
+# Un même import apparaissait DEUX fois dans le journal :
+#   • « imported »               → évènement persisté par le webhook *arr
+#                                   (« Download »), avec media_type/media_id ;
+#   • « downloadFolderImported » → ligne de l'historique *arr fusionné en
+#                                   direct (titre, affiche, indexer, taille).
+# On garde la ligne persistée (elle porte le lien vers la fiche média) et on
+# la complète avec les infos de l'historique, puis on retire le doublon.
+_DEDUP_WINDOW_S = 15 * 60  # le webhook et l'historique arrivent à quelques secondes d'écart
+_EP_CODE = re.compile(r"S(\d{1,2})E(\d{1,3})", re.IGNORECASE)
+
+
+def _norm_title(value: str | None) -> str:
+    """Titre comparable : minuscules, sans ponctuation ni espaces."""
+    return "".join(ch for ch in (value or "").lower() if ch.isalnum())
+
+
+def _episode_code(value: str | None) -> str | None:
+    """Extrait « S01E02 » (normalisé) d'un titre ou sous-titre, sinon None."""
+    m = _EP_CODE.search(value or "")
+    return f"S{int(m.group(1)):02d}E{int(m.group(2)):02d}" if m else None
+
+
+def _dedupe_imports(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    persisted = [
+        it for it in items
+        if it.get("action") == "imported" and not str(it.get("id", "")).startswith("arr-")
+    ]
+    if not persisted:
+        return items
+
+    used: set[str] = set()      # une ligne persistée n'absorbe qu'un seul doublon
+    dropped: set[str] = set()   # ids des lignes *arr retirées
+    for arr in items:
+        if arr.get("action") != "downloadFolderImported":
+            continue
+        arr_title = _norm_title(arr.get("title"))
+        if not arr_title:
+            continue
+        arr_ep = _episode_code(arr.get("subtitle"))
+        for p in persisted:
+            if p["id"] in used or p.get("source") != arr.get("source"):
+                continue
+            if abs((p.get("ts") or 0) - (arr.get("ts") or 0)) > _DEDUP_WINDOW_S:
+                continue
+            # Webhook Sonarr : titre « Série S01E02 » → on sépare le code épisode.
+            p_title = p.get("title") or ""
+            p_ep = _episode_code(p_title)
+            if arr_ep and p_ep and arr_ep != p_ep:
+                continue
+            if _norm_title(_EP_CODE.split(p_title)[0]) != arr_title:
+                continue
+            # Doublon trouvé : on enrichit la ligne persistée.
+            for key in ("poster_url", "size_bytes", "detail"):
+                if not p.get(key) and arr.get(key):
+                    p[key] = arr[key]
+            used.add(p["id"])
+            dropped.add(arr["id"])
+            break
+
+    if not dropped:
+        return items
+    return [it for it in items if it.get("id") not in dropped]
 
 
 @router.get("/timeline")
@@ -124,6 +190,9 @@ async def timeline(
         except Exception as exc:
             logger.warning("timeline: *arr history merge failed: %s", exc)
 
+        # 2b. Même import vu par le webhook ET par l'historique → une seule ligne.
+        items = _dedupe_imports(items)
+
     # 3. Enrich (title/poster) from the media library
     try:
         media = list(
@@ -146,6 +215,11 @@ async def timeline(
                     it["poster_url"] = m.get("poster_url")
                 if not it.get("tmdb_id"):
                     it["tmdb_id"] = m.get("tmdb_id")
+                # Lecture Kodi/Cast connue par son seul tmdb_id : on renseigne
+                # aussi le lien vers la fiche (la ligne devient cliquable).
+                if not it.get("media_id") and m.get("external_id"):
+                    it["media_type"] = m.get("type")
+                    it["media_id"] = str(m["external_id"])
     except Exception as exc:
         logger.debug("timeline enrich skipped: %s", exc)
 
