@@ -19,6 +19,16 @@ const TONES = {
 
 export type ProgressTone = keyof typeof TONES;
 
+/** Couleur du halo assortie à la teinte. */
+const GLOWS: Record<ProgressTone, string> = {
+    primary: "hsl(var(--primary) / 0.55)",
+    emerald: "hsl(152 69% 47% / 0.5)",
+    amber: "hsl(38 95% 58% / 0.5)",
+    rose: "hsl(350 89% 64% / 0.5)",
+    violet: "hsl(262 83% 70% / 0.5)",
+    slate: "transparent",
+};
+
 export function GradientProgress({
     value,
     tone = "primary",
@@ -41,7 +51,7 @@ export function GradientProgress({
                 initial={{ width: 0 }}
                 animate={{ width: `${v}%` }}
                 transition={{ duration: 0.9, ease: EASE_OUT }}
-                style={glow ? { boxShadow: "0 0 12px 0 hsl(var(--primary) / 0.55)" } : undefined}
+                style={glow ? { boxShadow: `0 0 12px 0 ${GLOWS[tone]}` } : undefined}
             >
                 {active && (
                     <span

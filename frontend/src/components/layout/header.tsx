@@ -97,16 +97,17 @@ export function Header({ title }: HeaderProps) {
                         </>
                     )}
                     <AnimatePresence mode="wait" initial={false}>
-                        <motion.h1
+                        <motion.p
                             key={pageLabel}
                             initial={{ opacity: 0, y: 6 }}
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: -6 }}
                             transition={{ duration: 0.2 }}
+                            aria-current="page"
                             className="truncate font-semibold tracking-tight"
                         >
                             {pageLabel}
-                        </motion.h1>
+                        </motion.p>
                     </AnimatePresence>
                 </nav>
 

@@ -1,14 +1,19 @@
 "use client";
 
+/**
+ * Actions sur un média : recherche automatique (*arr), recherche d'épisodes,
+ * activité de recherche en direct, recherche interactive de releases et
+ * envoi d'une release au client de téléchargement.
+ */
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api-client";
 
-/* ── Automatic search (native *arr command) ────────────────── */
+/* ── Recherche automatique (commande native *arr) ──────────── */
 
 export function useTriggerMediaSearch() {
     const queryClient = useQueryClient();
     return useMutation<
-        { status: string; command: any },
+        { status: string; command: unknown },
         Error,
         { type: "movie" | "series"; id: number | string; season?: number }
     >({
@@ -20,16 +25,20 @@ export function useTriggerMediaSearch() {
             queryClient.invalidateQueries({
                 queryKey: ["media", "detail", variables.type, String(variables.id)],
             });
+            // Série : l'indicateur « Recherche en cours » doit s'allumer tout de suite.
+            if (variables.type === "series") {
+                queryClient.invalidateQueries({ queryKey: ["media", "search-activity", String(variables.id)] });
+            }
         },
     });
 }
 
-/* ── Automatic search for specific episodes (missing grab) ──── */
+/* ── Recherche automatique d'épisodes précis (manquants) ───── */
 
 export function useSearchEpisodes() {
     const queryClient = useQueryClient();
     return useMutation<
-        { status: string; command: any; count: number },
+        { status: string; command: unknown; count: number },
         Error,
         { id: number | string; episodeIds: number[] }
     >({
@@ -42,11 +51,12 @@ export function useSearchEpisodes() {
             queryClient.invalidateQueries({
                 queryKey: ["media", "detail", "series", String(variables.id)],
             });
+            queryClient.invalidateQueries({ queryKey: ["media", "search-activity", String(variables.id)] });
         },
     });
 }
 
-/* ── Live search activity (Sonarr command queue) ───────────── */
+/* ── Activité de recherche en direct (file de commandes Sonarr) ── */
 
 export interface SearchActivity {
     episode_ids: number[];
@@ -56,22 +66,33 @@ export interface SearchActivity {
 }
 
 /**
- * Poll which episodes/seasons of a series currently have a search running in
- * Sonarr, so the UI can show a "recherche en cours" indicator. Polls every 4s
- * while enabled; harmless to leave running on the page.
+ * Quels épisodes / saisons d'une série sont en cours de recherche dans Sonarr
+ * (pour afficher « Recherche… » au lieu d'un bouton qui semble figé).
+ *
+ * Avant : interrogation toutes les 4 s en permanence, même sans aucune
+ * recherche. Désormais :
+ *  - 1 lecture à l'ouverture de la page (et au retour sur l'onglet) ;
+ *  - toutes les 4 s uniquement tant qu'une recherche est active ;
+ *  - `opts.boost` force l'interrogation pendant quelques secondes juste après
+ *    un lancement (le temps que Sonarr inscrive la commande dans sa file).
  */
-export function useSeriesSearchActivity(id: number | string, enabled = true) {
+export function useSeriesSearchActivity(
+    id: number | string,
+    enabled = true,
+    opts: { boost?: boolean } = {},
+) {
+    const boost = !!opts.boost;
     return useQuery<SearchActivity>({
         queryKey: ["media", "search-activity", String(id)],
         queryFn: () => apiFetch(`/api/media/series/${id}/search-activity`),
         enabled: enabled && !!id,
-        refetchInterval: 4000,
+        refetchInterval: (query) => (query.state.data?.active || boost ? 4000 : false),
         refetchOnWindowFocus: true,
         staleTime: 0,
     });
 }
 
-/* ── Interactive release search ────────────────────────────── */
+/* ── Recherche interactive de releases ─────────────────────── */
 
 export interface Release {
     guid: string;
@@ -98,8 +119,9 @@ export interface ReleasesResponse {
 }
 
 /**
- * Fetch candidate releases for a media item (interactive search).
- * Disabled by default — pass `enabled` to trigger the (slow) indexer search.
+ * Releases candidates pour un média (recherche interactive).
+ * Désactivé par défaut — passe `enabled` pour lancer la recherche (lente)
+ * sur les indexeurs.
  */
 export function useMediaReleases(
     type: "movie" | "series",
@@ -108,8 +130,9 @@ export function useMediaReleases(
     season?: number,
     episode?: number,
 ) {
-    // Episode search (fast, single query per indexer) takes precedence over a
-    // season-pack search (slow fan-out). Only one is sent to the backend.
+    // La recherche d'épisode (rapide : 1 requête par indexeur) prime sur la
+    // recherche de pack saison (lente : éventail sur tous les épisodes).
+    // Un seul des deux paramètres est envoyé au backend.
     const qs =
         type === "series"
             ? episode !== undefined
@@ -118,7 +141,7 @@ export function useMediaReleases(
                     ? `?season=${season}`
                     : ""
             : "";
-    // For series, either a season or an episode must be chosen before searching.
+    // Pour une série, il faut choisir une saison ou un épisode avant de chercher.
     const canQuery =
         enabled && !!id && (type === "movie" || season !== undefined || episode !== undefined);
     return useQuery<ReleasesResponse>({
@@ -130,18 +153,35 @@ export function useMediaReleases(
     });
 }
 
-/* ── Grab a release ────────────────────────────────────────── */
+/* ── Envoi d'une release au client de téléchargement ───────── */
 
 export function useGrabRelease() {
+    const queryClient = useQueryClient();
     return useMutation<
-        { status: string; release: any },
+        { status: string; release: unknown },
         Error,
-        { type: "movie" | "series"; id: number | string; guid: string; indexer_id: number }
+        {
+            type: "movie" | "series";
+            id: number | string;
+            guid: string;
+            indexer_id: number;
+            /** Facultatifs : alimentent le journal d'activité côté backend. */
+            title?: string;
+            release_title?: string;
+        }
     >({
-        mutationFn: ({ type, id, guid, indexer_id }) =>
+        mutationFn: ({ type, id, guid, indexer_id, title, release_title }) =>
             apiFetch(`/api/media/${type}/${id}/grab`, {
                 method: "POST",
-                body: JSON.stringify({ guid, indexer_id }),
+                body: JSON.stringify({ guid, indexer_id, title, release_title }),
             }),
+        onSuccess: (_data, variables) => {
+            // La release part dans la file : la fiche (statut) et la page
+            // Téléchargements doivent se rafraîchir.
+            queryClient.invalidateQueries({
+                queryKey: ["media", "detail", variables.type, String(variables.id)],
+            });
+            queryClient.invalidateQueries({ queryKey: ["downloads"] });
+        },
     });
 }

@@ -6,7 +6,7 @@
  */
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Inbox, type LucideIcon } from "lucide-react";
+import { Inbox, ServerCrash, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { EASE_OUT } from "@/lib/motion";
@@ -104,6 +104,7 @@ export function ErrorState({
     return (
         <EmptyState
             tone="error"
+            icon={ServerCrash}
             title={title}
             description={message}
             compact={compact}

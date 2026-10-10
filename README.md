@@ -46,23 +46,45 @@
 
 ## ✨ Features
 
+> 🎨 **Interface « Neon Armada »** — dark-only glassmorphism UI with animated aurora background, 3D-tilt posters, animated counters & gauges, page transitions and real-time toasts. Fully responsive (floating mobile tab bar) and `prefers-reduced-motion` aware.
+
+### 🧭 Navigation
+| Group | Pages |
+|-------|-------|
+| — | **Dashboard** (command bridge) · **Salon** (Kodi / Yamaha / Cast remote) |
+| Bibliothèque | Médiathèque · Manquants · Calendrier · Rechercher & Ajouter |
+| Activité | Téléchargements (queue + imports) · Journal · Notifications |
+| Maintenance | Santé médiathèque (qualité, doublons, nettoyage) · TRaSH Guides (profils, overrides, SABnzbd) · Indexers |
+| Système | Serveur & Docker · Statistiques |
+| ⚙️ | Paramètres (général, services *arr, Kodi, Cast & Jellyfin, ampli Yamaha) |
+
+Legacy URLs (`/quality`, `/duplicates`, `/cleanup`, `/fichiers`, `/docker`, `/requests`, `/recommendations`, `/services`, `/settings/profile-overrides`, `/settings/sabnzbd-config`) redirect to their new location.
+
+### ⌨️ Keyboard-first
+| Shortcut | Action |
+|----------|--------|
+| `⌘K` / `Ctrl+K` / `/` | Command palette: open a media sheet, jump to a page, run an action (Kodi sync, refresh, mark all read…) |
+| `g` then `d` `r` `m` `x` `c` `s` `t` `j` `n` `h` `i` `y` `p` | Go to Dashboard, Salon, Médiathèque, Manquants, Calendrier, Recherche, Téléchargements, Journal, Notifications, Santé, Indexers, Serveur, Paramètres |
+| `[` | Collapse / expand the sidebar |
+| `?` | Shortcut cheat-sheet |
+
 ### 🧙 Setup Wizard
 Auto-discover your *arr services on the local network or configure them manually. API keys are **encrypted at rest** with Fernet (AES-128-CBC).
 
-### 📊 Unified Dashboard
-Real-time overview of your entire media library: movies, series, storage, downloads, and service health — all in one view.
+### 📊 Command Bridge (Dashboard)
+Greeting with live fleet summary, animated KPIs (films, séries, stockage, téléchargements) with ring gauges, services health strip, recently-added carousel, unified activity timeline, live download queue, this week's releases, disk usage and TRaSH compliance.
 
-### 🔍 Unified Search
-Search across Sonarr, Radarr, and more simultaneously. Find any media in your library or search for new content to add.
+### 🔍 Search & Add
+Unified title search, natural-language AI search, TMDB trending / "because you have…" suggestions and request tracking — all in one hub.
 
 ### 🎬 Detailed Media View
-Browse your library with rich metadata: cast, subtitles, file quality, storage size. Take actions like downloading directly.
+Cinematic hero, seasons & episodes, cast & filmography, files & quality, interactive release search, Bazarr subtitles, TRaSH profile overrides, Kodi playback & Chromecast casting.
 
-### 📥 Download Manager
-Monitor active downloads across SABnzbd with real-time progress, speed, and ETA.
+### 📥 Downloads & Imports
+Live SABnzbd / Deluge queue with per-item actions (retry, blocklist, remove) and an Imports tab for stuck downloads, manual/bulk import and auto-import history.
 
-### 🔔 Notifications
-Telegram integration for import events, health alerts, and more.
+### 🔔 Real-time
+Server-Sent Events keep every page fresh and raise toasts on imports, grabs and service outages; a floating mini-player follows Kodi playback across pages.
 
 ### 🛡️ Security First
 - JWT authentication with configurable expiration

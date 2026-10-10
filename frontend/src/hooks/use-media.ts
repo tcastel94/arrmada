@@ -1,7 +1,16 @@
 "use client";
 
+/**
+ * Hooks d'accès à la médiathèque (liste, recherche, fiche détail, édition).
+ * ----------------------------------------------------------------
+ * ATTENTION : `useMedia`, `useMediaFacets`, `useMediaSearch`, `MediaItem` et
+ * `MediaFilters` sont utilisés par d'autres pages (médiathèque, manquants,
+ * palette de commandes, badges de navigation) : leurs signatures ne doivent
+ * pas changer.
+ */
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api-client";
+import type { EpisodeSubtitleInfo, MovieSubtitleInfo } from "@/hooks/use-subtitles";
 
 export interface MediaItem {
     external_id: string;
@@ -86,7 +95,7 @@ export interface MediaFacets {
     missing_monitored_count: number;
 }
 
-/** Distinct genres/qualities + missing counts across the whole library. */
+/** Genres / qualités distincts + compteurs de manquants sur toute la médiathèque. */
 export function useMediaFacets() {
     return useQuery<MediaFacets>({
         queryKey: ["media", "facets"],
@@ -103,7 +112,7 @@ export function useMediaSearch(query: string) {
     });
 }
 
-// ── Detail types ─────────────────────────────────────────────
+// ── Types de la fiche détail ─────────────────────────────────
 
 export interface FileInfo {
     id: number;
@@ -112,7 +121,8 @@ export interface FileInfo {
     size_bytes: number;
     quality: string;
     quality_source: string;
-    resolution: string;
+    /** Radarr/Sonarr renvoient un nombre (1080, 2160…) même si l'ancien typage disait string. */
+    resolution: string | number;
     video_codec: string;
     video_dynamic_range: string;
     video_dynamic_range_type: string;
@@ -130,13 +140,15 @@ export interface FileInfo {
 export interface CastMember {
     name: string;
     character: string;
+    /** "cast" pour les acteurs ; pour l'équipe : director, writer… (ou job TMDb). */
     type: string;
+    job?: string;
     photo?: string;
     tmdb_id?: number | null;
     order?: number;
 }
 
-/* ── Actor filmography (cast click → library + discovery) ───── */
+/* ── Filmographie d'un acteur (clic sur le casting) ─────────── */
 
 export interface PersonInfo {
     tmdb_id: number;
@@ -156,7 +168,7 @@ export interface PersonMovie {
     poster: string | null;
     vote_average: number;
     popularity: number;
-    /** Present only for in-library entries. */
+    /** Présent uniquement pour les films déjà dans la médiathèque. */
     radarr_id?: number;
     has_file?: boolean;
 }
@@ -178,21 +190,13 @@ export function usePersonFilmography(personId: number | null, enabled: boolean) 
     });
 }
 
-export interface SubtitleInfo {
-    language: string;
-    code2: string;
-    code3?: string;
-    path?: string;
-    forced: boolean;
-    hi: boolean;
-}
-
 export interface EpisodeDetail {
     id: number;
     episode_number: number;
     season_number: number;
     title: string;
     overview: string;
+    /** Date de diffusion « jour » (YYYY-MM-DD), null si inconnue. */
     air_date: string | null;
     has_file: boolean;
     monitored: boolean;
@@ -207,16 +211,31 @@ export interface SeasonDetail {
     episodes: EpisodeDetail[];
 }
 
+/**
+ * Notes : un film expose tmdb / imdb / metacritic / rotten_tomatoes,
+ * une série expose seulement `value` (+ `votes`).
+ */
+export interface MediaRatings {
+    tmdb?: number | null;
+    imdb?: number | null;
+    metacritic?: number | null;
+    rotten_tomatoes?: number | null;
+    value?: number | null;
+    votes?: number | null;
+}
+
 export interface MediaDetail {
     id: number;
     type: "movie" | "series";
     title: string;
     original_title: string;
+    sort_title?: string;
     year: number | null;
     overview: string;
     studio?: string;
     network?: string;
     genres: string[];
+    /** Durée en MINUTES (film) ou durée moyenne d'un épisode (série). */
     runtime: number | null;
     status: string;
     monitored: boolean;
@@ -227,12 +246,14 @@ export interface MediaDetail {
     size_on_disk: number;
     added: string | null;
     path: string;
+    root_folder_path?: string;
     certification: string;
+    website?: string;
     youtube_trailer_id?: string;
     tmdb_id?: number;
     imdb_id?: string;
     tvdb_id?: number;
-    ratings: Record<string, number | null>;
+    ratings: MediaRatings;
     images: { poster: string | null; fanart: string | null; banner: string | null };
     file?: FileInfo | null;
     seasons?: SeasonDetail[];
@@ -241,16 +262,28 @@ export interface MediaDetail {
     episodes_have?: number;
     cast?: CastMember[];
     crew?: CastMember[];
-    subtitles: any[];
+    /** Film : un seul bloc MovieSubtitleInfo ; série : un bloc par épisode. */
+    subtitles: Array<MovieSubtitleInfo | EpisodeSubtitleInfo>;
     tags: number[];
     error?: string;
 }
 
+/**
+ * Fiche détail d'un film / d'une série.
+ * Le backend répond parfois 200 avec `{ error: "…" }` (service *arr absent ou
+ * injoignable) : on le transforme en vraie erreur pour que la page affiche
+ * un ErrorState avec le message réel et un bouton « Réessayer ».
+ */
 export function useMediaDetail(type: "movie" | "series", id: string) {
     return useQuery<MediaDetail>({
         queryKey: ["media", "detail", type, id],
-        queryFn: () => apiFetch(`/api/media/${type}/${id}`),
+        queryFn: async () => {
+            const data = await apiFetch<MediaDetail>(`/api/media/${type}/${id}`);
+            if (data?.error) throw new Error(data.error);
+            return data;
+        },
         enabled: !!id,
+        retry: 1,
     });
 }
 
@@ -258,33 +291,85 @@ export interface RootFolder {
     path: string;
     accessible: boolean;
     freeSpace: number;
-    unmappedFolders: any[];
+    unmappedFolders: unknown[];
 }
 
-export function useMediaRootFolders(type: "movie" | "series", id: string) {
+/** Dossiers racine Radarr/Sonarr (boîte « Déplacer »). `enabled` évite l'appel tant que la boîte est fermée. */
+export function useMediaRootFolders(type: "movie" | "series", id: string, enabled = true) {
     return useQuery<RootFolder[]>({
         queryKey: ["media", "rootfolders", type, id],
         queryFn: () => apiFetch(`/api/media/${type}/${id}/rootfolders`),
-        enabled: !!id,
+        enabled: enabled && !!id,
+        staleTime: 60_000,
     });
 }
 
 export function useUpdateMediaPath() {
     const queryClient = useQueryClient();
-    return useMutation<any, Error, { type: "movie" | "series"; id: string; new_path: string }>({
+    return useMutation<unknown, Error, { type: "movie" | "series"; id: string; new_path: string }>({
         mutationFn: ({ type, id, new_path }) =>
             apiFetch(`/api/media/${type}/${id}/path`, {
                 method: "PUT",
                 body: JSON.stringify({ new_path }),
             }),
-        onSuccess: (data, variables) => {
+        onSuccess: (_data, variables) => {
             queryClient.invalidateQueries({ queryKey: ["media", "detail", variables.type, variables.id] });
             queryClient.invalidateQueries({ queryKey: ["media"] });
         },
     });
 }
 
-// ── Edit media (monitored / quality profile / tags / …) ──────
+// ── Suppression ──────────────────────────────────────────────
+
+/**
+ * Supprime un film / une série de Radarr/Sonarr.
+ * Avant : appel apiFetch brut dans la page, sans invalidation (la médiathèque
+ * affichait encore le média supprimé) et erreur réelle avalée.
+ */
+export function useDeleteMedia() {
+    const queryClient = useQueryClient();
+    return useMutation<
+        { status: string },
+        Error,
+        { type: "movie" | "series"; id: number | string; deleteFiles: boolean; deleteDownloads: boolean }
+    >({
+        mutationFn: ({ type, id, deleteFiles, deleteDownloads }) =>
+            apiFetch(`/api/media/${type}/${id}?delete_files=${deleteFiles}&delete_downloads=${deleteDownloads}`, {
+                method: "DELETE",
+            }),
+        onSuccess: (_data, variables) => {
+            // Toute la médiathèque est marquée périmée SANS refetch immédiat :
+            // re-demander la fiche supprimée afficherait une erreur 404 juste
+            // avant la redirection. /media se rechargera à l'arrivée.
+            queryClient.invalidateQueries({ queryKey: ["media"], refetchType: "none" });
+            if (variables.deleteDownloads) queryClient.invalidateQueries({ queryKey: ["downloads"] });
+            // Une fois la page quittée (requête inactive), on jette le cache de
+            // la fiche pour ne jamais ré-afficher un média qui n'existe plus.
+            const detailKey = ["media", "detail", variables.type, String(variables.id)];
+            setTimeout(() => queryClient.removeQueries({ queryKey: detailKey, type: "inactive" }), 1500);
+        },
+    });
+}
+
+// ── Scraping NFO / illustrations (Radarr uniquement côté backend) ──
+
+export function useScrapeMedia() {
+    return useMutation<
+        { status: string; items_count: number },
+        Error,
+        { movie_id: number; tmdb_id?: number; imdb_id?: string }
+    >({
+        // Le backend lance une tâche de fond et répond tout de suite :
+        // un succès signifie « lancé », pas « terminé ».
+        mutationFn: (item) =>
+            apiFetch("/api/media/scrape", {
+                method: "POST",
+                body: JSON.stringify({ items: [{ ...item, source_service: "radarr" }] }),
+            }),
+    });
+}
+
+// ── Édition (surveillance / profil qualité / tags / …) ───────
 
 export interface QualityProfileOption {
     id: number;
@@ -320,7 +405,7 @@ export interface MediaEditPayload {
 
 export function useUpdateMedia() {
     const queryClient = useQueryClient();
-    return useMutation<any, Error, { type: "movie" | "series"; id: string | number; data: MediaEditPayload }>({
+    return useMutation<unknown, Error, { type: "movie" | "series"; id: string | number; data: MediaEditPayload }>({
         mutationFn: ({ type, id, data }) =>
             apiFetch(`/api/media/${type}/${id}`, {
                 method: "PATCH",
@@ -347,17 +432,43 @@ export function useCreateTag() {
     });
 }
 
+/**
+ * (Dé)surveillance d'une saison.
+ * Mise à jour « optimiste » : l'interrupteur bascule immédiatement dans le
+ * cache, et revient en arrière si Sonarr refuse (au lieu d'attendre 1-2 s).
+ */
 export function useUpdateSeasonMonitoring() {
     const queryClient = useQueryClient();
-    return useMutation<any, Error, { id: string | number; season: number; monitored: boolean }>({
+    return useMutation<
+        unknown,
+        Error,
+        { id: string | number; season: number; monitored: boolean },
+        { previous?: MediaDetail }
+    >({
         mutationFn: ({ id, season, monitored }) =>
             apiFetch(`/api/media/series/${id}/season/${season}`, {
                 method: "PATCH",
                 body: JSON.stringify({ monitored }),
             }),
-        onSuccess: (_data, variables) => {
+        onMutate: async ({ id, season, monitored }) => {
+            const key = ["media", "detail", "series", String(id)];
+            await queryClient.cancelQueries({ queryKey: key });
+            const previous = queryClient.getQueryData<MediaDetail>(key);
+            if (previous?.seasons) {
+                queryClient.setQueryData<MediaDetail>(key, {
+                    ...previous,
+                    seasons: previous.seasons.map((s) => (s.season_number === season ? { ...s, monitored } : s)),
+                });
+            }
+            return { previous };
+        },
+        onError: (_err, variables, context) => {
+            if (context?.previous) {
+                queryClient.setQueryData(["media", "detail", "series", String(variables.id)], context.previous);
+            }
+        },
+        onSettled: (_data, _err, variables) => {
             queryClient.invalidateQueries({ queryKey: ["media", "detail", "series", String(variables.id)] });
-            queryClient.invalidateQueries({ queryKey: ["media"] });
         },
     });
 }

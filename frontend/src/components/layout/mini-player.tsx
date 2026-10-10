@@ -21,7 +21,9 @@ export function MiniPlayer() {
     const pathname = usePathname();
     const { data: np } = useKodiNowPlaying(true);
     const control = useKodiControl();
-    const visible = !!np?.playing && !HIDDEN_ON.some((p) => pathname.startsWith(p));
+    // Masqué aussi sur la fiche du média en cours (elle a sa propre télécommande).
+    const onPlayingSheet = !!np?.media_id && pathname === `/media/${np.media_type}/${np.media_id}`;
+    const visible = !!np?.playing && !onPlayingSheet && !HIDDEN_ON.some((p) => pathname.startsWith(p));
     const pct = np?.total ? Math.min(100, ((np.position || 0) / np.total) * 100) : np?.percentage ?? 0;
 
     const send = (action: "playpause" | "stop") =>
@@ -32,12 +34,16 @@ export function MiniPlayer() {
     return (
         <AnimatePresence>
             {visible && np && (
+                // Le positionnement (fixed + centrage) est porté par un conteneur
+                // statique : framer-motion réécrit `transform` sur l'élément animé,
+                // ce qui annulait le -translate-x-1/2 (lecteur décalé sur mobile).
+                <div className="pointer-events-none fixed inset-x-3 bottom-[calc(5.75rem+env(safe-area-inset-bottom))] z-40 flex justify-center lg:inset-x-auto lg:bottom-5 lg:right-5">
                 <motion.div
                     initial={{ y: 80, opacity: 0, scale: 0.95 }}
                     animate={{ y: 0, opacity: 1, scale: 1 }}
                     exit={{ y: 80, opacity: 0, scale: 0.95 }}
                     transition={SPRING_SOFT}
-                    className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] left-1/2 z-40 w-[min(calc(100vw-1.5rem),440px)] -translate-x-1/2 lg:bottom-5 lg:left-auto lg:right-5 lg:translate-x-0"
+                    className="pointer-events-auto w-full max-w-[440px] lg:w-[400px]"
                 >
                     <div className="glass-strong border-gradient relative overflow-hidden rounded-2xl">
                         {np.poster && (
@@ -106,6 +112,7 @@ export function MiniPlayer() {
                         </div>
                     </div>
                 </motion.div>
+                </div>
             )}
         </AnimatePresence>
     );
