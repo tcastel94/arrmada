@@ -52,3 +52,12 @@ htmlcov/
 
 # Misc
 *.log
+
+# Copies de .env : mêmes secrets que l'original
+.env.*
+!.env.example
+*.bak
+*.bak-*
+
+# Builds versionnés de l'add-on Kodi (régénérés par kodi-addon/build_zip.py)
+kodi-addon/script.arrmada-*.zip

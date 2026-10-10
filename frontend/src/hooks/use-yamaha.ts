@@ -43,7 +43,7 @@ export function useYamahaControl() {
         { status: string; detail?: string },
         Error,
         {
-            action: "volume" | "volume_step" | "mute" | "power" | "input";
+            action: "volume" | "volume_step" | "mute" | "power" | "input" | "sound_program" | "dialog_lift" | "dialog_level" | "enhancer" | "extra_bass" | "adaptive_drc";
             value?: number | string | boolean;
             service_id?: number;
             zone?: string;
@@ -62,6 +62,57 @@ export function useYamahaInputs(serviceId?: number, enabled = true) {
             apiFetch(`/api/yamaha/inputs${serviceId ? `?service_id=${serviceId}` : ""}`),
         enabled,
         staleTime: 5 * 60_000,
+    });
+}
+
+export interface RoomProfile {
+    name: string;
+    volume_pct: number;
+    volume_raw: number;
+    dialog_lift: number;
+    dialog_level: number;
+    movie_sound_program: string;
+    series_sound_program: string;
+    music_sound_program: string;
+    adaptive_drc: boolean;
+    enhancer: boolean;
+    extra_bass: boolean;
+    input?: string | null;
+}
+
+export function useYamahaProfiles() {
+    return useQuery<Record<string, RoomProfile>>({
+        queryKey: ["yamaha", "profiles"],
+        queryFn: () => apiFetch("/api/yamaha/profiles"),
+    });
+}
+
+export function useSaveYamahaProfile() {
+    const qc = useQueryClient();
+    return useMutation<
+        { status: string; room: string; profile: RoomProfile },
+        Error,
+        { room: string; profile: Partial<RoomProfile> }
+    >({
+        mutationFn: (body) =>
+            apiFetch("/api/yamaha/profiles", { method: "POST", body: JSON.stringify(body) }),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ["yamaha", "profiles"] });
+            qc.invalidateQueries({ queryKey: ["yamaha", "state"] });
+        },
+    });
+}
+
+export function useApplyYamahaPreset() {
+    const qc = useQueryClient();
+    return useMutation<
+        { status: string; device?: string; applied?: Record<string, any>; detail?: string },
+        Error,
+        { room: "salon" | "cinema" | string; media_type?: string; audio_codec?: string; audio_channels?: number; service_id?: number }
+    >({
+        mutationFn: (body) =>
+            apiFetch("/api/yamaha/preset/apply", { method: "POST", body: JSON.stringify(body) }),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ["yamaha", "state"] }),
     });
 }
 

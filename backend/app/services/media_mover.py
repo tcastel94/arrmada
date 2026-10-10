@@ -14,9 +14,15 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models.service import Service
 from app.services.encryption import decrypt_api_key
-from app.services.import_helpers import build_import_payload, find_candidates, trigger_rename
+from app.services.import_helpers import (
+    build_import_payload,
+    filter_safe_candidates,
+    find_candidates,
+    trigger_rename,
+)
 from app.services.path_mapper import get_path_mappings  # noqa: F401 — re-export
 from app.services.radarr import RadarrClient
 from app.services.sonarr import SonarrClient
@@ -279,8 +285,13 @@ async def trigger_manual_import(
     db: AsyncSession,
     download_path: str,
     media_type: str,
+    allow_overwrite: bool = False,
 ) -> dict[str, Any]:
     """Import a stuck download into the media library.
+
+    ``allow_overwrite`` must stay False for the scheduled job: candidates
+    whose destination already holds a file are skipped rather than
+    replaced.  Only an explicit user action should pass True.
 
     Strategy (3-phase):
     ───────────────────────────────────────────────────────────
@@ -322,17 +333,28 @@ async def trigger_manual_import(
         # ── Build a match_name from the download path ────────
         path_parts = download_path.rstrip("/").split("/")
         match_name = ""
-        scan_folder = "/data"
+        # Path as seen *inside* the *arr container.  It must sit on the
+        # same mount as the library, otherwise every import degrades from
+        # a hardlink to a full copy (EXDEV across Docker bind mounts).
+        scan_folder = settings.ARR_DOWNLOADS_PATH
 
-        for i, part in enumerate(path_parts):
-            if part in ("sonarr", "radarr", "data", "complete"):
-                if i + 1 < len(path_parts):
-                    match_name = path_parts[i + 1].lower()
-                    scan_folder = "/".join(path_parts[: i + 1])
-                    break
+        # The download client reports its own view ("/data/sonarr/X",
+        # "/downloads/complete/sonarr/X").  Only the release name is
+        # reusable — the folder must be rebuilt from ARR_DOWNLOADS_PATH,
+        # which is the path valid inside Sonarr/Radarr.
+        _ROOTS = ("data", "downloads", "complete")
+        _LABELS = ("sonarr", "radarr")
+        stripped = download_path.rstrip("/")
+        if stripped.startswith(settings.ARR_DOWNLOADS_PATH):
+            stripped = stripped[len(settings.ARR_DOWNLOADS_PATH):]
+        rest = [p for p in stripped.split("/") if p]
+        while rest and rest[0].lower() in _ROOTS:
+            rest.pop(0)
+        if rest and rest[0].lower() in _LABELS:
+            scan_folder = f"{settings.ARR_DOWNLOADS_PATH}/{rest.pop(0).lower()}"
 
-        if not match_name:
-            match_name = path_parts[-1].lower() if path_parts[-1] else path_parts[-2].lower()
+        if rest:
+            match_name = rest[0].lower()
 
         # Remove file extension for matching
         if "." in match_name and match_name.rsplit(".", 1)[-1] in ("mkv", "mp4", "avi", "srt", "nfo"):
@@ -343,10 +365,30 @@ async def trigger_manual_import(
             target_service, match_name, scan_folder,
         )
 
-        # ── PHASE 1: ManualImport from /data ─────────────────
+        # ── PHASE 1: ManualImport from the downloads folder ──
         matched = await find_candidates(client, scan_folder, match_name)
-        if not matched and scan_folder != "/data":
-            matched = await find_candidates(client, "/data", match_name)
+        for fallback in (settings.ARR_DOWNLOADS_PATH, "/data"):
+            if matched or fallback == scan_folder:
+                continue
+            matched = await find_candidates(client, fallback, match_name)
+
+        found = len(matched)
+        matched = filter_safe_candidates(matched, target_service, allow_overwrite)
+
+        if found and not matched:
+            # Candidates existed but every one was unsafe.  Phase 2 would
+            # only rescan the library for the same files, so stop here and
+            # tell the caller this is a deliberate skip, not a failure —
+            # otherwise the scheduled job retries it forever.
+            return {
+                "success": False,
+                "skipped": True,
+                "service": target_service,
+                "error": (
+                    f"{found} fichier(s) écarté(s) : rejet *arr ou destination "
+                    f"déjà pourvue (import automatique sans écrasement)"
+                ),
+            }
 
         if matched:
             files_payload = build_import_payload(matched, target_service)
@@ -471,6 +513,10 @@ async def trigger_manual_import(
                                 logger.info(
                                     "Phase 2: matched candidate %s", c_path,
                                 )
+
+                    matched_lib = filter_safe_candidates(
+                        matched_lib, target_service, allow_overwrite,
+                    )
 
                     if matched_lib:
                         files_payload = build_import_payload(

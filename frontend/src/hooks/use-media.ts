@@ -21,6 +21,14 @@ export interface MediaItem {
     rating: number | null;
     runtime: number | null;
     overview: string;
+    resolution?: string | number | null;
+    video_codec?: string | null;
+    video_dynamic_range?: string | null;
+    audio_codec?: string | null;
+    audio_channels?: number | null;
+    studio?: string | null;
+    network?: string | null;
+    clearlogo_url?: string | null;
     seasons?: number;
     episodes_total?: number;
     episodes_have?: number;
@@ -230,7 +238,7 @@ export interface MediaDetail {
     imdb_id?: string;
     tvdb_id?: number;
     ratings: Record<string, number | null>;
-    images: { poster: string | null; fanart: string | null; banner: string | null };
+    images: { poster: string | null; fanart: string | null; banner: string | null; logo?: string | null; clearlogo?: string | null };
     file?: FileInfo | null;
     seasons?: SeasonDetail[];
     season_count?: number;

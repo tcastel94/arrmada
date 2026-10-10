@@ -24,6 +24,8 @@ import {
     useDeleteYamaha,
     useTestYamaha,
     useYamahaDiscover,
+    useYamahaProfiles,
+    useSaveYamahaProfile,
     type YamahaInstance,
 } from "@/hooks/use-yamaha";
 import { YamahaRemote } from "@/components/yamaha-remote";
@@ -182,7 +184,208 @@ export default function YamahaSettingsPage() {
                         </div>
                     </CardContent>
                 </Card>
+
+                {/* Room Audio Profiles Configuration */}
+                <Card className="bg-card/40 border-border/50">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-base">
+                            <Speaker className="h-5 w-5 text-purple-400" /> Profils Acoustiques & Réglages Auto
+                        </CardTitle>
+                        <CardDescription>
+                            Définis les paramètres sonores optimaux appliqués automatiquement lors du lancement d&apos;un média (Salon vs Salle de Cinéma).
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <RoomProfilesEditor />
+                    </CardContent>
+                </Card>
             </motion.div>
         </>
+    );
+}
+
+function RoomProfilesEditor() {
+    const { data: profiles, isLoading } = useYamahaProfiles();
+    const saveMutation = useSaveYamahaProfile();
+
+    const salon = profiles?.salon ?? {
+        name: "Salon",
+        volume_pct: 40,
+        volume_raw: 65,
+        dialog_lift: 2,
+        dialog_level: 2,
+        movie_sound_program: "surround_decoder",
+        series_sound_program: "drama",
+        music_sound_program: "2ch_stereo",
+        adaptive_drc: true,
+        enhancer: true,
+        extra_bass: false,
+    };
+
+    const cinema = profiles?.cinema ?? {
+        name: "Salle de cinéma",
+        volume_pct: 60,
+        volume_raw: 95,
+        dialog_lift: 1,
+        dialog_level: 1,
+        movie_sound_program: "straight",
+        series_sound_program: "spectacle",
+        music_sound_program: "7ch_stereo",
+        adaptive_drc: false,
+        enhancer: false,
+        extra_bass: true,
+    };
+
+    if (isLoading) {
+        return <div className="h-32 rounded-lg bg-muted/15 animate-pulse" />;
+    }
+
+    return (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <ProfileCard
+                roomKey="salon"
+                icon="🛋️"
+                title="Salon"
+                profile={salon}
+                onSave={(p) =>
+                    saveMutation.mutate(
+                        { room: "salon", profile: p },
+                        { onSuccess: () => toast.success("Profil Salon sauvegardé !") },
+                    )
+                }
+            />
+            <ProfileCard
+                roomKey="cinema"
+                icon="🍿"
+                title="Salle de Cinéma"
+                profile={cinema}
+                onSave={(p) =>
+                    saveMutation.mutate(
+                        { room: "cinema", profile: p },
+                        { onSuccess: () => toast.success("Profil Salle de Cinéma sauvegardé !") },
+                    )
+                }
+            />
+        </div>
+    );
+}
+
+function ProfileCard({
+    roomKey,
+    icon,
+    title,
+    profile,
+    onSave,
+}: {
+    roomKey: string;
+    icon: string;
+    title: string;
+    profile: any;
+    onSave: (p: any) => void;
+}) {
+    const [volRaw, setVolRaw] = useState(profile.volume_raw ?? 65);
+    const [dialogLift, setDialogLift] = useState(profile.dialog_lift ?? 1);
+    const [movieProg, setMovieProg] = useState(profile.movie_sound_program ?? "straight");
+    const [seriesProg, setSeriesProg] = useState(profile.series_sound_program ?? "drama");
+    const [drc, setDrc] = useState(!!profile.adaptive_drc);
+    const [extraBass, setExtraBass] = useState(!!profile.extra_bass);
+
+    const handleSave = () => {
+        onSave({
+            volume_raw: Number(volRaw),
+            volume_pct: Math.round((volRaw / 161) * 100),
+            dialog_lift: Number(dialogLift),
+            movie_sound_program: movieProg,
+            series_sound_program: seriesProg,
+            adaptive_drc: drc,
+            extra_bass: extraBass,
+        });
+    };
+
+    return (
+        <div className="rounded-lg border border-white/10 bg-black/20 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+                <span className="font-semibold text-sm flex items-center gap-1.5">
+                    {icon} {title}
+                </span>
+                <Button size="sm" variant="secondary" onClick={handleSave} className="h-7 text-xs">
+                    Sauvegarder
+                </Button>
+            </div>
+
+            <div className="space-y-2 text-xs">
+                <div className="space-y-1">
+                    <div className="flex justify-between text-muted-foreground">
+                        <span>Volume cible (ampli)</span>
+                        <span className="tabular-nums font-mono">{Math.round((volRaw / 161) * 100)}%</span>
+                    </div>
+                    <input
+                        type="range"
+                        min={20}
+                        max={120}
+                        value={volRaw}
+                        onChange={(e) => setVolRaw(Number(e.target.value))}
+                        className="w-full accent-purple-500 h-1.5 cursor-pointer"
+                    />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                    <div>
+                        <Label className="text-[11px] text-muted-foreground">Prog. Son (Films)</Label>
+                        <Input
+                            value={movieProg}
+                            onChange={(e) => setMovieProg(e.target.value)}
+                            className="h-7 text-xs border-white/10 bg-transparent"
+                            placeholder="straight / sci-fi"
+                        />
+                    </div>
+                    <div>
+                        <Label className="text-[11px] text-muted-foreground">Prog. Son (Séries)</Label>
+                        <Input
+                            value={seriesProg}
+                            onChange={(e) => setSeriesProg(e.target.value)}
+                            className="h-7 text-xs border-white/10 bg-transparent"
+                            placeholder="drama / spectacle"
+                        />
+                    </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                    <Label className="text-[11px] text-muted-foreground">Rehaussement Voix (0-5)</Label>
+                    <Input
+                        type="number"
+                        min={0}
+                        max={5}
+                        value={dialogLift}
+                        onChange={(e) => setDialogLift(Number(e.target.value))}
+                        className="h-7 w-16 text-xs border-white/10 bg-transparent text-right"
+                    />
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                    <span className="text-muted-foreground">Mode Nuit (DRC Adaptatif)</span>
+                    <Button
+                        size="sm"
+                        variant={drc ? "default" : "outline"}
+                        className={`h-6 text-[11px] px-2 ${drc ? "bg-amber-600 hover:bg-amber-500 text-white" : "border-white/10"}`}
+                        onClick={() => setDrc(!drc)}
+                    >
+                        {drc ? "Activé" : "Désactivé"}
+                    </Button>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                    <span className="text-muted-foreground">Extra Bass (Subwoofer Boost)</span>
+                    <Button
+                        size="sm"
+                        variant={extraBass ? "default" : "outline"}
+                        className={`h-6 text-[11px] px-2 ${extraBass ? "bg-purple-600 hover:bg-purple-500 text-white" : "border-white/10"}`}
+                        onClick={() => setExtraBass(!extraBass)}
+                    >
+                        {extraBass ? "Activé" : "Désactivé"}
+                    </Button>
+                </div>
+            </div>
+        </div>
     );
 }

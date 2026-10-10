@@ -74,6 +74,7 @@ async def delete_media(
     id: int,
     delete_files: bool = Query(True, description="Delete media files from disk"),
     delete_downloads: bool = Query(True, description="Delete downloads from client queue and history"),
+    add_exclusion: bool = Query(True, description="Add to import-list exclusions so a followed actor / list import does not re-add it"),
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a movie or series from Radarr/Sonarr, optionally deleting files and downloads."""
@@ -158,9 +159,9 @@ async def delete_media(
         # 3. Delete the movie or series itself
         try:
             if type == "movie":
-                await client.delete_movie(movie_id=id, delete_files=delete_files)
+                await client.delete_movie(movie_id=id, delete_files=delete_files, add_exclusion=add_exclusion)
             else:
-                await client.delete_series(series_id=id, delete_files=delete_files)
+                await client.delete_series(series_id=id, delete_files=delete_files, add_exclusion=add_exclusion)
         except Exception as exc:
             exc_str = str(exc)
             if "not found" in exc_str.lower() or "404" in exc_str or "return 1 rows" in exc_str:
@@ -188,7 +189,7 @@ async def delete_media(
         source="arrmada",
         media_type=type,
         media_id=id,
-        meta={"delete_files": delete_files, "delete_downloads": delete_downloads},
+        meta={"delete_files": delete_files, "delete_downloads": delete_downloads, "add_exclusion": add_exclusion},
     )
 
     return {"status": "deleted"}

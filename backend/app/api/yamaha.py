@@ -51,6 +51,39 @@ async def control(data: dict, db: AsyncSession = Depends(get_db)):
     )
 
 
+@router.get("/profiles")
+async def get_profiles(db: AsyncSession = Depends(get_db)):
+    """Retrieve room sound profiles (Salon & Salle de Cinéma)."""
+    return await yamaha_service.get_room_profiles(db)
+
+
+@router.post("/profiles")
+async def save_profile(data: dict, db: AsyncSession = Depends(get_db)):
+    """Save or update audio settings for a room profile."""
+    room = (data or {}).get("room", "salon")
+    profile = (data or {}).get("profile", {})
+    return await yamaha_service.save_room_profile(db, room, profile)
+
+
+@router.post("/preset/apply")
+async def apply_preset(data: dict, db: AsyncSession = Depends(get_db)):
+    """Apply room audio preset (salon / cinema) based on media context."""
+    room = (data or {}).get("room", "salon")
+    media_type = (data or {}).get("media_type", "movie")
+    audio_codec = (data or {}).get("audio_codec")
+    audio_channels = (data or {}).get("audio_channels")
+    service_id = (data or {}).get("service_id")
+
+    return await yamaha_service.apply_preset(
+        db,
+        room=room,
+        media_type=media_type,
+        audio_codec=audio_codec,
+        audio_channels=audio_channels,
+        service_id=service_id,
+    )
+
+
 @router.post("/test/{service_id}")
 async def test(service_id: int, db: AsyncSession = Depends(get_db)):
     """Ping an AVR and read its model / status."""

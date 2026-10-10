@@ -14,10 +14,17 @@ get_db = _get_db
 
 
 async def get_current_user(request: Request) -> dict:
-    """Verify JWT from Authorization header, cookie, or query param.
+    """Verify JWT from Authorization header, cookie, or query param, or API key from header/param.
 
     Returns the decoded token payload.
     """
+    from app.config import settings
+
+    # 0. Try X-Api-Key header or apikey query param
+    api_key = request.headers.get("X-Api-Key") or request.query_params.get("apikey")
+    if api_key and api_key == settings.ARRMADA_AUTH_SECRET:
+        return {"sub": "api_client", "role": "admin"}
+
     token: str | None = None
 
     # 1. Try Authorization header
@@ -41,3 +48,4 @@ async def get_current_user(request: Request) -> dict:
         )
 
     return verify_token(token)
+

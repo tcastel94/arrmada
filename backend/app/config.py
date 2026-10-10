@@ -45,6 +45,25 @@ class Settings(BaseSettings):
     # ── AI / OpenRouter ───────────────────────────────────────
     OPENROUTER_API_KEY: str = ""
     AI_MODEL: str = "google/gemini-2.0-flash-001"  # cost-effective, fast
+    # Local Ollama on the NAS — primary engine for log analysis (OpenRouter = fallback)
+    OLLAMA_URL: str = "http://192.168.2.3:11434"
+    OLLAMA_MODEL: str = "qwen2.5:3b-instruct-q4_K_M"
+
+    # ── Auto-import ───────────────────────────────────────────
+    # Scheduled job that imports completed-but-orphaned downloads.
+    # Set AUTO_IMPORT_ENABLED=false to stop it entirely.
+    AUTO_IMPORT_ENABLED: bool = True
+    AUTO_IMPORT_INTERVAL_MINUTES: int = 5
+    # Safety: the scheduled job never replaces an episode/movie that
+    # already has a file — *arr parsers do mis-map releases (e.g. anime
+    # cour numbering), and an unattended overwrite is unrecoverable.
+    # Only explicit, user-initiated imports may overwrite.
+    AUTO_IMPORT_ALLOW_OVERWRITE: bool = False
+    # Completed-downloads folder as seen from inside Sonarr/Radarr.
+    # Keep it on the same mount as the library: a separate Docker bind
+    # mount of the same share still fails link() with EXDEV, turning
+    # every import into a multi-GB copy.
+    ARR_DOWNLOADS_PATH: str = "/media/downloads/complete"
 
     # ── Misc ──────────────────────────────────────────────────
     LOG_LEVEL: str = "INFO"

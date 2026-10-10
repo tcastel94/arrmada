@@ -260,20 +260,40 @@ export interface TMDBItem {
   in_library?: boolean;
 }
 
+export interface LibrarySelectItem {
+  id: number;
+  title: string;
+  type: string;
+  year?: number;
+  poster_url?: string;
+  tmdb_id?: number;
+}
+
 export function useRecommendations() {
   return useQuery<{
     trending_movies: TMDBItem[];
     trending_series: TMDBItem[];
     because_you_have: {
+      base_id?: number;
       base_title: string;
+      base_type?: string;
       base_poster?: string;
       recommendations: TMDBItem[];
     }[];
+    library_select_items: LibrarySelectItem[];
     wanted: Record<string, unknown>[];
     tmdb_available: boolean;
   }>({
     queryKey: ["recommendations"],
     queryFn: () => apiFetch("/api/recommendations"),
     staleTime: 3600_000,
+  });
+}
+
+export function useRecommendationsBasedOn(mediaType?: string, tmdbId?: number | null) {
+  return useQuery<{ items: TMDBItem[] }>({
+    queryKey: ["recommendations-based-on", mediaType, tmdbId],
+    queryFn: () => apiFetch(`/api/recommendations/based_on/${mediaType}/${tmdbId}`),
+    enabled: !!mediaType && !!tmdbId,
   });
 }

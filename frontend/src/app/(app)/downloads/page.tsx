@@ -151,7 +151,7 @@ export default function DownloadsPage() {
             const key = it.download_client || "?";
             counts.set(key, (counts.get(key) ?? 0) + 1);
         }
-        return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+        return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
     }, [data]);
 
     const visibleItems = useMemo(

@@ -10,9 +10,19 @@ export interface MediaItem {
     year: number | null;
     genres: string[] | null;
     quality: string | null;
+    resolution?: string | number | null;
+    video_codec?: string | null;
+    video_dynamic_range?: string | null;
+    audio_codec?: string | null;
+    audio_channels?: number | null;
+    studio?: string | null;
+    network?: string | null;
+    clearlogo_url?: string | null;
     size_bytes: number | null;
     poster_url: string | null;
     source_service: string;
-    added_at: string | null;
-    synced_at: string;
+    has_file?: boolean;
+    monitored?: boolean;
+    added_at?: string | null;
+    synced_at?: string;
 }

@@ -1,9 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api-client";
 import { useQueryClient } from "@tanstack/react-query";
+import {
+    DropdownMenu,
+    DropdownMenuTrigger,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import {
+    loadSessionFilters,
+    saveSessionFilters,
+    loadPresets,
+    savePresets,
+    type MediaFilters,
+    type FilterPreset,
+} from "@/lib/media-filters";
 import {
     Dialog,
     DialogContent,
@@ -45,11 +61,16 @@ import {
     Filter,
     X,
     Eye,
-    PackageX
+    PackageX,
+    Bookmark,
+    BookmarkPlus,
+    Check,
 } from "lucide-react";
 import { useMedia, useMediaFacets, type MediaItem } from "@/hooks/use-media";
 import { useSubtitleStatus } from "@/hooks/use-subtitles";
 import { useKodiWatchedStatus } from "@/hooks/use-kodi";
+import { MediaTechBadges } from "@/components/media/media-tech-badges";
+import { StudioNetworkLogo } from "@/components/media/studio-network-logo";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 
@@ -167,12 +188,8 @@ function MediaCard({ item, selectionMode, isSelected, onToggle, subState, watchS
                             </div>
                         )}
                         {/* Top badges */}
-                        <div className="absolute top-2 left-2 flex flex-col gap-1 items-start">
-                            {item.quality && (
-                                <Badge className="text-[10px] bg-black/60 backdrop-blur-sm border-0 text-white">
-                                    {item.quality}
-                                </Badge>
-                            )}
+                        <div className="absolute top-2 left-2 flex flex-col gap-1 items-start max-w-[80%]">
+                            <MediaTechBadges specs={item} variant="card" />
                             <SubBadge state={subState} />
                             <WatchBadge state={watchState} />
                         </div>
@@ -189,15 +206,18 @@ function MediaCard({ item, selectionMode, isSelected, onToggle, subState, watchS
                             <p className="text-sm font-semibold text-white truncate drop-shadow-lg">
                                 {item.title}
                             </p>
-                            <div className="flex items-center gap-2 mt-0.5">
-                                {item.year && (
-                                    <span className="text-[11px] text-white/70">
-                                        {item.year}
+                            <div className="flex items-center justify-between gap-1 mt-0.5">
+                                <div className="flex items-center gap-1.5">
+                                    {item.year && (
+                                        <span className="text-[11px] text-white/70">
+                                            {item.year}
+                                        </span>
+                                    )}
+                                    <span className="text-[10px] text-white/40">
+                                        {item.source_service}
                                     </span>
-                                )}
-                                <span className="text-[10px] text-white/40">
-                                    {item.source_service}
-                                </span>
+                                </div>
+                                <StudioNetworkLogo name={item.studio || item.network} variant="mini" />
                             </div>
                         </div>
                     </div>
@@ -271,6 +291,67 @@ export default function MediaPage() {
     // Kodi watch filter (client-side, movies on the current page).
     const [watchFilter, setWatchFilter] = useState<"all" | "watched" | "unwatched" | "inprogress">("all");
     const [showFilters, setShowFilters] = useState(false);
+
+    // ── Filter persistence + saved presets ────────────────────
+    // Snapshot of every filter value, used for session persistence and presets.
+    const currentFilters: MediaFilters = {
+        type, search, sort, order, subFilter,
+        genre, quality, availability, monitored, watchFilter,
+    };
+
+    // Apply a full filter set at once (from session restore or a preset).
+    const applyFilters = (f: Partial<MediaFilters>) => {
+        if (f.type != null) setType(f.type);
+        if (f.search != null) setSearch(f.search);
+        if (f.sort != null) setSort(f.sort);
+        if (f.order != null) setOrder(f.order);
+        if (f.subFilter != null) setSubFilter(f.subFilter as typeof subFilter);
+        if (f.genre != null) setGenre(f.genre);
+        if (f.quality != null) setQuality(f.quality);
+        if (f.availability != null) setAvailability(f.availability as typeof availability);
+        if (f.monitored != null) setMonitored(f.monitored as typeof monitored);
+        if (f.watchFilter != null) setWatchFilter(f.watchFilter as typeof watchFilter);
+        setPage(1);
+    };
+
+    // `restored` is state (not a ref) so the persist effect below reliably skips
+    // its first run and never overwrites the stored filters with defaults.
+    const [restored, setRestored] = useState(false);
+    useEffect(() => {
+        applyFilters(loadSessionFilters());
+        setRestored(true);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+    useEffect(() => {
+        if (!restored) return;
+        saveSessionFilters(currentFilters);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [restored, type, search, sort, order, subFilter, genre, quality, availability, monitored, watchFilter]);
+
+    const [presets, setPresets] = useState<FilterPreset[]>([]);
+    useEffect(() => {
+        setPresets(loadPresets());
+    }, []);
+
+    const saveCurrentPreset = () => {
+        const name = window.prompt("Nom du filtre à enregistrer :")?.trim();
+        if (!name) return;
+        const next = [
+            ...presets.filter((p) => p.name !== name),
+            { name, filters: currentFilters },
+        ];
+        setPresets(next);
+        savePresets(next);
+    };
+    const applyPreset = (p: FilterPreset) => {
+        applyFilters(p.filters);
+        setShowFilters(true);
+    };
+    const deletePreset = (name: string) => {
+        const next = presets.filter((p) => p.name !== name);
+        setPresets(next);
+        savePresets(next);
+    };
 
     // Reset to page 1 whenever a filter changes.
     const onFilterChange = <T,>(setter: (v: T) => void) => (v: T) => {
@@ -520,6 +601,71 @@ export default function MediaPage() {
                             </span>
                         )}
                     </Button>
+
+                    {/* Saved filter presets */}
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="shrink-0 gap-1.5 border-white/10"
+                                title="Filtres enregistrés"
+                            >
+                                <Bookmark className="h-4 w-4" />
+                                Enregistrés
+                                {presets.length > 0 && (
+                                    <span className="ml-0.5 rounded-full bg-white/15 px-1.5 text-[10px] font-semibold tabular-nums">
+                                        {presets.length}
+                                    </span>
+                                )}
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-64">
+                            <DropdownMenuLabel>
+                                Filtres enregistrés
+                            </DropdownMenuLabel>
+                            {presets.length === 0 ? (
+                                <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                                    Aucun filtre enregistré.
+                                </div>
+                            ) : (
+                                presets.map((p) => (
+                                    <DropdownMenuItem
+                                        key={p.name}
+                                        onSelect={() => applyPreset(p)}
+                                        className="flex items-center justify-between gap-2"
+                                    >
+                                        <span className="flex items-center gap-2 truncate">
+                                            <Check className="h-3.5 w-3.5 text-violet-400 shrink-0" />
+                                            <span className="truncate">
+                                                {p.name}
+                                            </span>
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                deletePreset(p.name);
+                                            }}
+                                            className="text-muted-foreground/60 hover:text-red-400 shrink-0"
+                                            title="Supprimer ce filtre"
+                                        >
+                                            <X className="h-3.5 w-3.5" />
+                                        </button>
+                                    </DropdownMenuItem>
+                                ))
+                            )}
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                                onSelect={saveCurrentPreset}
+                                className="gap-2 text-violet-400 focus:text-violet-300"
+                            >
+                                <BookmarkPlus className="h-4 w-4" />
+                                Enregistrer le filtre actuel
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
 
                     {/* Missing view shortcut */}
                     <Button

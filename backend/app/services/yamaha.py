@@ -248,6 +248,23 @@ async def control(
             await _get(base, f"/{zone}/setPower?power={p}")
         elif action == "input":
             await _get(base, f"/{zone}/setInput?input={value}")
+        elif action == "sound_program":
+            await _get(base, f"/{zone}/setSoundProgram?program={value}")
+        elif action == "dialog_lift":
+            val = max(0, min(5, int(value)))
+            await _get(base, f"/{zone}/setDialogueLift?value={val}")
+        elif action == "dialog_level":
+            val = max(0, min(3, int(value)))
+            await _get(base, f"/{zone}/setDialogueLevel?value={val}")
+        elif action == "enhancer":
+            enable = "true" if value else "false"
+            await _get(base, f"/{zone}/setEnhancer?enable={enable}")
+        elif action == "extra_bass":
+            enable = "true" if value else "false"
+            await _get(base, f"/{zone}/setExtraBass?enable={enable}")
+        elif action == "adaptive_drc":
+            enable = "true" if value else "false"
+            await _get(base, f"/{zone}/setAdaptiveDrc?enable={enable}")
         else:
             return {"status": "error", "detail": f"Action inconnue: {action}"}
     except Exception as exc:
@@ -255,6 +272,185 @@ async def control(
         return {"status": "error", "detail": f"{type(exc).__name__}"}
 
     return {"status": "ok", "action": action}
+
+
+# ── Room Audio Profiles & Automation ─────────────────────────
+
+DEFAULT_PROFILES = {
+    "salon": {
+        "name": "Salon",
+        "volume_pct": 40,
+        "volume_raw": 65,  # Typical YXC volume step (0..161)
+        "dialog_lift": 2,
+        "dialog_level": 2,
+        "movie_sound_program": "surround_decoder",
+        "series_sound_program": "drama",
+        "music_sound_program": "2ch_stereo",
+        "adaptive_drc": True,
+        "enhancer": True,
+        "extra_bass": False,
+        "input": None,
+    },
+    "cinema": {
+        "name": "Salle de cinéma",
+        "volume_pct": 60,
+        "volume_raw": 95,
+        "dialog_lift": 1,
+        "dialog_level": 1,
+        "movie_sound_program": "straight",
+        "series_sound_program": "spectacle",
+        "music_sound_program": "7ch_stereo",
+        "adaptive_drc": False,
+        "enhancer": False,
+        "extra_bass": True,
+        "input": None,
+    },
+}
+
+
+async def get_room_profiles(db: AsyncSession) -> dict[str, Any]:
+    """Retrieve configured room sound profiles (Salon & Salle de Cinéma)."""
+    from app.utils.cache import cache
+
+    stored = await cache.get_or_set(
+        "yamaha:room_profiles",
+        lambda: asyncio.sleep(0, result=DEFAULT_PROFILES),
+        ttl_seconds=86400,
+    )
+    return stored or DEFAULT_PROFILES
+
+
+async def save_room_profile(db: AsyncSession, room: str, profile_data: dict[str, Any]) -> dict[str, Any]:
+    """Save or update audio settings for a room profile."""
+    from app.utils.cache import cache
+
+    profiles = dict(await get_room_profiles(db))
+    current = dict(profiles.get(room) or DEFAULT_PROFILES.get(room, {}))
+    current.update(profile_data)
+    profiles[room] = current
+
+    # Persist in cache / storage
+    cache.set("yamaha:room_profiles", profiles, ttl_seconds=86400 * 30)
+    return {"status": "ok", "room": room, "profile": current}
+
+
+async def apply_preset(
+    db: AsyncSession,
+    room: str = "salon",
+    media_type: str = "movie",
+    audio_codec: str | None = None,
+    audio_channels: int | None = None,
+    service_id: int | None = None,
+) -> dict[str, Any]:
+    """Apply optimal sound parameters on the AVR for the specified room & media context."""
+    svc = await _pick(db, service_id)
+    if not svc:
+        return {"status": "error", "detail": "Aucun ampli Yamaha configuré"}
+    base = _base(svc.url)
+
+    profiles = await get_room_profiles(db)
+    room_key = "cinema" if "cinema" in room.lower() or "cinéma" in room.lower() else "salon"
+    profile = profiles.get(room_key, DEFAULT_PROFILES["salon"])
+
+    applied: dict[str, Any] = {"room": profile.get("name", room_key)}
+
+    try:
+        # 1. Power ON if standby
+        st = await _zone_status(base)
+        if st.get("power") != "on":
+            await _get(base, "/main/setPower?power=on")
+            applied["power"] = "on"
+            await asyncio.sleep(0.5)
+
+        # 2. Input switch if configured
+        target_input = profile.get("input")
+        if target_input:
+            await _get(base, f"/main/setInput?input={target_input}")
+            applied["input"] = target_input
+
+        # 3. Choose Sound Program based on media type & channels
+        program = profile.get("movie_sound_program", "straight")
+        if media_type in ("tv", "series", "episode"):
+            program = profile.get("series_sound_program", "drama")
+        elif media_type in ("music", "audio", "track"):
+            program = profile.get("music_sound_program", "2ch_stereo")
+        elif audio_channels and audio_channels <= 2 and room_key == "salon":
+            program = "surround_decoder"
+
+        # Apply Sound Program (try, gracefully fallback if not supported)
+        try:
+            await _get(base, f"/main/setSoundProgram?program={program}")
+            applied["sound_program"] = program
+        except Exception:
+            logger.debug("Sound program %s not supported on %s", program, base)
+
+        # 4. Set Volume
+        vol_raw = profile.get("volume_raw")
+        if vol_raw is not None:
+            vol_target = max(0, min(140, int(vol_raw)))  # cap at safe volume
+            await _get(base, f"/main/setVolume?volume={vol_target}")
+            applied["volume"] = vol_target
+
+        # 5. Dialogue Lift & Dialogue Level
+        dialog_lift = profile.get("dialog_lift")
+        if dialog_lift is not None:
+            try:
+                await _get(base, f"/main/setDialogueLift?value={dialog_lift}")
+                applied["dialog_lift"] = dialog_lift
+            except Exception:
+                pass
+
+        dialog_level = profile.get("dialog_level")
+        if dialog_level is not None:
+            try:
+                await _get(base, f"/main/setDialogueLevel?value={dialog_level}")
+                applied["dialog_level"] = dialog_level
+            except Exception:
+                pass
+
+        # 6. Enhancer & Extra Bass
+        if "enhancer" in profile:
+            try:
+                e_val = "true" if profile["enhancer"] else "false"
+                await _get(base, f"/main/setEnhancer?enable={e_val}")
+                applied["enhancer"] = profile["enhancer"]
+            except Exception:
+                pass
+
+        if "extra_bass" in profile:
+            try:
+                b_val = "true" if profile["extra_bass"] else "false"
+                await _get(base, f"/main/setExtraBass?enable={b_val}")
+                applied["extra_bass"] = profile["extra_bass"]
+            except Exception:
+                pass
+
+        # 7. Adaptive DRC (Night Mode)
+        if "adaptive_drc" in profile:
+            try:
+                drc_val = "true" if profile["adaptive_drc"] else "false"
+                await _get(base, f"/main/setAdaptiveDrc?enable={drc_val}")
+                applied["adaptive_drc"] = profile["adaptive_drc"]
+            except Exception:
+                pass
+
+        # Log event in activity history
+        from app.services.activity_log import log_event
+        await log_event(
+            category="yamaha",
+            action="apply_preset",
+            status="ok",
+            source="arrmada",
+            device=svc.name,
+            detail=f"Preset {profile.get('name')} appliqué ({applied.get('sound_program', '')})",
+            meta=applied,
+        )
+
+        return {"status": "ok", "device": svc.name, "applied": applied}
+
+    except Exception as exc:
+        logger.error("Failed to apply Yamaha sound preset %s on %s: %s", room_key, base, exc)
+        return {"status": "error", "detail": f"Échec de l'application du préréglage : {type(exc).__name__}"}
 
 
 async def test_connection(db: AsyncSession, service_id: int) -> dict[str, Any]:
@@ -288,3 +484,4 @@ async def list_inputs(db: AsyncSession, service_id: int | None = None) -> list[s
         return list(main.get("input_list", [])) if main else []
     except Exception:
         return []
+

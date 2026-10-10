@@ -22,11 +22,17 @@ logger = get_logger(__name__)
 
 
 def _extract_images(raw: dict[str, Any]) -> dict[str, str | None]:
-    """Extract poster, fanart, banner from images list."""
+    """Extract poster, fanart, banner, logo, clearlogo from images list."""
     images = raw.get("images") or []
-    result: dict[str, str | None] = {"poster": None, "fanart": None, "banner": None}
+    result: dict[str, str | None] = {
+        "poster": None,
+        "fanart": None,
+        "banner": None,
+        "logo": None,
+        "clearlogo": None,
+    }
     for img in images:
-        cover = img.get("coverType", "")
+        cover = (img.get("coverType") or "").lower()
         url = img.get("remoteUrl") or img.get("url")
         if cover == "poster" and not result["poster"]:
             result["poster"] = url
@@ -34,6 +40,9 @@ def _extract_images(raw: dict[str, Any]) -> dict[str, str | None]:
             result["fanart"] = url
         elif cover == "banner" and not result["banner"]:
             result["banner"] = url
+        elif cover in ("clearlogo", "logo", "fanartlogo") and not result["clearlogo"]:
+            result["clearlogo"] = url
+            result["logo"] = url
     return result
 
 

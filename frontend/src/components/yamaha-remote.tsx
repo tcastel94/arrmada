@@ -17,6 +17,7 @@ import {
     useYamahaState,
     useYamahaControl,
     useYamahaInputs,
+    useApplyYamahaPreset,
     type YamahaDevice,
 } from "@/hooks/use-yamaha";
 
@@ -35,6 +36,7 @@ const inputLabel = (id?: string) => (id ? INPUT_LABELS[id] ?? id.toUpperCase() :
 
 function DeviceControl({ device }: { device: YamahaDevice }) {
     const control = useYamahaControl();
+    const applyPreset = useApplyYamahaPreset();
     const { data: inputs } = useYamahaInputs(device.id, device.online);
 
     const max = device.max_volume ?? 161;
@@ -142,23 +144,49 @@ function DeviceControl({ device }: { device: YamahaDevice }) {
                 </div>
             </div>
 
-            {/* Input */}
-            {device.online && inputOptions.length > 0 && (
-                <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground shrink-0">Entrée</span>
-                    <Select
-                        value={device.input ?? undefined}
-                        onValueChange={(v) => control.mutate({ action: "input", value: v, service_id: device.id })}
-                    >
-                        <SelectTrigger className="h-8 border-white/10 bg-transparent text-xs">
-                            <SelectValue placeholder={inputLabel(device.input)} />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-72">
-                            {inputOptions.map((i) => (
-                                <SelectItem key={i} value={i}>{inputLabel(i)}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+            {/* Input & Room Sound Presets */}
+            {device.online && (
+                <div className="space-y-2 pt-1">
+                    {inputOptions.length > 0 && (
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground shrink-0">Entrée</span>
+                            <Select
+                                value={device.input ?? undefined}
+                                onValueChange={(v) => control.mutate({ action: "input", value: v, service_id: device.id })}
+                            >
+                                <SelectTrigger className="h-8 border-white/10 bg-transparent text-xs">
+                                    <SelectValue placeholder={inputLabel(device.input)} />
+                                </SelectTrigger>
+                                <SelectContent className="max-h-72">
+                                    {inputOptions.map((i) => (
+                                        <SelectItem key={i} value={i}>{inputLabel(i)}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
+
+                    <div className="flex items-center gap-1.5 pt-1">
+                        <span className="text-[11px] text-muted-foreground shrink-0 mr-1">Préréglage :</span>
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs border-orange-500/30 hover:bg-orange-500/20 text-orange-200 gap-1 flex-1"
+                            disabled={applyPreset.isPending || !on}
+                            onClick={() => applyPreset.mutate({ room: "salon", service_id: device.id })}
+                        >
+                            🛋️ Salon
+                        </Button>
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs border-purple-500/30 hover:bg-purple-500/20 text-purple-200 gap-1 flex-1"
+                            disabled={applyPreset.isPending || !on}
+                            onClick={() => applyPreset.mutate({ room: "cinema", service_id: device.id })}
+                        >
+                            🍿 Cinéma
+                        </Button>
+                    </div>
                 </div>
             )}
         </div>

@@ -21,13 +21,18 @@ logger = get_logger(__name__)
 def _normalise_movie(raw: dict[str, Any], service_name: str) -> dict[str, Any]:
     """Normalise a Radarr movie to a unified media item."""
     size = 0
-    if raw.get("movieFile"):
-        size = raw["movieFile"].get("size", 0)
+    movie_file = raw.get("movieFile") or {}
+    if movie_file:
+        size = movie_file.get("size", 0)
     elif raw.get("sizeOnDisk"):
         size = raw["sizeOnDisk"]
 
     images = raw.get("images") or []
-    poster = next((img["remoteUrl"] for img in images if img.get("coverType") == "poster" and img.get("remoteUrl")), None)
+    poster = next((img.get("remoteUrl") or img.get("url") for img in images if (img.get("coverType") or "").lower() == "poster" and (img.get("remoteUrl") or img.get("url"))), None)
+    clearlogo = next((img.get("remoteUrl") or img.get("url") for img in images if (img.get("coverType") or "").lower() in ("clearlogo", "logo", "fanartlogo") and (img.get("remoteUrl") or img.get("url"))), None)
+
+    media_info = movie_file.get("mediaInfo") or {}
+    quality_obj = movie_file.get("quality", {}).get("quality", {}) if movie_file else {}
 
     return {
         "external_id": str(raw.get("id", "")),
@@ -36,9 +41,16 @@ def _normalise_movie(raw: dict[str, Any], service_name: str) -> dict[str, Any]:
         "type": "movie",
         "year": raw.get("year"),
         "genres": raw.get("genres", []),
-        "quality": raw.get("movieFile", {}).get("quality", {}).get("quality", {}).get("name") if raw.get("movieFile") else None,
+        "quality": quality_obj.get("name") if movie_file else None,
+        "resolution": quality_obj.get("resolution") or media_info.get("resolution"),
+        "video_codec": media_info.get("videoCodec"),
+        "video_dynamic_range": media_info.get("videoDynamicRange") or media_info.get("videoDynamicRangeType"),
+        "audio_codec": media_info.get("audioCodec"),
+        "audio_channels": media_info.get("audioChannels"),
+        "studio": raw.get("studio"),
         "size_bytes": size,
         "poster_url": poster,
+        "clearlogo_url": clearlogo,
         "source_service": service_name,
         "has_file": raw.get("hasFile", False),
         "monitored": raw.get("monitored", False),
@@ -53,7 +65,8 @@ def _normalise_movie(raw: dict[str, Any], service_name: str) -> dict[str, Any]:
 def _normalise_series(raw: dict[str, Any], service_name: str) -> dict[str, Any]:
     """Normalise a Sonarr series to a unified media item."""
     images = raw.get("images") or []
-    poster = next((img["remoteUrl"] for img in images if img.get("coverType") == "poster" and img.get("remoteUrl")), None)
+    poster = next((img.get("remoteUrl") or img.get("url") for img in images if (img.get("coverType") or "").lower() == "poster" and (img.get("remoteUrl") or img.get("url"))), None)
+    clearlogo = next((img.get("remoteUrl") or img.get("url") for img in images if (img.get("coverType") or "").lower() in ("clearlogo", "logo", "fanartlogo") and (img.get("remoteUrl") or img.get("url"))), None)
 
     stats = raw.get("statistics") or {}
 
@@ -65,8 +78,10 @@ def _normalise_series(raw: dict[str, Any], service_name: str) -> dict[str, Any]:
         "year": raw.get("year"),
         "genres": raw.get("genres", []),
         "quality": raw.get("qualityProfileId"),
+        "network": raw.get("network"),
         "size_bytes": stats.get("sizeOnDisk", 0),
         "poster_url": poster,
+        "clearlogo_url": clearlogo,
         "source_service": service_name,
         "has_file": stats.get("episodeFileCount", 0) > 0,
         "monitored": raw.get("monitored", False),

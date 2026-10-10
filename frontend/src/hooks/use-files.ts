@@ -83,6 +83,55 @@ export function useDockerAction() {
     });
 }
 
+export interface DockerLogEntry {
+    ts: string;
+    time: string;
+    container: string;
+    service: string;
+    level: "error" | "warning" | "info" | "other";
+    message: string;
+}
+
+export interface DockerLogsResponse {
+    logs: DockerLogEntry[];
+    count: number;
+}
+
+export function useDockerLogs(tail = 60) {
+    return useQuery<DockerLogsResponse>({
+        queryKey: ["docker-logs", tail],
+        queryFn: () => apiFetch(`/api/files/docker/logs?tail=${tail}`),
+        refetchInterval: 10_000,
+    });
+}
+
+export interface LogProblem {
+    title: string;
+    severity: "error" | "warning" | "info";
+    services: string[];
+    cause: string;
+    solution: string;
+    occurrences?: number;
+}
+
+export interface LogAnalysis {
+    summary?: string;
+    problems?: LogProblem[];
+    engine?: string;
+    analyzed_lines?: number;
+    error?: string;
+    ai_available?: boolean;
+}
+
+export function useAnalyzeLogs() {
+    return useMutation<LogAnalysis, Error, number | undefined>({
+        mutationFn: (tail) =>
+            apiFetch(`/api/files/docker/logs/analyze?tail=${tail ?? 150}`, {
+                method: "POST",
+            }),
+    });
+}
+
 // ── NAS Paths ────────────────────────────────────────────────
 
 export interface PathMappings {
