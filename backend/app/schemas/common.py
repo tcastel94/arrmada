@@ -4,16 +4,19 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from app import __version__
+
 
 class HealthResponse(BaseModel):
     """Health check response."""
 
     status: str = Field(default="ok", description="Service health status")
     service: str = Field(default="arrmada", description="Service name")
+    version: str = Field(default=__version__, description="Backend version")
 
     model_config = {
         "json_schema_extra": {
-            "examples": [{"status": "ok", "service": "arrmada"}]
+            "examples": [{"status": "ok", "service": "arrmada", "version": __version__}]
         }
     }
 
@@ -32,11 +35,7 @@ class ErrorResponse(BaseModel):
 
     detail: str = Field(description="Human-readable error message")
 
-    model_config = {
-        "json_schema_extra": {
-            "examples": [{"detail": "Not found"}]
-        }
-    }
+    model_config = {"json_schema_extra": {"examples": [{"detail": "Not found"}]}}
 
 
 class MessageResponse(BaseModel):

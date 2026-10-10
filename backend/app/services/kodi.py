@@ -1,18 +1,19 @@
 """Kodi service for discovering instances and triggering library scans."""
 
 import asyncio
-import httpx
-from typing import List, Dict, Any
-from zeroconf import ServiceBrowser, Zeroconf
+from typing import Any
 
-from sqlalchemy.ext.asyncio import AsyncSession
+import httpx
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from zeroconf import ServiceBrowser, Zeroconf
 
 from app.models.service import Service
 from app.services.encryption import decrypt_api_key
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
 
 class KodiListener:
     def __init__(self):
@@ -27,31 +28,37 @@ class KodiListener:
             ip = ".".join([str(c) for c in info.addresses[0]])
             port = info.port
             url = f"http://{ip}:{port}"
-            self.found.append({
-                "name": name.split(".")[0],
-                "url": url,
-            })
+            self.found.append(
+                {
+                    "name": name.split(".")[0],
+                    "url": url,
+                }
+            )
 
     def update_service(self, zeroconf, type, name):
         pass
 
-async def discover_kodi() -> List[Dict[str, str]]:
+
+async def discover_kodi() -> list[dict[str, str]]:
     """Discover local Kodi instances via ZeroConf (mDNS)."""
     zeroconf = Zeroconf()
     listener = KodiListener()
-    
+
     # Listen for kodi web interfaces
     # Usually Kodi broadcasts _http._tcp.local or _xbmc-jsonrpc._tcp.local
     # Let's check _http._tcp.local
-    browser = ServiceBrowser(zeroconf, "_http._tcp.local.", listener)
-    
-    await asyncio.sleep(3) # Wait for discovery
-    
+    _browser = ServiceBrowser(zeroconf, "_http._tcp.local.", listener)  # noqa: F841 — garde la référence pendant l'écoute
+
+    await asyncio.sleep(3)  # Wait for discovery
+
     zeroconf.close()
-    
+
     # Filter for Kodi
-    kodi_instances = [s for s in listener.found if "kodi" in s["name"].lower() or "xbmc" in s["name"].lower()]
+    kodi_instances = [
+        s for s in listener.found if "kodi" in s["name"].lower() or "xbmc" in s["name"].lower()
+    ]
     return kodi_instances
+
 
 async def sync_kodi(db: AsyncSession) -> dict[str, Any]:
     """Trigger VideoLibrary.Scan on all registered Kodi instances."""
@@ -71,7 +78,7 @@ async def sync_kodi(db: AsyncSession) -> dict[str, Any]:
 
     success = 0
     failed = 0
-    
+
     async with httpx.AsyncClient(timeout=10.0) as client:
         for kodi in kodis:
             url = f"{kodi.url}/jsonrpc"
@@ -81,19 +88,19 @@ async def sync_kodi(db: AsyncSession) -> dict[str, Any]:
                 creds = decrypt_api_key(kodi.api_key)
                 if ":" in creds:
                     auth = tuple(creds.split(":", 1))
-            
+
             payload = {
                 "jsonrpc": "2.0",
                 "method": "VideoLibrary.Scan",
-                "id": sum(ord(c) for c in kodi.name)
+                "id": sum(ord(c) for c in kodi.name),
             }
-            
+
             try:
                 if auth:
                     resp = await client.post(url, json=payload, auth=auth)
                 else:
                     resp = await client.post(url, json=payload)
-                    
+
                 resp.raise_for_status()
                 data = resp.json()
                 if "error" in data:
@@ -142,7 +149,9 @@ async def _pick(db: AsyncSession, service_id: int | None) -> Service | None:
     return kodis[0]
 
 
-async def _rpc(client: httpx.AsyncClient, base_url: str, auth, method: str, params: dict | None = None):
+async def _rpc(
+    client: httpx.AsyncClient, base_url: str, auth, method: str, params: dict | None = None
+):
     """Perform one Kodi JSON-RPC call; raise on Kodi-level error."""
     payload = {"jsonrpc": "2.0", "method": method, "params": params or {}, "id": 1}
     resp = await client.post(f"{base_url}/jsonrpc", json=payload, auth=auth)
@@ -154,7 +163,9 @@ async def _rpc(client: httpx.AsyncClient, base_url: str, auth, method: str, para
 
 
 # ── Feature: play a movie on Kodi ─────────────────────────────
-async def play_movie(db: AsyncSession, tmdb_id: int, service_id: int | None = None) -> dict[str, Any]:
+async def play_movie(
+    db: AsyncSession, tmdb_id: int, service_id: int | None = None
+) -> dict[str, Any]:
     """Start playback of a movie (matched by TMDB uniqueid) on a Kodi instance."""
     kodi = await _pick(db, service_id)
     if not kodi:
@@ -162,14 +173,19 @@ async def play_movie(db: AsyncSession, tmdb_id: int, service_id: int | None = No
     auth = _auth_of(kodi)
     try:
         async with httpx.AsyncClient(timeout=12.0) as client:
-            res = await _rpc(client, kodi.url, auth, "VideoLibrary.GetMovies", {"properties": ["uniqueid"]})
+            res = await _rpc(
+                client, kodi.url, auth, "VideoLibrary.GetMovies", {"properties": ["uniqueid"]}
+            )
             movieid = None
             for m in (res or {}).get("movies", []):
                 if str((m.get("uniqueid") or {}).get("tmdb")) == str(tmdb_id):
                     movieid = m.get("movieid")
                     break
             if movieid is None:
-                return {"status": "not_found", "detail": "Film absent de la bibliothèque Kodi (à scanner ?)"}
+                return {
+                    "status": "not_found",
+                    "detail": "Film absent de la bibliothèque Kodi (à scanner ?)",
+                }
             await _rpc(client, kodi.url, auth, "Player.Open", {"item": {"movieid": movieid}})
             return {"status": "ok", "kodi": kodi.name, "movieid": movieid}
     except Exception as exc:
@@ -187,7 +203,10 @@ async def get_watched_status(db: AsyncSession) -> dict[str, Any]:
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             res = await _rpc(
-                client, kodi.url, auth, "VideoLibrary.GetMovies",
+                client,
+                kodi.url,
+                auth,
+                "VideoLibrary.GetMovies",
                 {"properties": ["playcount", "resume", "uniqueid", "lastplayed", "title", "year"]},
             )
     except Exception as exc:
@@ -238,10 +257,10 @@ def _resolution_label(width: int | None, height: int | None) -> str | None:
 
 def _tech_details(it: dict) -> dict[str, Any]:
     """Extract video/audio/subtitle technical info from a Kodi item's streamdetails."""
-    sd = (it.get("streamdetails") or {})
-    video = (sd.get("video") or [{}])
-    audio = (sd.get("audio") or [{}])
-    subs = (sd.get("subtitle") or [])
+    sd = it.get("streamdetails") or {}
+    video = sd.get("video") or [{}]
+    audio = sd.get("audio") or [{}]
+    subs = sd.get("subtitle") or []
     v = video[0] if video else {}
     a = audio[0] if audio else {}
     return {
@@ -273,18 +292,40 @@ async def get_now_playing(db: AsyncSession) -> dict[str, Any]:
                 return {"playing": False, "kodi": kodi.name}
             pid = player["playerid"]
             props = await _rpc(
-                client, kodi.url, auth, "Player.GetProperties",
+                client,
+                kodi.url,
+                auth,
+                "Player.GetProperties",
                 {"playerid": pid, "properties": ["speed", "time", "totaltime", "percentage"]},
             )
             item = await _rpc(
-                client, kodi.url, auth, "Player.GetItem",
-                {"playerid": pid, "properties": [
-                    "title", "showtitle", "season", "episode", "uniqueid", "year",
-                    "plot", "runtime", "genre", "rating", "streamdetails",
-                ]},
+                client,
+                kodi.url,
+                auth,
+                "Player.GetItem",
+                {
+                    "playerid": pid,
+                    "properties": [
+                        "title",
+                        "showtitle",
+                        "season",
+                        "episode",
+                        "uniqueid",
+                        "year",
+                        "plot",
+                        "runtime",
+                        "genre",
+                        "rating",
+                        "streamdetails",
+                    ],
+                },
             )
             appp = await _rpc(
-                client, kodi.url, auth, "Application.GetProperties", {"properties": ["volume", "muted"]},
+                client,
+                kodi.url,
+                auth,
+                "Application.GetProperties",
+                {"properties": ["volume", "muted"]},
             )
             it = (item or {}).get("item", {}) or {}
             subtitle = ""
@@ -367,7 +408,9 @@ async def control_player(db: AsyncSession, action: str, value: Any = None) -> di
         async with httpx.AsyncClient(timeout=8.0) as client:
             if action in ("playpause", "stop", "seek"):
                 players = await _rpc(client, kodi.url, auth, "Player.GetActivePlayers")
-                player = next((p for p in (players or []) if p.get("type") in ("video", "audio")), None)
+                player = next(
+                    (p for p in (players or []) if p.get("type") in ("video", "audio")), None
+                )
                 if not player:
                     return {"status": "error", "detail": "Rien en lecture"}
                 pid = player["playerid"]
@@ -377,11 +420,16 @@ async def control_player(db: AsyncSession, action: str, value: Any = None) -> di
                     await _rpc(client, kodi.url, auth, "Player.Stop", {"playerid": pid})
                 elif action == "seek":
                     await _rpc(
-                        client, kodi.url, auth, "Player.Seek",
+                        client,
+                        kodi.url,
+                        auth,
+                        "Player.Seek",
                         {"playerid": pid, "value": {"percentage": float(value or 0)}},
                     )
             elif action == "volume":
-                await _rpc(client, kodi.url, auth, "Application.SetVolume", {"volume": int(value or 0)})
+                await _rpc(
+                    client, kodi.url, auth, "Application.SetVolume", {"volume": int(value or 0)}
+                )
             elif action == "mute":
                 await _rpc(client, kodi.url, auth, "Application.SetMute", {"mute": "toggle"})
             else:
@@ -417,9 +465,19 @@ async def test_connection(db: AsyncSession, service_id: int) -> dict[str, Any]:
     try:
         async with httpx.AsyncClient(timeout=8.0) as client:
             await _rpc(client, svc.url, auth, "JSONRPC.Ping")
-            app = await _rpc(client, svc.url, auth, "Application.GetProperties", {"properties": ["version", "name"]})
+            app = await _rpc(
+                client,
+                svc.url,
+                auth,
+                "Application.GetProperties",
+                {"properties": ["version", "name"]},
+            )
         v = (app or {}).get("version", {})
-        return {"ok": True, "version": f"{v.get('major', '?')}.{v.get('minor', '')}", "name": (app or {}).get("name", "Kodi")}
+        return {
+            "ok": True,
+            "version": f"{v.get('major', '?')}.{v.get('minor', '')}",
+            "name": (app or {}).get("name", "Kodi"),
+        }
     except Exception as exc:
         return {"ok": False, "detail": f"{type(exc).__name__}"}
 
@@ -441,7 +499,10 @@ async def get_drift(db: AsyncSession) -> dict[str, Any]:
         try:
             for m in await client.get("/movie"):
                 if m.get("tmdbId") and m.get("hasFile"):
-                    radarr_by_tmdb[str(m["tmdbId"])] = {"title": m.get("title"), "year": m.get("year")}
+                    radarr_by_tmdb[str(m["tmdbId"])] = {
+                        "title": m.get("title"),
+                        "year": m.get("year"),
+                    }
         except Exception as exc:
             logger.warning("Drift: Radarr fetch failed: %s", exc)
         finally:
@@ -454,7 +515,9 @@ async def get_drift(db: AsyncSession) -> dict[str, Any]:
         auth = _auth_of(kodi)
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
-                res = await _rpc(client, kodi.url, auth, "VideoLibrary.GetMovies", {"properties": ["uniqueid"]})
+                res = await _rpc(
+                    client, kodi.url, auth, "VideoLibrary.GetMovies", {"properties": ["uniqueid"]}
+                )
             for m in (res or {}).get("movies", []):
                 t = (m.get("uniqueid") or {}).get("tmdb")
                 if t:
@@ -471,4 +534,3 @@ async def get_drift(db: AsyncSession) -> dict[str, Any]:
         "missing_in_kodi": sorted(missing_in_kodi, key=lambda x: x.get("year") or 0, reverse=True),
         "missing_count": len(missing_in_kodi),
     }
-

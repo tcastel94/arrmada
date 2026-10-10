@@ -29,8 +29,11 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Lint with ruff
+        # Version figée : chaque nouvelle version de ruff peut ajouter des
+        # règles et casser la CI sans aucun changement de code. On monte la
+        # version volontairement (et on corrige) plutôt que de la subir.
         run: |
-          pip install ruff
+          pip install ruff==0.17.0
           ruff check app/ tests/
           ruff format --check app/ tests/
 

@@ -99,14 +99,15 @@ def _episode_code(value: str | None) -> str | None:
 
 def _dedupe_imports(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     persisted = [
-        it for it in items
+        it
+        for it in items
         if it.get("action") == "imported" and not str(it.get("id", "")).startswith("arr-")
     ]
     if not persisted:
         return items
 
-    used: set[str] = set()      # une ligne persistée n'absorbe qu'un seul doublon
-    dropped: set[str] = set()   # ids des lignes *arr retirées
+    used: set[str] = set()  # une ligne persistée n'absorbe qu'un seul doublon
+    dropped: set[str] = set()  # ids des lignes *arr retirées
     for arr in items:
         if arr.get("action") != "downloadFolderImported":
             continue
@@ -141,7 +142,9 @@ def _dedupe_imports(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 @router.get("/timeline")
 async def timeline(
-    categories: str | None = Query(None, description="Comma list: download,subtitle,playback,library,telegram,system"),
+    categories: str | None = Query(
+        None, description="Comma list: download,subtitle,playback,library,telegram,system"
+    ),
     statuses: str | None = Query(None, description="Comma list: ok,ko,info"),
     source: str | None = Query(None),
     media_type: str | None = Query(None),

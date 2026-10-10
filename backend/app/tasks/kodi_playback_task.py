@@ -8,7 +8,7 @@ plays started from the Kodi remote/UI, not only those launched from Arrmada.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import select
@@ -30,7 +30,7 @@ async def _recent_arrmada_play(db, tmdb_id: int | None) -> bool:
     """True if Arrmada launched this TMDB on Kodi within the last 2 minutes."""
     if not tmdb_id:
         return False
-    cutoff = datetime.now(timezone.utc) - timedelta(seconds=120)
+    cutoff = datetime.now(UTC) - timedelta(seconds=120)
     stmt = (
         select(ActivityEvent.id)
         .where(

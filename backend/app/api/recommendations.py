@@ -55,7 +55,9 @@ def _format_tmdb_movie(raw: dict[str, Any]) -> dict[str, Any]:
         "vote_count": raw.get("vote_count", 0),
         "popularity": raw.get("popularity", 0),
         "poster_url": f"{TMDB_IMG}/w342{raw['poster_path']}" if raw.get("poster_path") else None,
-        "backdrop_url": f"{TMDB_IMG}/w780{raw['backdrop_path']}" if raw.get("backdrop_path") else None,
+        "backdrop_url": f"{TMDB_IMG}/w780{raw['backdrop_path']}"
+        if raw.get("backdrop_path")
+        else None,
         "genre_ids": raw.get("genre_ids", []),
     }
 
@@ -74,7 +76,9 @@ def _format_tmdb_series(raw: dict[str, Any]) -> dict[str, Any]:
         "vote_count": raw.get("vote_count", 0),
         "popularity": raw.get("popularity", 0),
         "poster_url": f"{TMDB_IMG}/w342{raw['poster_path']}" if raw.get("poster_path") else None,
-        "backdrop_url": f"{TMDB_IMG}/w780{raw['backdrop_path']}" if raw.get("backdrop_path") else None,
+        "backdrop_url": f"{TMDB_IMG}/w780{raw['backdrop_path']}"
+        if raw.get("backdrop_path")
+        else None,
         "genre_ids": raw.get("genre_ids", []),
     }
 
@@ -89,6 +93,7 @@ async def get_recommendations(db: AsyncSession = Depends(get_db)):
     - wanted: monitored but not downloaded items from library
     - missing_collections: sequels/prequels you might be missing
     """
+
     async def _fetch():
         result: dict[str, Any] = {
             "trending_movies": [],
@@ -151,9 +156,9 @@ async def get_recommendations(db: AsyncSession = Depends(get_db)):
 
         # 5. "Because you have X" — pick random library items with tmdb_id
         import random
+
         movies_with_tmdb = [
-            m for m in media
-            if m.get("type") == "movie" and m.get("tmdb_id") and m.get("has_file")
+            m for m in media if m.get("type") == "movie" and m.get("tmdb_id") and m.get("has_file")
         ]
         sample_movies = random.sample(movies_with_tmdb, min(3, len(movies_with_tmdb)))
 
@@ -172,11 +177,13 @@ async def get_recommendations(db: AsyncSession = Depends(get_db)):
                             rec_items.append(item)
 
                     if rec_items:
-                        result["because_you_have"].append({
-                            "base_title": base_movie["title"],
-                            "base_poster": base_movie.get("poster_url"),
-                            "recommendations": rec_items[:4],
-                        })
+                        result["because_you_have"].append(
+                            {
+                                "base_title": base_movie["title"],
+                                "base_poster": base_movie.get("poster_url"),
+                                "recommendations": rec_items[:4],
+                            }
+                        )
             except Exception as exc:
                 logger.debug("TMDB recs for %s failed: %s", base_movie.get("title"), exc)
 
@@ -211,7 +218,11 @@ async def discover_media(
             genre_data = await _tmdb_get(f"/genre/{media_type}/list")
             if genre_data:
                 genre_id = next(
-                    (g["id"] for g in genre_data.get("genres", []) if g["name"].lower() == genre.lower()),
+                    (
+                        g["id"]
+                        for g in genre_data.get("genres", [])
+                        if g["name"].lower() == genre.lower()
+                    ),
                     None,
                 )
                 if genre_id:

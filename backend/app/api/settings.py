@@ -2,24 +2,14 @@
 
 from __future__ import annotations
 
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from fastapi import APIRouter, Depends, Response, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db
+from app import __version__
+from app.api.deps import get_current_user
 from app.config import settings
 from app.services.telegram import send_message
 from app.utils.logger import get_logger
-
-
-def app_version() -> str:
-    """Version exposed by the FastAPI app (single source: app.main)."""
-    try:
-        from app.main import app
-
-        return app.version
-    except Exception:  # pragma: no cover - defensive
-        return "unknown"
 
 logger = get_logger(__name__)
 
@@ -54,7 +44,7 @@ async def get_settings():
         "scheduler": {
             "health_check_interval": "60s",
         },
-        "version": app_version(),
+        "version": __version__,
     }
 
 

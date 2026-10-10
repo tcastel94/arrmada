@@ -33,6 +33,7 @@ async def list_downloads(db: AsyncSession = Depends(get_db)):
 
 # ── Queue actions ─────────────────────────────────────────────
 
+
 async def _get_arr_client_for_service(db: AsyncSession, service_type: str, *, timeout: int = 30):
     """Resolve the enabled Radarr/Sonarr client for a queue item's service type."""
     if service_type not in ("radarr", "sonarr"):
@@ -79,7 +80,7 @@ async def remove_queue_item(
         raise
     except Exception as exc:
         logger.error("Failed to remove queue item %d (%s): %s", id, type, exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
         await client.close()
 
@@ -115,6 +116,6 @@ async def retry_queue_item(
         raise
     except Exception as exc:
         logger.error("Failed to retry queue item %d (%s): %s", id, type, exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
         await client.close()

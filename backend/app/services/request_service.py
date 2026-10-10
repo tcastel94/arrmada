@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import contextlib
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -142,10 +143,8 @@ async def create_request(
     await db.refresh(req)
 
     # Telegram notification
-    try:
+    with contextlib.suppress(Exception):
         await notify_new_media(req.title, req.type, req.year)
-    except Exception:
-        pass
 
     return req
 
@@ -209,7 +208,9 @@ async def _send_to_arr(
                 "title": movie_data.get("title", req.title),
                 "tmdbId": tmdb_id,
                 "year": movie_data.get("year", req.year),
-                "qualityProfileId": _resolve_quality_profile_id(quality_profiles, req.quality_profile),
+                "qualityProfileId": _resolve_quality_profile_id(
+                    quality_profiles, req.quality_profile
+                ),
                 "rootFolderPath": root_folders[0]["path"],
                 "monitored": True,
                 "addOptions": {"searchForMovie": True},
@@ -270,7 +271,9 @@ async def _send_to_arr(
                 "title": series_data.get("title", req.title),
                 "tvdbId": tvdb_id,
                 "year": series_data.get("year", req.year),
-                "qualityProfileId": _resolve_quality_profile_id(quality_profiles, req.quality_profile),
+                "qualityProfileId": _resolve_quality_profile_id(
+                    quality_profiles, req.quality_profile
+                ),
                 "rootFolderPath": root_folders[0]["path"],
                 "monitored": True,
                 "addOptions": {"searchForMissingEpisodes": True},
@@ -339,9 +342,7 @@ async def sync_active_requests(db: AsyncSession) -> None:
                 logger.error("Failed to get Radarr queue: %s", exc)
 
             queue_items = queue_data.get("records", [])
-            downloading_movie_ids = {
-                item["movieId"] for item in queue_items if "movieId" in item
-            }
+            downloading_movie_ids = {item["movieId"] for item in queue_items if "movieId" in item}
 
             for req in radarr_requests:
                 if not req.arr_id:
@@ -359,14 +360,16 @@ async def sync_active_requests(db: AsyncSession) -> None:
                                     req.arr_id = existing.get("id")
                                     break
                     except Exception as lookup_exc:
-                        logger.error("Radarr lookup failed during sync for %s: %s", req.title, lookup_exc)
+                        logger.error(
+                            "Radarr lookup failed during sync for %s: %s", req.title, lookup_exc
+                        )
 
                 if req.arr_id:
                     try:
                         movie = await client.get_movie_by_id(req.arr_id)
                         if movie.get("hasFile"):
                             req.status = "available"
-                            req.completed_at = datetime.now(timezone.utc)
+                            req.completed_at = datetime.now(UTC)
                         elif req.arr_id in downloading_movie_ids:
                             req.status = "downloading"
                         else:
@@ -374,7 +377,11 @@ async def sync_active_requests(db: AsyncSession) -> None:
                     except httpx.HTTPStatusError as exc:
                         if exc.response.status_code == 404:
                             req.status = "failed"
-                            logger.warning("Movie %s (arr_id=%s) not found in Radarr, marking as failed", req.title, req.arr_id)
+                            logger.warning(
+                                "Movie %s (arr_id=%s) not found in Radarr, marking as failed",
+                                req.title,
+                                req.arr_id,
+                            )
                         else:
                             logger.error("Failed to sync Radarr movie %s: %s", req.title, exc)
                     except Exception as exc:
@@ -414,7 +421,9 @@ async def sync_active_requests(db: AsyncSession) -> None:
                                     req.arr_id = existing.get("id")
                                     break
                     except Exception as lookup_exc:
-                        logger.error("Sonarr lookup failed during sync for %s: %s", req.title, lookup_exc)
+                        logger.error(
+                            "Sonarr lookup failed during sync for %s: %s", req.title, lookup_exc
+                        )
 
                 if req.arr_id:
                     try:
@@ -425,18 +434,22 @@ async def sync_active_requests(db: AsyncSession) -> None:
 
                         if episode_file_count == episode_count and episode_count > 0:
                             req.status = "available"
-                            req.completed_at = datetime.now(timezone.utc)
+                            req.completed_at = datetime.now(UTC)
                         elif req.arr_id in downloading_series_ids:
                             req.status = "downloading"
                         elif episode_file_count > 0:
                             req.status = "available"
-                            req.completed_at = datetime.now(timezone.utc)
+                            req.completed_at = datetime.now(UTC)
                         else:
                             req.status = "searching"
                     except httpx.HTTPStatusError as exc:
                         if exc.response.status_code == 404:
                             req.status = "failed"
-                            logger.warning("Series %s (arr_id=%s) not found in Sonarr, marking as failed", req.title, req.arr_id)
+                            logger.warning(
+                                "Series %s (arr_id=%s) not found in Sonarr, marking as failed",
+                                req.title,
+                                req.arr_id,
+                            )
                         else:
                             logger.error("Failed to sync Sonarr series %s: %s", req.title, exc)
                     except Exception as exc:

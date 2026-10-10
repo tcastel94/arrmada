@@ -35,7 +35,18 @@ async def get_path_mappings() -> dict[str, Any]:
       - downloads_host_path: where SABnzbd downloads land on host
       - movies_host_path: where Radarr movies are stored on host
       - series_host_path: where Sonarr series are stored on host
+
+    Unraid non configuré (UNRAID_URL / UNRAID_API_KEY vides) → mappings vides
+    au lieu d'un crash « URL is missing a protocol » (HTTP 500).
     """
+    if not settings.UNRAID_URL or not settings.UNRAID_API_KEY:
+        return {
+            "service_mounts": {},
+            "downloads_host_path": "",
+            "movies_host_path": "",
+            "series_host_path": "",
+        }
+
     client = UnraidClient(
         url=settings.UNRAID_URL,
         api_key=settings.UNRAID_API_KEY,
@@ -63,11 +74,13 @@ async def get_path_mappings() -> dict[str, Any]:
         mounts = []
         for m in c.get("mounts", []):
             if isinstance(m, dict):
-                mounts.append({
-                    "host": m.get("Source", ""),
-                    "container": m.get("Destination", ""),
-                    "rw": m.get("RW", False),
-                })
+                mounts.append(
+                    {
+                        "host": m.get("Source", ""),
+                        "container": m.get("Destination", ""),
+                        "rw": m.get("RW", False),
+                    }
+                )
         service_mounts[svc_type] = mounts
 
     # Derive key paths
@@ -92,9 +105,10 @@ async def get_path_mappings() -> dict[str, Any]:
 
     if not series_host:
         for m in service_mounts.get("sonarr", []):
-            if m["container"] in ("/tv", "/media"):
-                if "seriesTV" in m["host"] or "series" in m["host"].lower():
-                    series_host = m["host"]
+            if m["container"] in ("/tv", "/media") and (
+                "seriesTV" in m["host"] or "series" in m["host"].lower()
+            ):
+                series_host = m["host"]
 
     return {
         "service_mounts": service_mounts,

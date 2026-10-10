@@ -7,11 +7,11 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models.service import Service
 from app.services.encryption import decrypt_api_key
 from app.services.sabnzbd import SabnzbdClient
 from app.services.unraid import UnraidClient
-from app.config import settings
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -43,22 +43,24 @@ async def get_sabnzbd_history(db: AsyncSession, limit: int = 50) -> list[dict[st
             path = slot.get("path", "")
             final_path = storage or path
 
-            items.append({
-                "nzo_id": slot.get("nzo_id", ""),
-                "name": slot.get("name", "Unknown"),
-                "status": status,
-                "category": slot.get("category", "*"),
-                "size_bytes": slot.get("bytes", 0),
-                "size_human": slot.get("size", "0 B"),
-                "completed_at": slot.get("completed"),
-                "storage_path": final_path,
-                "download_path": slot.get("path", ""),
-                "stage_log": _parse_stage_log(slot.get("stage_log", [])),
-                "fail_message": slot.get("fail_message", ""),
-                "script_log": slot.get("script_log", ""),
-                "has_been_moved": bool(storage and storage != path),
-                "is_stuck": status == "Completed" and not storage,
-            })
+            items.append(
+                {
+                    "nzo_id": slot.get("nzo_id", ""),
+                    "name": slot.get("name", "Unknown"),
+                    "status": status,
+                    "category": slot.get("category", "*"),
+                    "size_bytes": slot.get("bytes", 0),
+                    "size_human": slot.get("size", "0 B"),
+                    "completed_at": slot.get("completed"),
+                    "storage_path": final_path,
+                    "download_path": slot.get("path", ""),
+                    "stage_log": _parse_stage_log(slot.get("stage_log", [])),
+                    "fail_message": slot.get("fail_message", ""),
+                    "script_log": slot.get("script_log", ""),
+                    "has_been_moved": bool(storage and storage != path),
+                    "is_stuck": status == "Completed" and not storage,
+                }
+            )
         return items
     finally:
         await client.close()
@@ -70,10 +72,12 @@ def _parse_stage_log(stage_log: list[dict]) -> list[dict[str, Any]]:
     for stage in stage_log:
         name = stage.get("name", "")
         actions = stage.get("actions", [])
-        parsed.append({
-            "stage": name,
-            "actions": actions[:3] if actions else [],  # Limit to 3 actions per stage
-        })
+        parsed.append(
+            {
+                "stage": name,
+                "actions": actions[:3] if actions else [],  # Limit to 3 actions per stage
+            }
+        )
     return parsed
 
 

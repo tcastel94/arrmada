@@ -46,7 +46,9 @@ class SonarrClient(ArrBaseClient):
         return await self.get("/rootfolder")
 
     # ── Calendar ──────────────────────────────────────────────
-    async def get_calendar(self, start: str | None = None, end: str | None = None) -> list[dict[str, Any]]:
+    async def get_calendar(
+        self, start: str | None = None, end: str | None = None
+    ) -> list[dict[str, Any]]:
         """Fetch upcoming episodes."""
         params: dict[str, str] = {}
         if start:
@@ -158,8 +160,7 @@ class SonarrClient(ArrBaseClient):
     ) -> None:
         """Remove a queue item, optionally from the download client and/or blocklisting it."""
         params = (
-            f"removeFromClient={str(remove_from_client).lower()}"
-            f"&blocklist={str(blocklist).lower()}"
+            f"removeFromClient={str(remove_from_client).lower()}&blocklist={str(blocklist).lower()}"
         )
         url = f"{self.API_PREFIX}/queue/{queue_id}?{params}"
         resp = await self.client.delete(url)

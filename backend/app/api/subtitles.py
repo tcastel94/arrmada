@@ -16,15 +16,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
 from app.models.service import Service
-from app.services.encryption import decrypt_api_key
 from app.services.bazarr import BazarrClient
+from app.services.encryption import decrypt_api_key
 from app.utils.cache import cache
 from app.utils.logger import get_logger
 
@@ -43,7 +43,8 @@ DEFAULT_LANGUAGE = "fr"
 async def _get_bazarr(db: AsyncSession) -> BazarrClient:
     """Return a configured Bazarr client, or raise 503 if none enabled."""
     stmt = select(Service).where(
-        Service.is_enabled == True, Service.type == "bazarr"  # noqa: E712
+        Service.is_enabled == True,
+        Service.type == "bazarr",  # noqa: E712
     )
     result = await db.execute(stmt)
     svc = result.scalars().first()
@@ -111,9 +112,7 @@ async def subtitle_status(
             sid = ep.get("sonarrSeriesId")
             if sid is None:
                 continue
-            entry = series.setdefault(
-                str(sid), {"state": "missing", "missing_episodes": 0}
-            )
+            entry = series.setdefault(str(sid), {"state": "missing", "missing_episodes": 0})
             entry["missing_episodes"] += 1
 
         return {
@@ -123,9 +122,7 @@ async def subtitle_status(
             "series": series,
         }
 
-    return await cache.get_or_set(
-        f"subtitles:status:{code2}", _compute, ttl_seconds=120
-    )
+    return await cache.get_or_set(f"subtitles:status:{code2}", _compute, ttl_seconds=120)
 
 
 def _invalidate_status() -> None:
@@ -141,7 +138,7 @@ async def subtitle_languages(
     bazarr = await _get_bazarr(db)
     try:
         langs = await bazarr.get_languages()
-        return [l for l in (langs or []) if l.get("enabled")]
+        return [lg for lg in (langs or []) if lg.get("enabled")]
     finally:
         await bazarr.close()
 
@@ -170,9 +167,14 @@ async def auto_download_movie(
         await bazarr.close()
     _invalidate_status()
     from app.services.activity_log import log_event
+
     await log_event(
-        category="subtitle", action="sub_download", source="arrmada",
-        media_type="movie", media_id=radarr_id, subtitle=language.upper(),
+        category="subtitle",
+        action="sub_download",
+        source="arrmada",
+        media_type="movie",
+        media_id=radarr_id,
+        subtitle=language.upper(),
     )
     return {"status": "ok", "result": res}
 
@@ -196,9 +198,14 @@ async def auto_download_episode(
         await bazarr.close()
     _invalidate_status()
     from app.services.activity_log import log_event
+
     await log_event(
-        category="subtitle", action="sub_download", source="arrmada",
-        media_type="series", media_id=series_id, subtitle=f"{language.upper()} · ep {episode_id}",
+        category="subtitle",
+        action="sub_download",
+        source="arrmada",
+        media_type="series",
+        media_id=series_id,
+        subtitle=f"{language.upper()} · ep {episode_id}",
     )
     return {"status": "ok", "result": res}
 
@@ -278,10 +285,7 @@ def _normalize_provider(s: dict[str, Any]) -> dict[str, Any]:
     """Flatten a Bazarr provider candidate into the shape the frontend uses
     (and that the download endpoints expect back)."""
     ri = s.get("release_info")
-    if isinstance(ri, list):
-        release_info = ", ".join(str(x) for x in ri)
-    else:
-        release_info = str(ri or "")
+    release_info = ", ".join(str(x) for x in ri) if isinstance(ri, list) else str(ri or "")
     return {
         "subtitle": s.get("subtitle"),
         "provider": s.get("provider"),
@@ -443,9 +447,14 @@ async def sync_movie_subtitle(
     finally:
         await bazarr.close()
     from app.services.activity_log import log_event
+
     await log_event(
-        category="subtitle", action="sub_sync", source="arrmada",
-        media_type="movie", media_id=radarr_id, subtitle=body.language.upper(),
+        category="subtitle",
+        action="sub_sync",
+        source="arrmada",
+        media_type="movie",
+        media_id=radarr_id,
+        subtitle=body.language.upper(),
     )
     return {"status": "ok", "result": res}
 
@@ -472,8 +481,13 @@ async def sync_episode_subtitle(
     finally:
         await bazarr.close()
     from app.services.activity_log import log_event
+
     await log_event(
-        category="subtitle", action="sub_sync", source="arrmada",
-        media_type="series", media_id=series_id, subtitle=f"{body.language.upper()} · ep {episode_id}",
+        category="subtitle",
+        action="sub_sync",
+        source="arrmada",
+        media_type="series",
+        media_id=series_id,
+        subtitle=f"{body.language.upper()} · ep {episode_id}",
     )
     return {"status": "ok", "result": res}

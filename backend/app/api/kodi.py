@@ -19,10 +19,12 @@ router = APIRouter(
     dependencies=[Depends(get_current_user)],
 )
 
+
 @router.get("/discover")
 async def discover_instances() -> list[dict]:
     """Discover Kodi instances using mDNS."""
     return await discover_kodi()
+
 
 @router.post("/sync")
 async def trigger_kodi_sync(db: AsyncSession = Depends(get_db)):
@@ -39,6 +41,7 @@ async def play_on_kodi(data: dict, db: AsyncSession = Depends(get_db)):
     result = await kodi_service.play_movie(db, int(tmdb_id), data.get("service_id"))
 
     from app.services.activity_log import log_event
+
     ok = result.get("status") == "ok"
     await log_event(
         category="playback",
@@ -74,6 +77,7 @@ async def control(data: dict, db: AsyncSession = Depends(get_db)):
 @router.get("/watched-status")
 async def watched_status(db: AsyncSession = Depends(get_db)):
     """Watched/resume state per TMDB id from Kodi (cached 60s)."""
+
     async def _compute():
         return await kodi_service.get_watched_status(db)
 
@@ -97,6 +101,7 @@ async def kodi_drift(db: AsyncSession = Depends(get_db)):
 async def test_kodi(service_id: int, db: AsyncSession = Depends(get_db)):
     """Ping a Kodi instance and read its version."""
     return await kodi_service.test_connection(db, service_id)
+
 
 # ── Settings (instances) ──────────────────────────────────────
 # Les identifiants Kodi sont stockés chiffrés dans `Service.api_key` sous la
@@ -213,7 +218,9 @@ async def update_kodi_setting(service_id: int, data: dict, db: AsyncSession = De
     url = (data.get("url") or "").strip().rstrip("/")
     if url and url != svc.url:
         dup = await db.execute(
-            select(Service).where(Service.type == "kodi", Service.url == url, Service.id != service_id)
+            select(Service).where(
+                Service.type == "kodi", Service.url == url, Service.id != service_id
+            )
         )
         if dup.scalars().first():
             raise HTTPException(status_code=409, detail="Un autre Kodi utilise déjà cette URL")

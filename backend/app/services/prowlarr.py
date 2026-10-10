@@ -13,7 +13,9 @@ class ProwlarrClient(ArrBaseClient):
     API_PREFIX: str = "/api/v1"
 
     # ── Search ────────────────────────────────────────────────
-    async def search(self, query: str, indexer_ids: list[int] | None = None, categories: list[int] | None = None) -> list[dict[str, Any]]:
+    async def search(
+        self, query: str, indexer_ids: list[int] | None = None, categories: list[int] | None = None
+    ) -> list[dict[str, Any]]:
         """Search across all configured indexers."""
         params: dict[str, Any] = {"query": query}
         if indexer_ids:

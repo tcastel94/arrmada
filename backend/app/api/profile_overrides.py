@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import contextlib
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select, delete
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
@@ -23,11 +25,14 @@ router = APIRouter(
 
 # ── Schemas ────────────────────────────────────────────────────
 
+
 class OverrideCreate(BaseModel):
     media_type: str = Field(..., description="'series' or 'movie'")
     external_id: int = Field(..., description="Sonarr series ID or Radarr movie ID")
     title: str = Field(..., description="Display title")
-    profile_name: str = Field(..., description="TRaSH profile filename, e.g. 'french-multi-vo-bluray-web-2160p'")
+    profile_name: str = Field(
+        ..., description="TRaSH profile filename, e.g. 'french-multi-vo-bluray-web-2160p'"
+    )
     service_id: int = Field(..., description="Sonarr or Radarr service ID")
     note: str | None = None
 
@@ -50,6 +55,7 @@ class AvailableProfile(BaseModel):
 
 
 # ── Endpoints ──────────────────────────────────────────────────
+
 
 @router.get("", summary="List all profile overrides")
 async def list_overrides(
@@ -168,16 +174,19 @@ async def list_available_profiles(
         if not filename or filename in seen:
             continue
         seen.add(filename)
-        profiles.append(AvailableProfile(
-            filename=filename,
-            display_name=qp.get("name", filename),
-            service_type=service_type.lower(),
-        ))
+        profiles.append(
+            AvailableProfile(
+                filename=filename,
+                display_name=qp.get("name", filename),
+                service_type=service_type.lower(),
+            )
+        )
 
     return sorted(profiles, key=lambda p: p.display_name)
 
 
 # ── Apply Override to Sonarr/Radarr ───────────────────────────
+
 
 class ApplyOverrideResult(BaseModel):
     success: bool
@@ -205,13 +214,12 @@ async def apply_override(
     2. Create or update a Quality Profile with correct CF scores
     3. Assign the Quality Profile to the specific series/movie
     """
-    from typing import Any
 
     from app.models.service import Service
     from app.services.arr_client import ArrBaseClient
     from app.services.encryption import decrypt_api_key
-    from app.services.trash_guides import get_trash_cache
     from app.services.notification_service import create_notification
+    from app.services.trash_guides import get_trash_cache
 
     # 1. Get the override
     stmt = select(ProfileOverride).where(ProfileOverride.id == override_id)
@@ -232,7 +240,9 @@ async def apply_override(
         expected_type = "sonarr" if override.media_type == "series" else "radarr"
         logger.info(
             "Override %d: service_id=%s not found, searching for type '%s'",
-            override_id, override.service_id, expected_type,
+            override_id,
+            override.service_id,
+            expected_type,
         )
         stmt = (
             select(Service)
@@ -258,7 +268,9 @@ async def apply_override(
 
         if service:
             # Update override with the found service_id for next time
-            logger.info("Found service %s (id=%d) for override %d", service.name, service.id, override_id)
+            logger.info(
+                "Found service %s (id=%d) for override %d", service.name, service.id, override_id
+            )
             override.service_id = service.id
 
     if not service:
@@ -305,14 +317,10 @@ async def apply_override(
     try:
         # ── Step A: Create/update Custom Formats ──────────────
         current_cfs = await client.get("/customformat")
-        current_by_name: dict[str, dict] = {
-            cf["name"].lower(): cf for cf in current_cfs
-        }
+        current_by_name: dict[str, dict] = {cf["name"].lower(): cf for cf in current_cfs}
 
         all_trash_cfs = cache.get_custom_formats(service_type)
-        trash_by_id: dict[str, dict] = {
-            cf["trash_id"]: cf for cf in all_trash_cfs
-        }
+        trash_by_id: dict[str, dict] = {cf["trash_id"]: cf for cf in all_trash_cfs}
 
         # Extract CF IDs from the QP
         format_items_raw = qp_data.get("formatItems", {})
@@ -329,7 +337,9 @@ async def apply_override(
 
         logger.info(
             "Override %d: applying %d CFs from profile '%s'",
-            override_id, len(qp_cf_ids), override.profile_name,
+            override_id,
+            len(qp_cf_ids),
+            override.profile_name,
         )
 
         # Map trash_id → Sonarr CF ID after create/update
@@ -373,10 +383,12 @@ async def apply_override(
         sonarr_format_items = []
         for cf_trash_id, sonarr_id in trash_to_sonarr_id.items():
             score = cf_scores.get(cf_trash_id, 0)
-            sonarr_format_items.append({
-                "format": sonarr_id,
-                "score": score,
-            })
+            sonarr_format_items.append(
+                {
+                    "format": sonarr_id,
+                    "score": score,
+                }
+            )
 
         if existing_qp:
             # Update: merge our CFs into the existing QP
@@ -395,9 +407,7 @@ async def apply_override(
 
             existing_qp["formatItems"] = existing_formats
             try:
-                await client.put(
-                    f"/qualityprofile/{existing_qp['id']}", existing_qp
-                )
+                await client.put(f"/qualityprofile/{existing_qp['id']}", existing_qp)
                 profile_id = existing_qp["id"]
             except Exception as e:
                 errors.append(f"Update QP: {e}")
@@ -421,28 +431,20 @@ async def apply_override(
         if profile_id:
             try:
                 if override.media_type == "series":
-                    media_data = await client.get(
-                        f"/series/{override.external_id}"
-                    )
+                    media_data = await client.get(f"/series/{override.external_id}")
                     media_data["qualityProfileId"] = profile_id
-                    await client.put(
-                        f"/series/{override.external_id}", media_data
-                    )
+                    await client.put(f"/series/{override.external_id}", media_data)
                     media_updated = True
                 else:
-                    media_data = await client.get(
-                        f"/movie/{override.external_id}"
-                    )
+                    media_data = await client.get(f"/movie/{override.external_id}")
                     media_data["qualityProfileId"] = profile_id
-                    await client.put(
-                        f"/movie/{override.external_id}", media_data
-                    )
+                    await client.put(f"/movie/{override.external_id}", media_data)
                     media_updated = True
             except Exception as e:
                 errors.append(f"Assign QP to media: {e}")
 
         # Notification
-        try:
+        with contextlib.suppress(Exception):
             await create_notification(
                 db,
                 type="trash_apply",
@@ -454,8 +456,6 @@ async def apply_override(
                 severity="success" if not errors else "warning",
                 service_name=service.name,
             )
-        except Exception:
-            pass
 
     except Exception as e:
         errors.append(f"Connection error: {e}")
@@ -474,4 +474,3 @@ async def apply_override(
         media_updated=media_updated,
         errors=errors,
     )
-

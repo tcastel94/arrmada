@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import time
 
 import pytest
 
@@ -43,6 +42,7 @@ async def test_cache_expires():
     await asyncio.sleep(0.01)
     result2 = await cache.get_or_set("key", factory, ttl_seconds=0)
 
+    assert result1 == 1
     assert call_count == 2
     assert result2 == 2
 
