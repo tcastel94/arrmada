@@ -8,10 +8,12 @@ puis quitte Kodi.
 Variables d'environnement (posées par run.sh) : SHOT_DIR, MOCK_URL, PACE, DEMO_VIDEO.
 """
 
+import json
 import os
 import urllib.request
 
 import xbmc
+import xbmcaddon
 import xbmcvfs
 
 MONITOR = xbmc.Monitor()
@@ -51,6 +53,15 @@ def run_plugin(action):
 
 
 wait(8)  # accueil de Kodi chargé
+
+# ── 0. Phase 3 : la TV s'est appairée toute seule avec l'ancien mot de passe ─
+_device = xbmcvfs.translatePath("special://profile/addon_data/script.arrmada/device.json")
+log(
+    "migration : jeton "
+    + ("présent" if os.path.exists(_device) else "ABSENT")
+    + ", mot de passe "
+    + ("effacé" if not xbmcaddon.Addon("script.arrmada").getSetting("api_key") else "ENCORE LÀ")
+)
 
 # ── 1. Ouverture depuis le menu de l'add-on (intro), accueil ────────────────
 xbmc.executebuiltin("ActivateWindow(Videos,plugin://script.arrmada/,return)")
@@ -95,7 +106,10 @@ press("Up")
 press("Right")  # Lire → Bande-annonce
 press("Select")
 wait(1.5)
+wait(1.5)  # QR code de la bande-annonce (phase 3)
 shot("04d-bande-annonce-sans-youtube")
+press("Back")  # ferme la fenêtre QR
+wait(1.0)
 press("Back")  # retour à l'accueil
 wait(1.5)
 press("Right")  # Severance (série)
@@ -187,7 +201,11 @@ open_list("?action=list&feed=notifications", "13g-notifications")
 # puis flux concernés rafraîchis un par seconde (annoncés aux widgets par
 # arrmada.reload une fois la série terminée)
 before = xbmc.getInfoLabel("Window(Home).Property(arrmada.reload)")
-urllib.request.urlopen(f"{MOCK}/__emit?type=new_import&title=Gladiator%20II&quality=Remux-2160p").read()
+IMPORT = (
+    f"{MOCK}/__emit?type=new_import&event=Download&title=Gladiator%20II&quality=Remux-2160p"
+    f"&size=68719476736&poster={MOCK}/img/poster-3.jpg"
+)
+urllib.request.urlopen(IMPORT).read()
 for _ in range(24):  # la bulle, au plus 12 s
     wait(0.5)
     if xbmc.getCondVisibility("Window.IsVisible(notification)"):
@@ -203,6 +221,31 @@ press("Back")
 wait(1.0)
 xbmc.executebuiltin("ActivateWindow(Home)")
 wait(2.0)
+
+# ── 6d. Phase 3 : QR code vers la web app, raccourcis (favoris Kodi) ──────
+run_plugin("qr&page=home")
+wait(3.0)
+shot("14a-qr-web-app")
+press("Back")
+wait(1.0)
+run_plugin("favourites")
+wait(1.5)
+shot("14b-favoris-ajoutes")
+_favs = json.loads(
+    xbmc.executeJSONRPC(
+        json.dumps({"jsonrpc": "2.0", "id": 1, "method": "Favourites.GetFavourites",
+                    "params": {"properties": ["path"]}})
+    )
+).get("result", {}).get("favourites") or []
+log(f"favoris : {[f.get('title') for f in _favs]}")
+wait(6.0)  # la bulle disparaît
+# Un favori lance l'écran comme une lecture (PlayMedia) : il doit s'ouvrir normalement
+xbmc.executebuiltin('PlayMedia("plugin://script.arrmada/?action=salon")')
+wait(4.0)
+shot("14c-favori-salon")
+log(f"favori Salon : fenêtre {xbmc.getInfoLabel('System.CurrentWindow')}")
+press("Back")
+wait(1.5)
 
 # ── 7. Réouverture (cache), panne serveur ──────────────────────────────────
 run_plugin("home")
@@ -223,7 +266,18 @@ if DEMO_VIDEO and os.path.exists(DEMO_VIDEO):
     shot("09b-salon-pause")
     press("Back")
     wait(1.0)
+    # Phase 3 : un import pendant le film ne s'affiche pas…
+    urllib.request.urlopen(IMPORT.replace("Gladiator%20II", "Wicked")).read()
+    wait(7.0)
+    log(f"bulle pendant le film : {xbmc.getCondVisibility('Window.IsVisible(notification)')}")
     xbmc.executebuiltin("PlayerControl(Stop)")
+    # … mais un résumé « Pendant ta séance » apparaît à l'arrêt
+    for _ in range(16):
+        wait(0.5)
+        if xbmc.getCondVisibility("Window.IsVisible(notification)"):
+            break
+    wait(0.8)
+    shot("09c-resume-seance")
     wait(2.0)
     run_plugin("home")
     wait(1.5)

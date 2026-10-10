@@ -136,6 +136,7 @@ _EVENT_FEEDS: Dict[str, Set[str]] = {
     "media_renamed": {"recent"},
     "health_alert": {"notifications"},
     "health_restored": {"notifications"},
+    "import_blocked": {"notifications", "downloads"},
 }
 
 
@@ -147,24 +148,118 @@ def feeds_for_event(event_type: str, data: Dict[str, Any]) -> Set[str]:
     return names
 
 
-def osd_message(event_type: str, data: Dict[str, Any]) -> Optional[Tuple[str, str]]:
-    """(titre, message) de la notification à l'écran, ou None."""
+# ─────────────────────────────────────────────────────────────────────────────
+# Notifications à l'écran (phase 3 : enrichies)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Au-delà, une seule bulle de résumé (rattrapage après une coupure, ou ce
+# qui s'est passé pendant un film) plutôt qu'une rafale de bulles.
+MAX_SEPARATE = 2
+
+
+def _size_label(size: Any) -> str:
+    """Octets → « 64 Go » (arrondi, unités françaises) ; "" si inconnu."""
+    try:
+        value = float(size)
+    except (TypeError, ValueError):
+        return ""
+    if value <= 0:
+        return ""
+    for unit in ("o", "Ko", "Mo", "Go", "To"):
+        if value < 1024 or unit == "To":
+            if value >= 10 or unit in ("o", "Ko"):
+                return f"{value:.0f} {unit}"
+            return f"{value:.1f} {unit}".replace(".", ",")  # « 7,5 Go »
+        value /= 1024
+    return ""
+
+
+def _details(*parts: Any) -> str:
+    return " · ".join(str(part).strip() for part in parts if str(part or "").strip())
+
+
+def osd_notification(event_type: str, data: Dict[str, Any]) -> Optional[Dict[str, str]]:
+    """Bulle à afficher pour un événement du serveur, ou None.
+
+    {"heading", "message", "icon" (affiche ou ""), "title" (pour un résumé)}.
+    Le serveur envoie l'affiche (`poster`), l'épisode, la mise à niveau et
+    la taille depuis la phase 3 ; avec un serveur plus ancien, la bulle reste
+    simplement plus sobre.
+    """
     title = str(data.get("title") or "").strip()
+    event = str(data.get("event") or "")
     quality = str(data.get("quality") or "").strip()
+    poster = str(data.get("poster") or "")
+    icon = poster if poster.startswith(("http://", "https://")) else ""
+    year = data.get("year")
+    episode_title = str(data.get("episode_title") or "").strip()
+    size = _size_label(data.get("size"))
     if event_type == "new_import" and title:
-        return "Importé sur le NAS", f"{title} · {quality}" if quality else title
+        if event in ("MovieAdded", "SeriesAdd"):
+            label = f"{title} ({year})" if isinstance(year, int) and year > 0 else title
+            return {
+                "heading": "Nouveau titre suivi",
+                "message": _details(label, "Radarr" if event == "MovieAdded" else "Sonarr"),
+                "icon": icon,
+                "title": title,
+            }
+        heading = "Mise à niveau sur le NAS" if data.get("upgrade") else "Importé sur le NAS"
+        return {
+            "heading": heading,
+            "message": _details(title, episode_title, quality, size),
+            "icon": icon,
+            "title": title,
+        }
     if event_type == "download_grab" and title:
-        return "Téléchargement lancé", title
+        return {
+            "heading": "Téléchargement lancé",
+            "message": _details(title, episode_title, quality, size),
+            "icon": icon,
+            "title": title,
+        }
+    if event_type == "import_blocked" and title:
+        service = str(data.get("service") or "").capitalize() or "Radarr/Sonarr"
+        return {
+            "heading": "Import bloqué",
+            "message": f"{title} : à régler dans {service} (web app)",
+            "icon": icon,
+            "title": title,
+        }
     if event_type == "health_alert":
-        return "Alerte ArrMada", title or str(data.get("message") or "Un service a un problème")
+        message = title or str(data.get("message") or "Un service a un problème")
+        return {"heading": "Alerte ArrMada", "message": message, "icon": "", "title": message}
     return None
 
 
-# Relevé des événements : toutes les EVENTS_EVERY secondes. Après une coupure
-# plus longue, au plus MAX_OSD_PER_POLL notifications (les plus récentes) :
-# pas de rafale de bulles à l'écran.
+def merge_notifications(
+    items: List[Dict[str, str]], heading: Optional[str] = None
+) -> List[Dict[str, str]]:
+    """Bulles à afficher : telles quelles s'il y en a peu, sinon un résumé.
+
+    `heading` force un résumé (« Pendant ta séance »), même pour une seule.
+    """
+    if not items:
+        return []
+    if heading is None and len(items) <= MAX_SEPARATE:
+        return list(items)
+    if heading is not None and len(items) == 1:
+        # Un seul titre pendant le film : sa bulle complète, sous ce titre
+        return [dict(items[0], heading=f"{heading} · {items[0]['heading']}")]
+    titles = [item.get("title") or item.get("message", "") for item in items]
+    shown = ", ".join(titles[:3]) + (f" et {len(titles) - 3} autre(s)" if len(titles) > 3 else "")
+    count = len(items)
+    return [
+        {
+            "heading": heading or f"{count} nouveautés ArrMada",
+            "message": shown if heading is None else f"{count} nouveauté(s) : {shown}",
+            "icon": next((item["icon"] for item in reversed(items) if item.get("icon")), ""),
+            "title": shown,
+        }
+    ]
+
+
+# Relevé des événements : toutes les EVENTS_EVERY secondes.
 EVENTS_EVERY = 5
-MAX_OSD_PER_POLL = 3
 
 
 def _event_id(value: Any) -> Optional[int]:

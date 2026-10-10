@@ -29,6 +29,7 @@ WINDOWS = {
     "downloads": ("script-arrmada-downloads.xml", "downloads_window.py"),
     "salon": ("script-arrmada-salon.xml", "salon_window.py"),
     "pair": ("script-arrmada-pair.xml", "pair_window.py"),
+    "qr": ("script-arrmada-qr.xml", "qr_window.py"),
 }
 
 # Noms de police présents dans TOUS les jeux de polices (« fontsets ») d'Aeon

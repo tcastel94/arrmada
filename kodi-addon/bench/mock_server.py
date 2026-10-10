@@ -13,6 +13,8 @@ Répond comme le vrai backend aux routes lues par l'écran « Accueil » :
   GET /img/<fichier>            images générées au démarrage (Pillow)
   GET /__down                   simule une panne : toutes les routes API → 503
   GET /__deny                   simule une TV refusée : toutes les routes API → 401
+  GET /api/qr                   QR code vers la web app ou YouTube (phase 3)
+  POST /api/devices/pair/confirm  appairage validé par mot de passe (migration)
 
 La progression des téléchargements avance à chaque appel, pour vérifier le
 rafraîchissement en direct. Une latence est simulée (--delay) pour voir les
@@ -59,6 +61,7 @@ STATE = {
     "qtick": 0,
     "paused": False,
     "pair_polls": 0,
+    "pair_confirmed": False,  # code validé avec le mot de passe (migration, phase 3)
     "read": set(),  # notifications marquées lues
     "events": [],  # événements relevés par l'add-on (déposés par /__emit)  # l'appairage est « validé dans la web app » au 3e poll
     "auth": "",  # dernier mode d'authentification vu (journal du banc)
@@ -386,7 +389,9 @@ def detail(base: str, kind: str, arr_id: int) -> dict | None:
         "runtime": 166,
         "has_file": True,
         "tmdb_id": 693134 + idx,
-        "youtube_trailer_id": "Way9Dexny3w" if idx == 0 else "",
+        # Tous les films ont une bande-annonce : sans l'add-on YouTube (cas du
+        # banc), la fiche affiche son QR code (phase 3).
+        "youtube_trailer_id": "Way9Dexny3w",
         "ratings": {"tmdb": 8.2, "imdb": 8.6, "rotten_tomatoes": 92},
         "file": {
             "quality": "Remux-2160p" if res >= 2160 else "WEBDL-1080p",
@@ -628,6 +633,21 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
                     "boot_id": BOOT_ID,
                     "last_id": len(STATE["events"]),
                 })
+            elif path == "/api/qr":
+                # QR code vers la web app ou YouTube (phase 3), comme le vrai serveur
+                import base64
+                import hashlib
+                from urllib.parse import parse_qs, urlsplit
+
+                query = {k: v[0] for k, v in parse_qs(urlsplit(self.path).query).items()}
+                if query.get("youtube"):
+                    url = f"https://www.youtube.com/watch?v={query['youtube']}"
+                else:
+                    url = f"http://192.168.2.3:3420{query.get('path') or '/'}"
+                file = images / f"qr-{hashlib.sha1(url.encode()).hexdigest()[:10]}.png"
+                if not file.exists():
+                    make_qr(file, url)
+                self._json({"url": url, "png": base64.b64encode(file.read_bytes()).decode()})
             elif path == "/api/yamaha/state":
                 self._json(yamaha_state())
             elif path == "/api/yamaha/profiles":
@@ -651,6 +671,7 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
                 self._json({"success": True})
             elif path == "/api/devices/pair/start":
                 STATE["pair_polls"] = 0
+                STATE["pair_confirmed"] = False
                 self._json({
                     "device_code": "code-secret-du-banc",
                     "user_code": PAIR_CODE,
@@ -659,9 +680,18 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
                     "expires_in": 600,
                     "interval": 3,
                 })
+            elif path == "/api/devices/pair/confirm":
+                # Migration de l'ancien mot de passe (phase 3) : la TV valide
+                # elle-même son code, avec le mot de passe en X-Api-Key.
+                if not self.headers.get("X-Api-Key"):
+                    self._json({"detail": "Not authenticated"}, status=401)
+                else:
+                    STATE["pair_confirmed"] = True
+                    sys.stderr.write(f"[mock] appairage validé par mot de passe : {data}\n")
+                    self._json({"status": "ok", "device": PAIRED_DEVICE})
             elif path == "/api/devices/pair/poll":
                 STATE["pair_polls"] += 1
-                if STATE["pair_polls"] < 3:
+                if STATE["pair_polls"] < 3 and not STATE["pair_confirmed"]:
                     self._json({"status": "pending", "interval": 3})
                 else:
                     self._json({"status": "ok", "token": "jeton-du-banc", "device": PAIRED_DEVICE})

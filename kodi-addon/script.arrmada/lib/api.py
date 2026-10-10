@@ -54,23 +54,30 @@ class ArrMadaAPI:
 
     @classmethod
     def auth_headers(cls, config: dict | None = None) -> dict:
-        """En-têtes d'authentification pour CE serveur.
+        """En-têtes d'authentification pour CE serveur : le jeton de la TV.
 
-        TV appairée : son propre jeton (ADR-003 § 4). Sinon, ancien mode :
-        le mot de passe admin saisi dans les réglages (toléré une version).
+        Depuis la phase 3, la TV n'envoie plus jamais le mot de passe admin
+        (une TV volée ne donne plus les droits admin). Une TV qui l'avait
+        encore dans ses réglages s'appaire toute seule au démarrage
+        (lib/migration.py), puis l'efface. Non appairée : aucun en-tête, le
+        serveur répond 401 et l'écran propose « Appairer cette TV ».
         """
         config = config or cls.get_config()
         device_token = device.token_for(config["url"])
-        if device_token:
-            return {"X-Device-Token": device_token}
-        if config["api_key"]:
-            return {"X-Api-Key": config["api_key"], "Authorization": f"Bearer {config['api_key']}"}
-        return {}
+        return {"X-Device-Token": device_token} if device_token else {}
 
     @classmethod
-    def _request(cls, path: str, method: str = "GET", data: dict | None = None, timeout: int = 15) -> dict:
+    def _request(
+        cls,
+        path: str,
+        method: str = "GET",
+        data: dict | None = None,
+        timeout: int = 15,
+        headers: dict | None = None,
+    ) -> dict:
         config = cls.get_config()
         full_url = f"{config['url']}{path}"
+        extra_headers = headers or {}
 
         headers = {
             "Content-Type": "application/json",
@@ -78,6 +85,7 @@ class ArrMadaAPI:
         }
         auth = cls.auth_headers(config)
         headers.update(auth)
+        headers.update(extra_headers)
         device_token = auth.get("X-Device-Token", "")
 
         req_body = json.dumps(data).encode("utf-8") if data is not None else None
@@ -119,6 +127,12 @@ class ArrMadaAPI:
         return cls._request(path, method="GET", timeout=timeout)
 
     @classmethod
+    def get_qr(cls, path: str = "", youtube: str = "") -> dict:
+        """QR code vers la web app ou YouTube : {"url", "png" (base64)} (phase 3)."""
+        query = {"youtube": youtube} if youtube else {"path": path or "/"}
+        return cls._request(f"/api/qr?{urllib.parse.urlencode(query)}", method="GET", timeout=10)
+
+    @classmethod
     def mark_notification_read(cls, notification_id: str) -> dict:
         return cls._request(f"/api/notifications/{notification_id}/read", method="POST", timeout=8)
 
@@ -133,6 +147,21 @@ class ArrMadaAPI:
     def pair_poll(cls, device_code: str) -> dict:
         """« Le code a-t-il été validé ? » → jeton de l'appareil, une seule fois."""
         return cls._request("/api/devices/pair/poll", method="POST", data={"device_code": device_code}, timeout=10)
+
+    @classmethod
+    def pair_confirm_with_password(cls, user_code: str, name: str, room: str, password: str) -> dict:
+        """Valide son propre code avec l'ancien mot de passe admin (migration, phase 3).
+
+        Seul et unique usage du mot de passe par la TV : il est effacé des
+        réglages dès que le jeton est reçu.
+        """
+        return cls._request(
+            "/api/devices/pair/confirm",
+            method="POST",
+            data={"user_code": user_code, "name": name, "room": room},
+            timeout=10,
+            headers={"X-Api-Key": password},
+        )
 
     @classmethod
     def device_me(cls) -> dict:

@@ -36,6 +36,7 @@ BTN_PLAY = 501
 BTN_TRAILER = 502
 BTN_UPGRADE = 503
 BTN_SUBTITLES = 504
+BTN_PHONE = 505  # phase 3 : page du titre dans la web app (QR code)
 BADGES = 520
 CAST = 600
 SEASONS = 610
@@ -170,7 +171,13 @@ class DetailWindow(xbmcgui.WindowXML):
             # série) ; Kodi ne permet pas de changer la navigation d'un groupe
             # de boutons depuis Python : on redirige ici vers les saisons.
             try:
-                if self.getFocusId() in (BTN_PLAY, BTN_TRAILER, BTN_UPGRADE, BTN_SUBTITLES):
+                if self.getFocusId() in (
+                    BTN_PLAY,
+                    BTN_TRAILER,
+                    BTN_UPGRADE,
+                    BTN_SUBTITLES,
+                    BTN_PHONE,
+                ):
                     self.setFocusId(SEASONS)
             except RuntimeError:
                 pass
@@ -185,10 +192,29 @@ class DetailWindow(xbmcgui.WindowXML):
             ui.run_in_background(ui.search_release, dict(entry))
         elif controlId == BTN_SUBTITLES:
             ui.run_in_background(ui.search_subtitles, dict(entry))
+        elif controlId == BTN_PHONE:
+            self._show_on_phone(entry)
         elif controlId == CAST:
             item = self.getControl(CAST).getSelectedItem()
             if item:
                 ui.notify(item.getLabel(), item.getLabel2() or "Casting")
+
+    @staticmethod
+    def _show_on_phone(entry: dict) -> None:
+        """QR code vers la fiche complète du titre dans la web app (phase 3)."""
+        import links_data
+        import qr_window
+
+        path = links_data.media_path(entry.get("kind", ""), entry.get("arr_id"))
+        if not path:
+            ui.notify(entry.get("title") or "ArrMada", "Fiche web indisponible pour ce titre")
+            return
+        qr_window.show_qr(
+            entry.get("title") or "Sur ton téléphone",
+            "La fiche complète dans la web app : historique, fichiers, profil de qualité, "
+            "suppression (impossible depuis la TV).",
+            path=path,
+        )
 
 
 def open_detail(entry: dict) -> None:

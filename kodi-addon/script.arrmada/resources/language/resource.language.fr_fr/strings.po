@@ -124,6 +124,10 @@ msgctxt "#30205"
 msgid "ArrMada is unreachable. Check your settings."
 msgstr "ArrMada est injoignable. Vérifiez vos réglages."
 
+msgctxt "#30132"
+msgid "Notifications during playback (otherwise: summary when it stops)"
+msgstr "Notifications pendant la lecture (sinon : résumé à l'arrêt)"
+
 msgctxt "#30140"
 msgid "Advanced"
 msgstr "Avancé"

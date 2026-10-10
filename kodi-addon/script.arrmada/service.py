@@ -11,6 +11,8 @@
   behaviour: scrobble + legacy download alerts only)
 - The old polling of /api/kodi/addon-status only runs while the server's
   events are unreachable (or in safe mode)
+- Phase 3: the TV never sends the admin password any more. A TV that still
+  has it in its settings pairs itself once, then erases it (lib/migration.py)
 """
 
 from __future__ import annotations
@@ -30,10 +32,12 @@ import kodi_helper
 from kodi_helper import get_current_item_info, show_notification, get_setting_bool, get_setting_int
 from audio_switcher import run_audio_switch
 from background import BackgroundTasks
+import migration
 import startup_guard
 import threading
 
 ADDON = xbmcaddon.Addon("script.arrmada")
+MIGRATION_RETRY = 300  # s entre deux essais d'appairage automatique (serveur injoignable)
 
 
 class ArrMadaPlayer(xbmc.Player):
@@ -240,6 +244,9 @@ def main():
     healthy_at = time.time() + startup_guard.HEALTHY_AFTER if tasks else 0.0
     _reload_settings()  # le disjoncteur a pu cocher « Mode minimal » à l'instant
     safe_mode = get_setting_bool("safe_mode", default=False)
+    # Ancien mot de passe encore là : appairage automatique (tout de suite,
+    # puis toutes les 5 min tant que le serveur ne répond pas).
+    migrate_at = time.time() if migration.needed() else 0.0
 
     last_notification_check = 0
     seen_downloads: set[str] = set()
@@ -262,6 +269,14 @@ def main():
                 _log("mode minimal retiré : cache des listes et relevé des événements actifs")
                 tasks = BackgroundTasks(monitor)
                 healthy_at = time.time() + startup_guard.HEALTHY_AFTER
+
+        # 0b. Ancien mot de passe → appairage automatique (phase 3)
+        if migrate_at and time.time() >= migrate_at:
+            outcome = migration.run()
+            migrate_at = time.time() + MIGRATION_RETRY if outcome == "retry" else 0.0
+            _reload_settings()  # le mot de passe vient d'être effacé
+            if outcome == "done" and tasks is not None:
+                tasks = BackgroundTasks(monitor)  # relevés tout de suite, avec le jeton
 
         # 1. Handle player tracking
         if player.isPlayingVideo():

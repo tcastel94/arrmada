@@ -141,7 +141,12 @@ backend les refuse aussi pour un jeton d'appareil, donc l'interface n'est pas
 la seule barrière.
 
 Pour la transition, l'ancien en-tête `X-Api-Key` reste accepté pendant une
-version, puis il est retiré.
+version, puis il est retiré **côté TV** : depuis l'add-on 1.8 (phase 3), la
+TV n'envoie plus jamais le mot de passe admin. Une TV qui l'avait encore
+s'appaire toute seule au démarrage (code validé avec le mot de passe, une
+seule fois), puis l'efface. Décision du 10/10/2026 : le **serveur garde**
+`X-Api-Key` pour les scripts et automatisations (n8n…), qui ne passent pas
+par l'appairage.
 
 Côté backend, cela demande :
 - une table `devices` (nom, pièce, empreinte du jeton, dates) ;
@@ -283,8 +288,23 @@ pièce. Le choix d'une autre pièce reste possible dans un menu secondaire.
 > La 1.7.2 distingue aussi « TV refusée » (401/403 → appairer) de « serveur
 > injoignable ».
 >
-> Reste : retrait de l'ancien `X-Api-Key` (phase 3), avec les QR codes vers
-> la web app et les notifications enrichies.
+> **Phase 3 livrée (10/10/2026), add-on 1.8.0** :
+> - **QR codes vers la web app** (§ 7) : `GET /api/qr` (adresse de la web app
+>   ou vidéo YouTube, chemins filtrés, PNG en base64 écrit en local par
+>   l'add-on). Fiche média → *Téléphone*, bande-annonce sans add-on YouTube,
+>   Maintenance du NAS (ancien menu), entrée de la racine. *Ouvrir sur la TV*
+>   sur Android.
+> - **Notifications enrichies** : affiche en icône, épisode, qualité, taille,
+>   mise à niveau / nouvel ajout / import bloqué (`ManualInteractionRequired`
+>   → `import_blocked`), regroupement au-delà de 2, sans son ; rien pendant
+>   un film, résumé « Pendant ta séance » à l'arrêt.
+> - **Raccourcis** : favoris Kodi (JSON-RPC `Favourites.AddFavourite`) vers
+>   Accueil, Téléchargements, Salon, Rechercher ; un favori lancé comme une
+>   lecture (`PlayMedia`) rouvre l'écran proprement.
+> - **Mot de passe admin retiré côté TV** (voir § 4) avec appairage
+>   automatique ; le serveur le garde pour les scripts.
+> - Validé : banc Kodi 20.5 (40 captures) et, contre le vrai serveur,
+>   migration automatique et QR code.
 
 ## Conséquences
 

@@ -35,16 +35,8 @@ EXPIRED = ("Ce code a expiré", "Demande un nouveau code et valide-le dans les 1
 
 
 def _platform() -> str:
-    """« Kodi 21.1 · Android » : aide à reconnaître la TV dans la web app."""
-    name = next(
-        (
-            label
-            for key, label in pairing_data.PLATFORMS
-            if xbmc.getCondVisibility(f"System.Platform.{key}")
-        ),
-        "",
-    )
-    return pairing_data.platform_label(xbmc.getInfoLabel("System.BuildVersion"), name)
+    """« Kodi 21.1 · Android » (voir ui_common.platform_name)."""
+    return ui.platform_name()
 
 
 class PairWindow(xbmcgui.WindowXML):

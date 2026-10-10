@@ -22,6 +22,8 @@ Le plugin **ArrMada pour Kodi** permet de connecter directement votre médiathè
 ### 4. 📺 Notifications TV en temps réel
 - Dès qu'un titre est importé sur le NAS (ou qu'un téléchargement démarre), une alerte discrète s'affiche en haut de l'écran Kodi, **en 5 secondes au plus** : le service relève les événements du serveur toutes les 5 s (§ 11).
 - Un import déclenche aussi le scan de la médiathèque Kodi (au plus une fois par minute).
+- **Bulles enrichies** (phase 3) : affiche du titre en icône, épisode (« Severance S02E10 · Cold Harbor »), qualité et taille ; *Mise à niveau sur le NAS* pour un remplacement, *Nouveau titre suivi* pour un simple ajout à Radarr/Sonarr, *Import bloqué* quand le *arr attend une intervention. Sans son. Au-delà de 2 nouveautés d'un coup, une seule bulle de résumé.
+- **Pas de bulle pendant un film ou un épisode** : un résumé « Pendant ta séance » s'affiche à l'arrêt de la lecture. Réglage *Notifications pendant la lecture* pour les voir quand même.
 
 ### 5. 📥 Menu de l'add-on
 Calqué sur la web app (§ 10) : Accueil, Découvrir, Manquants, Rechercher,
@@ -132,13 +134,23 @@ plus de mot de passe admin dans Kodi, et un appareil se révoque d'un clic.
 Ensuite :
 - l'écran **Salon** et le préréglage appliqué par **Lire** visent **toujours l'ampli de la pièce de cette TV**. Le serveur l'impose : une TV ne peut pas piloter l'ampli d'une autre pièce ;
 - la pièce choisie remplace le réglage « Profil de la pièce » de l'add-on ;
-- le **mot de passe admin peut être retiré** des réglages de l'add-on ;
+- la TV **n'utilise plus jamais le mot de passe admin** (depuis la 1.8) : une TV volée ou compromise ne donne pas les droits admin. Le serveur l'accepte toujours pour tes scripts et automatisations ;
 - périmètre « TV » imposé par le serveur : lecture, recherche, ajout, sous-titres, file (lecture seule + pause/reprise), ampli. **Aucune suppression ni configuration** depuis une TV appairée (même dans les anciens menus) ;
 - appairage et jeton acceptés **uniquement depuis le réseau local** ;
 - Diagnostic (Accueil) : ligne « Appareil » ; web app : liste des TV, dernière activité, modifier, révoquer.
 
 > Une TV révoquée (ou une base serveur remise à zéro) oublie son jeton à la
 > première requête refusée : relance simplement l'appairage.
+
+> **Passage automatique (1.8)** : une TV qui avait encore le mot de passe admin
+> dans ses réglages s'appaire **toute seule** au démarrage. Elle demande un
+> code, le valide elle-même avec le mot de passe (nom et pièce repris de ses
+> réglages), récupère son jeton, puis **efface le mot de passe**. Une bulle
+> « Cette TV est appairée » le confirme. Il reste à choisir son ampli dans la
+> web app (Paramètres → Kodi → Appareils) ; en attendant, le serveur prend le
+> premier ampli actif, comme avant. Serveur injoignable : nouvel essai toutes
+> les 5 min. Mot de passe refusé : il est effacé, et la TV propose
+> « Appairer cette TV ».
 
 ### 8. 🔄 Mises à jour automatiques : le dépôt ArrMada
 ArrMada sert un **dépôt Kodi** (`http://<serveur>:8420/kodi/repo/`). Installé une
@@ -251,6 +263,33 @@ cause : chercher `ArrMada`, `Fatal`, `Traceback` et les dernières lignes.
 
 ---
 
+### 13. 📱 Sur ton téléphone : QR codes vers la web app (phase 3)
+Ce qui ne se fait pas sur la TV s'ouvre sur le téléphone : la TV affiche un
+**QR code**, on le vise avec l'appareil photo, la bonne page s'ouvre.
+
+| Où | QR code vers |
+|---|---|
+| Fiche média → bouton **Téléphone** | La fiche complète du titre dans la web app (historique, fichiers, profil, suppression) |
+| Fiche média → **Bande-annonce**, sans l'add-on YouTube | La bande-annonce sur YouTube |
+| Menu ArrMada → **Sur ton téléphone (QR code)** | Le tableau de bord de la web app |
+| Outils (ancien menu) → **Maintenance du NAS** | La page Santé (nettoyage des orphelins) : aucune suppression depuis une TV |
+
+Sur Android, un bouton **Ouvrir sur la TV** ouvre aussi l'adresse dans le
+navigateur de la TV (s'il y en a un d'installé). L'adresse de la web app vient
+du serveur : `PUBLIC_WEB_URL` si elle est réglée, sinon l'adresse du serveur
+avec le port 3420.
+
+### 14. ⭐ Raccourcis : favoris Kodi et menu de SiLVO (phase 3)
+1. Menu ArrMada → **Raccourcis : ajouter aux favoris Kodi**. Quatre favoris
+   apparaissent : *ArrMada · Accueil*, *· Téléchargements*, *· Salon*,
+   *· Rechercher* (ceux déjà présents ne sont pas dupliqués).
+2. Dans **SiLVO** : Paramètres du skin → *Personnaliser le menu principal* →
+   ajouter un élément → *Favoris* → choisir le raccourci.
+
+> Piège Kodi : un favori vers un écran d'add-on est lancé comme une **lecture**
+> (`PlayMedia`). L'add-on le détecte, répond « rien à lire » à Kodi, puis
+> ouvre l'écran normalement : pas de message d'erreur.
+
 ## 🚀 Installation dans Kodi
 
 > ⚠️ **NVIDIA Shield (Kodi 21, Android)** : l'installation **par le dépôt** ferme
@@ -287,14 +326,12 @@ Copiez le dossier `script.arrmada/` dans le dossier des extensions de Kodi :
 1. Ouvrez Kodi > **Extensions** > **Extensions Programmes** > **ArrMada** (ou faites Clic droit > **Paramètres**).
 2. Renseignez :
    - **URL du serveur ArrMada** : `http://<IP_DE_VOTRE_SERVEUR>:8420` (port du backend ; le port 3420 de l'interface est converti automatiquement).
-   - **Clé API / Mot de passe** : **inutile une fois la TV appairée** (§ 7). Sinon (ancien mode,
-     toléré une version) : votre mot de passe de connexion ArrMada (`ARRMADA_AUTH_SECRET`).
-     Il n'y a **aucune valeur par défaut** : sans mot de passe ni appairage, l'add-on est refusé (401).
-     Le champ est masqué à la saisie.
+   - Plus de mot de passe à saisir depuis la 1.8 : la TV s'**appaire** (§ 7). Une TV
+     qui avait l'ancien mot de passe s'appaire toute seule, puis l'efface.
    - **Nom de l'appareil** : Ex: `Kodi Salon`.
    - **Langue des sous-titres** : `fr` (ou selon votre choix).
 3. Validez ! Le service démarre automatiquement en arrière-plan.
-4. Appairez la TV (§ 7) : ArrMada → **Appairer cette TV**.
+4. Appairez la TV (§ 7) : ArrMada → **Appairer cette TV** (sauf passage automatique depuis l'ancien mot de passe).
 
 ---
 
@@ -309,6 +346,8 @@ Copiez le dossier `script.arrmada/` dans le dossier des extensions de Kodi :
 | Flux en cache, événements, conversion en listes — sans Kodi | `script.arrmada/lib/feeds.py`, `script.arrmada/lib/catalog_data.py` |
 | Travail de fond du service (cache + événements, sans fil) | `script.arrmada/lib/background.py` |
 | Disjoncteur de démarrage (mode minimal) — sans Kodi | `script.arrmada/lib/startup_guard.py` |
+| QR codes, raccourcis (logique pure) / fenêtre QR | `script.arrmada/lib/links_data.py` / `script.arrmada/lib/qr_window.py` |
+| Passage automatique du mot de passe à l'appairage | `script.arrmada/lib/migration.py` |
 | Outils communs (lecture, préréglage ampli, notifications) | `script.arrmada/lib/ui_common.py` |
 | Logique pure (mise en forme, cache) — sans Kodi | `script.arrmada/lib/home_data.py`, `script.arrmada/lib/screens_data.py` |
 | Dépôt Kodi servi par le backend | `backend/app/services/kodi_repo.py`, `backend/app/api/kodi_repo.py` |
@@ -322,7 +361,7 @@ Le script lance un faux backend et un Kodi sans écran (Xvfb) avec les polices
 de SiLVO. Il rejoue un parcours à la télécommande (menu, intro, accueil,
 fiche film et série, téléchargements, salon avec et sans lecture,
 diagnostic, appairage, listes natives, widgets, événement serveur, cache, panne
-serveur, TV refusée) et dépose 36 captures dans
+serveur, TV refusée, QR codes, favoris, bulle pendant un film) et dépose 40 captures dans
 `/tmp/arrmada-kodi-bench/shots/`. Le Kodi du système n'est pas modifié : tout
 se passe dans un profil jetable. Le rendu final reste à valider sur la Shield.
 

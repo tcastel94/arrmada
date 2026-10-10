@@ -6,8 +6,11 @@ morceaux, dans la boucle principale du service (un tour par seconde), comme
 dans la 1.4.2. À chaque tour, `BackgroundTasks.tick()` fait au plus :
 
   1. un relevé des événements du serveur (`/api/events/recent`), toutes les
-     5 s. Un import, un téléchargement lancé… déclenche une notification à
-     l'écran et le rafraîchissement immédiat des flux concernés ;
+     5 s. Un import, un téléchargement lancé… déclenche une bulle à l'écran
+     (avec l'affiche du titre, phase 3) et le rafraîchissement immédiat des
+     flux concernés. Pendant un film, rien ne s'affiche : un résumé
+     « Pendant ta séance » apparaît à l'arrêt (réglage « Notifications
+     pendant la lecture ») ;
   2. le téléchargement d'UN flux (le plus urgent) vers le cache local.
      Quand un flux change, `arrmada.reload` est publié dans la mémoire
      commune de Kodi (Window(10000)) : un widget de skin qui ajoute
@@ -53,6 +56,11 @@ def _log(message: str, level: int = xbmc.LOGINFO) -> None:
     xbmc.log(f"[ArrMada] Service : {message}", level)
 
 
+def _watching() -> bool:
+    """Un film ou un épisode est à l'écran (lecture ou pause)."""
+    return bool(xbmc.getCondVisibility("Player.HasVideo"))
+
+
 class BackgroundTasks:
     """Cache des flux et relevé des événements, un petit morceau par tour."""
 
@@ -66,6 +74,7 @@ class BackgroundTasks:
         self._retry_at: dict = {}  # nom → prochain essai après une erreur
         self._changed: set = set()  # flux modifiés, pas encore annoncés au skin
         self._last_scan = 0.0
+        self._held: list = []  # bulles retenues pendant un film (résumé à l'arrêt)
         self.connected = False  # le dernier relevé a réussi (lu par service.py)
 
     def tick(self) -> None:
@@ -73,6 +82,10 @@ class BackgroundTasks:
         now = time.time()
         if now >= self._next_poll:
             self._poll_events(now)
+        if self._held and not _watching():
+            # Film terminé : ce qui s'est passé pendant la séance, en une bulle
+            self._show(feeds.merge_notifications(self._held, heading="Pendant ta séance"))
+            self._held = []
         if self.connected and not self._monitor.abortRequested():
             self._refresh_one_feed(now)
 
@@ -100,17 +113,33 @@ class BackgroundTasks:
             _log("serveur redémarré : relecture des événements depuis le début")
             response = ArrMadaAPI.get_feed(f"{EVENTS_PATH}?since_id=0", timeout=EVENTS_TIMEOUT)
             fresh = [] if feeds.is_error(response) else (self._cursor.accept(response) or [])
-        first_osd = len(fresh) - feeds.MAX_OSD_PER_POLL
-        for position, (_, event_type, data) in enumerate(fresh):
-            self._handle(event_type, data, notify=position >= first_osd)
+        bubbles = []
+        for _, event_type, data in fresh:
+            bubble = self._handle(event_type, data)
+            if bubble:
+                bubbles.append(bubble)
+        if not bubbles or not get_setting_bool("enable_notifications", default=True):
+            return
+        if _watching() and not get_setting_bool("notify_during_playback", default=False):
+            self._held.extend(bubbles)  # pas de bulle sur le film : résumé à l'arrêt
+            return
+        self._show(feeds.merge_notifications(bubbles))
 
-    def _handle(self, event_type: str, data: dict, notify: bool) -> None:
+    def _handle(self, event_type: str, data: dict):
+        """Rafraîchissements et scan pour un événement ; sa bulle (ou None)."""
         self._forced |= feeds.feeds_for_event(event_type, data)
-        message = feeds.osd_message(event_type, data)
-        if notify and message and get_setting_bool("enable_notifications", default=True):
-            ui.notify(message[0], message[1], 6000)
-        if event_type == "new_import":
+        # Un titre seulement ajouté à Radarr/Sonarr n'a pas encore de fichier
+        if event_type == "new_import" and data.get("event", "Download") == "Download":
             self._scan_library()
+        return feeds.osd_notification(event_type, data)
+
+    @staticmethod
+    def _show(bubbles: list) -> None:
+        """Bulles en haut de l'écran, avec l'affiche du titre, sans son."""
+        dialog = xbmcgui.Dialog()
+        for bubble in bubbles:
+            icon = bubble.get("icon") or ui.ADDON.getAddonInfo("icon")
+            dialog.notification(bubble["heading"], bubble["message"], icon, 7000, False)
 
     def _scan_library(self) -> None:
         """Nouveau fichier sur le NAS : la médiathèque Kodi le découvre."""

@@ -23,6 +23,7 @@ from app.api.events import router as events_router
 from app.api.files import router as files_router
 from app.api.kodi import router as kodi_router
 from app.api.kodi_repo import router as kodi_repo_router
+from app.api.links import router as links_router
 from app.api.media import router as media_router
 from app.api.notifications import router as notifications_router
 from app.api.profile_overrides import router as profile_overrides_router
@@ -73,6 +74,7 @@ api_router.include_router(yamaha_router)
 api_router.include_router(activity_timeline_router)
 api_router.include_router(cast_router)
 api_router.include_router(devices_router)
+api_router.include_router(links_router)  # QR codes TV → web app (ADR-003 § 7)
 
 # New feature routes
 api_router.include_router(events_router)

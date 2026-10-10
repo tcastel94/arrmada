@@ -5,7 +5,7 @@ Racine calquée sur la web app :
 
   Accueil · Découvrir · Manquants · Rechercher · Calendrier ·
   Téléchargements · Notifications · Salon · Appairage ·
-  Widgets pour SiLVO · Outils (ancien menu) · Paramètres
+  Widgets pour SiLVO · Sur ton téléphone · Outils (ancien menu) · Paramètres
 
 Chaque liste lit le cache local (lib/listing.py) et s'affiche dans les vues
 du skin (mur d'affiches, liste…). OK ouvre la fiche ArrMada (ou la fenêtre
@@ -139,6 +139,19 @@ def show_root(handle: int, base: str) -> None:
             "DefaultAddonSkin.png",
             "À choisir dans Paramètres du skin → Personnaliser le menu principal → Widgets",
         ),
+        listing.action_entry(
+            "Raccourcis : ajouter aux favoris Kodi",
+            {"action": "favourites"},
+            "DefaultFavourites.png",
+            "Accueil, Téléchargements, Salon, Rechercher : ensuite, dans SiLVO, "
+            "Personnaliser le menu principal, puis Favoris",
+        ),
+        listing.action_entry(
+            "Sur ton téléphone (QR code)",
+            {"action": "qr", "page": "home"},
+            icon,
+            "La web app complète : configuration, nettoyage, historique",
+        ),
         listing.folder("Outils (ancien menu)", {"action": "legacy"}, "DefaultAddonProgram.png"),
         listing.action_entry("Paramètres", {"action": "settings"}, "DefaultAddonProgram.png"),
     ]
@@ -206,6 +219,37 @@ def context_action(params: dict) -> None:
         open_detail(params)
     elif op == "upgrade":
         ui.search_release(entry)
+
+
+def add_favourites() -> None:
+    """Ajoute les écrans ArrMada aux favoris Kodi (JSON-RPC), sans doublon."""
+    import links_data
+
+    favourites = ui.jsonrpc("Favourites.GetFavourites", {"properties": ["path", "windowparameter"]})
+    missing = links_data.missing_shortcuts(favourites.get("favourites") or [])
+    icon = ADDON.getAddonInfo("icon")
+    added = 0
+    for title, action in missing:
+        result = ui.jsonrpc(
+            "Favourites.AddFavourite",
+            {
+                "title": title,
+                "type": "media",
+                "path": links_data.shortcut_path(action),
+                "thumbnail": icon,
+            },
+        )
+        added += 1 if result == "OK" else 0
+    if added:
+        ui.notify(
+            f"{added} raccourci(s) ajouté(s) aux favoris",
+            "SiLVO : Personnaliser le menu principal, puis Favoris",
+            7000,
+        )
+    elif not missing:
+        ui.notify("Raccourcis déjà dans tes favoris", "Favoris Kodi : ArrMada · Accueil…", 5000)
+    else:
+        ui.notify("Favoris", "Kodi a refusé l'ajout (voir kodi.log)", 5000)
 
 
 def open_notification(params: dict) -> None:

@@ -215,6 +215,74 @@ class TestWebhooks:
         assert {e["type"] for e in after["events"]} >= {"download_grab"}
         assert all(int(e["id"]) > before["last_id"] for e in after["events"])
 
+    async def test_events_carry_tv_notification_details(
+        self, client: AsyncClient, auth_headers: dict
+    ) -> None:
+        """Affiche, mise à niveau, taille, épisode : de quoi enrichir la bulle sur la TV."""
+        since = (await client.get("/api/events/recent", headers=auth_headers)).json()["last_id"]
+        payloads = (
+            (
+                "/api/webhooks/radarr",
+                {
+                    "eventType": "Download",
+                    "isUpgrade": True,
+                    "movie": {
+                        "id": 3,
+                        "title": "Dune",
+                        "year": 2021,
+                        "tmdbId": 438631,
+                        "images": [
+                            {"coverType": "fanart", "remoteUrl": "https://img/fanart.jpg"},
+                            {
+                                "coverType": "poster",
+                                "url": "/MediaCover/3/poster.jpg",
+                                "remoteUrl": "https://img/dune.jpg",
+                            },
+                        ],
+                    },
+                    "movieFile": {"quality": "Remux-2160p", "size": 64_000_000_000},
+                },
+            ),
+            (
+                "/api/webhooks/sonarr",
+                {
+                    "eventType": "Grab",
+                    "series": {"title": "Severance", "year": 2022},
+                    "episodes": [{"seasonNumber": 2, "episodeNumber": 10, "title": "Cold Harbor"}],
+                    "release": {"quality": "WEBDL-2160p", "size": 7_000_000_000},
+                },
+            ),
+            (
+                "/api/webhooks/radarr",
+                {"eventType": "ManualInteractionRequired", "movie": {"title": "Wicked"}},
+            ),
+            # Numéros d'épisode absents : pas de plantage (HTTP 500 avant)
+            (
+                "/api/webhooks/sonarr",
+                {"eventType": "Grab", "series": {"title": "Andor"}, "episodes": [{}]},
+            ),
+        )
+        for path, payload in payloads:
+            assert (await client.post(path, json=payload)).status_code == 200
+
+        events = (
+            await client.get(f"/api/events/recent?since_id={since}", headers=auth_headers)
+        ).json()["events"]
+        by_type = {}
+        for event in events:
+            by_type.setdefault(event["type"], []).append(event["data"])
+
+        (imported,) = by_type["new_import"]
+        assert imported["poster"] == "https://img/dune.jpg"
+        assert imported["upgrade"] is True and imported["size"] == 64_000_000_000
+        assert imported["media_type"] == "movie" and imported["year"] == 2021
+        grabs = by_type["download_grab"]
+        assert grabs[0]["title"] == "Severance S02E10"
+        assert grabs[0]["episode_title"] == "Cold Harbor"
+        assert grabs[0]["quality"] == "WEBDL-2160p" and grabs[0]["poster"] == ""
+        assert grabs[1]["title"] == "Andor"
+        assert by_type["import_blocked"][0]["title"] == "Wicked"
+
     async def test_sonarr_episode_title(self, client: AsyncClient) -> None:
         payload = {
             "eventType": "Grab",

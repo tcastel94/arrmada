@@ -80,3 +80,28 @@ def device_summary(device: dict) -> str:
         device.get("avr_name") or "",
     ]
     return " · ".join(p for p in parts if p)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Migration : ancien mot de passe → appairage (phase 3)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def migration_room(room_setting: str) -> str:
+    """Pièce de l'ancien réglage « Profil de la pièce » (cinema | salon)."""
+    value = (room_setting or "").strip().lower()
+    return value if value in ("salon", "cinema") else "salon"
+
+
+def migration_confirm_outcome(response) -> str:
+    """Après la validation du code avec le mot de passe : ok | refused | retry.
+
+    refused : mot de passe refusé (401/403) ou demande invalide (422) ;
+    réessayer ne changera rien, la TV devra être appairée à la main.
+    retry : serveur injoignable ou erreur passagère, on réessaiera.
+    """
+    if not isinstance(response, dict):
+        return "retry"
+    if response.get("status") == "error":
+        return "refused" if response.get("code") in (401, 403, 422) else "retry"
+    return "ok"

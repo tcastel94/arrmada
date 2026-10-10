@@ -122,14 +122,14 @@
 
 		<!-- ═══════════════ ACTIONS ═══════════════ -->
 		<control type="grouplist" id="500">
-			<left>96</left><top>730</top><width>1150</width><height>64</height>
+			<left>96</left><top>730</top><width>1300</width><height>64</height>
 			<orientation>horizontal</orientation>
 			<itemgap>16</itemgap>
 			<ondown>600</ondown>
 			<animation effect="slide" start="0,40" end="0,0" time="500" delay="150" tween="cubic" easing="out">WindowOpen</animation>
 			<animation effect="fade" start="0" end="100" time="400" delay="150">WindowOpen</animation>
 			<control type="button" id="501">
-				<width>200</width><height>64</height>
+				<width>180</width><height>64</height>
 				<label>Lire</label>
 				<font>font13</font>
 				<textcolor>FF8CC4FF</textcolor>
@@ -141,7 +141,7 @@
 				<animation effect="zoom" start="107" end="100" time="160" tween="cubic" easing="out" center="auto">UnFocus</animation>
 			</control>
 			<control type="button" id="502">
-				<width>250</width><height>64</height>
+				<width>230</width><height>64</height>
 				<label>Bande-annonce</label>
 				<font>font13</font>
 				<textcolor>D9F5F7FA</textcolor>
@@ -155,7 +155,7 @@
 				<animation effect="zoom" start="107" end="100" time="160" tween="cubic" easing="out" center="auto">UnFocus</animation>
 			</control>
 			<control type="button" id="503">
-				<width>320</width><height>64</height>
+				<width>290</width><height>64</height>
 				<label>Meilleure version</label>
 				<font>font13</font>
 				<textcolor>D9F5F7FA</textcolor>
@@ -167,7 +167,7 @@
 				<animation effect="zoom" start="107" end="100" time="160" tween="cubic" easing="out" center="auto">UnFocus</animation>
 			</control>
 			<control type="button" id="504">
-				<width>240</width><height>64</height>
+				<width>210</width><height>64</height>
 				<label>Sous-titres</label>
 				<font>font13</font>
 				<textcolor>D9F5F7FA</textcolor>
@@ -176,6 +176,19 @@
 				<texturenofocus border="14" colordiffuse="1AFFFFFF">arrmada/rounded-12.png</texturenofocus>
 				<texturefocus border="14" colordiffuse="FF4A9EFF">arrmada/rounded-12.png</texturefocus>
 				<visible>String.IsEqual(Window.Property(kind),movie)</visible>
+				<animation effect="zoom" start="100" end="107" time="160" tween="cubic" easing="out" center="auto">Focus</animation>
+				<animation effect="zoom" start="107" end="100" time="160" tween="cubic" easing="out" center="auto">UnFocus</animation>
+			</control>
+			<!-- Phase 3 : la page complète du titre sur le téléphone (QR code) -->
+			<control type="button" id="505">
+				<width>210</width><height>64</height>
+				<label>Téléphone</label>
+				<font>font13</font>
+				<textcolor>D9F5F7FA</textcolor>
+				<focusedcolor>FF0A0E16</focusedcolor>
+				<align>center</align><aligny>center</aligny>
+				<texturenofocus border="14" colordiffuse="1AFFFFFF">arrmada/rounded-12.png</texturenofocus>
+				<texturefocus border="14" colordiffuse="FF4A9EFF">arrmada/rounded-12.png</texturefocus>
 				<animation effect="zoom" start="100" end="107" time="160" tween="cubic" easing="out" center="auto">Focus</animation>
 				<animation effect="zoom" start="107" end="100" time="160" tween="cubic" easing="out" center="auto">UnFocus</animation>
 			</control>

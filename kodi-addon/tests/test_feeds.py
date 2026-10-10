@@ -58,17 +58,87 @@ def test_events_refresh_the_right_feeds() -> None:
     assert feeds.feeds_for_event("kodi_scrobble", {}) == set()
 
 
-def test_osd_messages() -> None:
-    assert feeds.osd_message("new_import", {"title": "Dune", "quality": "Remux-2160p"}) == (
-        "Importé sur le NAS",
-        "Dune · Remux-2160p",
+DUNE = {
+    "event": "Download",
+    "title": "Dune",
+    "quality": "Remux-2160p",
+    "poster": "https://image.tmdb.org/t/p/w500/dune.jpg",
+    "size": 64 * 1024**3,
+    "year": 2021,
+}
+
+
+def test_import_notification_carries_the_poster() -> None:
+    bubble = feeds.osd_notification("new_import", DUNE)
+    assert bubble == {
+        "heading": "Importé sur le NAS",
+        "message": "Dune · Remux-2160p · 64 Go",
+        "icon": "https://image.tmdb.org/t/p/w500/dune.jpg",
+        "title": "Dune",
+    }
+    upgrade = feeds.osd_notification("new_import", dict(DUNE, upgrade=True))
+    assert upgrade["heading"] == "Mise à niveau sur le NAS"
+
+
+def test_other_notifications() -> None:
+    episode = feeds.osd_notification(
+        "download_grab",
+        {"title": "Severance S02E10", "episode_title": "Cold Harbor", "size": 7.5 * 1024**3},
     )
-    assert feeds.osd_message("download_grab", {"title": "Arcane S02E01"}) == (
-        "Téléchargement lancé",
-        "Arcane S02E01",
+    assert episode["heading"] == "Téléchargement lancé"
+    assert episode["message"] == "Severance S02E10 · Cold Harbor · 7,5 Go"
+    assert episode["icon"] == ""  # pas d'affiche : l'icône de l'add-on
+
+    added = feeds.osd_notification(
+        "new_import", {"event": "MovieAdded", "title": "Wicked", "year": 2024}
     )
-    assert feeds.osd_message("download_update", {"title": "x"}) is None
-    assert feeds.osd_message("new_import", {}) is None  # sans titre : rien à dire
+    assert (added["heading"], added["message"]) == ("Nouveau titre suivi", "Wicked (2024) · Radarr")
+
+    blocked = feeds.osd_notification("import_blocked", {"title": "Flow", "service": "radarr"})
+    assert blocked["message"] == "Flow : à régler dans Radarr (web app)"
+
+    assert feeds.osd_notification("health_alert", {"title": "Disque plein"})["message"] == (
+        "Disque plein"
+    )
+    # Serveur d'avant la phase 3 : bulle plus sobre, mais bulle quand même
+    assert feeds.osd_notification("new_import", {"title": "Dune"})["message"] == "Dune"
+    assert feeds.osd_notification("download_update", {"title": "x"}) is None
+    assert feeds.osd_notification("new_import", {}) is None  # sans titre : rien à dire
+    # Adresse d'affiche douteuse : ignorée
+    assert feeds.osd_notification("new_import", dict(DUNE, poster="/local.jpg"))["icon"] == ""
+
+
+def test_merge_notifications() -> None:
+    one = feeds.osd_notification("new_import", DUNE)
+    two = feeds.osd_notification("download_grab", {"title": "Arcane S02E01"})
+    assert feeds.merge_notifications([]) == []
+    assert feeds.merge_notifications([one, two]) == [one, two]  # peu : telles quelles
+
+    many = [one, two] + [
+        feeds.osd_notification("new_import", {"title": f"Film {n}"}) for n in range(3)
+    ]
+    (summary,) = feeds.merge_notifications(many)
+    assert summary["heading"] == "5 nouveautés ArrMada"
+    assert summary["message"] == "Dune, Arcane S02E01, Film 0 et 2 autre(s)"
+    assert summary["icon"] == DUNE["poster"]  # la dernière affiche connue
+
+    (after_movie,) = feeds.merge_notifications([one], heading="Pendant ta séance")
+    assert after_movie["heading"] == "Pendant ta séance · Importé sur le NAS"
+    assert after_movie["message"] == "Dune · Remux-2160p · 64 Go"
+    assert after_movie["icon"] == DUNE["poster"]
+    (several,) = feeds.merge_notifications([one, two], heading="Pendant ta séance")
+    assert several["message"] == "2 nouveauté(s) : Dune, Arcane S02E01"
+
+
+def test_notification_texts_use_only_silvo_glyphs() -> None:
+    missing = {"→", "★", "✓", "✔", "▶", "⏸", "●"}
+    samples = [
+        feeds.osd_notification("new_import", DUNE),
+        feeds.osd_notification("import_blocked", {"title": "Flow"}),
+        feeds.merge_notifications([feeds.osd_notification("new_import", DUNE)] * 3)[0],
+    ]
+    for bubble in samples:
+        assert not missing & set(bubble["heading"] + bubble["message"])
 
 
 def test_next_feed_one_at_a_time() -> None:

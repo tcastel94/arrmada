@@ -59,6 +59,21 @@ def notify(title: str, message: str, ms: int = 3500) -> None:
     xbmcgui.Dialog().notification(title, message, ADDON.getAddonInfo("icon"), ms)
 
 
+def platform_name() -> str:
+    """« Kodi 21.1 · Android » : aide à reconnaître la TV dans la web app."""
+    import pairing_data
+
+    name = next(
+        (
+            label
+            for key, label in pairing_data.PLATFORMS
+            if xbmc.getCondVisibility(f"System.Platform.{key}")
+        ),
+        "",
+    )
+    return pairing_data.platform_label(xbmc.getInfoLabel("System.BuildVersion"), name)
+
+
 def cache_dir() -> str:
     """special://profile/addon_data/script.arrmada/cache/ en chemin réel."""
     return os.path.join(xbmcvfs.translatePath(ADDON.getAddonInfo("profile")), "cache")
@@ -188,10 +203,15 @@ def play_trailer(youtube_id: str, title: str) -> None:
         notify(title, "Pas de bande-annonce connue pour ce titre")
         return
     if not xbmc.getCondVisibility("System.HasAddon(plugin.video.youtube)"):
-        notify(
-            title,
-            "Installe l'add-on YouTube (avec ta clé API Google) pour les bandes-annonces",
-            6000,
+        # Pas d'add-on YouTube sur cette TV : la bande-annonce sur le téléphone
+        # (QR code, phase 3), et ce qu'il faut pour la voir ici.
+        import qr_window
+
+        qr_window.show_qr(
+            f"Bande-annonce · {title}" if title else "Bande-annonce",
+            "Vise le QR code pour la voir sur ton téléphone. Pour la lire sur la TV : "
+            "installe l'add-on YouTube de Kodi, avec ta propre clé API Google.",
+            youtube=youtube_id,
         )
         return
     xbmc.executebuiltin(f"PlayMedia(plugin://plugin.video.youtube/play/?video_id={youtube_id})")

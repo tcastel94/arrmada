@@ -63,3 +63,24 @@ def test_device_summary() -> None:
     assert (
         pd.device_summary({"name": "Shield", "room": "salon", "avr_name": None}) == "Shield · Salon"
     )
+
+
+class TestMigration:
+    """Ancien mot de passe → appairage automatique (phase 3)."""
+
+    def test_room_from_the_old_setting(self) -> None:
+        assert pd.migration_room("cinema") == "cinema"
+        assert pd.migration_room(" Salon ") == "salon"
+        assert pd.migration_room("") == "salon"
+        assert pd.migration_room("garage") == "salon"
+
+    def test_confirm_outcome(self) -> None:
+        assert pd.migration_confirm_outcome({"status": "ok"}) == "ok"
+        # Mot de passe refusé ou demande invalide : inutile de réessayer
+        for code in (401, 403, 422):
+            refused = {"status": "error", "message": "Not authenticated", "code": code}
+            assert pd.migration_confirm_outcome(refused) == "refused"
+        # Serveur injoignable ou erreur passagère : on réessaiera
+        assert pd.migration_confirm_outcome({"status": "error", "message": "x"}) == "retry"
+        assert pd.migration_confirm_outcome({"status": "error", "code": 500}) == "retry"
+        assert pd.migration_confirm_outcome(None) == "retry"

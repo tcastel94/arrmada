@@ -55,6 +55,63 @@ def _quality_name(file: Any) -> str:
     return ""
 
 
+def _episode_label(episodes: Any) -> str:
+    """« S02E10 » du premier épisode, ou "" si les numéros manquent."""
+    first = episodes[0] if isinstance(episodes, list) and episodes else None
+    if not isinstance(first, dict):
+        return ""
+    season, number = first.get("seasonNumber"), first.get("episodeNumber")
+    if isinstance(season, int) and isinstance(number, int):
+        return f"S{season:02d}E{number:02d}"
+    return ""
+
+
+def _poster_from(obj: Any) -> str:
+    """Affiche (TMDB / TheTVDB) parmi les images du webhook, sinon "".
+
+    Radarr 5 et Sonarr 4 envoient `images: [{coverType, url, remoteUrl}]`.
+    Seule une adresse complète (`remoteUrl`) sert à la TV : `url` est un
+    chemin local du *arr, inaccessible depuis Kodi.
+    """
+    for img in (obj.get("images") if isinstance(obj, dict) else None) or []:
+        if isinstance(img, dict) and (img.get("coverType") or "").lower() == "poster":
+            url = img.get("remoteUrl") or img.get("url") or ""
+            if url.startswith(("http://", "https://")):
+                return url
+    return ""
+
+
+async def _poster_from_library(db: AsyncSession, media_type: str | None, tmdb_id: Any) -> str:
+    """Affiche connue de la médiathèque ArrMada (webhook sans images)."""
+    if not media_type or not str(tmdb_id or "").isdigit():
+        return ""
+    try:
+        from sqlalchemy import select
+
+        from app.models.media import Media
+
+        poster = (
+            await db.execute(
+                select(Media.poster_url)
+                .where(Media.type == media_type, Media.tmdb_id == int(tmdb_id))
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+    except Exception as exc:  # base indisponible : la notification part sans affiche
+        logger.debug("[Webhook] affiche introuvable : %s", exc)
+        return ""
+    return poster if poster and poster.startswith(("http://", "https://")) else ""
+
+
+def _size_bytes(payload: dict[str, Any]) -> int:
+    """Taille de la release (Grab) ou du fichier importé (Download), 0 si inconnue."""
+    for key in ("release", "movieFile", "episodeFile"):
+        part = payload.get(key)
+        if isinstance(part, dict) and isinstance(part.get("size"), int | float):
+            return int(part["size"])
+    return 0
+
+
 async def _handle_arr_webhook(
     service_type: str,
     payload: dict[str, Any],
@@ -69,10 +126,9 @@ async def _handle_arr_webhook(
         title = payload["movie"].get("title", "Unknown movie")
     elif "series" in payload:
         title = payload["series"].get("title", "Unknown series")
-        if "episodes" in payload:
-            eps = payload["episodes"]
-            if eps:
-                title += f" S{eps[0].get('seasonNumber', '?'):02d}E{eps[0].get('episodeNumber', '?'):02d}"
+        label = _episode_label(payload.get("episodes"))
+        if label:
+            title += f" {label}"
     elif "message" in payload:
         title = payload["message"]
 
@@ -146,17 +202,33 @@ async def _handle_arr_webhook(
         "MovieDelete": "media_deleted",
         "MovieFileDelete": "media_deleted",
         "Test": "webhook_test",
+        # Import bloqué (échantillon, mauvais fichier…) : à régler dans le *arr
+        "ManualInteractionRequired": "import_blocked",
     }
     sse_event_type = sse_type_map.get(event_type, f"{service_type}_{event_type.lower()}")
 
+    # Données enrichies pour les notifications de la TV (ADR-003, phase 3) :
+    # affiche, épisode, mise à niveau, taille.
+    episodes = payload.get("episodes")
+    first_episode = episodes[0] if isinstance(episodes, list) and episodes else {}
+    poster = _poster_from(_obj) or await _poster_from_library(db, _media_type, _obj.get("tmdbId"))
+    release = payload.get("release") if isinstance(payload.get("release"), dict) else {}
     await event_bus.publish(
         sse_event_type,
         {
             "service": service_type,
             "event": event_type,
             "title": title,
-            "quality": quality,
+            "quality": quality or str(release.get("quality") or ""),
             "source": payload.get("downloadClient", ""),
+            "media_type": _media_type or "",
+            "year": _obj.get("year"),
+            "poster": poster,
+            "episode_title": (
+                str(first_episode.get("title") or "") if isinstance(first_episode, dict) else ""
+            ),
+            "upgrade": bool(payload.get("isUpgrade")),
+            "size": _size_bytes(payload),
         },
     )
 

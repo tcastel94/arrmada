@@ -124,7 +124,9 @@ def show_legacy_menu():
     add_dir("[SUGGESTIONS]    Recommandations intelligentes", "recommendations")
     add_dir("[MISSION CTRL]   Console & Sante de la Stack (HUD)", "dashboard_popup", is_folder=False)
     add_dir("[TELECHARG.]     Telechargements actifs (Gestion / Annulation)", "downloads", is_folder=False)
-    add_dir("[MAINTENANCE]    Assistant Maintenance du NAS (Orphelins / Scan / Clean)", "maintenance", is_folder=False)
+    # Nettoyage du NAS : depuis la web app seulement (QR code), aucune
+    # suppression depuis une TV (ADR-003, phase 3).
+    add_dir("[MAINTENANCE]    Maintenance du NAS : sur le téléphone (QR code)", "qr", params={"page": "cleanup"}, is_folder=False)
 
     xbmcplugin.endOfDirectory(HANDLE)
 
@@ -421,6 +423,16 @@ def main():
 
     action = params.get("action")
 
+    # Écran lancé depuis un favori Kodi : Kodi l'appelle comme une LECTURE
+    # (PlayMedia) et attend une vidéo. On lui répond « rien à lire », puis on
+    # rouvre l'écran comme depuis le menu de l'add-on (phase 3, raccourcis).
+    import links_data
+
+    if action in links_data.WINDOW_ACTIONS and HANDLE >= 0:
+        xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
+        xbmc.executebuiltin(f"RunPlugin({PLUGIN_URL}?{urllib.parse.urlencode(params)})")
+        return
+
     if not action:
         # Racine calquée sur la web app (ADR-003 § 2)
         import navigation
@@ -485,6 +497,18 @@ def main():
     elif action == "discovery":
         import discovery
         discovery.show_discovery_menu()
+    elif action == "favourites":
+        # Raccourcis vers les écrans ArrMada dans les favoris Kodi (phase 3)
+        import navigation
+
+        navigation.add_favourites()
+    elif action == "qr":
+        # Page de la web app sur le téléphone (ADR-003 § 7, phase 3)
+        import links_data
+        import qr_window
+
+        page = params.get("page", "home")
+        qr_window.show_page(page if page in links_data.PAGES else "home")
     elif action == "maintenance":
         import maintenance
         maintenance.show_maintenance_menu()
