@@ -268,8 +268,23 @@ async def addon_search_action(data: dict, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/scrobble")
-async def addon_scrobble(data: dict, db: AsyncSession = Depends(get_db)):
-    """Receive live playback status & scrobbles from Kodi add-on service."""
+async def addon_scrobble(
+    data: dict, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)
+):
+    """Receive live playback status & scrobbles from Kodi add-on service.
+
+    Also feeds the per-room "now playing" state shown by the living-room
+    screen (`/api/ambient`): the room is the paired TV's, else the add-on's
+    own room setting.
+    """
+    import time
+
+    from app.services.now_playing import now_playing
+
+    room = user.get("room") or str((data or {}).get("room") or "salon")
+    if user.get("device_name"):
+        data = dict(data, device_name=user["device_name"])
+    now_playing.record(room, data or {}, time.time())
     return await kodi_service.handle_addon_scrobble(db, data)
 
 

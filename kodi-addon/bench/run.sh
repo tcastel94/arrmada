@@ -110,7 +110,7 @@ cat > "$KODI_DIR/userdata/addon_data/script.arrmada/settings.xml" <<EOF
     <setting id="server_url">$MOCK_URL</setting>
     <setting id="api_key">banc-de-test</setting>
     <setting id="enable_notifications">true</setting>
-    <setting id="enable_scrobble">false</setting>
+    <setting id="enable_scrobble">true</setting>
 </settings>
 EOF
 
@@ -166,5 +166,7 @@ fi
 
 echo "== Journal"
 grep -E "\[ArrMada\] Accueil|\[HARNESS\]|Traceback" "$KODI_DIR/temp/kodi.log" || true
+echo "== Suivi de lecture reçu par le faux serveur"
+grep -F "[mock] lecture" mock.log || true
 echo "== Captures : $SHOT_DIR"
 ls -1 "$SHOT_DIR"

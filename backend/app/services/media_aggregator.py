@@ -169,6 +169,53 @@ async def fetch_all_media(db: AsyncSession) -> list[dict[str, Any]]:
     return all_media
 
 
+async def cached_library(db: AsyncSession) -> list[dict[str, Any]]:
+    """Toute la médiathèque, via le même cache de 5 min que `/api/media` (clé « media:all »)."""
+    from app.utils.cache import cache
+
+    async def _fetch() -> list[dict[str, Any]]:
+        return await fetch_all_media(db)
+
+    return list(await cache.get_or_set("media:all", _fetch, ttl_seconds=300))
+
+
+async def find_artwork(
+    db: AsyncSession, media_type: str | None, tmdb_id: Any = None, title: str | None = None
+) -> dict[str, str]:
+    """Affiche et fond d'un titre de la médiathèque ({"poster", "fanart"}, vides si inconnu).
+
+    Recherche par identifiant (film : TMDB ; série : TVDB, comme Sonarr), sinon
+    par titre exact (casse ignorée). Ne lève jamais : un Radarr injoignable
+    donne juste un écran sans image.
+    """
+    empty = {"poster": "", "fanart": ""}
+    wanted_id = str(tmdb_id or "").strip()
+    wanted_title = str(title or "").strip().casefold()
+    if not wanted_id.isdigit() and not wanted_title:
+        return empty
+    try:
+        library = await cached_library(db)
+    except Exception as exc:
+        logger.debug("Médiathèque indisponible pour les images : %s", exc)
+        return empty
+    candidates = [m for m in library if not media_type or m.get("type") == media_type]
+    match = None
+    if wanted_id.isdigit():
+        match = next((m for m in candidates if str(m.get("tmdb_id") or "") == wanted_id), None)
+    if match is None and wanted_title:
+        match = next(
+            (m for m in candidates if str(m.get("title") or "").casefold() == wanted_title), None
+        )
+    if match is None:
+        return empty
+
+    def _url(value: Any) -> str:
+        text = str(value or "")
+        return text if text.startswith(("http://", "https://")) else ""
+
+    return {"poster": _url(match.get("poster_url")), "fanart": _url(match.get("fanart_url"))}
+
+
 async def get_dashboard_stats(db: AsyncSession) -> dict[str, Any]:
     """Compute dashboard statistics from all services."""
     media = await fetch_all_media(db)

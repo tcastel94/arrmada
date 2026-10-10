@@ -62,12 +62,38 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             raise
 
 
+# Colonnes ajoutées à une table existante : `create_all` crée les tables
+# manquantes mais ne touche jamais une table déjà là. Comme un script de
+# mise à jour de schéma idempotent : on ajoute la colonne si elle manque.
+_ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
+    ("devices", "kind", "VARCHAR(20) NOT NULL DEFAULT 'tv'"),  # écran d'appoint
+)
+
+
+def add_missing_columns(sync_conn) -> list[str]:
+    """Ajoute les colonnes de `_ADDED_COLUMNS` absentes ; renvoie celles ajoutées."""
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(sync_conn)
+    tables = set(inspector.get_table_names())
+    added = []
+    for table, column, ddl in _ADDED_COLUMNS:
+        if table not in tables:
+            continue  # créée à l'instant par create_all, déjà complète
+        existing = {col["name"] for col in inspector.get_columns(table)}
+        if column not in existing:
+            sync_conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"))
+            added.append(f"{table}.{column}")
+    return added
+
+
 async def init_db() -> None:
     """Create all tables (used on first startup before Alembic is run)."""
     from app.models import Base  # noqa: F811
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(add_missing_columns)
 
 
 async def close_db() -> None:

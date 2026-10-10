@@ -307,6 +307,20 @@ pièce. Le choix d'une autre pièce reste possible dans un menu secondaire.
 > - Validé : banc Kodi 20.5 (40 captures) et, contre le vrai serveur,
 >   migration automatique et QR code.
 
+> **Écran d'appoint (10/10/2026), add-on 1.10.0** — hors plan initial, à la
+> demande du propriétaire : une tablette sous la TV du salon affiche l'heure
+> de début et de fin du film en cours, l'ampli, les téléchargements et les
+> sorties, sans éblouir (page `/ecran` de la web app, Fully Kiosk pour la
+> luminosité). Choix :
+> - **source** : le suivi de lecture que l'add-on envoie déjà (pas le serveur
+>   web de Kodi, rien à ouvrir sur la TV) ; l'add-on 1.10 le lit sur le
+>   lecteur et ajoute affiche et pause ;
+> - **appairage** identique à celui d'une TV (§ 4), avec un type d'appareil
+>   « écran » dont le périmètre est **une seule route en lecture**
+>   (`GET /api/ambient`) ; réseau local uniquement (décision 4) ;
+> - **pas de pilotage** depuis la tablette : elle affiche, la TV et le
+>   téléphone commandent.
+
 ## Conséquences
 
 ### Positives

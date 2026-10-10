@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 """ArrMada Background Service for Kodi.
 
-- Tracks playback progress and sends scrobbles to ArrMada
+- Tracks playback progress and sends scrobbles to ArrMada (since 1.10.0 also
+  the poster, episode and pause state for the living-room ambient screen,
+  lib/playback_data.py)
 - Keeps the local feed cache fresh for native lists and SiLVO widgets, and
   polls the server's recent events every 5 s for TV OSD alerts
   (lib/background.py, ADR-003 § 1). Since 1.7.1 everything runs in this one
@@ -29,10 +31,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "lib"))
 
 from api import ArrMadaAPI
 import kodi_helper
-from kodi_helper import get_current_item_info, show_notification, get_setting_bool, get_setting_int
+from kodi_helper import show_notification, get_setting_bool, get_setting_int
 from audio_switcher import run_audio_switch
 from background import BackgroundTasks
 import migration
+import playback_data
 import startup_guard
 import threading
 
@@ -40,131 +43,103 @@ ADDON = xbmcaddon.Addon("script.arrmada")
 MIGRATION_RETRY = 300  # s entre deux essais d'appairage automatique (serveur injoignable)
 
 
+def _read_playing_item(player: xbmc.Player) -> dict:
+    """Ce que lit le LECTEUR (jamais l'élément sélectionné dans une liste)."""
+    labels = {key: xbmc.getInfoLabel(label) for key, label in playback_data.LABELS.items()}
+    media_type = ""
+    try:
+        media_type = player.getVideoInfoTag().getMediaType()
+    except Exception:  # la lecture vient de s'arrêter : les libellés suffisent
+        pass
+    return playback_data.playing_item(labels, media_type)
+
+
 class ArrMadaPlayer(xbmc.Player):
+    """Suivi de lecture envoyé au serveur (historique + écran d'appoint du salon).
+
+    1.10.0 : infos lues sur le lecteur (VideoPlayer.*), affiche et fond,
+    indicateur de pause dans le relevé des 30 s, dernière position gardée
+    pour l'arrêt (Kodi ne la donne plus une fois la vidéo arrêtée).
+    """
+
     def __init__(self):
         super().__init__()
-        self._last_scrobble_time = 0
-        self._current_media_info = None
+        self._last_scrobble_time = 0.0
+        self._item = None  # vidéo suivie (None : rien, ou de la musique)
+        self._position = 0.0
+        self._total = 0.0
+
+    def _times(self):
+        """(position, durée) en secondes ; les dernières connues si Kodi ne répond plus."""
+        try:
+            position, total = self.getTime(), self.getTotalTime()
+        except Exception:
+            return self._position, self._total
+        self._position, self._total = position, total
+        return position, total
+
+    def _send(self, event: str, paused: bool = False, ended: bool = False) -> None:
+        if self._item is None:
+            return
+        position, total = (self._position, self._total) if event == "stop" else self._times()
+        payload = playback_data.scrobble_payload(
+            event, self._item, position, total, paused=paused, ended=ended
+        )
+        ArrMadaAPI.send_scrobble(payload)
 
     def onPlayBackStarted(self):
+        # Nouvelle lecture (ou épisode suivant enchaîné) : on oublie la précédente.
+        # Le relevé des 30 s repart de zéro : le « play » d'onAVStarted vient d'abord.
+        self._item = None
+        self._position = self._total = 0.0
+        self._last_scrobble_time = time.time()
         if not self.isPlayingVideo():
             return
-            
+
         # Run audio switcher in background so we don't block
         threading.Thread(target=run_audio_switch, args=(self,)).start()
 
-        if not get_setting_bool("enable_scrobble"):
+    def onAVStarted(self):
+        """Image et son démarrés : titre, épisode, durée et images sont connus."""
+        if not self.isPlayingVideo() or not get_setting_bool("enable_scrobble"):
             return
-
-
-        xbmc.sleep(1000)  # Wait for infolabels to settle
-        info = get_current_item_info()
-        self._current_media_info = info
-
-        total_time = self.getTotalTime()
-        current_time = self.getTime()
-        progress = (current_time / total_time * 100) if total_time > 0 else 0
-
-        ArrMadaAPI.send_scrobble({
-            "event": "play",
-            "title": info.get("title"),
-            "media_type": info.get("media_type"),
-            "tmdb_id": info.get("tmdb_id"),
-            "season": info.get("season"),
-            "episode": info.get("episode"),
-            "percentage": round(progress, 1),
-            "position": int(current_time),
-            "total": int(total_time),
-        })
+        self._item = _read_playing_item(self)
+        self._last_scrobble_time = time.time()
+        self._send("play")
 
     def onPlayBackPaused(self):
         if not self.isPlayingVideo() or not get_setting_bool("enable_scrobble"):
             return
-
-        info = self._current_media_info or get_current_item_info()
-        total_time = self.getTotalTime()
-        current_time = self.getTime()
-        progress = (current_time / total_time * 100) if total_time > 0 else 0
-
-        ArrMadaAPI.send_scrobble({
-            "event": "pause",
-            "title": info.get("title"),
-            "media_type": info.get("media_type"),
-            "percentage": round(progress, 1),
-            "position": int(current_time),
-            "total": int(total_time),
-        })
+        self._send("pause", paused=True)
 
     def onPlayBackResumed(self):
         if not self.isPlayingVideo() or not get_setting_bool("enable_scrobble"):
             return
-
-        info = self._current_media_info or get_current_item_info()
-        total_time = self.getTotalTime()
-        current_time = self.getTime()
-        progress = (current_time / total_time * 100) if total_time > 0 else 0
-
-        ArrMadaAPI.send_scrobble({
-            "event": "resume",
-            "title": info.get("title"),
-            "media_type": info.get("media_type"),
-            "percentage": round(progress, 1),
-            "position": int(current_time),
-            "total": int(total_time),
-        })
+        self._send("resume")
 
     def onPlayBackStopped(self):
-        if not get_setting_bool("enable_scrobble"):
-            return
-
-        info = self._current_media_info or get_current_item_info()
-        self._current_media_info = None
-
-        ArrMadaAPI.send_scrobble({
-            "event": "stop",
-            "title": info.get("title"),
-            "media_type": info.get("media_type"),
-            "percentage": 0,
-        })
+        if get_setting_bool("enable_scrobble"):
+            self._send("stop")
+        self._item = None
 
     def onPlayBackEnded(self):
-        if not get_setting_bool("enable_scrobble"):
-            return
-
-        info = self._current_media_info or get_current_item_info()
-        self._current_media_info = None
-
-        ArrMadaAPI.send_scrobble({
-            "event": "stop",
-            "title": info.get("title"),
-            "media_type": info.get("media_type"),
-            "percentage": 100,
-        })
+        if get_setting_bool("enable_scrobble"):
+            self._send("stop", ended=True)
+        self._item = None
 
     def check_periodic_progress(self):
-        """Send progress update every 30s during active playback."""
+        """Position toutes les 30 s, pause comprise (Kodi reste « en lecture » en pause)."""
         if not self.isPlayingVideo() or not get_setting_bool("enable_scrobble"):
             return
 
         now = time.time()
-        if now - self._last_scrobble_time < 30:
+        if now - self._last_scrobble_time < playback_data.PROGRESS_EVERY:
             return
 
         self._last_scrobble_time = now
-        info = self._current_media_info or get_current_item_info()
-        total_time = self.getTotalTime()
-        current_time = self.getTime()
-        progress = (current_time / total_time * 100) if total_time > 0 else 0
-
-        ArrMadaAPI.send_scrobble({
-            "event": "progress",
-            "title": info.get("title"),
-            "media_type": info.get("media_type"),
-            "tmdb_id": info.get("tmdb_id"),
-            "percentage": round(progress, 1),
-            "position": int(current_time),
-            "total": int(total_time),
-        })
+        if self._item is None:  # service démarré pendant une lecture
+            self._item = _read_playing_item(self)
+        self._send("progress", paused=xbmc.getCondVisibility("Player.Paused"))
 
 
 def _log(message: str, level: int = xbmc.LOGINFO) -> None:

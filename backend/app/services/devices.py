@@ -127,10 +127,21 @@ _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
 )
 
 
-def device_may_call(method: str, path: str) -> bool:
-    """Vrai si un jeton d'appareil peut appeler cette route."""
+# Périmètre « écran d'appoint » : il affiche, il ne commande rien.
+_SCREEN_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
+    (method, re.compile(pattern))
+    for method, pattern in (
+        ("GET", r"/api/devices/me"),
+        ("GET", r"/api/ambient"),
+    )
+)
+
+
+def device_may_call(method: str, path: str, kind: str = "tv") -> bool:
+    """Vrai si un jeton d'appareil (TV ou écran d'appoint) peut appeler cette route."""
     path = path.rstrip("/") or "/"
-    return any(m == method.upper() and p.fullmatch(path) for m, p in _DEVICE_ALLOWED)
+    allowed = _SCREEN_ALLOWED if kind == "screen" else _DEVICE_ALLOWED
+    return any(m == method.upper() and p.fullmatch(path) for m, p in allowed)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -145,6 +156,7 @@ class PendingPairing:
     platform: str
     ip: str
     expires_at: float
+    kind: str = "tv"  # « screen » : écran d'appoint (lecture seule)
     # Remplis à la validation dans la web app :
     token: str | None = None
     device: dict | None = None
@@ -165,7 +177,7 @@ class PairingStore:
         for code in [c for c, p in self._by_device_code.items() if p.expired]:
             del self._by_device_code[code]
 
-    def start(self, platform: str, ip: str) -> PendingPairing:
+    def start(self, platform: str, ip: str, kind: str = "tv") -> PendingPairing:
         self._purge()
         if len(self._by_device_code) >= MAX_PENDING:
             raise OverflowError("Trop de demandes d'appairage en attente")
@@ -178,6 +190,7 @@ class PairingStore:
             device_code=secrets.token_urlsafe(32),
             user_code=user_code,
             platform=(platform or "")[:100],
+            kind=kind if kind in ("tv", "screen") else "tv",
             ip=ip,
             expires_at=time.monotonic() + PAIRING_TTL_SECONDS,
         )

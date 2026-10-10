@@ -15,6 +15,8 @@ Répond comme le vrai backend aux routes lues par l'écran « Accueil » :
   GET /__deny                   simule une TV refusée : toutes les routes API → 401
   GET /api/qr                   QR code vers la web app ou YouTube (phase 3)
   POST /api/devices/pair/confirm  appairage validé par mot de passe (migration)
+  POST /api/kodi/scrobble       suivi de lecture de la TV (écran d'appoint, 1.10)
+  GET /__scrobbles              ce que la TV a envoyé (vérifié par le harnais)
 
 La progression des téléchargements avance à chaque appel, pour vérifier le
 rafraîchissement en direct. Une latence est simulée (--delay) pour voir les
@@ -65,6 +67,7 @@ STATE = {
     "read": set(),  # notifications marquées lues
     "events": [],  # événements relevés par l'add-on (déposés par /__emit)  # l'appairage est « validé dans la web app » au 3e poll
     "auth": "",  # dernier mode d'authentification vu (journal du banc)
+    "scrobbles": [],  # suivi de lecture reçu de la TV (POST /api/kodi/scrobble)
     "amp": {"power": "on", "volume": 84, "mute": False, "input": "hdmi1", "sound_program": "surr_decoder"},
 }
 CAST = [
@@ -647,6 +650,9 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
                 STATE["down"], STATE["deny"] = False, True
                 self._json({"deny": True})
                 return
+            if path == "/__scrobbles":  # le harnais relit le suivi de lecture reçu
+                self._json(STATE["scrobbles"])
+                return
             if path == "/__emit":  # le harnais publie un événement temps réel
                 from urllib.parse import parse_qs, urlsplit
 
@@ -793,6 +799,10 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
                 self._json({"status": "ok", "message": "ok"})
             elif path.startswith("/api/kodi/actions/"):
                 self._json({"status": "ok", "message": "Demande envoyée (banc de test)"})
+            elif path == "/api/kodi/scrobble":
+                STATE["scrobbles"].append(data)
+                sys.stderr.write(f"[mock] lecture : {json.dumps(data, ensure_ascii=False)}\n")
+                self._json({"status": "ok"})
             else:
                 self.send_error(404)
 

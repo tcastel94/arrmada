@@ -14,6 +14,7 @@ import urllib.request
 
 import xbmc
 import xbmcaddon
+import xbmcgui
 import xbmcvfs
 
 MONITOR = xbmc.Monitor()
@@ -266,7 +267,20 @@ shot("08-reouverture-cache")
 if DEMO_VIDEO and os.path.exists(DEMO_VIDEO):
     press("Back")
     wait(1.5)
-    xbmc.Player().play(DEMO_VIDEO)
+    # Présentée comme un épisode identifié (comme depuis la médiathèque Kodi) :
+    # le suivi de lecture doit envoyer série, épisode et affiche (1.10).
+    episode = xbmcgui.ListItem("Cold Harbor", path=DEMO_VIDEO)
+    tag = episode.getVideoInfoTag()
+    tag.setMediaType("episode")
+    tag.setTitle("Cold Harbor")
+    tag.setTvShowTitle("Severance")
+    tag.setSeason(2)
+    tag.setEpisode(10)
+    tag.setYear(2022)
+    episode.setArt(
+        {"tvshow.poster": f"{MOCK}/img/poster-1.jpg", "fanart": f"{MOCK}/img/fanart-1.jpg"}
+    )
+    xbmc.Player().play(DEMO_VIDEO, episode)
     wait(4.0)
     run_plugin("salon")
     wait(3.0)
@@ -281,6 +295,13 @@ if DEMO_VIDEO and os.path.exists(DEMO_VIDEO):
     wait(7.0)
     log(f"bulle pendant le film : {xbmc.getCondVisibility('Window.IsVisible(notification)')}")
     xbmc.executebuiltin("PlayerControl(Stop)")
+    wait(1.0)
+    sent = json.loads(urllib.request.urlopen(f"{MOCK}/__scrobbles").read())
+    log("suivi de lecture : " + " → ".join(
+        f"{s.get('event')}({s.get('title')} S{s.get('season')}E{s.get('episode')}"
+        f" pause={s.get('paused')} affiche={'oui' if s.get('poster') else 'non'})"
+        for s in sent
+    ))
     # … mais un résumé « Pendant ta séance » apparaît à l'arrêt
     for _ in range(16):
         wait(0.5)

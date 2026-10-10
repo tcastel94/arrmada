@@ -89,6 +89,7 @@ Server-Sent Events keep every page fresh and raise toasts on imports, grabs and 
 ### 🛋️ Home cinema
 - **Kodi add-on** (`kodi-addon/`): scrobbling, add-on dashboard, home-screen widgets, search & add from the couch, subtitle download / audio sync, release upgrade — see [`kodi-addon/README.md`](kodi-addon/README.md)
 - **Yamaha room profiles** (Salon / Cinéma): sound program, dialogue lift, DRC… applied automatically when a movie starts on Kodi
+- **Ambient screen** (`/ecran`): a tablet under the TV shows the start and expected end time of what is playing, the amp, downloads and tonight's releases, dimmed during the film (Fully Kiosk brightness control) — read-only paired device, see [`kodi-addon/README.md` § 15](kodi-addon/README.md)
 - **Technical badges** (4K, HDR / Dolby Vision, Atmos, 7.1…), studio / network logos and trailers on media sheets
 
 ### 🐳 Docker logs & AI diagnosis

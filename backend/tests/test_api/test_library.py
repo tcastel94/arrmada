@@ -301,6 +301,36 @@ class TestWebhooks:
         assert grabs[1]["title"] == "Andor"
         assert by_type["import_blocked"][0]["title"] == "Wicked"
 
+    async def test_poster_found_in_library_when_webhook_has_none(
+        self, client: AsyncClient, arr_stack: dict
+    ) -> None:
+        """Webhook sans images : affiche reprise de la médiathèque (TMDB film, TVDB série).
+
+        Régression 1.8.0 : la recherche visait une table jamais remplie et
+        l'erreur était avalée — les bulles de la TV restaient sans affiche.
+        """
+        since = (await client.get("/api/events/recent", headers=arr_stack)).json()["last_id"]
+        for path, payload in (
+            (
+                "/api/webhooks/radarr",
+                {"eventType": "Grab", "movie": {"title": "Dune", "tmdbId": 438631, "images": []}},
+            ),
+            (
+                "/api/webhooks/sonarr",
+                {
+                    "eventType": "Grab",
+                    "series": {"title": "The Expanse", "tvdbId": 280619},
+                    "episodes": [{"seasonNumber": 1, "episodeNumber": 2}],
+                },
+            ),
+        ):
+            assert (await client.post(path, json=payload)).status_code == 200
+        events = (
+            await client.get(f"/api/events/recent?since_id={since}", headers=arr_stack)
+        ).json()["events"]
+        posters = [e["data"]["poster"] for e in events if e["type"] == "download_grab"]
+        assert posters == ["https://img.test/dune.jpg", "https://img.test/expanse.jpg"]
+
     async def test_sonarr_episode_title(self, client: AsyncClient) -> None:
         payload = {
             "eventType": "Grab",

@@ -17,6 +17,7 @@ Le plugin **ArrMada pour Kodi** permet de connecter directement votre médiathè
 
 ### 3. ⚡ Scrobbling & Synchronisation en direct
 - Remonte en temps réel l'état de lecture (*Play, Pause, Stop, Progression*) vers ArrMada.
+- Alimente l'écran d'appoint du salon (heure de fin du film, voir § 15).
 - Met à jour l'état *Vu* et les points de reprise pour le multi-écrans.
 
 ### 4. 📺 Notifications TV en temps réel
@@ -306,6 +307,58 @@ avec le port 3420.
 > Piège Kodi : un favori vers un écran d'add-on est lancé comme une **lecture**
 > (`PlayMedia`). L'add-on le détecte, répond « rien à lire » à Kodi, puis
 > ouvre l'écran normalement : pas de message d'erreur.
+
+### 15. 🕰️ Écran d'appoint : heure de fin sur la tablette du salon (1.10.0)
+Une tablette posée sous la TV (Pixel Tablet, ou n'importe quelle tablette
+Android) affiche, sans éblouir pendant le film :
+
+- l'**heure**, et pendant une lecture : titre, épisode, affiche, **heure de
+  début**, **heure de fin prévue**, temps restant, barre de progression ;
+- en pause : « Fin, si reprise » (l'heure de fin recule tant que dure la pause) ;
+- l'**ampli** de la pièce (volume, entrée, programme sonore) ;
+- les **téléchargements** en cours et les **sorties** de ce soir et demain.
+
+**Rien à régler dans Kodi** : l'écran se sert du suivi de lecture que
+l'add-on envoie déjà au serveur (case *Scrobbling* active dans les paramètres
+de l'add-on). Depuis la 1.10.0, ce suivi lit les infos **du lecteur** (l'épisode
+enchaîné tout seul est bien reconnu), envoie l'affiche et dit quand la vidéo
+est **en pause**. Avec une 1.9 ou plus ancienne, l'écran marche aussi, mais
+sans affiche venue de Kodi (le serveur prend alors celle de Radarr / Sonarr).
+
+**Mise en place (Fully Kiosk Browser, recommandé)**
+
+1. Sur la tablette, installer **Fully Kiosk Browser** (Play Store). La
+   **licence PLUS** (achat unique, par appareil) est nécessaire pour régler
+   la luminosité depuis la page.
+2. *Settings → Web Content Settings → Start URL* :
+   `http://<IP-du-serveur>:3420/ecran?seance=6&repos=40`
+   - `seance` : luminosité **pendant un film** (0 à 255, défaut 6) ;
+   - `repos` : luminosité **sans lecture** (0 à 255, défaut 40) ;
+3. *Settings → Advanced Web Settings → **Enable JavaScript Interface*** :
+   cocher (sinon la page ne peut pas baisser le rétroéclairage ; elle
+   s'assombrit seulement elle-même).
+4. *Settings → Device Management → **Keep Screen On*** : cocher (l'écran ne
+   se met jamais en veille). Optionnel : *Screen Brightness* au même niveau
+   que `repos`, et *Kiosk Mode* pour bloquer la sortie de l'appli.
+5. Au premier affichage, la page montre un **code** et un **QR code** :
+   le viser avec le téléphone (connecté à la web app), choisir la pièce
+   **Salon**, valider. L'écran apparaît dans *Réglages → Kodi → Appareils*
+   avec l'étiquette *Écran d'appoint* ; on le révoque d'un clic.
+
+Toucher l'écran pendant un film le rallume 20 s. Sans Fully (Chrome) la page
+marche aussi, mais Android garde sa luminosité et sa mise en veille : activer
+*Options pour les développeurs → Rester activé* pendant la charge.
+
+**Sécurité** : le jeton de l'écran ne permet qu'**une** chose, lire
+`GET /api/ambient` (et « qui suis-je ? »). Pas de file de téléchargement,
+pas de pilotage de l'ampli, pas de recherche : une tablette volée ne peut rien
+faire d'autre qu'afficher l'heure de fin. Réseau local uniquement, comme les TV.
+
+> Pièges : la page est en `http` sur le réseau local, donc l'API « Wake Lock »
+> du navigateur (garder l'écran allumé) n'est pas disponible : c'est Fully
+> (*Keep Screen On*) qui s'en charge. L'heure de fin est calculée par la
+> tablette chaque seconde à partir du dernier relevé de la TV (toutes les
+> 30 s) ; un saut dans le film est pris en compte au relevé suivant.
 
 ## 🚀 Installation dans Kodi
 

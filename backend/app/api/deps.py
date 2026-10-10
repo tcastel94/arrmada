@@ -43,7 +43,7 @@ async def _authenticate_device(request: Request, db: AsyncSession, token: str) -
             detail="Appareil inconnu ou révoqué : relance l'appairage sur la TV",
         )
 
-    if not devices_service.device_may_call(request.method, request.url.path):
+    if not devices_service.device_may_call(request.method, request.url.path, device.kind):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Action non autorisée depuis une TV (à faire dans la web app)",
@@ -56,6 +56,7 @@ async def _authenticate_device(request: Request, db: AsyncSession, token: str) -
         "device_name": device.name,
         "room": device.room,
         "avr_service_id": device.avr_service_id,
+        "kind": device.kind,
     }
     now = datetime.now(UTC).replace(tzinfo=None)
     if device.last_seen_at is None or now - device.last_seen_at > _LAST_SEEN_EVERY:

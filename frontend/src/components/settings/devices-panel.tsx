@@ -6,7 +6,9 @@
  * - Appairer une TV : saisir le code affiché par Kodi (ou scanner son QR
  *   code, qui ouvre cette page avec `?pair=CODE` et pré-remplit la boîte),
  *   puis choisir le nom, la pièce et l'ampli de l'appareil.
- * - Liste des TV appairées : pièce, ampli, dernière activité.
+ * - Même chose pour un écran d'appoint (tablette sous la TV, page /ecran) :
+ *   il affiche ce qui passe sur la TV de SA pièce, sans rien pouvoir piloter.
+ * - Liste des appareils : type, pièce, ampli, dernière activité.
  * - Modifier (nom, pièce, ampli) ou révoquer (le jeton cesse de marcher).
  *
  * Pourquoi l'ampli est choisi ici : la TV pilote ensuite TOUJOURS l'ampli de
@@ -15,7 +17,7 @@
  */
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Link2, Loader2, Speaker, Tv } from "lucide-react";
+import { Link2, Loader2, Speaker, Tablet, Tv } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -74,7 +76,7 @@ export function DevicesPanel() {
     return (
         <>
             <Panel
-                title="Appareils (TV)"
+                title="Appareils (TV et écrans)"
                 icon={Tv}
                 iconClassName="text-sky-300"
                 action={
@@ -87,7 +89,7 @@ export function DevicesPanel() {
                         }}
                     >
                         <Link2 />
-                        Appairer une TV
+                        Appairer
                     </Button>
                 }
                 bodyClassName="space-y-3"
@@ -95,6 +97,8 @@ export function DevicesPanel() {
                 <p className="text-xs leading-relaxed text-muted-foreground">
                     Chaque Kodi appairé a son propre accès : plus de mot de passe admin dans la TV, et tu peux le révoquer d&apos;un
                     clic. Il pilote toujours l&apos;ampli de sa pièce. Sur la TV : <span className="text-foreground">ArrMada → Appairer cet appareil</span>.
+                    Écran d&apos;appoint (tablette sous la TV) : ouvre <span className="font-mono text-foreground">/ecran</span> de la web app sur la
+                    tablette, elle affiche un code à valider ici. Elle montre l&apos;heure de fin du film en cours, sans rien pouvoir piloter.
                 </p>
                 {isLoading ? (
                     <TableSkeleton rows={2} />
@@ -113,10 +117,19 @@ export function DevicesPanel() {
                             {devices.map((d) => (
                                 <DeviceRow
                                     key={d.id}
-                                    icon={Tv}
+                                    icon={d.kind === "screen" ? Tablet : Tv}
                                     tone="sky"
                                     name={d.name}
-                                    badges={<RoomBadge room={d.room} />}
+                                    badges={
+                                        <>
+                                            <RoomBadge room={d.room} />
+                                            {d.kind === "screen" && (
+                                                <span className="inline-flex items-center rounded-full bg-white/5 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                                                    Écran d&apos;appoint
+                                                </span>
+                                            )}
+                                        </>
+                                    }
                                     meta={
                                         <span className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
                                             <span className="inline-flex items-center gap-1">
@@ -148,8 +161,10 @@ export function DevicesPanel() {
             <Dialog open={pairOpen} onOpenChange={setPairOpen}>
                 <DialogContent className="sm:max-w-lg">
                     <DialogHeader>
-                        <DialogTitle>Appairer une TV</DialogTitle>
-                        <DialogDescription>Saisis le code affiché par Kodi, puis choisis la pièce et l&apos;ampli de cet appareil.</DialogDescription>
+                        <DialogTitle>Appairer un appareil</DialogTitle>
+                        <DialogDescription>
+                            Saisis le code affiché par Kodi ou par l&apos;écran d&apos;appoint, puis choisis la pièce et l&apos;ampli de cet appareil.
+                        </DialogDescription>
                     </DialogHeader>
                     <DeviceForm
                         key={pairCode || "new"}
@@ -163,7 +178,7 @@ export function DevicesPanel() {
                             try {
                                 const r = await pair.mutateAsync({ user_code: code, ...settings });
                                 toast.success(`${r.device.name} est appairé`, {
-                                    description: "La TV le confirme d'ici quelques secondes.",
+                                    description: "L'appareil le confirme d'ici quelques secondes.",
                                 });
                                 setPairOpen(false);
                             } catch (e) {
@@ -265,7 +280,7 @@ function DeviceForm({
     return (
         <form onSubmit={submit} className="space-y-4">
             {withCode && (
-                <FormField id={`${idPrefix}-code`} label="Code affiché sur la TV" error={codeError}>
+                <FormField id={`${idPrefix}-code`} label="Code affiché sur l'appareil" error={codeError}>
                     <Input
                         id={`${idPrefix}-code`}
                         value={code}
@@ -302,7 +317,7 @@ function DeviceForm({
                         </SelectContent>
                     </Select>
                 </FormField>
-                <FormField id={`${idPrefix}-avr`} label="Ampli de cette pièce" hint="Celui que la TV pilote (volume, préréglages).">
+                <FormField id={`${idPrefix}-avr`} label="Ampli de cette pièce" hint="Celui que la TV pilote (volume, préréglages), ou que l'écran d'appoint affiche.">
                     <Select value={avr} onValueChange={setAvr}>
                         <SelectTrigger id={`${idPrefix}-avr`}>
                             <SelectValue />

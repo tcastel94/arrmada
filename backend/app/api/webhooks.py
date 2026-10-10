@@ -81,26 +81,18 @@ def _poster_from(obj: Any) -> str:
     return ""
 
 
-async def _poster_from_library(db: AsyncSession, media_type: str | None, tmdb_id: Any) -> str:
-    """Affiche connue de la médiathèque ArrMada (webhook sans images)."""
-    if not media_type or not str(tmdb_id or "").isdigit():
-        return ""
-    try:
-        from sqlalchemy import select
+async def _poster_from_library(db: AsyncSession, media_type: str | None, obj: Any) -> str:
+    """Affiche connue de la médiathèque ArrMada (webhook sans images).
 
-        from app.models.media import Media
-
-        poster = (
-            await db.execute(
-                select(Media.poster_url)
-                .where(Media.type == media_type, Media.tmdb_id == int(tmdb_id))
-                .limit(1)
-            )
-        ).scalar_one_or_none()
-    except Exception as exc:  # base indisponible : la notification part sans affiche
-        logger.debug("[Webhook] affiche introuvable : %s", exc)
+    Identifiant comme dans la médiathèque : TMDB pour un film, TVDB pour une
+    série (Sonarr) ; à défaut, le titre.
+    """
+    if not media_type or not isinstance(obj, dict):
         return ""
-    return poster if poster and poster.startswith(("http://", "https://")) else ""
+    from app.services.media_aggregator import find_artwork
+
+    ref = obj.get("tmdbId") if media_type == "movie" else obj.get("tvdbId")
+    return (await find_artwork(db, media_type, tmdb_id=ref, title=obj.get("title")))["poster"]
 
 
 def _size_bytes(payload: dict[str, Any]) -> int:
@@ -211,7 +203,7 @@ async def _handle_arr_webhook(
     # affiche, épisode, mise à niveau, taille.
     episodes = payload.get("episodes")
     first_episode = episodes[0] if isinstance(episodes, list) and episodes else {}
-    poster = _poster_from(_obj) or await _poster_from_library(db, _media_type, _obj.get("tmdbId"))
+    poster = _poster_from(_obj) or await _poster_from_library(db, _media_type, _obj)
     release = payload.get("release") if isinstance(payload.get("release"), dict) else {}
     await event_bus.publish(
         sse_event_type,

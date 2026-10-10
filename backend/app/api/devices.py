@@ -43,6 +43,8 @@ router = APIRouter(prefix="/api/devices", tags=["devices"])
 
 class PairStartRequest(BaseModel):
     platform: str = Field(default="", max_length=100)  # ex. « Kodi 21.1 · Android »
+    # « screen » : écran d'appoint (tablette), jeton en lecture seule
+    kind: str = Field(default="tv", pattern="^(tv|screen)$")
 
 
 class PairPollRequest(BaseModel):
@@ -120,6 +122,7 @@ async def _serialize(db: AsyncSession, device: Device) -> dict:
         "room": device.room,
         "avr_service_id": device.avr_service_id,
         "avr_name": avr.name if avr else None,
+        "kind": device.kind or "tv",
         "platform": device.platform,
         "last_ip": device.last_ip,
         "created_at": device.created_at.isoformat() if device.created_at else None,
@@ -136,7 +139,7 @@ async def pair_start(request: Request, body: PairStartRequest) -> dict:
     """Kodi demande un appairage : code court à afficher, code secret à garder."""
     host = _require_lan(request)
     try:
-        pending = pairings.start(body.platform, host)
+        pending = pairings.start(body.platform, host, body.kind)
     except OverflowError as exc:
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, str(exc)) from exc
     return {
@@ -200,6 +203,7 @@ async def pair_confirm(body: PairConfirmRequest, db: AsyncSession = Depends(get_
         token_hash=devices_service.hash_token(token),
         platform=pending.platform or None,
         last_ip=pending.ip or None,
+        kind=pending.kind,
     )
     db.add(device)
     await db.flush()

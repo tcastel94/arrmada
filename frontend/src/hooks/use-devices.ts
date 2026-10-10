@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Appareils appairés (TV Kodi) — ADR-003 § 4 et § 6.
+ * Appareils appairés (TV Kodi, écrans d'appoint) — ADR-003 § 4 et § 6.
  * ----------------------------------------------------------------
  * La TV affiche un code à 6 caractères ; on le valide ici en choisissant
  * le nom, la pièce et l'ampli de l'appareil. La TV reçoit alors son propre
@@ -19,6 +19,11 @@ export interface PairedDevice {
     /** Ampli Yamaha de la pièce ; null = le premier ampli actif. */
     avr_service_id: number | null;
     avr_name: string | null;
+    /**
+     * « tv » : Kodi (jeton « TV »). « screen » : écran d'appoint, la tablette
+     * de la page /ecran (jeton en lecture seule, une seule route).
+     */
+    kind: "tv" | "screen";
     /** Ex. « Kodi 21.1 · Android » (envoyé par l'add-on). */
     platform: string | null;
     last_ip: string | null;

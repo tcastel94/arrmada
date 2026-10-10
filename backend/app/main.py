@@ -86,7 +86,8 @@ app.add_middleware(
     allow_origins=settings.cors_origin_list,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
-    allow_headers=["Authorization", "Content-Type", "Accept"],
+    # X-Device-Token : jeton de l'écran d'appoint (page /ecran de la web app)
+    allow_headers=["Authorization", "Content-Type", "Accept", "X-Device-Token"],
 )
 
 # ── Routes ────────────────────────────────────────────────────

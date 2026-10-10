@@ -7,6 +7,7 @@ from fastapi import APIRouter
 from app.api.activity import router as activity_router
 from app.api.activity_timeline import router as activity_timeline_router
 from app.api.ai_search import router as ai_search_router
+from app.api.ambient import router as ambient_router
 from app.api.analytics import router as analytics_router
 from app.api.auth import router as auth_router
 from app.api.calendar import router as calendar_router
@@ -75,6 +76,7 @@ api_router.include_router(activity_timeline_router)
 api_router.include_router(cast_router)
 api_router.include_router(devices_router)
 api_router.include_router(links_router)  # QR codes TV → web app (ADR-003 § 7)
+api_router.include_router(ambient_router)  # Écran d'appoint du salon (tablette)
 
 # New feature routes
 api_router.include_router(events_router)
