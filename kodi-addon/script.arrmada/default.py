@@ -108,27 +108,16 @@ def add_media_item(item: dict):
     xbmcplugin.addDirectoryItem(handle=HANDLE, url=url, listitem=li, isFolder=False)
 
 
-def show_root_menu():
-    """Build the main category menu."""
-    xbmcplugin.setPluginCategory(HANDLE, "ArrMada")
+def show_legacy_menu():
+    """Ancien menu de l'add-on, gardé sous « Outils (ancien menu) ».
+
+    La nouvelle racine (lib/navigation.py) reprend la navigation de la web
+    app. Les actions destructrices d'ici (maintenance, suppression dans la
+    file) sont refusées par le serveur pour une TV appairée (ADR-003).
+    """
+    xbmcplugin.setPluginCategory(HANDLE, "Outils")
     xbmcplugin.setContent(HANDLE, "files")
 
-    # Aperçu de la future appli (ADR-003, phase 0) : fenêtre sur mesure.
-    # Raccourci possible depuis le menu de SiLVO :
-    #   RunPlugin(plugin://script.arrmada/?action=home)
-    add_dir("[NOUVEAU]        Accueil ArrMada (apercu v2)", "home", is_folder=False)
-    # Écran Salon en accès direct (aussi en favori Kodi : action=salon)
-    add_dir("[NOUVEAU]        Salon : ampli et lecture en cours", "salon", is_folder=False)
-    # Appairage (ADR-003 § 4) : jeton propre à cette TV, pièce et ampli
-    import device
-    paired = device.token_for(ArrMadaAPI.get_config()["url"])
-    pair_label = (
-        f"Appareil appairé : {device.load().get('name') or 'cette TV'} (refaire l'appairage)"
-        if paired
-        else "Appairer cet appareil (code + QR code)"
-    )
-    add_dir(f"[NOUVEAU]        {pair_label}", "pair", is_folder=False)
-    add_dir("[RECHERCHE]      Rechercher un film ou une serie...", "search_input", is_folder=False)
     add_dir("[DECOUVERTE]     Tendances TMDB & Ajout 1-Clic", "discovery", is_folder=False)
     add_dir("[FILMS]          Films Tendances & Populaires", "trending_movies")
     add_dir("[SERIES]         Series Tendances & Populaires", "trending_series")
@@ -136,7 +125,6 @@ def show_root_menu():
     add_dir("[MISSION CTRL]   Console & Sante de la Stack (HUD)", "dashboard_popup", is_folder=False)
     add_dir("[TELECHARG.]     Telechargements actifs (Gestion / Annulation)", "downloads", is_folder=False)
     add_dir("[MAINTENANCE]    Assistant Maintenance du NAS (Orphelins / Scan / Clean)", "maintenance", is_folder=False)
-    add_dir("[PARAMETRES]     Parametres ArrMada", "settings", is_folder=False)
 
     xbmcplugin.endOfDirectory(HANDLE)
 
@@ -434,7 +422,35 @@ def main():
     action = params.get("action")
 
     if not action:
-        show_root_menu()
+        # Racine calquée sur la web app (ADR-003 § 2)
+        import navigation
+        navigation.show_root(HANDLE, PLUGIN_URL)
+    elif action == "legacy":
+        show_legacy_menu()
+    elif action == "discover":
+        import navigation
+        navigation.show_discover(HANDLE, PLUGIN_URL)
+    elif action == "widgets":
+        import navigation
+        navigation.show_widgets(HANDLE, PLUGIN_URL)
+    elif action in ("list", "widget"):
+        # Listes natives et widgets SiLVO : lisent le cache tenu par le service
+        #   plugin://script.arrmada/?action=widget&feed=recent
+        import navigation
+        navigation.show_feed(
+            HANDLE, PLUGIN_URL, params.get("feed", ""), widget=action == "widget", sub=params.get("sub", "")
+        )
+    elif action == "detail":
+        import navigation
+        navigation.open_detail(params)
+    elif action == "ctx":
+        import navigation
+        navigation.context_action(params)
+    elif action == "notification":
+        import navigation
+        navigation.open_notification(params)
+    elif action == "noop":
+        pass
     elif action == "home":
         import home_window
         home_window.open_home()

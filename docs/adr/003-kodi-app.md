@@ -240,9 +240,27 @@ pièce. Le choix d'une autre pièce reste possible dans un menu secondaire.
 >   volume (`AndroidKey.cpp`), un add-on ne peut pas les capter. Solution
 >   documentée côté Shield : contrôle du volume par HDMI-CEC (ou IR).
 >
-> Reste pour la phase 1 : service qui préchauffe le cache et écoute le temps
-> réel (SSE), navigation native (listes et widgets SiLVO), retrait de
-> l'ancien `X-Api-Key` (phase 3).
+> **Fin de la phase 1 (10/10/2026), add-on 1.7.0** :
+> - **Service** (§ 1) : préchauffe un cache local de 6 flux (ajouts récents,
+>   à venir, téléchargements, pour toi, manquants, notifications), chacun à
+>   son rythme, avec un nouvel essai espacé si le serveur ne répond pas ;
+>   écoute le temps réel (`/api/events/stream`, SSE) : notification à
+>   l'écran, rafraîchissement immédiat des flux concernés, scan de la
+>   médiathèque après un import, reconnexion et rattrapage
+>   (`/api/events/recent`). L'ancienne interrogation ne sert plus qu'en
+>   secours. Arrêt propre avec Kodi.
+> - **Navigation native** (§ 2) : racine calquée sur la web app, listes
+>   lues depuis le cache (instantanées, même hors ligne), fiche vidéo
+>   InfoTagVideo (Kodi 20+, repli `setInfo` sur Kodi 19), appui long
+>   (Lire, Fiche détaillée, Meilleure version). « Rechercher » réutilise
+>   l'ancienne recherche ; l'ancien menu reste sous « Outils ».
+> - **Widgets SiLVO** : ajouts récents, à venir, téléchargements, pour toi,
+>   manquants ; propriété `arrmada.reload` pour un rechargement en direct.
+> - Validé sur le banc Kodi 20.5 (listes, appui long, widgets, événement
+>   temps réel reçu et affiché, arrêt sans erreur).
+>
+> Reste : retrait de l'ancien `X-Api-Key` (phase 3), avec les QR codes vers
+> la web app et les notifications enrichies.
 
 ## Conséquences
 

@@ -19,12 +19,15 @@ Le plugin **ArrMada pour Kodi** permet de connecter directement votre médiathè
 - Remonte en temps réel l'état de lecture (*Play, Pause, Stop, Progression*) vers ArrMada.
 - Met à jour l'état *Vu* et les points de reprise pour le multi-écrans.
 
-### 4. 📺 Notifications TV des téléchargements terminés
-- Dès qu'un téléchargement SABnzbd ou Torrent est terminé et importé par Radarr/Sonarr, une alerte discrète s'affiche en haut de l'écran Kodi.
+### 4. 📺 Notifications TV en temps réel
+- Dès qu'un titre est importé sur le NAS (ou qu'un téléchargement démarre), une alerte discrète s'affiche en haut de l'écran Kodi, **à la seconde** : le service écoute le flux temps réel du serveur (§ 11).
+- Un import déclenche aussi le scan de la médiathèque Kodi (au plus une fois par minute).
 
-### 5. 📥 Menu d'accueil ArrMada
-- Consultez la liste et la progression des téléchargements actifs directement sur Kodi.
-- Lancez un scan ou un nettoyage manuel de la médiathèque Kodi en un clic.
+### 5. 📥 Menu de l'add-on
+Calqué sur la web app (§ 10) : Accueil, Découvrir, Manquants, Rechercher,
+Calendrier, Téléchargements, Notifications, Salon, Appairage, Widgets pour
+SiLVO. L'ancien menu (maintenance, gestion de la file…) reste disponible
+sous **Outils (ancien menu)**.
 
 ### 6. 📺 Nouvelle interface (ADR-003) : Accueil, Fiche, Téléchargements, Salon
 Écrans « sur mesure » de la future appli ArrMada pour Kodi
@@ -97,7 +100,7 @@ télécommande. Phase 0 : **Accueil**. Phase 2 : **Fiche média**,
 > micro du clavier de Kodi (bouton « Rechercher »).
 
 **L'ouvrir**
-- Depuis l'add-on : **ArrMada → [NOUVEAU] Accueil ArrMada (apercu v2)**, ou **[NOUVEAU] Salon : ampli et lecture en cours**.
+- Depuis l'add-on : **ArrMada → Accueil**, ou **Salon : ampli et lecture en cours**.
 - Depuis le menu principal d'**Aeon Nox SiLVO** : Paramètres du skin → *Personnaliser le menu principal* → ajouter un élément → action personnalisée :
 
 | Écran | Action personnalisée (ou favori Kodi) |
@@ -122,7 +125,7 @@ télécommande. Phase 0 : **Accueil**. Phase 2 : **Fiche média**,
 Chaque TV reçoit **son propre accès**, comme « connecter la TV » de Netflix :
 plus de mot de passe admin dans Kodi, et un appareil se révoque d'un clic.
 
-1. Sur la TV : **ArrMada → [NOUVEAU] Appairer cet appareil**. L'écran affiche un code à 6 caractères et un QR code.
+1. Sur la TV : **ArrMada → Appairer cette TV**. L'écran affiche un code à 6 caractères et un QR code.
 2. Sur le téléphone : scanne le QR code (ou web app → **Réglages → Kodi → Appairer une TV** et saisis le code).
 3. Choisis le **nom**, la **pièce** (Salon / Salle de cinéma) et l'**ampli** de cette TV. La TV se connecte toute seule en quelques secondes.
 
@@ -173,6 +176,47 @@ et Yamaha). Chaque Shield pilote ainsi **l'ampli de sa propre pièce**, sans
 réseau et sans délai. Dans Kodi, l'écran **Salon** reste disponible pour le volume fin, le
 muet, la mise en veille et les préréglages.
 
+### 10. 🧭 Navigation native et widgets pour l'accueil de SiLVO
+La racine de l'add-on reprend la navigation de la web app. Les listes
+s'affichent dans les vues du skin (mur d'affiches, liste…), avec affiche,
+fanart, synopsis, année, genres et note :
+
+| Entrée | Contenu | OK / appui long |
+|---|---|---|
+| **Découvrir** | *Pour toi* (« parce que tu as … », sans ce que tu as déjà), *Films tendance*, *Séries tendance* | OK : fenêtre « Demander » (qualité, dossier, release) |
+| **Manquants** | Titres surveillés sans fichier | OK : fiche · appui long : *Chercher une meilleure version* (lance la recherche) |
+| **Calendrier (7 jours)** | Épisodes et films à venir, à l'heure locale (« Demain · 21:00 ») | OK : fiche |
+| **Notifications** | Dernières notifications, nombre de non lues dans le menu | OK : texte complet, marquée lue |
+| **Téléchargements**, **Accueil**, **Salon** | Écrans sur mesure (§ 6) | — |
+
+Sur un titre de la médiathèque, l'**appui long** propose *Lire*, *Fiche
+détaillée* et *Chercher une meilleure version*.
+
+**Widgets** (Paramètres du skin → *Personnaliser le menu principal* → un
+élément → *Widgets* → Extensions → ArrMada → **Widgets pour l'accueil de
+SiLVO**) :
+
+| Widget | Chemin |
+|---|---|
+| Ajouts récents | `plugin://script.arrmada/?action=widget&feed=recent` |
+| À venir (7 jours) | `plugin://script.arrmada/?action=widget&feed=upcoming` |
+| Téléchargements en cours | `plugin://script.arrmada/?action=widget&feed=downloads` |
+| Pour toi | `plugin://script.arrmada/?action=widget&feed=foryou` |
+| Manquants surveillés | `plugin://script.arrmada/?action=widget&feed=missing` |
+
+> Rafraîchissement en direct : quand un flux change, le service publie
+> `Window(Home).Property(arrmada.reload)`. Un widget dont le chemin se termine
+> par `&reload=$INFO[Window(Home).Property(arrmada.reload)]` (chemin
+> personnalisé dans Skin Shortcuts) se recharge alors tout seul.
+
+### 11. ⚡ Cache local et temps réel (service)
+Le service de l'add-on (toujours actif) :
+- **préchauffe un cache** sur la TV : ajouts récents (10 min), à venir (30 min), téléchargements (30 s), pour toi (6 h), manquants (30 min), notifications (2 min). Listes et widgets lisent ce cache : **affichage instantané, même serveur coupé**. Serveur injoignable : nouvel essai 2 min plus tard ;
+- **écoute le temps réel** du serveur (SSE) : un import ou un téléchargement lancé déclenche une notification à l'écran et le **rafraîchissement immédiat** des flux concernés. Connexion coupée : reconnexion automatique, puis rattrapage des événements manqués ;
+- s'arrête proprement avec Kodi (aucune trace d'erreur dans `kodi.log`).
+
+L'ancienne surveillance par interrogation ne sert plus qu'en secours, quand le temps réel est coupé.
+
 ---
 
 ## 🚀 Installation dans Kodi
@@ -212,7 +256,7 @@ Copiez le dossier `script.arrmada/` dans le dossier des extensions de Kodi :
    - **Nom de l'appareil** : Ex: `Kodi Salon`.
    - **Langue des sous-titres** : `fr` (ou selon votre choix).
 3. Validez ! Le service démarre automatiquement en arrière-plan.
-4. Appairez la TV (§ 7) : ArrMada → **Appairer cet appareil**.
+4. Appairez la TV (§ 7) : ArrMada → **Appairer cette TV**.
 
 ---
 
@@ -223,6 +267,9 @@ Copiez le dossier `script.arrmada/` dans le dossier des extensions de Kodi :
 | Mise en page (XML Kodi, repère 1920 × 1080) | `script.arrmada/resources/skins/Default/1080i/script-arrmada-{home,detail,downloads,salon,pair}.xml` |
 | Remplissage des écrans, fils d'arrière-plan | `script.arrmada/lib/{home,detail,downloads,salon,pair}_window.py` |
 | Appairage : jeton de la TV, logique pure | `script.arrmada/lib/device.py`, `script.arrmada/lib/pairing_data.py` |
+| Navigation native, widgets (Kodi) | `script.arrmada/lib/navigation.py`, `script.arrmada/lib/listing.py` |
+| Flux en cache, temps réel, conversion en listes — sans Kodi | `script.arrmada/lib/feeds.py`, `script.arrmada/lib/catalog_data.py` |
+| Fils de fond du service (cache + SSE) | `script.arrmada/lib/background.py` |
 | Outils communs (lecture, préréglage ampli, notifications) | `script.arrmada/lib/ui_common.py` |
 | Logique pure (mise en forme, cache) — sans Kodi | `script.arrmada/lib/home_data.py`, `script.arrmada/lib/screens_data.py` |
 | Dépôt Kodi servi par le backend | `backend/app/services/kodi_repo.py`, `backend/app/api/kodi_repo.py` |
@@ -235,7 +282,8 @@ Copiez le dossier `script.arrmada/` dans le dossier des extensions de Kodi :
 Le script lance un faux backend et un Kodi sans écran (Xvfb) avec les polices
 de SiLVO. Il rejoue un parcours à la télécommande (menu, intro, accueil,
 fiche film et série, téléchargements, salon avec et sans lecture,
-diagnostic, appairage, cache, panne serveur) et dépose 27 captures dans
+diagnostic, appairage, listes natives, widgets, temps réel, cache, panne
+serveur) et dépose 35 captures dans
 `/tmp/arrmada-kodi-bench/shots/`. Le Kodi du système n'est pas modifié : tout
 se passe dans un profil jetable. Le rendu final reste à valider sur la Shield.
 
@@ -253,5 +301,6 @@ Pièges connus, chacun couvert par un test :
 - **Barres de progression dans une liste** : le contrôle `progress` de Kodi ne lit pas les propriétés d'un élément de liste. Les barres sont donc des images toutes prêtes (`media/arrmada/progress/bar-000.png` … `bar-100.png`, pas de 2 %).
 - **Groupes de boutons** (`grouplist`) : Python ne peut pas changer leur navigation (`controlDown` lève « Unknown control type »). Rediriger la touche dans `onAction`.
 - **Libellé numérique** : `<label>1</label>` est lu comme l'identifiant d'un texte traduit de Kodi, pas comme « 1 ». Écrire `$NUMBER[1]`.
+- **Fil de fond d'un service** : à l'arrêt, Kodi tue le script s'il ne s'arrête pas en 5 s. Un fil bloqué sur une lecture réseau doit être débloqué (fermeture du socket) puis attendu (`join`).
 - **Image servie par une URL** : Kodi l'interroge d'abord en `HEAD` et se fie à l'extension. Servir `…/qr/K7P4QX.png` (pas `…/qr.png?code=…`) et accepter `HEAD`, sinon l'image reste vide.
 - **Textures** : après une modification de `make_textures.py`, relancer le script et committer les PNG. Le test compare les PNG du dépôt à ceux que le script produit.

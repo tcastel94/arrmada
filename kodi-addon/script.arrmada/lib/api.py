@@ -53,6 +53,21 @@ class ArrMadaAPI:
 
 
     @classmethod
+    def auth_headers(cls, config: dict | None = None) -> dict:
+        """En-têtes d'authentification pour CE serveur.
+
+        TV appairée : son propre jeton (ADR-003 § 4). Sinon, ancien mode :
+        le mot de passe admin saisi dans les réglages (toléré une version).
+        """
+        config = config or cls.get_config()
+        device_token = device.token_for(config["url"])
+        if device_token:
+            return {"X-Device-Token": device_token}
+        if config["api_key"]:
+            return {"X-Api-Key": config["api_key"], "Authorization": f"Bearer {config['api_key']}"}
+        return {}
+
+    @classmethod
     def _request(cls, path: str, method: str = "GET", data: dict | None = None, timeout: int = 15) -> dict:
         config = cls.get_config()
         full_url = f"{config['url']}{path}"
@@ -61,14 +76,9 @@ class ArrMadaAPI:
             "Content-Type": "application/json",
             "User-Agent": "ArrMada-Kodi-Addon/1.0.0",
         }
-        # TV appairée : son propre jeton (ADR-003 § 4). Sinon, ancien mode :
-        # le mot de passe admin saisi dans les réglages (toléré une version).
-        device_token = device.token_for(config["url"])
-        if device_token:
-            headers["X-Device-Token"] = device_token
-        elif config["api_key"]:
-            headers["X-Api-Key"] = config["api_key"]
-            headers["Authorization"] = f"Bearer {config['api_key']}"
+        auth = cls.auth_headers(config)
+        headers.update(auth)
+        device_token = auth.get("X-Device-Token", "")
 
         req_body = json.dumps(data).encode("utf-8") if data is not None else None
         req = urllib.request.Request(full_url, data=req_body, headers=headers, method=method)
@@ -100,6 +110,30 @@ class ArrMadaAPI:
             xbmc.log(f"[ArrMada] Request failed on {path}: {exc}", level=xbmc.LOGERROR)
             return {"status": "error", "message": str(exc)}
 
+
+    # ── Flux en cache et temps réel (ADR-003 § 1) ───────────────────────
+
+    @classmethod
+    def get_feed(cls, path: str, timeout: int = 15):
+        """Réponse brute d'une route (liste ou objet) ; {"status": "error"} en cas d'échec."""
+        return cls._request(path, method="GET", timeout=timeout)
+
+    @classmethod
+    def open_stream(cls, path: str, timeout: int = 60):
+        """Ouvre le flux temps réel (SSE). Lève une exception si impossible.
+
+        `timeout` : délai de lecture. Le serveur n'envoie rien quand il ne se
+        passe rien : la connexion est alors simplement rouverte.
+        """
+        config = cls.get_config()
+        headers = {"Accept": "text/event-stream", "User-Agent": "ArrMada-Kodi-Addon/1.0.0"}
+        headers.update(cls.auth_headers(config))
+        req = urllib.request.Request(f"{config['url']}{path}", headers=headers, method="GET")
+        return urllib.request.urlopen(req, timeout=timeout)
+
+    @classmethod
+    def mark_notification_read(cls, notification_id: str) -> dict:
+        return cls._request(f"/api/notifications/{notification_id}/read", method="POST", timeout=8)
 
     # ── Appairage (ADR-003 § 4) ─────────────────────────────────────────
 

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="script.arrmada" name="ArrMada" version="1.6.0" provider-name="Jeff - TCastel">
+<addon id="script.arrmada" name="ArrMada" version="1.7.0" provider-name="Jeff - TCastel">
     <requires>
         <import addon="xbmc.python" version="3.0.0" />
     </requires>
@@ -13,24 +13,25 @@
     <!-- Service en tâche de fond (Scrobbler & Notifications OSD) -->
     <extension point="xbmc.service" library="service.py" start="startup" />
 
-    <!-- Menu contextuel unifié et actions directes -->
+    <!-- Menu contextuel unifié et actions directes (médiathèque Kodi). Masqué
+         dans les listes de l'appli : elles ont leur propre appui long. -->
     <extension point="kodi.context.item">
         <menu id="kodi.core.main">
             <item library="context_menu.py">
                 <label>30000</label>
-                <visible>!String.IsEmpty(ListItem.Title) | !String.IsEmpty(ListItem.Label)</visible>
+                <visible>[!String.IsEmpty(ListItem.Title) | !String.IsEmpty(ListItem.Label)] + !String.StartsWith(Container.FolderPath,plugin://script.arrmada)</visible>
             </item>
             <item library="context_subtitles.py">
                 <label>30001</label>
-                <visible>!String.IsEmpty(ListItem.Title) | !String.IsEmpty(ListItem.Label)</visible>
+                <visible>[!String.IsEmpty(ListItem.Title) | !String.IsEmpty(ListItem.Label)] + !String.StartsWith(Container.FolderPath,plugin://script.arrmada)</visible>
             </item>
             <item library="context_sync_subtitles.py">
                 <label>30003</label>
-                <visible>!String.IsEmpty(ListItem.Title) | !String.IsEmpty(ListItem.Label)</visible>
+                <visible>[!String.IsEmpty(ListItem.Title) | !String.IsEmpty(ListItem.Label)] + !String.StartsWith(Container.FolderPath,plugin://script.arrmada)</visible>
             </item>
             <item library="context_search.py">
                 <label>30002</label>
-                <visible>!String.IsEmpty(ListItem.Title) | !String.IsEmpty(ListItem.Label)</visible>
+                <visible>[!String.IsEmpty(ListItem.Title) | !String.IsEmpty(ListItem.Label)] + !String.StartsWith(Container.FolderPath,plugin://script.arrmada)</visible>
             </item>
         </menu>
     </extension>

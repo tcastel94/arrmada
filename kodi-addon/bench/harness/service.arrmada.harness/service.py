@@ -3,7 +3,8 @@
 
 Lancé automatiquement au démarrage de Kodi (add-on de type « service »), il
 rejoue un parcours complet sur l'appli ArrMada (Accueil, Fiche média,
-Téléchargements, Salon, Appairage), puis quitte Kodi.
+Téléchargements, Salon, Appairage, listes natives, widgets, temps réel),
+puis quitte Kodi.
 Variables d'environnement (posées par run.sh) : SHOT_DIR, MOCK_URL, PACE, DEMO_VIDEO.
 """
 
@@ -56,7 +57,7 @@ xbmc.executebuiltin("ActivateWindow(Videos,plugin://script.arrmada/,return)")
 wait(4.0)
 shot("00-menu-addon")
 for _ in range(3):  # 1er élément = « .. » si Kodi affiche le dossier parent
-    if "Accueil ArrMada" in xbmc.getInfoLabel("ListItem.Label"):
+    if xbmc.getInfoLabel("ListItem.Label") == "Accueil":
         break
     press("Down", 1, 0.5)
 press("Select", 1, 0.1)
@@ -161,6 +162,36 @@ shot("07b-appairage-code")
 wait(9.0)
 shot("07c-appairage-ok")
 wait(5.0)  # l'écran se ferme seul ; la suite utilise le jeton d'appareil
+
+# ── 6c. Navigation native, widgets, temps réel (TV appairée) ───────────────
+def open_list(query, name, settle=3.0):
+    xbmc.executebuiltin(f"ActivateWindow(Videos,plugin://script.arrmada/{query},return)")
+    wait(settle)
+    if xbmc.getInfoLabel("ListItem.Label") == "..":
+        press("Down", 1, 1.5)  # focus sur le 1er élément : affiche et synopsis visibles
+    log(f"{name} : {xbmc.getInfoLabel('Container.NumItems')} éléments")
+    shot(name)
+
+
+open_list("", "13a-racine")
+open_list("?action=list&feed=upcoming", "13b-calendrier")
+open_list("?action=list&feed=foryou&sub=foryou", "13c-pour-toi")
+open_list("?action=list&feed=missing", "13d-manquants")
+press("ContextMenu")  # appui long : Fiche détaillée, Chercher une meilleure version
+wait(1.0)
+shot("13e-appui-long")
+press("Back")
+open_list("?action=widgets", "13f-widgets")
+open_list("?action=list&feed=notifications", "13g-notifications")
+# Import publié par le serveur : notification à l'écran + flux rafraîchis
+urllib.request.urlopen(f"{MOCK}/__emit?type=new_import&title=Gladiator%20II&quality=Remux-2160p").read()
+wait(2.5)
+shot("13h-temps-reel")
+log(f"rechargement des widgets : {xbmc.getInfoLabel('Window(Home).Property(arrmada.reload)')}")
+press("Back")
+wait(1.0)
+xbmc.executebuiltin("ActivateWindow(Home)")
+wait(2.0)
 
 # ── 7. Réouverture (cache), panne serveur ──────────────────────────────────
 run_plugin("home")

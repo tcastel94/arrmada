@@ -2,7 +2,10 @@
 """ArrMada Background Service for Kodi.
 
 - Tracks playback progress and sends scrobbles to ArrMada
-- Checks for completed downloads and triggers TV OSD alerts
+- Keeps the local feed cache fresh for native lists and SiLVO widgets
+  (lib/background.py, ADR-003 § 1)
+- Listens to the server's real-time stream (SSE) for TV OSD alerts; the old
+  polling of /api/kodi/addon-status only runs while the stream is down
 """
 
 from __future__ import annotations
@@ -19,6 +22,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "lib"))
 from api import ArrMadaAPI
 from kodi_helper import get_current_item_info, show_notification, get_setting_bool, get_setting_int
 from audio_switcher import run_audio_switch
+from background import EventListener, FeedRefresher
 import threading
 
 ADDON = xbmcaddon.Addon("script.arrmada")
@@ -157,6 +161,12 @@ def main():
 
     xbmc.log("[ArrMada] Service started", level=xbmc.LOGINFO)
 
+    # Cache des flux (listes, widgets) et temps réel : deux fils de fond
+    refresher = FeedRefresher(monitor)
+    refresher.start()
+    listener = EventListener(monitor, refresher)
+    listener.start()
+
     last_notification_check = 0
     seen_downloads: set[str] = set()
     seen_event_ids: set[int] = set()
@@ -171,7 +181,13 @@ def main():
         now = time.time()
         interval = get_setting_int("check_interval", 15)
 
-        if get_setting_bool("enable_notifications") and (now - last_notification_check >= interval):
+        # Ancienne surveillance par interrogation : seulement si le temps réel
+        # est coupé (sinon les notifications arriveraient en double).
+        if (
+            not listener.connected
+            and get_setting_bool("enable_notifications")
+            and (now - last_notification_check >= interval)
+        ):
             last_notification_check = now
             try:
                 status = ArrMadaAPI.get_addon_status()
@@ -213,6 +229,11 @@ def main():
         if monitor.waitForAbort(1):
             break
 
+    # Arrêt propre des fils de fond : Kodi tue le service s'il traîne > 5 s
+    listener.stop()
+    refresher.stop()
+    listener.join(3)
+    refresher.join(3)
     xbmc.log("[ArrMada] Service stopped", level=xbmc.LOGINFO)
 
 

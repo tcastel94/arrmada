@@ -97,8 +97,9 @@ def is_lan_request(client_host: str | None, forwarded_for: str | None) -> bool:
 # Périmètre « TV » : ce qu'un jeton d'appareil a le droit d'appeler
 # ─────────────────────────────────────────────────────────────────────────────
 # Liste blanche (tout le reste est refusé) : lecture, recherche, ajout,
-# sous-titres, file en lecture seule + pause/reprise, ampli. Aucune
-# suppression, aucun nettoyage, aucune configuration (ADR-003, décision 1).
+# sous-titres, file en lecture seule + pause/reprise, ampli, notifications
+# (lecture et « marquer lu »), recommandations, flux temps réel (SSE).
+# Aucune suppression, aucun nettoyage, aucune configuration (ADR-003, décision 1).
 
 _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
     (method, re.compile(pattern))
@@ -116,6 +117,9 @@ _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         ("GET", r"/api/downloads"),
         ("GET", r"/api/calendar(/.*)?"),
         ("GET", r"/api/notifications(/.*)?"),
+        ("POST", r"/api/notifications/(\d+/read|read-all)"),
+        ("GET", r"/api/recommendations(/.*)?"),
+        ("GET", r"/api/events/(stream|recent)"),
         ("GET", r"/api/yamaha/(state|profiles)"),
         ("POST", r"/api/yamaha/(control|preset/apply)"),
     )

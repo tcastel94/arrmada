@@ -54,7 +54,9 @@ STATE = {
     "down": False,
     "qtick": 0,
     "paused": False,
-    "pair_polls": 0,  # l'appairage est « validé dans la web app » au 3e poll
+    "pair_polls": 0,
+    "read": set(),  # notifications marquées lues
+    "events": [],  # événements temps réel à diffuser (déposés par /__emit)  # l'appairage est « validé dans la web app » au 3e poll
     "auth": "",  # dernier mode d'authentification vu (journal du banc)
     "amp": {"power": "on", "volume": 84, "mute": False, "input": "hdmi1", "sound_program": "surr_decoder"},
 }
@@ -190,6 +192,83 @@ def recent(base: str) -> list[dict]:
             }
         )
     return items
+
+
+def calendar(base: str) -> dict:
+    """À venir sur 7 jours, relatif à maintenant (épisodes à l'heure UTC, films à la date)."""
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+    episode = lambda idx, days, hour, label, season, number, sub: {  # noqa: E731
+        "type": "episode", "title": TITLES[idx][0], "subtitle": sub, "label": label,
+        "season": season, "episode": number, "series_id": 100 + idx, "network": "Apple TV+",
+        "air_date": (now + timedelta(days=days)).replace(hour=hour).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "poster_url": f"{base}/img/poster-{idx}.jpg", "overview": f"Épisode « {sub} ».",
+        "has_file": False,
+    }
+    movie = lambda idx, days, release: {  # noqa: E731
+        "type": "movie", "title": TITLES[idx][0], "label": str(TITLES[idx][1]),
+        "air_date": (now + timedelta(days=days)).strftime("%Y-%m-%d"), "release_type": release,
+        "movie_id": 100 + idx, "poster_url": f"{base}/img/poster-{idx}.jpg",
+        "overview": "Sortie de test.", "genres": ["Drama"], "has_file": False,
+    }
+    items = [
+        episode(4, 0, 22, "S02E10", 2, 10, "Cold Harbor"),
+        episode(6, 1, 1, "S02E04", 2, 4, "Les Rouages"),
+        movie(7, 3, "digital"),
+        episode(1, 5, 21, "S02E01", 2, 1, "Anjin"),
+        movie(9, 6, "physical"),
+    ]
+    return {"start": "", "end": "", "total": len(items), "items": items, "by_date": {}}
+
+
+def missing(base: str) -> dict:
+    items = [dict(item, has_file=False, monitored=True) for item in recent(base)[6:10]]
+    return {"items": items, "total": len(items)}
+
+
+def recommendations(base: str) -> dict:
+    def tmdb(idx: int, in_library: bool = False) -> dict:
+        title, year, kind, _, _ = TITLES[idx]
+        return {
+            "tmdb_id": 5000 + idx, "title": title, "type": kind, "year": str(year),
+            "overview": f"Recommandation de test : « {title} ».", "rating": 7.1 + idx / 10,
+            "poster_url": f"{base}/img/poster-{idx}.jpg",
+            "backdrop_url": f"{base}/img/fanart-{idx}.jpg", "in_library": in_library,
+        }
+
+    return {
+        "because_you_have": [
+            {"base_title": "Dune : Deuxième partie", "recommendations": [tmdb(2), tmdb(11)]},
+            {"base_title": "Severance", "recommendations": [tmdb(5)]},
+        ],
+        "trending_movies": [tmdb(7), tmdb(0, in_library=True), tmdb(9)],
+        "trending_series": [tmdb(6), tmdb(1, in_library=True)],
+        "wanted": [],
+        "tmdb_available": True,
+    }
+
+
+def notifications() -> dict:
+    from datetime import datetime, timedelta, timezone
+
+    def stamp(minutes: int) -> str:  # heure UTC sans fuseau, comme le vrai serveur
+        moment = datetime.now(timezone.utc) - timedelta(minutes=minutes)
+        return moment.replace(tzinfo=None).isoformat()
+
+    items = [
+        {"id": 3, "type": "import", "severity": "info", "title": "Dune : Deuxième partie importé",
+         "message": "Remux-2160p · 64 Go, prêt dans la médiathèque.", "is_read": 3 in STATE["read"],
+         "service_name": "Radarr", "created_at": stamp(4)},
+        {"id": 2, "type": "health", "severity": "warning", "title": "Indexeur lent",
+         "message": "NZBgeek répond en plus de 8 s.", "is_read": 2 in STATE["read"],
+         "service_name": "Prowlarr", "created_at": stamp(150)},
+        {"id": 1, "type": "grab", "severity": "info", "title": "Arcane S02E09 lancé",
+         "message": "WEBDL-2160p via SABnzbd.", "is_read": True,
+         "service_name": "Sonarr", "created_at": stamp(60 * 30)},
+    ]
+    unread = sum(1 for item in items if not item["is_read"])
+    return {"items": items, "unread_count": unread}
 
 
 def dashboard() -> dict:
@@ -445,6 +524,31 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
                 sys.stderr.write(f"[mock] authentification : {mode}\n")
                 STATE["auth"] = mode
 
+        def _stream(self) -> None:
+            """Flux temps réel (SSE) : « connected », puis les événements de /__emit."""
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            sent = len(STATE["events"])  # seuls les événements publiés après la connexion
+            try:
+                self.wfile.write(b'event: connected\ndata: {"clients": 1}\n\n')
+                self.wfile.flush()
+                sys.stderr.write("[mock] temps réel : client connecté\n")
+                for _ in range(45):  # ~45 s, puis le client se reconnecte
+                    if STATE["down"]:
+                        return
+                    while sent < len(STATE["events"]):
+                        event_id, event_type, data = STATE["events"][sent]
+                        sent += 1
+                        payload = f"id: {event_id}\nevent: {event_type}\ndata: {json.dumps(data)}\n\n"
+                        self.wfile.write(payload.encode())
+                        self.wfile.flush()
+                        sys.stderr.write(f"[mock] temps réel : {event_type} envoyé\n")
+                    time.sleep(1)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+
         def _qr(self, head: bool) -> None:
             data = (images / "pair-qr.png").read_bytes()
             self.send_response(200)
@@ -455,8 +559,15 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
                 self.wfile.write(data)
 
         def do_HEAD(self):  # noqa: N802 — Kodi interroge les images en HEAD
-            if self.path.split("?")[0] == f"/api/devices/pair/qr/{PAIR_CODE}.png":
+            path = self.path.split("?")[0]
+            if path == f"/api/devices/pair/qr/{PAIR_CODE}.png":
                 self._qr(head=True)
+            elif path.startswith("/img/") and (images / Path(path[5:]).name).is_file():
+                file = images / Path(path[5:]).name
+                self.send_response(200)
+                self.send_header("Content-Type", "image/png" if file.suffix == ".png" else "image/jpeg")
+                self.send_header("Content-Length", str(file.stat().st_size))
+                self.end_headers()
             else:
                 self.send_error(404)
 
@@ -477,6 +588,14 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
             if path == "/__down":
                 STATE["down"] = True
                 self._json({"down": True})
+                return
+            if path == "/__emit":  # le harnais publie un événement temps réel
+                from urllib.parse import parse_qs, urlsplit
+
+                query = {k: v[0] for k, v in parse_qs(urlsplit(self.path).query).items()}
+                event_type = query.pop("type", "new_import")
+                STATE["events"].append((len(STATE["events"]) + 1, event_type, query))
+                self._json({"queued": event_type})
                 return
             time.sleep(delay)
             self._note_auth()
@@ -502,6 +621,28 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
                     self._json(payload)
             elif path == "/api/downloads":
                 self._json(queue())
+            elif path == "/api/calendar":
+                self._json(calendar(base))
+            elif path == "/api/media":
+                self._json(missing(base))
+            elif path == "/api/recommendations":
+                self._json(recommendations(base))
+            elif path == "/api/notifications":
+                self._json(notifications())
+            elif path == "/api/events/recent":
+                # Rattrapage après une coupure, comme le vrai serveur
+                from urllib.parse import parse_qs, urlsplit
+
+                since = int((parse_qs(urlsplit(self.path).query).get("since_id") or ["0"])[0])
+                self._json({
+                    "events": [
+                        {"id": i, "type": t, "data": d, "timestamp": 0}
+                        for i, t, d in STATE["events"] if i > since
+                    ],
+                    "clients": 1,
+                })
+            elif path == "/api/events/stream":
+                self._stream()
             elif path == "/api/yamaha/state":
                 self._json(yamaha_state())
             elif path == "/api/yamaha/profiles":
@@ -520,6 +661,9 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
             amp = STATE["amp"]
             if STATE["down"]:
                 self.send_error(503, "ArrMada en maintenance")
+            elif path.startswith("/api/notifications/") and path.endswith("/read"):
+                STATE["read"].add(int(path.split("/")[3]))
+                self._json({"success": True})
             elif path == "/api/devices/pair/start":
                 STATE["pair_polls"] = 0
                 self._json({

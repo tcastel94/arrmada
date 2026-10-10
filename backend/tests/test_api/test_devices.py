@@ -147,9 +147,12 @@ async def test_device_scope(client: AsyncClient, auth_headers: dict) -> None:
     token, device = await _pair(client, auth_headers)
     tv = {"X-Device-Token": token}
 
-    # Autorisé : lecture de la file, état de l'ampli
+    # Autorisé : lecture de la file, état de l'ampli, notifications, temps réel
     assert (await client.get("/api/downloads", headers=tv)).status_code == 200
     assert (await client.get("/api/yamaha/state", headers=tv)).status_code == 200
+    assert (await client.get("/api/notifications", headers=tv)).status_code == 200
+    assert (await client.post("/api/notifications/read-all", headers=tv)).status_code == 200
+    assert (await client.get("/api/events/recent", headers=tv)).status_code == 200
 
     # Refusé : suppression, nettoyage, configuration, gestion des appareils
     for method, path in (
@@ -252,6 +255,12 @@ def test_is_lan_request(host, forwarded, expected) -> None:
         ("GET", "/api/media/movie/12", True),
         ("POST", "/api/kodi/downloads/sonarr/7/pause", True),
         ("POST", "/api/yamaha/control", True),
+        ("GET", "/api/events/stream", True),
+        ("GET", "/api/recommendations", True),
+        ("POST", "/api/notifications/12/read", True),
+        ("POST", "/api/notifications/read-all", True),
+        ("DELETE", "/api/notifications/12", False),
+        ("POST", "/api/recommendations/discover", False),
         ("POST", "/api/kodi/downloads/sonarr/7/remove", False),
         ("DELETE", "/api/media/movie/12", False),
         ("POST", "/api/yamaha/profiles", False),
