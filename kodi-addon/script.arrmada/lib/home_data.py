@@ -25,7 +25,7 @@ from typing import Any
 
 # Version du format du cache : à incrémenter si la structure du modèle change,
 # pour ignorer proprement un ancien cache au lieu de planter à l'affichage.
-CACHE_VERSION = 1
+CACHE_VERSION = 2
 CACHE_FILE = "home.json"
 
 MAX_DOWNLOADS = 3  # emplacements prévus dans le XML (dl1…dl3)
@@ -79,6 +79,25 @@ def fmt_timeleft(raw: str) -> str:
     if minutes:
         return f"{minutes} min"
     return "< 1 min"
+
+
+def fmt_decimal(value: float, decimals: int = 1) -> str:
+    """42.13 → « 42,1 » (virgule décimale française)."""
+    return f"{value:.{decimals}f}".replace(".", ",")
+
+
+def parse_size_label(label: str) -> tuple[float, str] | None:
+    """« 42,1 To » → (42.1, "To") ; None si le libellé n'est pas un volume."""
+    match = re.match(r"^\s*(\d+(?:[.,]\d+)?)\s*([A-Za-z]+)\s*$", str(label or ""))
+    if not match:
+        return None
+    return float(match.group(1).replace(",", ".")), match.group(2)
+
+
+def ease_out_cubic(t: float) -> float:
+    """Courbe d'animation : démarre vite, ralentit à l'arrivée (0 → 1)."""
+    t = max(0.0, min(1.0, t))
+    return 1 - (1 - t) ** 3
 
 
 def age_label(fetched_at: str, now: datetime) -> str:
@@ -304,6 +323,16 @@ def build_model(dashboard: dict, recent: list[dict], now: datetime) -> dict[str,
                 if dl_total
                 else "file vide"
             ),
+        },
+        # Valeurs numériques brutes : la fenêtre les anime (compteurs qui défilent).
+        "kpis_raw": {
+            "movies": movies,
+            "series": series,
+            "downloads": dl_total,
+            # Deux champs simples (pas de tuple) : le cache JSON les relit à l'identique.
+            "storage": (parse_size_label(storage["value"]) or (None, ""))[0],
+            "storage_unit": (parse_size_label(storage["value"]) or (None, ""))[1],
+            "storage_pct": storage["pct"],
         },
         "downloads": downloads,
         "downloads_more": max(0, dl_total - len(downloads)),

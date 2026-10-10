@@ -15,8 +15,13 @@
 #   sudo apt install kodi xvfb python3-pil curl
 #
 # Usage :
-#   kodi-addon/bench/run.sh          # captures dans $BENCH_DIR/shots
+#   kodi-addon/bench/run.sh            # captures dans $BENCH_DIR/shots
+#   RECORD=1 kodi-addon/bench/run.sh   # + vidéo $BENCH_DIR/demo.mp4 (ffmpeg requis)
 #   BENCH_DIR=/tmp/bench kodi-addon/bench/run.sh
+#
+# Variables : RECORD=1 (vidéo), RES=1280x720 (taille de l'écran virtuel en
+# mode vidéo : plus petit = plus fluide en rendu logiciel), PACE=1.5 (ralentit
+# le parcours du harnais pour mieux voir les animations).
 #
 # Sortie : $BENCH_DIR/shots/*.png + extrait de kodi.log ([ArrMada] / [HARNESS]).
 # ─────────────────────────────────────────────────────────────────────────────
@@ -35,12 +40,18 @@ export MOCK_URL="http://${MOCK_IP}:8420"
 export SHOT_DIR="$BENCH_DIR/shots"
 export HOME="$BENCH_DIR/home"          # profil Kodi jetable (~/.kodi)
 export KODI_AE_SINK=NULL               # pas de carte son
+export PACE="${PACE:-1}"               # lu par le harnais (multiplie les pauses)
+RECORD="${RECORD:-0}"
+RES="${RES:-1280x720}"
 KODI_DIR="$HOME/.kodi"
 ESTUARY_SYS=/usr/share/kodi/addons/skin.estuary
 
 for cmd in kodi xvfb-run python3 curl; do
   command -v "$cmd" >/dev/null || { echo "Manquant : $cmd (voir Prérequis)" >&2; exit 1; }
 done
+if [[ "$RECORD" == "1" ]]; then
+  command -v ffmpeg >/dev/null || { echo "Manquant : ffmpeg (sudo apt install ffmpeg)" >&2; exit 1; }
+fi
 
 mkdir -p "$BENCH_DIR/assets" "$SHOT_DIR" "$KODI_DIR/addons" "$KODI_DIR/media/Fonts" \
          "$KODI_DIR/userdata/addon_data/script.arrmada"
@@ -115,8 +126,30 @@ with sqlite3.connect(sys.argv[1]) as db:
 PY
 
 # ── 5. Passage instrumenté (le harnais quitte Kodi à la fin) ─────────────────
-echo "== Kodi + harnais (≈ 90 s)"
-timeout 240 xvfb-run -a -s "-screen 0 1920x1080x24" kodi --standalone -fs > kodi.log 2>&1 || true
+if [[ "$RECORD" != "1" ]]; then
+  echo "== Kodi + harnais (≈ 90 s)"
+  timeout 240 xvfb-run -a -s "-screen 0 1920x1080x24" kodi --standalone -fs > kodi.log 2>&1 || true
+else
+  # Mode vidéo : on lance l'écran virtuel nous-mêmes pour pouvoir le filmer.
+  echo "== Kodi + harnais, enregistrement vidéo ($RES)"
+  DISP=":97"
+  Xvfb "$DISP" -screen 0 "${RES}x24" -nolisten tcp > xvfb.log 2>&1 &
+  XVFB_PID=$!
+  sleep 1
+  DISPLAY="$DISP" kodi --standalone -fs > kodi.log 2>&1 &
+  KODI_PID=$!
+  ffmpeg -loglevel error -y -f x11grab -framerate 30 -video_size "$RES" -i "$DISP" \
+    -c:v libx264 -preset ultrafast -crf 16 -pix_fmt yuv420p demo-raw.mp4 &
+  FFMPEG_PID=$!
+  timeout 300 tail --pid="$KODI_PID" -f /dev/null || kill "$KODI_PID" 2>/dev/null || true
+  kill -INT "$FFMPEG_PID" 2>/dev/null || true
+  wait "$FFMPEG_PID" 2>/dev/null || true
+  kill "$XVFB_PID" 2>/dev/null || true
+  # Recompression compacte (lecture web / téléphone) : ~1 Mo par 10 s.
+  ffmpeg -loglevel error -y -i demo-raw.mp4 -c:v libx264 -preset slow -crf 24 \
+    -pix_fmt yuv420p -movflags +faststart demo.mp4 && rm -f demo-raw.mp4
+  echo "== Vidéo : $BENCH_DIR/demo.mp4"
+fi
 
 echo "== Journal"
 grep -E "\[ArrMada\] Accueil|\[HARNESS\]|Traceback" "$KODI_DIR/temp/kodi.log" || true

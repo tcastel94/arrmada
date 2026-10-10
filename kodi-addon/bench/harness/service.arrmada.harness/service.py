@@ -21,8 +21,12 @@ def log(message):
     xbmc.log(f"[HARNESS] {message}", xbmc.LOGINFO)
 
 
+# PACE > 1 ralentit tout le parcours (vidéos de démonstration).
+PACE = float(os.environ.get("PACE", "1") or 1)
+
+
 def wait(seconds):
-    return MONITOR.waitForAbort(seconds)
+    return MONITOR.waitForAbort(seconds * PACE)
 
 
 def shot(name):

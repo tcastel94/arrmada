@@ -32,6 +32,12 @@ Premier écran « sur mesure » de la future appli ArrMada pour Kodi
 - Salutation et résumé de la flotte, 4 indicateurs (films, séries, stockage, téléchargements).
 - Téléchargements en cours, rafraîchis toutes les 20 s.
 - Rangée « Ajouts récents » avec zoom et halo au focus. Le fanart de l'affiche sélectionnée passe en fond, le ClearLogo et les badges 4K / DV / Atmos s'affichent.
+- Animations :
+  - **ouverture** : apparition en cascade ;
+  - **indicateurs** : compteurs qui défilent jusqu'à leur valeur, barres qui se remplissent ;
+  - **fond** : lent zoom du fanart (effet « Ken Burns ») ;
+  - **affiche sélectionnée** : elle se soulève et son halo « respire », son badge apparaît avec un léger rebond ;
+  - **infos** : elles glissent dans le sens du déplacement.
 - État des services.
 - **Ouverture instantanée** : le dernier état connu est gardé en cache sur l'appareil, puis mis à jour en arrière-plan. Aucun appel réseau ne fige l'interface.
 - **Hors ligne** : si le serveur ne répond pas, l'écran garde les dernières données, ou affiche l'adresse et l'erreur à vérifier. Il retente toutes les 20 s.
@@ -106,6 +112,11 @@ de SiLVO. Il rejoue un parcours à la télécommande (menu, accueil, focus,
 diagnostic, cache, panne serveur) et dépose 11 captures dans
 `/tmp/arrmada-kodi-bench/shots/`. Le Kodi du système n'est pas modifié : tout
 se passe dans un profil jetable. Le rendu final reste à valider sur la Shield.
+
+Pour voir les animations : `RECORD=1 PACE=1.3 kodi-addon/bench/run.sh` filme
+l'écran virtuel (`sudo apt install ffmpeg`) et produit
+`/tmp/arrmada-kodi-bench/demo.mp4`. Rendu logiciel sans carte graphique : la
+vidéo est moins fluide que sur la Shield.
 
 Pièges connus, chacun couvert par un test :
 - **Polices** : utiliser uniquement les noms présents dans **tous** les jeux de polices de SiLVO (liste dans `tests/test_home_window_xml.py`). Une police inconnue retombe sans prévenir sur `font13`.

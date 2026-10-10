@@ -47,6 +47,8 @@ DL_PROGRESS = (211, 221, 231)  # barres des 3 emplacements de téléchargement
 STORAGE_PROGRESS = 251
 
 REFRESH_SECONDS = 20  # le backend met déjà le tableau de bord en cache 15 s
+ANIM_FRAMES = 22  # compteurs et barres : 22 images × 33 ms ≈ 0,7 s
+ANIM_FRAME_MS = 33
 BACK_ACTIONS = (xbmcgui.ACTION_NAV_BACK, xbmcgui.ACTION_PREVIOUS_MENU)
 
 
@@ -79,6 +81,9 @@ class HomeWindow(xbmcgui.WindowXML):
         self._rail_ids: list[str] = []
         self._last_fetch = ""  # horodatage des dernières données affichées
         self._monitor = xbmc.Monitor()
+        # Dernières valeurs affichées, point de départ des animations suivantes.
+        self._shown: dict[str, float] = {}
+        self._anim_gen = 0  # chaque nouvelle animation annule la précédente
 
     # ── Cycle de vie ────────────────────────────────────────────────────────
 
@@ -174,17 +179,24 @@ class HomeWindow(xbmcgui.WindowXML):
 
     def _render(self, model: dict, source: str) -> None:
         kpis = model.get("kpis") or {}
-        for key in (
-            "movies",
-            "movies_hint",
-            "series",
-            "series_hint",
-            "storage",
-            "storage_hint",
-            "downloads",
-            "downloads_hint",
-        ):
+        raw = model.get("kpis_raw") or {}
+        for key in ("movies_hint", "series_hint", "storage_hint", "downloads_hint"):
             self.setProperty(f"kpi_{key}", str(kpis.get(key, "")))
+
+        # Compteurs qui défilent jusqu'à leur valeur (comme sur la web app).
+        tweens = [
+            self._tween_label(key, raw.get(key), str(kpis.get(key, "")))
+            for key in ("movies", "series", "downloads")
+        ]
+        if raw.get("storage") is not None:  # 42.1 (+ unité « To »)
+            tweens.append(
+                self._tween_label(
+                    "storage", raw["storage"], str(kpis["storage"]), unit=raw["storage_unit"]
+                )
+            )
+        else:
+            self.setProperty("kpi_storage", str(kpis.get("storage", "")))
+        tweens.append(self._tween_bar(STORAGE_PROGRESS, raw.get("storage_pct")))
         self.setProperty("summary", model.get("summary", ""))
         self.setProperty("source", source)
         self._last_fetch = model.get("fetched_at", "")
@@ -192,25 +204,88 @@ class HomeWindow(xbmcgui.WindowXML):
             "updated",
             home_data.age_label(model.get("fetched_at", ""), datetime.now(timezone.utc)),
         )
-        self.getControl(STORAGE_PROGRESS).setPercent(float(kpis.get("storage_pct") or 0))
-
-        self._render_downloads(model.get("downloads") or [], int(model.get("downloads_more") or 0))
+        tweens += self._render_downloads(
+            model.get("downloads") or [], int(model.get("downloads_more") or 0)
+        )
         self._render_services(model.get("services") or [], int(model.get("services_active") or 0))
         self._render_rail(model.get("recent") or [])
         self.setProperty("ready", "1")
+        self._animate([tw for tw in tweens if tw])
 
-    def _render_downloads(self, downloads: list[dict], more: int) -> None:
+    # ── Animations (compteurs, barres) ──────────────────────────────────────
+    # Kodi n'anime pas un texte ni une barre de progression depuis le XML :
+    # un petit fil pose ~22 valeurs intermédiaires (courbe « ease-out »).
+
+    def _tween_label(self, key: str, value, final_text: str, unit: str = "") -> dict | None:
+        """Prépare l'animation d'un compteur ; None si la valeur n'a pas changé."""
+        target = float(value or 0)
+        start = self._shown.get(key, 0.0)
+        self._shown[key] = target
+        if start == target:
+            self.setProperty(f"kpi_{key}", final_text)
+            return None
+        return {
+            "kind": "label",
+            "target": f"kpi_{key}",
+            "from": start,
+            "to": target,
+            "text": final_text,
+            "unit": unit,
+        }
+
+    def _tween_bar(self, control_id: int, pct) -> dict | None:
+        """Prépare le remplissage animé d'une barre de progression."""
+        target = float(pct or 0)
+        start = self._shown.get(f"bar{control_id}", 0.0)
+        self._shown[f"bar{control_id}"] = target
+        if start == target:
+            self.getControl(control_id).setPercent(target)
+            return None
+        return {"kind": "bar", "target": control_id, "from": start, "to": target}
+
+    def _animate(self, tweens: list[dict]) -> None:
+        self._anim_gen += 1
+        if tweens:
+            threading.Thread(
+                target=self._run_tweens, args=(self._anim_gen, tweens), daemon=True
+            ).start()
+
+    def _run_tweens(self, generation: int, tweens: list[dict]) -> None:
+        try:
+            for frame in range(1, ANIM_FRAMES + 1):
+                if generation != self._anim_gen or self._stop.is_set():
+                    return  # remplacée par une animation plus récente, ou fenêtre fermée
+                progress = home_data.ease_out_cubic(frame / ANIM_FRAMES)
+                last = frame == ANIM_FRAMES
+                for tween in tweens:
+                    value = tween["from"] + (tween["to"] - tween["from"]) * progress
+                    if tween["kind"] == "bar":
+                        self.getControl(tween["target"]).setPercent(value)
+                    elif last:
+                        self.setProperty(tween["target"], tween["text"])  # texte exact
+                    elif tween["unit"]:
+                        text = f"{home_data.fmt_decimal(value)}{home_data.NBSP}{tween['unit']}"
+                        self.setProperty(tween["target"], text)
+                    else:
+                        self.setProperty(tween["target"], home_data.fmt_int(round(value)))
+                xbmc.sleep(ANIM_FRAME_MS)
+        except RuntimeError:
+            pass  # fenêtre fermée pendant l'animation
+
+    def _render_downloads(self, downloads: list[dict], more: int) -> list:
         self.setProperty("dl_count", str(len(downloads)))
         self.setProperty("dl_more", f"+ {more} autre(s)" if more else "")
+        tweens = []
         for index, control_id in enumerate(DL_PROGRESS):
             slot = f"dl{index + 1}"
             if index < len(downloads):
                 self.setProperty(f"{slot}_title", downloads[index]["title"])
                 self.setProperty(f"{slot}_meta", downloads[index]["meta"])
-                self.getControl(control_id).setPercent(float(downloads[index]["pct"]))
+                tweens.append(self._tween_bar(control_id, downloads[index]["pct"]))
             else:
                 self.clearProperty(f"{slot}_title")
                 self.clearProperty(f"{slot}_meta")
+        return tweens
 
     def _render_services(self, services: list[dict], active: int) -> None:
         self.setProperty("services_summary", f"{active}/{len(services)} actifs" if services else "")

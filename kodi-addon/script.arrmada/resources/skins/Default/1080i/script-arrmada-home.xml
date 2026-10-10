@@ -33,6 +33,8 @@
 			<aspectratio>scale</aspectratio>
 			<fadetime>600</fadetime>
 			<texture background="true" colordiffuse="73FFFFFF">$INFO[Container(100).ListItem.Art(fanart)]</texture>
+			<!-- Ken Burns : zoom de 100 à 112 % en 24 s, puis retour, en boucle -->
+			<animation effect="zoom" start="100" end="112" time="24000" tween="sine" easing="inout" pulse="true" condition="true" center="960,540">Conditional</animation>
 		</control>
 		<control type="image">
 			<left>0</left><top>0</top><width>1560</width><height>1080</height>
@@ -576,6 +578,11 @@
 			-->
 			<control type="list" id="100">
 				<left>80</left><top>476</top><width>1840</width><height>400</height>
+				<visible allowhiddenfocus="true">Integer.IsGreater(Container(100).NumItems,0)</visible>
+				<animation type="Visible">
+					<effect type="slide" start="160,0" end="0,0" time="700" tween="cubic" easing="out"/>
+					<effect type="fade" start="0" end="100" time="450"/>
+				</animation>
 				<orientation>horizontal</orientation>
 				<onup>400</onup>
 				<scrolltime tween="cubic" easing="out">320</scrolltime>
@@ -622,14 +629,22 @@
 				<focusedlayout width="248" height="400">
 					<control type="group">
 						<left>16</left><top>32</top><width>220</width><height>330</height>
-						<animation effect="zoom" start="100" end="110" time="220" tween="cubic" easing="out" center="auto">Focus</animation>
-						<animation effect="zoom" start="110" end="100" time="180" tween="cubic" easing="out" center="auto">UnFocus</animation>
+						<!-- Focus : l'affiche grossit et « se soulève » de 10 px -->
+						<animation type="Focus">
+							<effect type="zoom" start="100" end="110" time="260" tween="cubic" easing="out" center="auto"/>
+							<effect type="slide" end="0,-10" time="260" tween="cubic" easing="out"/>
+						</animation>
+						<animation type="UnFocus">
+							<effect type="zoom" start="110" end="100" time="200" tween="cubic" easing="out" center="auto"/>
+							<effect type="slide" start="0,-10" end="0,0" time="200" tween="cubic" easing="out"/>
+						</animation>
 						<!-- Halo accent derrière l'affiche, seulement si la rangée a le focus -->
 						<control type="image">
 							<left>-40</left><top>-40</top><width>300</width><height>410</height>
 							<texture border="56" colordiffuse="A64A9EFF">arrmada/glow.png</texture>
 							<visible>Control.HasFocus(100)</visible>
 							<animation effect="fade" time="200">VisibleChange</animation>
+							<animation effect="fade" start="100" end="55" time="1600" tween="sine" pulse="true" condition="Control.HasFocus(100)">Conditional</animation>
 						</control>
 						<control type="image">
 							<left>0</left><top>0</top><width>220</width><height>330</height>
@@ -656,8 +671,12 @@
 							<visible>Control.HasFocus(100)</visible>
 						</control>
 						<control type="group">
-							<left>12</left><top>286</top>
+							<left>12</left><top>286</top><width>84</width><height>32</height>
 							<visible>!String.IsEmpty(ListItem.Property(badge))</visible>
+							<animation type="Focus">
+								<effect type="zoom" start="40" end="100" time="320" delay="140" tween="back" easing="out" center="auto"/>
+								<effect type="fade" start="0" end="100" time="200" delay="140"/>
+							</animation>
 							<control type="image">
 								<left>0</left><top>0</top><width>84</width><height>32</height>
 								<texture border="14" colordiffuse="FF4A9EFF">arrmada/rounded-12.png</texture>
@@ -679,8 +698,15 @@
 		<control type="group">
 			<visible>Integer.IsGreater(Container(100).NumItems,0)</visible>
 			<animation effect="fade" time="300">VisibleChange</animation>
-			<!-- Petit fondu à chaque déplacement dans la rangée -->
-			<animation effect="fade" start="30" end="100" time="300" reversible="false" condition="Container(100).OnNext | Container(100).OnPrevious">Conditional</animation>
+			<!-- À chaque déplacement, le texte arrive du côté où l'on va -->
+			<animation type="Conditional" condition="Container(100).OnNext" reversible="false">
+				<effect type="slide" start="48,0" end="0,0" time="320" tween="cubic" easing="out"/>
+				<effect type="fade" start="0" end="100" time="260"/>
+			</animation>
+			<animation type="Conditional" condition="Container(100).OnPrevious" reversible="false">
+				<effect type="slide" start="-48,0" end="0,0" time="320" tween="cubic" easing="out"/>
+				<effect type="fade" start="0" end="100" time="260"/>
+			</animation>
 			<control type="label">
 				<left>96</left><top>880</top><width>1240</width><height>48</height>
 				<font>font15_bold</font>

@@ -17,12 +17,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 TB = 1024**4
 
@@ -47,6 +48,8 @@ STATE = {"tick": 0, "down": False}
 
 
 # ── Images factices ──────────────────────────────────────────────────────────
+# Visuels « plausibles » (lumières floues, grain, titrage) : ce sont eux qui
+# apparaissent sur les captures, ils doivent ressembler à de vraies affiches.
 
 
 def _gradient(size: tuple[int, int], top: tuple, bottom: tuple) -> Image.Image:
@@ -58,36 +61,76 @@ def _gradient(size: tuple[int, int], top: tuple, bottom: tuple) -> Image.Image:
     return img
 
 
+def _lights(img: Image.Image, rng: random.Random, color: tuple, count: int, blur: int) -> Image.Image:
+    """Taches de lumière floues (effet « bokeh ») mélangées à l'image."""
+    layer = Image.new("RGB", img.size, (0, 0, 0))
+    draw = ImageDraw.Draw(layer)
+    w, h = img.size
+    for _ in range(count):
+        r = rng.randint(w // 8, w // 3)
+        x, y = rng.randint(0, w), rng.randint(0, int(h * 0.7))
+        tint = tuple(min(255, int(c * rng.uniform(0.8, 1.3))) for c in color)
+        draw.ellipse((x - r, y - r, x + r, y + r), fill=tint)
+    return ImageChops.screen(img, layer.filter(ImageFilter.GaussianBlur(blur)))
+
+
+def _grain(img: Image.Image, rng: random.Random, amount: int = 14) -> Image.Image:
+    noise = Image.effect_noise(img.size, amount).convert("RGB")
+    return Image.blend(img, ImageChops.overlay(img, noise), 0.35)
+
+
+def _vignette(img: Image.Image) -> Image.Image:
+    w, h = img.size
+    mask = Image.new("L", (w, h), 0)
+    ImageDraw.Draw(mask).ellipse((-w * 0.25, -h * 0.2, w * 1.25, h * 1.15), fill=255)
+    mask = mask.filter(ImageFilter.GaussianBlur(min(w, h) // 6))
+    return Image.composite(img, Image.new("RGB", (w, h), (0, 0, 0)), mask)
+
+
 def make_images(out: Path, font_path: str) -> None:
     """Affiche (440×660), fanart (1280×720) et ClearLogo (PNG transparent) par titre."""
     out.mkdir(parents=True, exist_ok=True)
-    for idx, (title, year, _kind, _tech, colors) in enumerate(TITLES):
+    for idx, (title, year, kind, _tech, colors) in enumerate(TITLES):
         if not colors:
             continue
-        poster = _gradient((440, 660), *colors)
+        rng = random.Random(idx)  # images identiques d'un lancement à l'autre
+        light, dark = colors
+
+        # Affiche : dégradé, lumières, grain, vignettage, titrage et crédits
+        poster = _gradient((440, 660), tuple(int(c * 0.55) for c in light), (8, 8, 12))
+        poster = _lights(poster, rng, light, 5, 38)
+        poster = _vignette(_grain(poster, rng))
         draw = ImageDraw.Draw(poster)
-        draw.ellipse((120, 120, 320, 320), outline=(255, 255, 255), width=6)
-        lines, line = [], ""
-        for word in title.split():
-            if len(f"{line} {word}") > 14:
+        draw.text((220, 46), "UN FILM ARRMADA" if kind == "movie" else "UNE SÉRIE ARRMADA",
+                  font=ImageFont.truetype(font_path, 17), fill=(225, 225, 230), anchor="mm")
+        words, lines, line = title.upper().split(), [], ""
+        for word in words:
+            if len(f"{line} {word}") > 12:
                 lines.append(line)
                 line = word
             else:
                 line = f"{line} {word}".strip()
         lines.append(line)
+        size = 62 if max(len(x) for x in lines) <= 9 else 48
+        base = 470 - (len(lines) - 1) * size // 2
         for i, text in enumerate(lines):
-            draw.text((220, 430 + i * 54), text.upper(), font=ImageFont.truetype(font_path, 46),
-                      fill=(255, 255, 255), anchor="mm")
-        draw.text((220, 620), str(year), font=ImageFont.truetype(font_path, 30),
-                  fill=(230, 230, 230), anchor="mm")
+            draw.text((220, base + i * (size + 4)), text, font=ImageFont.truetype(font_path, size),
+                      fill=(250, 250, 250), anchor="mm")
+        small = ImageFont.truetype(font_path, 11)
+        for i in range(3):  # bloc de crédits, comme en bas des vraies affiches
+            draw.text((220, 586 + i * 14), "RÉALISATION  ·  SCÉNARIO  ·  MUSIQUE  ·  PRODUCTION  ·  MONTAGE",
+                      font=small, fill=(150, 150, 160), anchor="mm")
+        draw.text((220, 636), f"{year}", font=ImageFont.truetype(font_path, 20),
+                  fill=(235, 235, 240), anchor="mm")
         poster.save(out / f"poster-{idx}.jpg", quality=90)
 
-        fanart = _gradient((1280, 720), colors[0], colors[1]).filter(ImageFilter.GaussianBlur(4))
-        fdraw = ImageDraw.Draw(fanart)
-        for k in range(9):
-            fdraw.ellipse((700 + k * 40, 80 + k * 25, 1100 + k * 40, 480 + k * 25),
-                          outline=(255, 255, 255), width=2)
-        fanart.save(out / f"fanart-{idx}.jpg", quality=85)
+        # Fanart : grandes lumières très floues + horizon lumineux + vignettage
+        fanart = _gradient((1280, 720), tuple(int(c * 0.35) for c in light), dark)
+        fanart = _lights(fanart, rng, light, 7, 90)
+        horizon = Image.new("RGB", fanart.size, (0, 0, 0))
+        ImageDraw.Draw(horizon).rectangle((0, 430, 1280, 470), fill=light)
+        fanart = ImageChops.screen(fanart, horizon.filter(ImageFilter.GaussianBlur(60)))
+        _vignette(_grain(fanart, rng, 10)).save(out / f"fanart-{idx}.jpg", quality=85)
 
         logo = Image.new("RGBA", (1200, 200), (0, 0, 0, 0))
         ImageDraw.Draw(logo).text((1190, 100), title.upper(), font=ImageFont.truetype(font_path, 64),

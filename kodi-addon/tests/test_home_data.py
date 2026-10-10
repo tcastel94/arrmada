@@ -66,6 +66,21 @@ class TestFormatting:
         assert home_data.age_label("pas une date", NOW) == ""
 
 
+class TestAnimationHelpers:
+    def test_parse_size_label(self) -> None:
+        assert home_data.parse_size_label("42,1 To") == (42.1, "To")
+        assert home_data.parse_size_label(f"980{NB}Go") == (980.0, "Go")
+        assert home_data.parse_size_label("—") is None
+
+    def test_ease_out_cubic(self) -> None:
+        assert home_data.ease_out_cubic(0) == 0
+        assert home_data.ease_out_cubic(1) == 1
+        assert home_data.ease_out_cubic(0.5) > 0.5  # rapide au début, lent à la fin
+
+    def test_fmt_decimal(self) -> None:
+        assert home_data.fmt_decimal(42.13) == "42,1"
+
+
 class TestBadges:
     def test_premium_movie(self) -> None:
         item = {
@@ -150,6 +165,15 @@ class TestBuildModel:
         assert kpis["storage_hint"] == f"78 % · 13,0{NB}To libres"
         assert kpis["downloads"] == "4"
         assert kpis["downloads_hint"] == "téléchargements"
+        # Valeurs brutes, animées par la fenêtre (compteurs qui défilent)
+        assert model["kpis_raw"] == {
+            "movies": 3412,
+            "series": 186,
+            "downloads": 4,
+            "storage": 42.1,
+            "storage_unit": "To",
+            "storage_pct": 78,
+        }
 
         assert [d["title"] for d in model["downloads"]] == ["Release 1", "Release 2", "Release 3"]
         assert model["downloads"][0]["meta"] == "10 % · 12 min · Radarr"
