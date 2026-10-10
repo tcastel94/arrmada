@@ -188,3 +188,32 @@ class TestDockerLogs:
     def test_parse_llm_json(self) -> None:
         assert _parse_json_object('```json\n{"a": 1}\n```') == {"a": 1}
         assert _parse_json_object('Voici : {"b": [1, 2]} fin') == {"b": [1, 2]}
+
+
+class TestYamahaYxc:
+    """L'ampli répond HTTP 200 même quand il refuse : `response_code` fait foi."""
+
+    async def test_rejected_command_raises(self, fake_network: None, monkeypatch) -> None:
+        import httpx
+
+        from app.services import yamaha
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            ok = request.url.params.get("program") == "surr_decoder"
+            return httpx.Response(200, json={"response_code": 0 if ok else 4})
+
+        original = httpx.AsyncClient.__init__
+
+        def patched(self, *a, **kw):
+            kw["transport"] = httpx.MockTransport(handler)
+            original(self, *a, **kw)
+
+        monkeypatch.setattr(httpx.AsyncClient, "__init__", patched)
+        base = "http://ampli.test"
+        prog = yamaha._program_id("surround_decoder")  # ancien id des profils
+        assert prog == "surr_decoder"
+        assert (await yamaha._get(base, f"/main/setSoundProgram?program={prog}")) == {
+            "response_code": 0
+        }
+        with pytest.raises(yamaha.YamahaError, match="paramètre invalide"):
+            await yamaha._get(base, "/main/setSoundProgram?program=inexistant")

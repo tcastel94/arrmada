@@ -70,7 +70,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
         label: "Ampli Yamaha",
         short: "Yamaha",
         icon: Speaker,
-        description: "Ton ampli home cinéma MusicCast, piloté depuis le Salon.",
+        description: "Ton ampli home cinéma MusicCast et ses profils audio Salon / Cinéma, pilotés depuis le Salon.",
     },
 ];
 

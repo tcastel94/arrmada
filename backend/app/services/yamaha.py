@@ -40,12 +40,47 @@ def _base(url: str) -> str:
     return f"{p.scheme}://{p.netloc}"
 
 
+# Codes d'erreur YXC : l'ampli répond HTTP 200 même quand il REFUSE une
+# commande ; seul `response_code` (≠ 0) le signale.
+_YXC_ERRORS = {
+    1: "initialisation en cours",
+    2: "erreur interne",
+    3: "commande non prise en charge",
+    4: "paramètre invalide",
+    5: "impossible dans l'état actuel",
+    6: "délai dépassé",
+    99: "mise à jour du firmware en cours",
+}
+
+
+class YamahaError(RuntimeError):
+    """L'ampli a répondu mais a refusé la commande (response_code ≠ 0)."""
+
+
+# Ancien identifiant (profils déjà enregistrés) → identifiant YXC réel.
+_PROGRAM_ALIASES = {"surround_decoder": "surr_decoder"}
+
+
+def _program_id(program: str) -> str:
+    return _PROGRAM_ALIASES.get(program, program)
+
+
 async def _get(base: str, path: str, *, timeout: float = 4.0) -> dict[str, Any]:
-    """GET a YXC endpoint and return the parsed JSON (raises on transport error)."""
+    """GET a YXC endpoint and return the parsed JSON.
+
+    Raises on transport errors AND when the AVR rejects the command
+    (``response_code`` ≠ 0) : sans ça, une commande refusée (programme sonore
+    inconnu, paramètre hors plage…) était affichée comme appliquée.
+    """
     async with httpx.AsyncClient(timeout=timeout) as client:
         r = await client.get(f"{base}{YXC}{path}")
         r.raise_for_status()
-        return r.json()
+        data = r.json()
+    code = data.get("response_code", 0) if isinstance(data, dict) else 0
+    if code:
+        reason = _YXC_ERRORS.get(code, f"code {code}")
+        raise YamahaError(f"{path.split('?')[0]} : {reason}")
+    return data
 
 
 async def probe(ip_or_base: str, *, timeout: float = 1.5) -> dict[str, Any] | None:
@@ -262,7 +297,7 @@ async def control(
         elif action == "input":
             await _get(base, f"/{zone}/setInput?input={value}")
         elif action == "sound_program":
-            await _get(base, f"/{zone}/setSoundProgram?program={value}")
+            await _get(base, f"/{zone}/setSoundProgram?program={_program_id(str(value))}")
         elif action == "dialog_lift":
             val = max(0, min(5, int(value)))
             await _get(base, f"/{zone}/setDialogueLift?value={val}")
@@ -296,7 +331,7 @@ DEFAULT_PROFILES = {
         "volume_raw": 65,  # Typical YXC volume step (0..161)
         "dialog_lift": 2,
         "dialog_level": 2,
-        "movie_sound_program": "surround_decoder",
+        "movie_sound_program": "surr_decoder",
         "series_sound_program": "drama",
         "music_sound_program": "2ch_stereo",
         "adaptive_drc": True,
@@ -408,10 +443,11 @@ async def apply_preset(
         elif media_type in ("music", "audio", "track"):
             program = profile.get("music_sound_program", "2ch_stereo")
         elif audio_channels and audio_channels <= 2 and room_key == "salon":
-            program = "surround_decoder"
+            program = "surr_decoder"
 
         # Apply Sound Program (try, gracefully fallback if not supported)
         try:
+            program = _program_id(program)
             await _get(base, f"/main/setSoundProgram?program={program}")
             applied["sound_program"] = program
         except Exception:

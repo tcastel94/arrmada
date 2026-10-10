@@ -275,7 +275,8 @@ async def analyze_logs(db: AsyncSession, tail: int = 150) -> dict[str, Any]:
     if content is None:
         return {
             "error": f"Analyse IA échouée (Ollama + OpenRouter) : {type(last_err).__name__}",
-            "ai_available": True,
+            # Aucun moteur n'a répondu : l'interface affiche comment en configurer un.
+            "ai_available": False,
         }
 
     try:
