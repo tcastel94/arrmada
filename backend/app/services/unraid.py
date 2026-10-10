@@ -56,6 +56,25 @@ SHARES_QUERY = """
 """
 
 
+class DockerActionError(Exception):
+    """Unraid could not perform a start/stop/restart action."""
+
+
+def _normalize_state(state_raw: str) -> str:
+    """Map an Unraid/Docker state to running | paused | restarting | stopped.
+
+    PAUSED and RESTARTING used to be reported as "stopped", which was
+    misleading (a paused container still holds its resources).
+    """
+    if state_raw == "RUNNING":
+        return "running"
+    if state_raw == "PAUSED":
+        return "paused"
+    if state_raw == "RESTARTING":
+        return "restarting"
+    return "stopped"
+
+
 class UnraidClient:
     """Client for the Unraid GraphQL API (via Unraid Connect / port 15000)."""
 
@@ -110,7 +129,7 @@ class UnraidClient:
 
             containers.append({
                 "name": name,
-                "status": "running" if state_raw == "RUNNING" else "stopped",
+                "status": _normalize_state(state_raw),
                 "image": c.get("image", ""),
                 "id": (c.get("id") or "")[:12],
                 "status_text": c.get("status", ""),
@@ -119,7 +138,13 @@ class UnraidClient:
         return containers
 
     async def docker_action(self, container_id: str, action: str) -> str:
-        """Start/stop/restart a Docker container."""
+        """Start/stop/restart a Docker container.
+
+        Raises ``ValueError`` for an unknown action and ``DockerActionError``
+        when Unraid refuses or fails the action — callers turn these into
+        real HTTP errors (previously a failure was returned as a 200
+        "Failed: …" string, so the UI reported a success).
+        """
         mutation_map = {
             "start": DOCKER_START_MUTATION,
             "stop": DOCKER_STOP_MUTATION,
@@ -127,14 +152,14 @@ class UnraidClient:
         }
         mutation = mutation_map.get(action.lower())
         if not mutation:
-            return f"Unknown action: {action}"
+            raise ValueError(f"Unknown action: {action}")
 
         try:
             data = await self._graphql(mutation, variables={"id": container_id})
-            return str(data)
         except Exception as exc:
             logger.error("Docker action %s on %s failed: %s", action, container_id, exc)
-            return f"Failed: {exc}"
+            raise DockerActionError(str(exc)) from exc
+        return str(data)
 
     # ── Shares ────────────────────────────────────────────────
     async def get_shares(self) -> list[dict[str, Any]]:

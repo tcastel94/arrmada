@@ -1,389 +1,227 @@
 "use client";
 
-import { Header } from "@/components/layout/header";
-import { PageSkeleton } from "@/components/shared/loading-skeleton";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog";
-import {
-    Radar,
-    CheckCircle,
-    AlertTriangle,
-    XCircle,
-    ArrowUpRight,
-    Search,
-    Download,
-    BarChart3,
-    Trash2,
-    FlaskConical,
-    Loader2,
-    ShieldCheck,
-    Lock,
-    Unlock,
-} from "lucide-react";
-import { useProwlarrStats, useTestIndexer, useToggleIndexer, useDeleteIndexer, IndexerStat, ProwlarrIndexer } from "@/hooks/use-prowlarr";
-import { cn } from "@/lib/utils";
+/**
+ * Indexers (/prowlarr) : santé et performances des indexers Prowlarr.
+ * ----------------------------------------------------------------
+ * - Héros : indexers actifs, requêtes, récupérations, taux de succès
+ *   global et nombre d'indexers à surveiller.
+ * - Encart « À surveiller » : indexers en erreur (message Prowlarr
+ *   affiché) ou peu fiables (< 80 % de succès) — `summary.problematic`
+ *   n'était jamais affiché.
+ * - Une seule table avec stats + actions ; « Tester tout » teste les
+ *   indexers actifs un par un, puis les stats sont relues.
+ */
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { AlertTriangle, CheckCircle2, Download, FlaskConical, Loader2, Radar, RefreshCw, Search, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
+import { Header } from "@/components/layout/header";
+import { PageContainer } from "@/components/shared/page-container";
+import { PageHeader, StatPill } from "@/components/shared/page-header";
+import { Panel } from "@/components/shared/panel";
+import { EmptyState, ErrorState } from "@/components/shared/empty-state";
+import { Shimmer } from "@/components/shared/loading-skeleton";
+import { AnimatedNumber } from "@/components/fx/animated-number";
+import { StatusDot } from "@/components/fx/status-dot";
+import { Button } from "@/components/ui/button";
+import { useProwlarrStats, useTestIndexer, type IndexerTestResult } from "@/hooks/use-prowlarr";
+import { plural } from "@/lib/format";
+import { fadeUp, stagger } from "@/lib/motion";
+import { cn } from "@/lib/utils";
+import { IndexerTable, buildRows, type IndexerRow, type TestOutcome } from "@/components/prowlarr/indexer-table";
 
-const container = {
-    hidden: { opacity: 0 },
-    show: { opacity: 1, transition: { staggerChildren: 0.06 } },
-};
-
-const fadeUp = {
-    hidden: { opacity: 0, y: 12 },
-    show: { opacity: 1, y: 0, transition: { duration: 0.3 } },
-};
-
-function SuccessRateBar({ rate, label }: { rate: number; label: string }) {
-    const color = rate >= 90 ? "from-emerald-500 to-emerald-400"
-        : rate >= 70 ? "from-amber-500 to-yellow-400"
-            : "from-red-500 to-red-400";
-    const textColor = rate >= 90 ? "text-emerald-400"
-        : rate >= 70 ? "text-amber-400"
-            : "text-red-400";
-
-    return (
-        <div className="space-y-1">
-            <div className="flex justify-between text-xs">
-                <span className="text-muted-foreground">{label}</span>
-                <span className={cn("font-bold tabular-nums", textColor)}>{rate}%</span>
-            </div>
-            <div className="relative">
-                <Progress value={rate} className="h-1.5 bg-muted/30" />
-                <div
-                    className={cn("absolute inset-0 h-1.5 rounded-full bg-gradient-to-r opacity-80", color)}
-                    style={{ width: `${rate}%` }}
-                />
-            </div>
-        </div>
-    );
-}
-
-function IndexerManagement({ indexers }: { indexers: ProwlarrIndexer[] }) {
-    const testIndexer = useTestIndexer();
-    const toggleIndexer = useToggleIndexer();
-    const deleteIndexer = useDeleteIndexer();
-    const [testingId, setTestingId] = useState<number | null>(null);
-    const [togglingId, setTogglingId] = useState<number | null>(null);
-    const [toDelete, setToDelete] = useState<ProwlarrIndexer | null>(null);
-
-    const handleTest = (idx: ProwlarrIndexer) => {
-        setTestingId(idx.id);
-        testIndexer.mutate(
-            { id: idx.id },
-            {
-                onSuccess: (res) => {
-                    if (res.ok) toast.success(`« ${idx.name} » : test réussi.`);
-                    else toast.error(`« ${idx.name} » : échec du test (HTTP ${res.status_code}).`);
-                },
-                onError: (e) => toast.error("Erreur : " + e.message),
-                onSettled: () => setTestingId(null),
-            },
-        );
-    };
-
-    const handleToggle = (idx: ProwlarrIndexer) => {
-        setTogglingId(idx.id);
-        toggleIndexer.mutate(
-            { id: idx.id, enable: !idx.enable },
-            {
-                onSuccess: (res) =>
-                    toast.success(`« ${idx.name} » ${res.enable ? "activé" : "désactivé"}.`),
-                onError: (e) => toast.error("Erreur : " + e.message),
-                onSettled: () => setTogglingId(null),
-            },
-        );
-    };
-
-    const handleDelete = () => {
-        if (!toDelete) return;
-        const name = toDelete.name;
-        deleteIndexer.mutate(
-            { id: toDelete.id },
-            {
-                onSuccess: () => {
-                    toast.success(`« ${name} » supprimé.`);
-                    setToDelete(null);
-                },
-                onError: (e) => toast.error("Erreur : " + e.message),
-            },
-        );
-    };
-
-    return (
-        <>
-            <Card className="border-0 ring-1 ring-white/5 bg-card/40 backdrop-blur-sm">
-                <CardContent className="p-0">
-                    <div className="flex items-center gap-2 px-5 py-3 border-b border-white/5">
-                        <ShieldCheck className="h-4 w-4 text-rose-400" />
-                        <span className="text-sm font-semibold">Gestion des indexers</span>
-                        <Badge variant="outline" className="text-[9px] px-1 h-4 ml-auto">
-                            {indexers.length}
-                        </Badge>
-                    </div>
-                    <div className="divide-y divide-white/5">
-                        {indexers.map((idx) => (
-                            <div key={`${idx.source}-${idx.id}`} className="flex items-center gap-3 p-4">
-                                <div className="flex items-center gap-2 min-w-0 flex-1">
-                                    {idx.enable ? (
-                                        <CheckCircle className="h-4 w-4 text-emerald-400 shrink-0" />
-                                    ) : (
-                                        <XCircle className="h-4 w-4 text-muted-foreground shrink-0" />
-                                    )}
-                                    <span className="text-sm font-medium truncate">{idx.name}</span>
-                                    <Badge variant="outline" className="text-[9px] px-1 h-4 shrink-0">
-                                        {idx.protocol}
-                                    </Badge>
-                                    {idx.privacy && (
-                                        <span className="text-muted-foreground shrink-0" title={idx.privacy}>
-                                            {idx.privacy === "private" ? (
-                                                <Lock className="h-3 w-3" />
-                                            ) : (
-                                                <Unlock className="h-3 w-3" />
-                                            )}
-                                        </span>
-                                    )}
-                                    {idx.status_messages && idx.status_messages.length > 0 && (
-                                        <AlertTriangle
-                                            className="h-3.5 w-3.5 text-amber-400 shrink-0"
-                                            aria-label="Indexer en erreur"
-                                        />
-                                    )}
-                                </div>
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-8 gap-1.5 text-sky-400 hover:text-sky-300 hover:bg-sky-500/10"
-                                        disabled={testingId === idx.id}
-                                        onClick={() => handleTest(idx)}
-                                    >
-                                        {testingId === idx.id ? (
-                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                        ) : (
-                                            <FlaskConical className="h-3.5 w-3.5" />
-                                        )}
-                                        Test
-                                    </Button>
-                                    <div className="flex items-center gap-1.5 px-1">
-                                        <Switch
-                                            checked={idx.enable}
-                                            disabled={togglingId === idx.id}
-                                            onCheckedChange={() => handleToggle(idx)}
-                                            aria-label="Activer / désactiver"
-                                        />
-                                    </div>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                                        title="Supprimer l'indexer"
-                                        onClick={() => setToDelete(idx)}
-                                    >
-                                        <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                </div>
-                            </div>
-                        ))}
-                        {indexers.length === 0 && (
-                            <div className="text-center py-8 text-muted-foreground text-sm">
-                                Aucun indexer configuré
-                            </div>
-                        )}
-                    </div>
-                </CardContent>
-            </Card>
-
-            <Dialog open={!!toDelete} onOpenChange={(open) => !open && !deleteIndexer.isPending && setToDelete(null)}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Supprimer l&apos;indexer</DialogTitle>
-                        <DialogDescription>
-                            L&apos;indexer sera définitivement supprimé de Prowlarr. Cette action est irréversible.
-                        </DialogDescription>
-                    </DialogHeader>
-                    {toDelete && (
-                        <p className="text-sm">
-                            <span className="font-medium">{toDelete.name}</span>
-                        </p>
-                    )}
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setToDelete(null)} disabled={deleteIndexer.isPending}>
-                            Annuler
-                        </Button>
-                        <Button variant="destructive" onClick={handleDelete} disabled={deleteIndexer.isPending}>
-                            {deleteIndexer.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                            Supprimer
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-        </>
-    );
+/** Message lisible d'un test échoué (Prowlarr renvoie une liste d'erreurs de validation). */
+function testErrorMessage(res: IndexerTestResult): string {
+    if (Array.isArray(res.errors)) {
+        const msgs = res.errors.map((e) => e.errorMessage).filter(Boolean);
+        if (msgs.length) return msgs.join(" · ");
+    }
+    if (typeof res.errors === "string" && res.errors.trim()) return res.errors.slice(0, 200);
+    return `HTTP ${res.status_code}`;
 }
 
 export default function ProwlarrPage() {
-    const { data, isLoading } = useProwlarrStats();
+    const { data, isLoading, isError, error, refetch, isFetching } = useProwlarrStats();
+    const testIndexer = useTestIndexer();
+    const [testing, setTesting] = useState<Set<string>>(new Set());
+    const [outcomes, setOutcomes] = useState<Record<string, TestOutcome | undefined>>({});
+    const [bulkRunning, setBulkRunning] = useState(false);
 
-    if (isLoading) {
-        return (
-            <>
-                <Header title="Indexers" />
-                <div className="p-6"><PageSkeleton /></div>
-            </>
-        );
-    }
+    const rows = useMemo(() => (data ? buildRows(data.indexers, data.stats) : []), [data]);
+    const watchlist = useMemo(() => rows.filter((r) => r.health === "error" || r.health === "warning"), [rows]);
+
+    /** Teste un indexer ; renvoie true si OK. `silent` = pas de toast (test groupé). */
+    const runTest = async (row: IndexerRow, silent = false): Promise<boolean> => {
+        setTesting((s) => new Set(s).add(row.key));
+        try {
+            const res = await testIndexer.mutateAsync({ id: row.id, skipRefresh: silent });
+            const outcome: TestOutcome = res.ok ? { ok: true } : { ok: false, message: testErrorMessage(res) };
+            setOutcomes((o) => ({ ...o, [row.key]: outcome }));
+            if (!silent) {
+                if (res.ok) toast.success(`« ${row.name} » répond correctement`);
+                else toast.error(`« ${row.name} » : test échoué`, { description: outcome.message });
+            }
+            return res.ok;
+        } catch (e) {
+            const message = e instanceof Error ? e.message : "erreur inconnue";
+            setOutcomes((o) => ({ ...o, [row.key]: { ok: false, message } }));
+            if (!silent) toast.error(`« ${row.name} » : test impossible`, { description: message });
+            return false;
+        } finally {
+            setTesting((s) => {
+                const next = new Set(s);
+                next.delete(row.key);
+                return next;
+            });
+        }
+    };
+
+    /** Teste tous les indexers actifs, un par un (Prowlarr n'aime pas les rafales). */
+    const testAll = async () => {
+        const targets = rows.filter((r) => r.enable && !r.orphan);
+        if (targets.length === 0) return;
+        setBulkRunning(true);
+        const id = toast.loading(`Test 0/${targets.length}…`);
+        let ok = 0;
+        for (let i = 0; i < targets.length; i++) {
+            toast.loading(`Test ${i + 1}/${targets.length} : ${targets[i].name}`, { id });
+            if (await runTest(targets[i], true)) ok++;
+        }
+        setBulkRunning(false);
+        refetch(); // une seule relecture des stats pour tout le lot
+        const failed = targets.length - ok;
+        if (failed === 0) toast.success(`Les ${targets.length} indexers actifs répondent`, { id });
+        else toast.warning(`${ok}/${targets.length} indexers OK, ${plural(failed, "en échec")}`, { id, description: "Le détail est affiché sur chaque ligne." });
+    };
 
     const summary = data?.summary;
-    const stats = data?.stats ?? [];
-    const indexers = data?.indexers ?? [];
+    const rate = summary?.total_queries ? summary.average_success_rate : null;
 
     return (
         <>
-            <Header title="Indexers Prowlarr" />
-            <motion.div
-                className="p-4 md:p-6 space-y-5 max-w-[1400px] mx-auto"
-                variants={container}
-                initial="hidden"
-                animate="show"
-            >
-                {/* Hero */}
-                <motion.div variants={fadeUp}>
-                    <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-rose-600/20 via-pink-600/10 to-transparent p-6 ring-1 ring-rose-500/20">
-                        <div className="flex items-center gap-3">
-                            <div className="rounded-xl p-2.5 bg-rose-500/20">
-                                <Radar className="h-6 w-6 text-rose-400" />
-                            </div>
-                            <div>
-                                <h2 className="text-2xl font-bold">Prowlarr Indexers</h2>
-                                <p className="text-sm text-muted-foreground">
-                                    Performances et santé de vos indexers
-                                </p>
-                            </div>
-                        </div>
-                        <div className="absolute -top-16 -right-16 w-40 h-40 rounded-full blur-3xl opacity-20 bg-rose-500/30" />
-                    </div>
-                </motion.div>
+            <Header title="Indexers" />
+            <PageContainer>
+                <PageHeader
+                    icon={Radar}
+                    accent="rose"
+                    eyebrow="Maintenance"
+                    title="Indexers"
+                    description="Santé et performances de tes indexers Prowlarr, avec tests et activation en un clic."
+                    actions={
+                        <>
+                            <Button variant="outline" onClick={() => refetch()} disabled={isFetching} aria-label="Actualiser les statistiques">
+                                <RefreshCw className={cn(isFetching && "animate-spin")} />
+                                <span className="hidden sm:inline">Actualiser</span>
+                            </Button>
+                            <Button onClick={testAll} disabled={bulkRunning || !rows.some((r) => r.enable)}>
+                                {bulkRunning ? <Loader2 className="animate-spin" /> : <FlaskConical />}
+                                Tester tout
+                            </Button>
+                        </>
+                    }
+                >
+                    {summary && (
+                        <>
+                            <StatPill
+                                icon={Radar}
+                                label="indexers actifs"
+                                value={
+                                    <>
+                                        <AnimatedNumber value={summary.enabled_indexers} />/{summary.total_indexers}
+                                    </>
+                                }
+                                tone="primary"
+                            />
+                            <StatPill icon={Search} label="requêtes" value={<AnimatedNumber value={summary.total_queries} />} />
+                            <StatPill icon={Download} label="récupérations" value={<AnimatedNumber value={summary.total_grabs} />} />
+                            <StatPill
+                                icon={CheckCircle2}
+                                label="de succès"
+                                value={rate === null ? "—" : <AnimatedNumber value={rate} decimals={1} suffix=" %" />}
+                                tone={rate === null ? "default" : rate >= 90 ? "success" : rate >= 70 ? "warning" : "danger"}
+                            />
+                            {watchlist.length > 0 && (
+                                <StatPill icon={AlertTriangle} label="à surveiller" value={watchlist.length} tone="warning" />
+                            )}
+                        </>
+                    )}
+                </PageHeader>
 
-                {/* Summary Stats */}
-                {summary && (
-                    <motion.div variants={fadeUp}>
-                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                            <Card className="border-0 ring-1 ring-white/5 bg-gradient-to-br from-blue-600/10 to-transparent">
-                                <CardContent className="p-4">
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <Radar className="h-4 w-4 text-blue-400" />
-                                        <span className="text-xs text-muted-foreground">Indexers actifs</span>
-                                    </div>
-                                    <p className="text-2xl font-bold tabular-nums">{summary.enabled_indexers}</p>
-                                    <p className="text-[10px] text-muted-foreground">sur {summary.total_indexers}</p>
-                                </CardContent>
-                            </Card>
-                            <Card className="border-0 ring-1 ring-white/5 bg-gradient-to-br from-purple-600/10 to-transparent">
-                                <CardContent className="p-4">
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <Search className="h-4 w-4 text-purple-400" />
-                                        <span className="text-xs text-muted-foreground">Requêtes totales</span>
-                                    </div>
-                                    <p className="text-2xl font-bold tabular-nums">{summary.total_queries.toLocaleString()}</p>
-                                </CardContent>
-                            </Card>
-                            <Card className="border-0 ring-1 ring-white/5 bg-gradient-to-br from-emerald-600/10 to-transparent">
-                                <CardContent className="p-4">
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <Download className="h-4 w-4 text-emerald-400" />
-                                        <span className="text-xs text-muted-foreground">Grabs réussis</span>
-                                    </div>
-                                    <p className="text-2xl font-bold tabular-nums">{summary.total_grabs.toLocaleString()}</p>
-                                </CardContent>
-                            </Card>
-                            <Card className="border-0 ring-1 ring-white/5 bg-gradient-to-br from-amber-600/10 to-transparent">
-                                <CardContent className="p-4">
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <BarChart3 className="h-4 w-4 text-amber-400" />
-                                        <span className="text-xs text-muted-foreground">Taux de succès</span>
-                                    </div>
-                                    <p className={cn(
-                                        "text-2xl font-bold tabular-nums",
-                                        summary.average_success_rate >= 90 ? "text-emerald-400"
-                                            : summary.average_success_rate >= 70 ? "text-amber-400"
-                                                : "text-red-400"
-                                    )}>
-                                        {summary.average_success_rate}%
-                                    </p>
-                                </CardContent>
-                            </Card>
+                {isLoading ? (
+                    <div className="space-y-4">
+                        <Shimmer className="h-24 w-full rounded-2xl" />
+                        <div className="glass space-y-2 rounded-2xl p-4">
+                            {Array.from({ length: 6 }).map((_, i) => (
+                                <Shimmer key={i} className="h-16 w-full" />
+                            ))}
                         </div>
+                    </div>
+                ) : isError || !data ? (
+                    <Panel>
+                        <ErrorState error={error} onRetry={() => refetch()} title="Statistiques Prowlarr indisponibles" />
+                    </Panel>
+                ) : rows.length === 0 ? (
+                    <Panel>
+                        <EmptyState
+                            icon={Radar}
+                            title="Aucun indexer"
+                            description="Aucun indexer trouvé : vérifie que Prowlarr est ajouté dans les services et qu'il contient des indexers."
+                            action={{ label: "Ouvrir les services", href: "/settings/services" }}
+                        />
+                    </Panel>
+                ) : (
+                    <motion.div variants={stagger(0, 0.08)} initial="hidden" animate="show" className="space-y-5">
+                        {watchlist.length > 0 && (
+                            <motion.div variants={fadeUp}>
+                                <Panel title="À surveiller" icon={ShieldAlert} iconClassName="text-amber-300">
+                                    <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                                        {watchlist.map((r) => {
+                                            const msg = r.messages.map((m) => m.message || m.title).filter(Boolean).join(" · ");
+                                            return (
+                                                <li
+                                                    key={r.key}
+                                                    className={cn(
+                                                        "flex items-start gap-2.5 rounded-xl p-3 ring-1",
+                                                        r.health === "error" ? "bg-red-500/[0.07] ring-red-400/20" : "bg-amber-500/[0.07] ring-amber-400/20",
+                                                    )}
+                                                >
+                                                    <StatusDot tone={r.health === "error" ? "error" : "warning"} className="mt-1.5" />
+                                                    <div className="min-w-0">
+                                                        <p className="truncate text-sm font-semibold">{r.name}</p>
+                                                        <p className={cn("line-clamp-2 text-xs", r.health === "error" ? "text-red-300" : "text-amber-300")} title={msg}>
+                                                            {r.health === "error"
+                                                                ? msg || "Prowlarr signale une erreur"
+                                                                : `${(r.stat?.success_rate ?? 0).toLocaleString("fr-FR")} % de requêtes réussies (${plural(r.stat?.failed_queries ?? 0, "échec")})`}
+                                                        </p>
+                                                    </div>
+                                                </li>
+                                            );
+                                        })}
+                                    </ul>
+                                </Panel>
+                            </motion.div>
+                        )}
+
+                        <motion.div variants={fadeUp}>
+                            <Panel
+                                title="Tous les indexers"
+                                icon={Radar}
+                                iconClassName="text-rose-300"
+                                bodyClassName="p-0"
+                                action={<span className="text-xs text-muted-foreground tabular-nums">{plural(rows.length, "indexer")}</span>}
+                            >
+                                <IndexerTable
+                                    rows={rows}
+                                    testing={testing}
+                                    outcomes={outcomes}
+                                    onTest={(r) => runTest(r)}
+                                    bulkRunning={bulkRunning}
+                                />
+                            </Panel>
+                        </motion.div>
                     </motion.div>
                 )}
-
-                {/* Indexer Management */}
-                <motion.div variants={fadeUp}>
-                    <IndexerManagement indexers={indexers} />
-                </motion.div>
-
-                {/* Indexer List */}
-                <motion.div variants={fadeUp}>
-                    <Card className="border-0 ring-1 ring-white/5 bg-card/40 backdrop-blur-sm">
-                        <CardContent className="p-0">
-                            <div className="flex items-center gap-2 px-5 py-3 border-b border-white/5">
-                                <BarChart3 className="h-4 w-4 text-rose-400" />
-                                <span className="text-sm font-semibold">Performances par indexer</span>
-                            </div>
-                            <div className="divide-y divide-white/5">
-                                {stats.map((stat: IndexerStat) => (
-                                    <div key={`${stat.indexer_name}-${stat.source}`} className="p-4 hover:bg-white/[0.02] transition-colors">
-                                        <div className="flex items-center justify-between mb-3">
-                                            <div className="flex items-center gap-2">
-                                                {stat.success_rate >= 90 ? (
-                                                    <CheckCircle className="h-4 w-4 text-emerald-400" />
-                                                ) : stat.success_rate >= 70 ? (
-                                                    <AlertTriangle className="h-4 w-4 text-amber-400" />
-                                                ) : (
-                                                    <XCircle className="h-4 w-4 text-red-400" />
-                                                )}
-                                                <span className="text-sm font-medium">{stat.indexer_name}</span>
-                                                <Badge variant="outline" className="text-[9px] px-1 h-4">
-                                                    {stat.source}
-                                                </Badge>
-                                            </div>
-                                            <div className="flex items-center gap-3 text-xs text-muted-foreground tabular-nums">
-                                                <span>{stat.queries} requêtes</span>
-                                                <span>{stat.grabs} grabs</span>
-                                                {stat.avg_response_time > 0 && (
-                                                    <span>{stat.avg_response_time}ms</span>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <div className="grid gap-2 sm:grid-cols-2">
-                                            <SuccessRateBar rate={stat.success_rate} label="Taux de succès" />
-                                            <SuccessRateBar rate={stat.grab_rate} label="Taux de grab" />
-                                        </div>
-                                    </div>
-                                ))}
-                                {stats.length === 0 && (
-                                    <div className="text-center py-8 text-muted-foreground text-sm">
-                                        Aucune statistique Prowlarr disponible
-                                    </div>
-                                )}
-                            </div>
-                        </CardContent>
-                    </Card>
-                </motion.div>
-            </motion.div>
+            </PageContainer>
         </>
     );
 }

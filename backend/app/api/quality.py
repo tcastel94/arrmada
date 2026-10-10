@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -190,8 +190,14 @@ async def _analyze_quality(db: AsyncSession) -> dict[str, Any]:
 
 
 @router.get("")
-async def get_quality_overview(db: AsyncSession = Depends(get_db)):
+async def get_quality_overview(
+    refresh: bool = Query(False, description="Ignore the 10 min cache (UI « Rescanner » button)"),
+    db: AsyncSession = Depends(get_db),
+):
     """Analyze quality distribution and find upgrade opportunities."""
+    if refresh:
+        cache.invalidate("quality_upgrade:overview")
+
     async def _fetch():
         return await _analyze_quality(db)
 

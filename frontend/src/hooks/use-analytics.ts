@@ -1,5 +1,8 @@
 "use client";
 
+/**
+ * Statistiques de la médiathèque (page /analytics).
+ */
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api-client";
 
@@ -30,10 +33,13 @@ export interface YearItem {
 
 export interface BiggestItem {
     title: string;
-    type: string;
+    type: "movie" | "series" | string;
     size_bytes: number;
     size_human: string;
+    /** Films : nom de qualité. Séries : le backend renvoie l'ID du profil (nombre). */
     quality: string;
+    /** Pas encore exposé par le backend : si présent, lien direct vers la fiche. */
+    external_id?: string | number | null;
 }
 
 export interface ServiceBreakdown {
@@ -53,7 +59,7 @@ export interface AnalyticsData {
 export function useAnalytics() {
     return useQuery<AnalyticsData>({
         queryKey: ["analytics"],
-        queryFn: () => apiFetch("/api/analytics"),
+        queryFn: () => apiFetch<AnalyticsData>("/api/analytics"),
         staleTime: 120_000,
     });
 }
