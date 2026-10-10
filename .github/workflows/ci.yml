@@ -83,11 +83,40 @@ jobs:
         env:
           NEXT_PUBLIC_API_URL: http://localhost:8420
 
+  # ── Add-on Kodi ────────────────────────────────────────────
+  # Pas de Kodi en CI : on teste la logique pure et la cohérence des fichiers
+  # (XML ↔ Python ↔ textures ↔ polices SiLVO). Le rendu se valide sur la TV.
+  kodi-addon-test:
+    name: "Kodi add-on — Tests"
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install tools
+        run: pip install pytest==8.3.4 ruff==0.17.0
+
+      - name: Lint with ruff
+        # Config : kodi-addon/ruff.toml. Seuls les modules des écrans v2,
+        # les outils et les tests sont contrôlés (l'ancien code suivra).
+        run: |
+          FILES="kodi-addon/script.arrmada/lib/home_data.py kodi-addon/script.arrmada/lib/home_window.py kodi-addon/tests kodi-addon/tools"
+          ruff check $FILES
+          ruff format --check $FILES
+
+      - name: Run tests
+        run: pytest kodi-addon/tests -v
+
   # ── Docker ─────────────────────────────────────────────────
   docker-build:
     name: "Docker — Build"
     runs-on: ubuntu-latest
-    needs: [backend-lint-test, frontend-lint-build]
+    needs: [backend-lint-test, frontend-lint-build, kodi-addon-test]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:

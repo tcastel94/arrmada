@@ -184,6 +184,13 @@ pièce. Le choix d'une autre pièce reste possible dans un menu secondaire.
 | Phase | Livrables | Critère de fin |
 |---|---|---|
 | **0. Prototype** (quelques jours) | Une fenêtre WindowXML minimale sous SiLVO / Kodi 21 / Shield : polices, focus, animations, performances | Captures validées sur la Shield |
+
+> **Avancement (10/10/2026)** — Phase 0 livrée dans l'add-on 1.4.0 : écran
+> « Accueil » (`action=home`) avec panneau Diagnostic. Déjà validé sur un banc
+> Kodi 20 sous écran virtuel avec les polices de SiLVO 10.0.4. Polices
+> retenues : celles communes à tous les jeux de polices de SiLVO. Glyphes
+> `→ ★ ✓ ▶` absents de la police, donc proscrits. Il reste les captures sur la
+> Shield (voir `kodi-addon/README.md`, « Valider le prototype »).
 | **1. Fondations** | Appairage, cache + service, dépôt de mises à jour, navigation native, widgets SiLVO, CI de l'add-on | Appli utilisable au quotidien, aucun gel de l'interface, mise à jour automatique |
 | **2. Écrans waouh** | Accueil, Fiche média, Téléchargements, Salon | Parcours complet « découvrir → ajouter → suivre → lire » sans quitter Kodi |
 | **3. Finitions** | Notifications temps réel enrichies, QR codes vers la web app, raccourcis, nettoyage de l'ancien `X-Api-Key` | Ancien mode d'authentification supprimé |

@@ -19,6 +19,21 @@ logger = get_logger(__name__)
 # ── Normalisation helpers ──────────────────────────────────────
 
 
+def _cover_url(images: list[dict[str, Any]], *cover_types: str) -> str | None:
+    """URL de la première image *arr dont le type figure dans ``cover_types``.
+
+    ``remoteUrl`` (TMDB / TheTVDB / fanart.tv) est préférée à ``url`` (chemin
+    servi par Radarr/Sonarr) : elle est joignable depuis n'importe quel client,
+    navigateur comme Kodi, sans passer par l'API *arr.
+    """
+    for img in images:
+        if (img.get("coverType") or "").lower() in cover_types:
+            url = img.get("remoteUrl") or img.get("url")
+            if url:
+                return url
+    return None
+
+
 def _normalise_movie(raw: dict[str, Any], service_name: str) -> dict[str, Any]:
     """Normalise a Radarr movie to a unified media item."""
     size = 0
@@ -29,24 +44,9 @@ def _normalise_movie(raw: dict[str, Any], service_name: str) -> dict[str, Any]:
         size = raw["sizeOnDisk"]
 
     images = raw.get("images") or []
-    poster = next(
-        (
-            img.get("remoteUrl") or img.get("url")
-            for img in images
-            if (img.get("coverType") or "").lower() == "poster"
-            and (img.get("remoteUrl") or img.get("url"))
-        ),
-        None,
-    )
-    clearlogo = next(
-        (
-            img.get("remoteUrl") or img.get("url")
-            for img in images
-            if (img.get("coverType") or "").lower() in ("clearlogo", "logo", "fanartlogo")
-            and (img.get("remoteUrl") or img.get("url"))
-        ),
-        None,
-    )
+    poster = _cover_url(images, "poster")
+    clearlogo = _cover_url(images, "clearlogo", "logo", "fanartlogo")
+    fanart = _cover_url(images, "fanart")
 
     media_info = movie_file.get("mediaInfo") or {}
     quality_obj = movie_file.get("quality", {}).get("quality", {}) if movie_file else {}
@@ -68,6 +68,7 @@ def _normalise_movie(raw: dict[str, Any], service_name: str) -> dict[str, Any]:
         "studio": raw.get("studio"),
         "size_bytes": size,
         "poster_url": poster,
+        "fanart_url": fanart,
         "clearlogo_url": clearlogo,
         "source_service": service_name,
         "has_file": raw.get("hasFile", False),
@@ -91,24 +92,9 @@ def _normalise_series(
     """
     profile_id = raw.get("qualityProfileId")
     images = raw.get("images") or []
-    poster = next(
-        (
-            img.get("remoteUrl") or img.get("url")
-            for img in images
-            if (img.get("coverType") or "").lower() == "poster"
-            and (img.get("remoteUrl") or img.get("url"))
-        ),
-        None,
-    )
-    clearlogo = next(
-        (
-            img.get("remoteUrl") or img.get("url")
-            for img in images
-            if (img.get("coverType") or "").lower() in ("clearlogo", "logo", "fanartlogo")
-            and (img.get("remoteUrl") or img.get("url"))
-        ),
-        None,
-    )
+    poster = _cover_url(images, "poster")
+    clearlogo = _cover_url(images, "clearlogo", "logo", "fanartlogo")
+    fanart = _cover_url(images, "fanart")
 
     stats = raw.get("statistics") or {}
 
@@ -123,6 +109,7 @@ def _normalise_series(
         "network": raw.get("network"),
         "size_bytes": stats.get("sizeOnDisk", 0),
         "poster_url": poster,
+        "fanart_url": fanart,
         "clearlogo_url": clearlogo,
         "source_service": service_name,
         "has_file": stats.get("episodeFileCount", 0) > 0,

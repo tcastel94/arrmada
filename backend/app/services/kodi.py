@@ -1046,6 +1046,29 @@ async def handle_addon_scrobble(db: AsyncSession, data: dict[str, Any]) -> dict[
     return {"status": "ok"}
 
 
+def _format_addon_queue(queue_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """File de téléchargement au format de l'add-on Kodi.
+
+    Les clés lues sont celles de ``media_aggregator.get_queue_items``
+    (``time_left``, ``size_bytes``…). L'ancienne version lisait ``timeleft``
+    et ``size``, absentes : temps restant et taille arrivaient toujours vides.
+    ``id`` et ``service`` servent aux actions pause / reprise de l'add-on.
+    """
+    return [
+        {
+            "id": it.get("id"),
+            "title": it.get("title") or it.get("name") or "Téléchargement",
+            "status": it.get("status", "downloading"),
+            "progress": round(it.get("progress", 0) or 0, 1),
+            "size": it.get("size_bytes") or it.get("size") or 0,
+            "size_left": it.get("size_left_bytes") or 0,
+            "timeleft": it.get("time_left") or it.get("timeleft") or it.get("eta") or "",
+            "service": it.get("service_type") or it.get("service") or "",
+        }
+        for it in queue_items
+    ]
+
+
 async def get_addon_dashboard_status(db: AsyncSession) -> dict[str, Any]:
     """Return download queue, recent events and quick summary for Kodi addon background service."""
     from sqlalchemy import select
@@ -1054,18 +1077,7 @@ async def get_addon_dashboard_status(db: AsyncSession) -> dict[str, Any]:
     from app.services import media_aggregator
 
     queue_items = await media_aggregator.get_queue_items(db)
-    formatted_queue = []
-    for it in queue_items:
-        formatted_queue.append(
-            {
-                "title": it.get("title") or it.get("name") or "Téléchargement",
-                "status": it.get("status", "downloading"),
-                "progress": round(it.get("progress", 0), 1),
-                "size": it.get("size", 0),
-                "timeleft": it.get("timeleft") or it.get("eta") or "",
-                "service": it.get("service_type") or it.get("service") or "",
-            }
-        )
+    formatted_queue = _format_addon_queue(queue_items)
 
     # Recent import events for auto-scan trigger
     recent_events = []
@@ -1189,18 +1201,7 @@ async def get_addon_full_dashboard(db: AsyncSession) -> dict[str, Any]:
             "total_size_human": format_bytes(raw_stats.get("total_size_bytes", 0)),
         }
 
-        formatted_queue = []
-        for it in queue_items if isinstance(queue_items, list) else []:
-            formatted_queue.append(
-                {
-                    "title": it.get("title") or it.get("name") or "Téléchargement",
-                    "status": it.get("status", "downloading"),
-                    "progress": round(it.get("progress", 0), 1),
-                    "size": it.get("size", 0),
-                    "timeleft": it.get("timeleft") or it.get("eta") or "",
-                    "service": it.get("service_type") or it.get("service") or "",
-                }
-            )
+        formatted_queue = _format_addon_queue(queue_items if isinstance(queue_items, list) else [])
 
         return {
             "status": "ok",
@@ -1638,9 +1639,11 @@ async def get_recent_media_for_addon(db: AsyncSession) -> list[dict[str, Any]]:
     try:
         all_media = await fetch_all_media(db)
         # Sort by added date or id descending
+        # Clé « added » (date ISO 8601 de *arr, triable telle quelle). L'ancienne
+        # clé « added_at » n'existait pas : la liste n'était pas triée du tout.
         sorted_media = sorted(
             [m for m in all_media if m.get("has_file")],
-            key=lambda x: x.get("added_at") or "",
+            key=lambda x: x.get("added") or "",
             reverse=True,
         )
         return sorted_media[:20]

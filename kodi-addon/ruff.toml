@@ -1,0 +1,12 @@
+# Lint des modules de l'add-on Kodi vérifiés en CI (job « Kodi add-on — Tests »).
+# Seuls les nouveaux modules (écrans v2, outils, tests) sont contrôlés : l'ancien
+# code de l'add-on sera repris au fil des phases de l'ADR-003.
+line-length = 100
+# Kodi 19+ embarque Python 3.8 minimum : pas de syntaxe plus récente.
+target-version = "py38"
+
+[lint]
+select = ["E", "F", "W", "I", "B"]
+
+[lint.isort]
+known-first-party = ["home_data", "home_window", "api", "make_textures"]

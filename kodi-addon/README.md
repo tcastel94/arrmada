@@ -26,6 +26,31 @@ Le plugin **ArrMada pour Kodi** permet de connecter directement votre médiathè
 - Consultez la liste et la progression des téléchargements actifs directement sur Kodi.
 - Lancez un scan ou un nettoyage manuel de la médiathèque Kodi en un clic.
 
+### 6. 🧪 Aperçu de la nouvelle interface (prototype, phase 0 de l'ADR-003)
+Premier écran « sur mesure » de la future appli ArrMada pour Kodi
+([ADR-003](../docs/adr/003-kodi-app.md)) : un **Accueil** plein écran.
+- Salutation et résumé de la flotte, 4 indicateurs (films, séries, stockage, téléchargements).
+- Téléchargements en cours, rafraîchis toutes les 20 s.
+- Rangée « Ajouts récents » avec zoom et halo au focus. Le fanart de l'affiche sélectionnée passe en fond, le ClearLogo et les badges 4K / DV / Atmos s'affichent.
+- État des services.
+- **Ouverture instantanée** : le dernier état connu est gardé en cache sur l'appareil, puis mis à jour en arrière-plan. Aucun appel réseau ne fige l'interface.
+- **Hors ligne** : si le serveur ne répond pas, l'écran garde les dernières données, ou affiche l'adresse et l'erreur à vérifier. Il retente toutes les 20 s.
+- Bouton **Diagnostic** : rendu des polices et des accents, version de Kodi et du skin, images/s, et temps mesurés (ouverture, réseau, rendu).
+
+**L'ouvrir**
+- Depuis l'add-on : **ArrMada → [NOUVEAU] Accueil ArrMada (apercu v2)**.
+- Depuis le menu principal d'**Aeon Nox SiLVO** : Paramètres du skin → *Personnaliser le menu principal* → ajouter un élément → action personnalisée :
+  `RunPlugin(plugin://script.arrmada/?action=home)`
+
+**Valider le prototype sur la Shield** : envoie une photo de chaque écran ci-dessous.
+1. **Accueil**, 10 s après l'ouverture : mise en page, polices, affiches.
+2. **Focus** : une affiche sélectionnée (flèches gauche/droite), puis les boutons du haut (flèche haut).
+3. **Diagnostic** : polices et glyphes, images/s, temps mesurés.
+4. **Réouverture** (Retour, puis rouvrir) : l'écran doit être rempli immédiatement.
+5. Ressenti : fluidité du défilement, animations à l'ouverture, réactivité de la télécommande.
+
+> Les temps mesurés sont aussi écrits dans `kodi.log` (lignes `[ArrMada] Accueil : …`).
+
 ---
 
 ## 🚀 Installation dans Kodi
@@ -60,3 +85,30 @@ Copiez le dossier `script.arrmada/` dans le dossier des extensions de Kodi :
    - **Nom de l'appareil** : Ex: `Kodi Salon`.
    - **Langue des sous-titres** : `fr` (ou selon votre choix).
 3. Validez ! Le service démarre automatiquement en arrière-plan.
+
+---
+
+## 🛠️ Développement des écrans sur mesure
+
+| Élément | Emplacement |
+|---|---|
+| Mise en page (XML Kodi, repère 1920 × 1080) | `script.arrmada/resources/skins/Default/1080i/script-arrmada-home.xml` |
+| Remplissage de l'écran, fil d'arrière-plan | `script.arrmada/lib/home_window.py` |
+| Logique pure (mise en forme, cache) — sans Kodi | `script.arrmada/lib/home_data.py` |
+| Textures (coins arrondis, halo, dégradés) | générées par `python3 kodi-addon/tools/make_textures.py` |
+| Tests (sans Kodi, lancés en CI) | `pytest kodi-addon/tests` |
+| Banc de test visuel (vrai Kodi sous écran virtuel) | `kodi-addon/bench/run.sh` |
+
+**Banc de test visuel** : sur une machine Linux (VM ou conteneur Ubuntu),
+`sudo apt install kodi xvfb python3-pil curl`, puis `kodi-addon/bench/run.sh`.
+Le script lance un faux backend et un Kodi sans écran (Xvfb) avec les polices
+de SiLVO. Il rejoue un parcours à la télécommande (menu, accueil, focus,
+diagnostic, cache, panne serveur) et dépose 11 captures dans
+`/tmp/arrmada-kodi-bench/shots/`. Le Kodi du système n'est pas modifié : tout
+se passe dans un profil jetable. Le rendu final reste à valider sur la Shield.
+
+Pièges connus, chacun couvert par un test :
+- **Polices** : utiliser uniquement les noms présents dans **tous** les jeux de polices de SiLVO (liste dans `tests/test_home_window_xml.py`). Une police inconnue retombe sans prévenir sur `font13`.
+- **Glyphes** : la police de SiLVO (Roboto Condensed) n'a pas `→ ★ ✓ ▶`. Ils s'affichent en carré vide. Utiliser `·` et `•`.
+- **Identifiants** : chaque `id` utilisé dans `home_window.py` doit exister dans le XML, sinon le contrôle reste vide sans aucune erreur.
+- **Textures** : après une modification de `make_textures.py`, relancer le script et committer les PNG. Le test compare les PNG du dépôt à ceux que le script produit.

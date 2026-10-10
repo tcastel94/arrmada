@@ -113,6 +113,10 @@ def show_root_menu():
     xbmcplugin.setPluginCategory(HANDLE, "ArrMada")
     xbmcplugin.setContent(HANDLE, "files")
 
+    # Aperçu de la future appli (ADR-003, phase 0) : fenêtre sur mesure.
+    # Raccourci possible depuis le menu de SiLVO :
+    #   RunPlugin(plugin://script.arrmada/?action=home)
+    add_dir("[NOUVEAU]        Accueil ArrMada (apercu v2)", "home", is_folder=False)
     add_dir("[RECHERCHE]      Rechercher un film ou une serie...", "search_input", is_folder=False)
     add_dir("[DECOUVERTE]     Tendances TMDB & Ajout 1-Clic", "discovery", is_folder=False)
     add_dir("[FILMS]          Films Tendances & Populaires", "trending_movies")
@@ -420,6 +424,9 @@ def main():
 
     if not action:
         show_root_menu()
+    elif action == "home":
+        import home_window
+        home_window.open_home()
     elif action == "search_input":
         query = xbmcgui.Dialog().input("ArrMada : Rechercher un film ou une serie")
         if query:

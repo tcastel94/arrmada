@@ -89,3 +89,25 @@ class TestAddonWithStack:
         for action in ("pause", "resume"):
             resp = await client.post(f"/api/kodi/downloads/movie/501/{action}", headers=arr_stack)
             assert resp.status_code == 200, f"{action} → {resp.text}"
+
+
+class TestAddonHomeData:
+    """Données de l'écran « Accueil » de l'appli Kodi (prototype phase 0)."""
+
+    async def test_recent_sorted_by_added(self, client: AsyncClient, arr_stack: dict) -> None:
+        items = (await client.get("/api/kodi/widgets/recent", headers=arr_stack)).json()
+        # Seuls les titres avec fichier, du plus récent au plus ancien (clé « added »).
+        assert [i["title"] for i in items] == ["Dune", "The Expanse", "Vieux Film"]
+        assert items[0]["fanart_url"] == "https://img.test/dune-fanart.jpg"
+        assert items[0]["poster_url"] == "https://img.test/dune.jpg"
+
+    async def test_dashboard_queue_fields(self, client: AsyncClient, arr_stack: dict) -> None:
+        data = (await client.get("/api/kodi/dashboard", headers=arr_stack)).json()
+        assert data["stats"]["movies_count"] == 3
+        dl = data["downloads"][0]
+        assert dl["id"] == 501
+        assert dl["service"] == "radarr"
+        assert dl["timeleft"] == "00:10:00"  # était toujours vide
+        assert dl["size"] == 10 * 1024**3  # était toujours 0
+        assert dl["size_left"] == 4 * 1024**3
+        assert dl["progress"] == 60.0
