@@ -7,15 +7,18 @@ Principe : le **service** de l'add-on (toujours actif) télécharge chaque flux
 coupé. C'est le même principe qu'un cache de paquets `apt` : on consulte la
 copie locale, une tâche de fond la tient à jour.
 
-Le temps réel (SSE, `/api/events/stream`) sert à rafraîchir tout de suite
-les flux concernés par un événement (un import → « Ajouts récents »…).
+Le « temps réel » : toutes les 5 s, le service relève les derniers
+événements du serveur (`/api/events/recent`) et rafraîchit tout de suite les
+flux concernés (un import → « Ajouts récents »…). Un simple relevé, pas de
+connexion permanente : depuis la 1.7.1, le service n'a plus aucun fil de fond
+(voir lib/background.py).
 """
 
 from __future__ import annotations
 
 import json
 import os
-from typing import Any, Dict, Iterator, List, NamedTuple, Optional, Set, Tuple
+from typing import Any, Dict, List, NamedTuple, Optional, Set, Tuple
 
 
 class Feed(NamedTuple):
@@ -99,6 +102,28 @@ def is_error(response: Any) -> bool:
     return isinstance(response, dict) and response.get("status") == "error"
 
 
+def next_feed(
+    forced: Set[str],
+    fetched_at: Dict[str, float],
+    retry_at: Dict[str, float],
+    now: float,
+) -> Optional[str]:
+    """Le flux à rafraîchir maintenant, ou None s'il n'y a rien à faire.
+
+    Le service en rafraîchit **un seul par tour de boucle** (1 s) : chaque
+    tour reste court, Kodi garde la main. Priorité aux flux réclamés par un
+    événement (`forced`), puis aux flux périmés qui ne sont pas en attente
+    après une erreur (`retry_at`).
+    """
+    for name in FEEDS:
+        if name in forced:
+            return name
+    for name, feed in FEEDS.items():
+        if now - fetched_at.get(name, 0.0) >= feed.ttl and now >= retry_at.get(name, 0.0):
+            return name
+    return None
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Temps réel : événements du serveur → flux à rafraîchir, notification à l'écran
 # ─────────────────────────────────────────────────────────────────────────────
@@ -135,50 +160,74 @@ def osd_message(event_type: str, data: Dict[str, Any]) -> Optional[Tuple[str, st
     return None
 
 
-class SSEParser:
-    """Découpe un flux SSE (texte, ligne par ligne) en événements.
+# Relevé des événements : toutes les EVENTS_EVERY secondes. Après une coupure
+# plus longue, au plus MAX_OSD_PER_POLL notifications (les plus récentes) :
+# pas de rafale de bulles à l'écran.
+EVENTS_EVERY = 5
+MAX_OSD_PER_POLL = 3
 
-    Format : des lignes « event: … », « data: … », « id: … », un événement
-    se termine par une ligne vide. Les lignes « : » sont des commentaires.
-    """
 
-    def __init__(self) -> None:
-        self._event = "message"
-        self._data: List[str] = []
-        self._id = ""
-
-    def feed(self, line: str) -> Optional[Tuple[str, Dict[str, Any], str]]:
-        """Ajoute une ligne ; renvoie (type, données, id) à la fin d'un événement."""
-        line = line.rstrip("\r\n")
-        if not line:
-            if not self._data:
-                self._event = "message"
-                return None
-            raw = "\n".join(self._data)
-            event, event_id = self._event, self._id
-            self._event, self._data = "message", []
-            try:
-                data = json.loads(raw)
-            except ValueError:
-                data = {"raw": raw}
-            return event, data if isinstance(data, dict) else {"value": data}, event_id
-        if line.startswith(":"):
-            return None
-        field, _, value = line.partition(":")
-        value = value[1:] if value.startswith(" ") else value
-        if field == "event":
-            self._event = value
-        elif field == "data":
-            self._data.append(value)
-        elif field == "id":
-            self._id = value
+def _event_id(value: Any) -> Optional[int]:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
         return None
 
 
-def parse_stream(lines: Iterator[str]) -> Iterator[Tuple[str, Dict[str, Any], str]]:
-    """Événements d'une suite de lignes (pratique pour les tests)."""
-    parser = SSEParser()
-    for line in lines:
-        event = parser.feed(line)
-        if event:
-            yield event
+def parse_events(response: Any) -> List[Tuple[int, str, Dict[str, Any]]]:
+    """Réponse de /api/events/recent → [(numéro, type, données)], triée."""
+    if not isinstance(response, dict):
+        return []
+    events = []
+    for event in response.get("events") or []:
+        if not isinstance(event, dict):
+            continue
+        event_id = _event_id(event.get("id"))
+        if event_id is None:
+            continue
+        data = event.get("data")
+        events.append(
+            (event_id, str(event.get("type") or ""), data if isinstance(data, dict) else {})
+        )
+    return sorted(events, key=lambda event: event[0])
+
+
+class EventCursor:
+    """Où en est la TV dans la liste des événements du serveur.
+
+    Comme la position de lecture d'un `tail -f` : on retient le numéro du
+    dernier événement traité et on ne demande que les suivants
+    (`?since_id=<numéro>`).
+
+    - Au tout premier relevé, on note seulement la position du serveur : pas
+      de notification pour des imports d'avant l'allumage de la TV.
+    - Le serveur numérote ses événements depuis son démarrage. S'il a
+      redémarré (`boot_id` différent), sa numérotation est repartie de 1 :
+      `accept()` renvoie None, il faut relire depuis 0.
+    """
+
+    def __init__(self) -> None:
+        self.last_id = 0
+        self.boot = ""  # identifiant du démarrage du serveur ("" = inconnu)
+        self.started = False  # premier relevé fait ?
+
+    def accept(self, response: Any) -> Optional[List[Tuple[int, str, Dict[str, Any]]]]:
+        """Événements nouveaux à traiter ; None = serveur redémarré, relire depuis 0."""
+        events = parse_events(response)
+        meta = response if isinstance(response, dict) else {}
+        boot = str(meta.get("boot_id") or "")
+        if not self.started:
+            self.started = True
+            self.boot = boot
+            server_last = _event_id(meta.get("last_id")) or 0
+            self.last_id = max([event[0] for event in events] + [server_last, self.last_id])
+            return []
+        if boot and self.boot and boot != self.boot:
+            self.boot = boot
+            self.last_id = 0
+            return None
+        self.boot = boot or self.boot
+        fresh = [event for event in events if event[0] > self.last_id]
+        if fresh:
+            self.last_id = fresh[-1][0]
+        return fresh

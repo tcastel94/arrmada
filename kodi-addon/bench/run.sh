@@ -61,6 +61,7 @@ rm -f "$SHOT_DIR"/*.png
 # aussi le 1er affichage et le passage du mot de passe admin au jeton).
 rm -rf "$KODI_DIR/userdata/addon_data/script.arrmada/cache" \
        "$KODI_DIR/userdata/addon_data/script.arrmada/device.json" \
+       "$KODI_DIR/userdata/addon_data/script.arrmada/service-state.json" \
        "$KODI_DIR/userdata/Thumbnails" "$KODI_DIR/userdata/Database/Textures13.db"
 
 # ── 1. Polices de SiLVO (téléchargées une fois) ──────────────────────────────

@@ -33,6 +33,28 @@ router = APIRouter(
 )
 
 
+def _quality_name(file: Any) -> str:
+    """Nom de la qualité d'un fichier (« Remux-2160p »…), quel que soit le format.
+
+    Les webhooks Radarr/Sonarr envoient une simple chaîne
+    (`"movieFile": {"quality": "Remux-2160p"}`), alors que l'API REST des
+    *arr renvoie un objet imbriqué (`{"quality": {"quality": {"name": …}}}`).
+    On accepte les deux : avant ce correctif, la chaîne faisait planter le
+    webhook (HTTP 500) et l'import n'était ni notifié ni publié en temps réel.
+    """
+    if not isinstance(file, dict):
+        return ""
+    quality = file.get("quality")
+    if isinstance(quality, str):
+        return quality
+    if isinstance(quality, dict):
+        inner = quality.get("quality")
+        if isinstance(inner, dict):
+            return str(inner.get("name") or "")
+        return str(quality.get("name") or "")
+    return ""
+
+
 async def _handle_arr_webhook(
     service_type: str,
     payload: dict[str, Any],
@@ -54,11 +76,7 @@ async def _handle_arr_webhook(
     elif "message" in payload:
         title = payload["message"]
 
-    quality = ""
-    if "movieFile" in payload:
-        quality = payload["movieFile"].get("quality", {}).get("quality", {}).get("name", "")
-    elif "episodeFile" in payload:
-        quality = payload["episodeFile"].get("quality", {}).get("quality", {}).get("name", "")
+    quality = _quality_name(payload.get("movieFile") or payload.get("episodeFile"))
 
     logger.info("[Webhook] %s → %s: %s (%s)", service_type, event_type, title, quality or "n/a")
 

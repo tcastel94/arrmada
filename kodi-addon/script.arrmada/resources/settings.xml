@@ -13,4 +13,9 @@
         <setting id="auto_audio_switch" type="bool" label="30130" default="true" />
         <setting id="room_profile" type="labelenum" label="30131" values="cinema|salon" default="cinema" />
     </category>
+    <!-- Coché automatiquement si Kodi se ferme 2 fois de suite au démarrage
+         (lib/startup_guard.py) ; à décocher pour revenir au fonctionnement normal. -->
+    <category label="30140">
+        <setting id="safe_mode" type="bool" label="30141" default="false" />
+    </category>
 </settings>

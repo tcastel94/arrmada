@@ -183,11 +183,22 @@ shot("13e-appui-long")
 press("Back")
 open_list("?action=widgets", "13f-widgets")
 open_list("?action=list&feed=notifications", "13g-notifications")
-# Import publié par le serveur : notification à l'écran + flux rafraîchis
+# Import publié par le serveur : relevé dans les 5 s, notification à l'écran,
+# puis flux concernés rafraîchis un par seconde (annoncés aux widgets par
+# arrmada.reload une fois la série terminée)
+before = xbmc.getInfoLabel("Window(Home).Property(arrmada.reload)")
 urllib.request.urlopen(f"{MOCK}/__emit?type=new_import&title=Gladiator%20II&quality=Remux-2160p").read()
-wait(2.5)
+for _ in range(24):  # la bulle, au plus 12 s
+    wait(0.5)
+    if xbmc.getCondVisibility("Window.IsVisible(notification)"):
+        break
+wait(0.8)  # fin de l'animation d'entrée de la bulle
 shot("13h-temps-reel")
-log(f"rechargement des widgets : {xbmc.getInfoLabel('Window(Home).Property(arrmada.reload)')}")
+for _ in range(24):  # l'annonce aux widgets, au plus 12 s
+    if xbmc.getInfoLabel("Window(Home).Property(arrmada.reload)") != before:
+        break
+    wait(0.5)
+log(f"rechargement des widgets : {before or '(aucun)'} → {xbmc.getInfoLabel('Window(Home).Property(arrmada.reload)')}")
 press("Back")
 wait(1.0)
 xbmc.executebuiltin("ActivateWindow(Home)")

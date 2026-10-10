@@ -66,7 +66,7 @@ conservés et la mise à jour reste une simple montée de version (2.0.0).
 
 | Brique | Rôle | Durée de vie |
 |---|---|---|
-| **Service** (`xbmc.service`) | Préchauffe le cache (tableau de bord, téléchargements, widgets), écoute le temps réel (SSE) pour les notifications et les rafraîchissements, et remonte la lecture (scrobble) | Permanent |
+| **Service** (`xbmc.service`) | Préchauffe le cache (tableau de bord, téléchargements, widgets), relève les événements du serveur toutes les 5 s pour les notifications et les rafraîchissements, et remonte la lecture (scrobble). Une seule boucle, sans fil de fond (incident 1.7.0) | Permanent |
 | **Plugin** (`xbmc.python.pluginsource`) | Listes natives et widgets. **Lit le cache local** au lieu d'appeler le serveur, pour un affichage instantané | Un appel par liste |
 | **Fenêtres sur mesure** (`WindowXML`) | Les 4 écrans « waouh » (voir § 3). Les appels réseau y passent par des fils d'arrière-plan, jamais dans l'interface | Tant que la fenêtre est ouverte |
 
@@ -258,6 +258,21 @@ pièce. Le choix d'une autre pièce reste possible dans un menu secondaire.
 >   manquants ; propriété `arrmada.reload` pour un rechargement en direct.
 > - Validé sur le banc Kodi 20.5 (listes, appui long, widgets, événement
 >   temps réel reçu et affiché, arrêt sans erreur).
+>
+> **Incident 1.7.0 (10/10/2026), add-on 1.7.1** : sur la Shield (Kodi 21,
+> Android), l'installation de la 1.7.0 fermait Kodi. Non reproduit sur le
+> banc (Kodi 20.5, Linux), y compris la mise à jour 1.4.2 → 1.7.0 avec le
+> vrai serveur. Seule vraie nouveauté du service par rapport à la 1.4.2 (qui
+> tournait sur la Shield) : deux fils de fond permanents, dont une connexion
+> SSE ouverte en continu. Décision : la 1.7.1 revient au modèle de la 1.4.2,
+> **une seule boucle, aucun fil de fond** ; le temps réel devient un relevé
+> de `/api/events/recent` toutes les 5 s (le serveur expose `boot_id` et
+> `last_id` pour détecter ses redémarrages). Ajout d'un **disjoncteur** :
+> deux fermetures de Kodi d'affilée dans les 2 min après le démarrage →
+> **mode minimal** automatique (comportement 1.4.2), réversible dans les
+> paramètres. Cause exacte à confirmer avec le `kodi.old.log` de la Shield.
+> Trouvé au passage : les webhooks « Download » réels de Radarr/Sonarr
+> (qualité envoyée en simple chaîne) répondaient 500 ; corrigé et testé.
 >
 > Reste : retrait de l'ancien `X-Api-Key` (phase 3), avec les QR codes vers
 > la web app et les notifications enrichies.

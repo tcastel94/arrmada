@@ -50,11 +50,18 @@ async def recent_events(
     since_id: int = 0,
     _user=Depends(get_current_user),
 ):
-    """Fetch recent events (for reconnection / catch-up)."""
+    """Fetch recent events (for reconnection / catch-up).
+
+    Also polled every few seconds by the Kodi add-on (no long-lived stream on
+    the TV): `boot_id` changes when the server restarts (event ids start over
+    at 1), `last_id` is the newest id published since then.
+    """
     events = event_bus.get_recent_events(since_id)
     return {
         "events": [
             {"id": e.id, "type": e.type, "data": e.data, "timestamp": e.timestamp} for e in events
         ],
         "clients": event_bus.client_count,
+        "boot_id": event_bus.boot_id,
+        "last_id": event_bus.last_id,
     }

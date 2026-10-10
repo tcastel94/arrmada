@@ -49,6 +49,8 @@ TITLES = [
     ("Interstellar", 2014, "movie", (2160, "HDR10", "DTS-HD MA", 5.1), ((180, 170, 150), (20, 20, 25))),
 ]
 
+BOOT_ID = "banc-1"  # identifiant de démarrage, comme EventBus.boot_id
+
 STATE = {
     "tick": 0,
     "down": False,
@@ -56,7 +58,7 @@ STATE = {
     "paused": False,
     "pair_polls": 0,
     "read": set(),  # notifications marquées lues
-    "events": [],  # événements temps réel à diffuser (déposés par /__emit)  # l'appairage est « validé dans la web app » au 3e poll
+    "events": [],  # événements relevés par l'add-on (déposés par /__emit)  # l'appairage est « validé dans la web app » au 3e poll
     "auth": "",  # dernier mode d'authentification vu (journal du banc)
     "amp": {"power": "on", "volume": 84, "mute": False, "input": "hdmi1", "sound_program": "surr_decoder"},
 }
@@ -524,31 +526,6 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
                 sys.stderr.write(f"[mock] authentification : {mode}\n")
                 STATE["auth"] = mode
 
-        def _stream(self) -> None:
-            """Flux temps réel (SSE) : « connected », puis les événements de /__emit."""
-            self.send_response(200)
-            self.send_header("Content-Type", "text/event-stream")
-            self.send_header("Cache-Control", "no-cache")
-            self.end_headers()
-            sent = len(STATE["events"])  # seuls les événements publiés après la connexion
-            try:
-                self.wfile.write(b'event: connected\ndata: {"clients": 1}\n\n')
-                self.wfile.flush()
-                sys.stderr.write("[mock] temps réel : client connecté\n")
-                for _ in range(45):  # ~45 s, puis le client se reconnecte
-                    if STATE["down"]:
-                        return
-                    while sent < len(STATE["events"]):
-                        event_id, event_type, data = STATE["events"][sent]
-                        sent += 1
-                        payload = f"id: {event_id}\nevent: {event_type}\ndata: {json.dumps(data)}\n\n"
-                        self.wfile.write(payload.encode())
-                        self.wfile.flush()
-                        sys.stderr.write(f"[mock] temps réel : {event_type} envoyé\n")
-                    time.sleep(1)
-            except (BrokenPipeError, ConnectionResetError):
-                pass
-
         def _qr(self, head: bool) -> None:
             data = (images / "pair-qr.png").read_bytes()
             self.send_response(200)
@@ -630,7 +607,7 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
             elif path == "/api/notifications":
                 self._json(notifications())
             elif path == "/api/events/recent":
-                # Rattrapage après une coupure, comme le vrai serveur
+                # Relevé toutes les 5 s par le service de l'add-on, comme le vrai serveur
                 from urllib.parse import parse_qs, urlsplit
 
                 since = int((parse_qs(urlsplit(self.path).query).get("since_id") or ["0"])[0])
@@ -639,10 +616,10 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
                         {"id": i, "type": t, "data": d, "timestamp": 0}
                         for i, t, d in STATE["events"] if i > since
                     ],
-                    "clients": 1,
+                    "clients": 0,
+                    "boot_id": BOOT_ID,
+                    "last_id": len(STATE["events"]),
                 })
-            elif path == "/api/events/stream":
-                self._stream()
             elif path == "/api/yamaha/state":
                 self._json(yamaha_state())
             elif path == "/api/yamaha/profiles":

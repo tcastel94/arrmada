@@ -111,25 +111,12 @@ class ArrMadaAPI:
             return {"status": "error", "message": str(exc)}
 
 
-    # ── Flux en cache et temps réel (ADR-003 § 1) ───────────────────────
+    # ── Flux en cache et événements (ADR-003 § 1) ───────────────────────
 
     @classmethod
     def get_feed(cls, path: str, timeout: int = 15):
         """Réponse brute d'une route (liste ou objet) ; {"status": "error"} en cas d'échec."""
         return cls._request(path, method="GET", timeout=timeout)
-
-    @classmethod
-    def open_stream(cls, path: str, timeout: int = 60):
-        """Ouvre le flux temps réel (SSE). Lève une exception si impossible.
-
-        `timeout` : délai de lecture. Le serveur n'envoie rien quand il ne se
-        passe rien : la connexion est alors simplement rouverte.
-        """
-        config = cls.get_config()
-        headers = {"Accept": "text/event-stream", "User-Agent": "ArrMada-Kodi-Addon/1.0.0"}
-        headers.update(cls.auth_headers(config))
-        req = urllib.request.Request(f"{config['url']}{path}", headers=headers, method="GET")
-        return urllib.request.urlopen(req, timeout=timeout)
 
     @classmethod
     def mark_notification_read(cls, notification_id: str) -> dict:

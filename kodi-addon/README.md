@@ -20,7 +20,7 @@ Le plugin **ArrMada pour Kodi** permet de connecter directement votre médiathè
 - Met à jour l'état *Vu* et les points de reprise pour le multi-écrans.
 
 ### 4. 📺 Notifications TV en temps réel
-- Dès qu'un titre est importé sur le NAS (ou qu'un téléchargement démarre), une alerte discrète s'affiche en haut de l'écran Kodi, **à la seconde** : le service écoute le flux temps réel du serveur (§ 11).
+- Dès qu'un titre est importé sur le NAS (ou qu'un téléchargement démarre), une alerte discrète s'affiche en haut de l'écran Kodi, **en 5 secondes au plus** : le service relève les événements du serveur toutes les 5 s (§ 11).
 - Un import déclenche aussi le scan de la médiathèque Kodi (au plus une fois par minute).
 
 ### 5. 📥 Menu de l'add-on
@@ -209,13 +209,45 @@ SiLVO**) :
 > par `&reload=$INFO[Window(Home).Property(arrmada.reload)]` (chemin
 > personnalisé dans Skin Shortcuts) se recharge alors tout seul.
 
-### 11. ⚡ Cache local et temps réel (service)
+### 11. ⚡ Cache local et événements (service)
 Le service de l'add-on (toujours actif) :
 - **préchauffe un cache** sur la TV : ajouts récents (10 min), à venir (30 min), téléchargements (30 s), pour toi (6 h), manquants (30 min), notifications (2 min). Listes et widgets lisent ce cache : **affichage instantané, même serveur coupé**. Serveur injoignable : nouvel essai 2 min plus tard ;
-- **écoute le temps réel** du serveur (SSE) : un import ou un téléchargement lancé déclenche une notification à l'écran et le **rafraîchissement immédiat** des flux concernés. Connexion coupée : reconnexion automatique, puis rattrapage des événements manqués ;
+- **relève les événements** du serveur toutes les 5 s (`/api/events/recent`, une toute petite requête) : un import ou un téléchargement lancé déclenche une notification à l'écran et le **rafraîchissement immédiat** des flux concernés. Serveur redémarré : détecté (`boot_id`), aucun événement perdu. Après une longue coupure : 3 notifications au plus, les plus récentes ;
+- fait tout cela **dans sa boucle principale, sans fil de fond** (depuis la 1.7.1) : un petit morceau par seconde (au plus un relevé et un flux), comme un cron très rapproché plutôt qu'un démon qui garde une connexion ouverte ;
 - s'arrête proprement avec Kodi (aucune trace d'erreur dans `kodi.log`).
 
-L'ancienne surveillance par interrogation ne sert plus qu'en secours, quand le temps réel est coupé.
+L'ancienne surveillance par interrogation (`/api/kodi/addon-status`) ne sert plus qu'en secours, quand les événements du serveur ne répondent pas.
+
+### 12. 🛟 Mode minimal et dépannage (Kodi qui se ferme)
+**Disjoncteur de démarrage** (même principe que `StartLimitBurst` de systemd) :
+si Kodi se ferme **deux fois de suite** dans les 2 minutes qui suivent son
+démarrage, l'add-on passe tout seul en **mode minimal** au démarrage suivant
+et l'annonce à l'écran. Il fait alors seulement ce que faisait la 1.4.2
+(suivi de lecture, alertes de fin de téléchargement) : ni cache des listes,
+ni relevé des événements. Les listes et l'accueil restent utilisables (ils
+interrogent le serveur directement).
+
+Pour revenir au fonctionnement normal : ArrMada → **Paramètres** → **Avancé**
+→ décocher **Mode minimal**. Pris en compte tout de suite, sans redémarrer.
+
+**Kodi se ferme à chaque démarrage et on n'a pas la main ?** Depuis un PC du
+réseau local, avec `adb` (Shield : Paramètres → Préférences de l'appareil →
+À propos → cliquer 7 fois sur « Build », puis Options pour les développeurs
+→ **Débogage réseau** activé) :
+
+```bash
+SHIELD=192.168.1.50                          # IP de la Shield
+KODI=/sdcard/Android/data/org.xbmc.kodi/files/.kodi
+adb connect "$SHIELD:5555"                   # accepter la demande sur la TV
+adb shell am force-stop org.xbmc.kodi        # arrêter Kodi
+# Récupérer les journaux : kodi.old.log = la session qui a planté
+adb pull "$KODI/temp/kodi.log" . ; adb pull "$KODI/temp/kodi.old.log" .
+# Neutraliser l'add-on sans rien supprimer (réversible : renommer en sens inverse)
+adb shell mv "$KODI/addons/script.arrmada" "$KODI/addons/script.arrmada.off"
+```
+
+Kodi redémarre alors sans ArrMada. Le journal (`kodi.old.log`) indique la
+cause : chercher `ArrMada`, `Fatal`, `Traceback` et les dernières lignes.
 
 ---
 
@@ -268,8 +300,9 @@ Copiez le dossier `script.arrmada/` dans le dossier des extensions de Kodi :
 | Remplissage des écrans, fils d'arrière-plan | `script.arrmada/lib/{home,detail,downloads,salon,pair}_window.py` |
 | Appairage : jeton de la TV, logique pure | `script.arrmada/lib/device.py`, `script.arrmada/lib/pairing_data.py` |
 | Navigation native, widgets (Kodi) | `script.arrmada/lib/navigation.py`, `script.arrmada/lib/listing.py` |
-| Flux en cache, temps réel, conversion en listes — sans Kodi | `script.arrmada/lib/feeds.py`, `script.arrmada/lib/catalog_data.py` |
-| Fils de fond du service (cache + SSE) | `script.arrmada/lib/background.py` |
+| Flux en cache, événements, conversion en listes — sans Kodi | `script.arrmada/lib/feeds.py`, `script.arrmada/lib/catalog_data.py` |
+| Travail de fond du service (cache + événements, sans fil) | `script.arrmada/lib/background.py` |
+| Disjoncteur de démarrage (mode minimal) — sans Kodi | `script.arrmada/lib/startup_guard.py` |
 | Outils communs (lecture, préréglage ampli, notifications) | `script.arrmada/lib/ui_common.py` |
 | Logique pure (mise en forme, cache) — sans Kodi | `script.arrmada/lib/home_data.py`, `script.arrmada/lib/screens_data.py` |
 | Dépôt Kodi servi par le backend | `backend/app/services/kodi_repo.py`, `backend/app/api/kodi_repo.py` |
@@ -282,7 +315,7 @@ Copiez le dossier `script.arrmada/` dans le dossier des extensions de Kodi :
 Le script lance un faux backend et un Kodi sans écran (Xvfb) avec les polices
 de SiLVO. Il rejoue un parcours à la télécommande (menu, intro, accueil,
 fiche film et série, téléchargements, salon avec et sans lecture,
-diagnostic, appairage, listes natives, widgets, temps réel, cache, panne
+diagnostic, appairage, listes natives, widgets, événement serveur, cache, panne
 serveur) et dépose 35 captures dans
 `/tmp/arrmada-kodi-bench/shots/`. Le Kodi du système n'est pas modifié : tout
 se passe dans un profil jetable. Le rendu final reste à valider sur la Shield.
@@ -298,6 +331,8 @@ Pièges connus, chacun couvert par un test :
 - **Identifiants** : chaque `id` utilisé dans un `*_window.py` doit exister dans son XML, sinon le contrôle reste vide sans aucune erreur. Convention : toute constante en MAJUSCULES ≥ 100 est un identifiant de contrôle.
 - **Focus** : un bouton non focalisé ne doit jamais être bleu plein (`texturenofocus` opaque en `4A9EFF`), sinon on ne sait plus où est le focus.
 - **Retour d'un sous-écran** : `<defaultcontrol always="false">`, sinon Kodi remet le focus sur le contrôle par défaut à chaque retour (fiche → accueil).
+- **Réglages modifiés pendant que Kodi tourne** : à l'enregistrement, Kodi ne recharge que la *première* copie `xbmcaddon.Addon(...)` de l'add-on en mémoire (`CAddonMgr::ReloadSettings`), alors que chaque module a la sienne. Un service qui doit voir un changement écoute `Monitor.onSettingsChanged()` et recrée sa copie (`service.py`, `ServiceMonitor`).
+- **Service** : pas de fil de fond permanent ni de connexion réseau longue (incident 1.7.0) ; des délais réseau courts (≤ 4 s), car Kodi coupe un service qui met plus de 5 s à s'arrêter.
 - **Barres de progression dans une liste** : le contrôle `progress` de Kodi ne lit pas les propriétés d'un élément de liste. Les barres sont donc des images toutes prêtes (`media/arrmada/progress/bar-000.png` … `bar-100.png`, pas de 2 %).
 - **Groupes de boutons** (`grouplist`) : Python ne peut pas changer leur navigation (`controlDown` lève « Unknown control type »). Rediriger la touche dans `onAction`.
 - **Libellé numérique** : `<label>1</label>` est lu comme l'identifiant d'un texte traduit de Kodi, pas comme « 1 ». Écrire `$NUMBER[1]`.

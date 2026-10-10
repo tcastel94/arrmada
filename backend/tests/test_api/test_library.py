@@ -167,6 +167,54 @@ class TestWebhooks:
         notifs = (await client.get("/api/notifications", headers=auth_headers)).json()
         assert notifs["unread_count"] >= 1
 
+    async def test_real_arr_payload_with_string_quality(
+        self, client: AsyncClient, auth_headers: dict
+    ) -> None:
+        """Format réel des webhooks Radarr/Sonarr : la qualité est une chaîne."""
+        for path, payload in (
+            (
+                "/api/webhooks/radarr",
+                {
+                    "eventType": "Download",
+                    "movie": {"id": 2, "title": "Gladiator II", "year": 2024},
+                    "movieFile": {"id": 9, "quality": "Remux-2160p", "qualityVersion": 1},
+                },
+            ),
+            (
+                "/api/webhooks/sonarr",
+                {
+                    "eventType": "Download",
+                    "series": {"title": "Severance"},
+                    "episodes": [{"seasonNumber": 2, "episodeNumber": 10}],
+                    "episodeFile": {"id": 4, "quality": "WEBDL-2160p"},
+                },
+            ),
+        ):
+            resp = await client.post(path, json=payload)
+            assert resp.status_code == 200, f"{path} → {resp.status_code}"
+
+        notifs = (await client.get("/api/notifications", headers=auth_headers)).json()
+        messages = " ".join(n["message"] for n in notifs["items"])
+        assert "Remux-2160p" in messages and "WEBDL-2160p" in messages
+
+    async def test_events_recent_cursor(self, client: AsyncClient, auth_headers: dict) -> None:
+        """Relevé périodique de la TV : boot_id stable, last_id qui avance."""
+        before = (await client.get("/api/events/recent", headers=auth_headers)).json()
+        assert before["boot_id"] and isinstance(before["last_id"], int)
+
+        payload = {"eventType": "Grab", "movie": {"title": "Wicked"}}
+        assert (await client.post("/api/webhooks/radarr", json=payload)).status_code == 200
+
+        after = (
+            await client.get(
+                f"/api/events/recent?since_id={before['last_id']}", headers=auth_headers
+            )
+        ).json()
+        assert after["boot_id"] == before["boot_id"]  # même démarrage du serveur
+        assert after["last_id"] > before["last_id"]
+        assert {e["type"] for e in after["events"]} >= {"download_grab"}
+        assert all(int(e["id"]) > before["last_id"] for e in after["events"])
+
     async def test_sonarr_episode_title(self, client: AsyncClient) -> None:
         payload = {
             "eventType": "Grab",

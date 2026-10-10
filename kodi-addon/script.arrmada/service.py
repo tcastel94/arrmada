@@ -2,10 +2,15 @@
 """ArrMada Background Service for Kodi.
 
 - Tracks playback progress and sends scrobbles to ArrMada
-- Keeps the local feed cache fresh for native lists and SiLVO widgets
-  (lib/background.py, ADR-003 § 1)
-- Listens to the server's real-time stream (SSE) for TV OSD alerts; the old
-  polling of /api/kodi/addon-status only runs while the stream is down
+- Keeps the local feed cache fresh for native lists and SiLVO widgets, and
+  polls the server's recent events every 5 s for TV OSD alerts
+  (lib/background.py, ADR-003 § 1). Since 1.7.1 everything runs in this one
+  loop: no background thread (1.7.0 closed Kodi on a Shield, see CHANGELOG)
+- Startup circuit breaker (lib/startup_guard.py): after two Kodi crashes in a
+  row right after startup, the service falls back to "safe mode" (1.4.2
+  behaviour: scrobble + legacy download alerts only)
+- The old polling of /api/kodi/addon-status only runs while the server's
+  events are unreachable (or in safe mode)
 """
 
 from __future__ import annotations
@@ -15,14 +20,17 @@ import os
 import time
 import xbmc
 import xbmcaddon
+import xbmcvfs
 
 # Add lib directory to Python path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "lib"))
 
 from api import ArrMadaAPI
+import kodi_helper
 from kodi_helper import get_current_item_info, show_notification, get_setting_bool, get_setting_int
 from audio_switcher import run_audio_switch
-from background import EventListener, FeedRefresher
+from background import BackgroundTasks
+import startup_guard
 import threading
 
 ADDON = xbmcaddon.Addon("script.arrmada")
@@ -155,17 +163,83 @@ class ArrMadaPlayer(xbmc.Player):
         })
 
 
+def _log(message: str, level: int = xbmc.LOGINFO) -> None:
+    xbmc.log(f"[ArrMada] Service : {message}", level=level)
+
+
+class ServiceMonitor(xbmc.Monitor):
+    """Le Monitor du service, prévenu par Kodi quand un réglage de l'add-on change.
+
+    Piège Kodi (lu dans AddonManager.cpp) : à l'enregistrement des réglages,
+    Kodi ne recharge que la PREMIÈRE copie de l'add-on en mémoire, alors que
+    chaque module en a une (`xbmcaddon.Addon(...)`). Sans ce signal, le service
+    ne voyait pas « Mode minimal » décoché (ni l'intervalle de vérification
+    changé) avant le redémarrage de Kodi.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.settings_changed = False
+
+    def onSettingsChanged(self) -> None:  # appelé par Kodi
+        self.settings_changed = True
+
+
+def _reload_settings() -> None:
+    """Copie neuve de l'add-on : relit settings.xml (get_setting_* l'utilisent)."""
+    kodi_helper.ADDON = xbmcaddon.Addon("script.arrmada")
+
+
+def _save_guard(path: str, state: dict) -> None:
+    """Le disjoncteur ne doit jamais faire tomber le service."""
+    try:
+        startup_guard.save(path, state)
+    except OSError as exc:
+        _log(f"état de démarrage non enregistré : {exc}", xbmc.LOGWARNING)
+
+
+def _start_tasks(monitor: xbmc.Monitor, guard_file: str):
+    """Travail de fond (cache + événements), ou None en mode minimal."""
+    if get_setting_bool("safe_mode", default=False):
+        _log("mode minimal (réglage) : ni cache des listes ni relevé des événements")
+        return None
+    state, tripped = startup_guard.on_start(startup_guard.load(guard_file))
+    _save_guard(guard_file, state)
+    if tripped:
+        # Kodi s'est fermé deux fois de suite peu après le démarrage : on
+        # passe en mode minimal (comportement de la 1.4.2) et on le dit.
+        try:
+            ADDON.setSettingBool("safe_mode", True)  # visible dans les paramètres
+        except Exception as exc:  # réglage absent (profil abîmé…) : mode minimal quand même
+            _log(f"réglage « safe_mode » non enregistré : {exc}", xbmc.LOGWARNING)
+        _log(
+            f"Kodi s'est fermé {startup_guard.TRIP_AFTER} fois de suite après le démarrage : "
+            "mode minimal activé (Paramètres de l'add-on → Avancé pour le retirer)",
+            xbmc.LOGWARNING,
+        )
+        show_notification(
+            "ArrMada · mode minimal",
+            "Kodi s'est fermé 2 fois au démarrage. Réglage : Paramètres → Avancé",
+            is_error=False,
+            time_ms=12000,
+        )
+        return None
+    return BackgroundTasks(monitor)
+
+
 def main():
-    monitor = xbmc.Monitor()
+    monitor = ServiceMonitor()
     player = ArrMadaPlayer()
 
     xbmc.log("[ArrMada] Service started", level=xbmc.LOGINFO)
 
-    # Cache des flux (listes, widgets) et temps réel : deux fils de fond
-    refresher = FeedRefresher(monitor)
-    refresher.start()
-    listener = EventListener(monitor, refresher)
-    listener.start()
+    # Cache des flux (listes, widgets) et événements : un petit morceau de
+    # travail par tour de boucle, sans fil de fond (lib/background.py).
+    guard_file = startup_guard.state_path(xbmcvfs.translatePath(ADDON.getAddonInfo("profile")))
+    tasks = _start_tasks(monitor, guard_file)
+    healthy_at = time.time() + startup_guard.HEALTHY_AFTER if tasks else 0.0
+    _reload_settings()  # le disjoncteur a pu cocher « Mode minimal » à l'instant
+    safe_mode = get_setting_bool("safe_mode", default=False)
 
     last_notification_check = 0
     seen_downloads: set[str] = set()
@@ -173,18 +247,42 @@ def main():
     initial_load = True
 
     while not monitor.abortRequested():
+        # 0. Réglages modifiés pendant que Kodi tourne (case « Mode minimal »…) :
+        #    on relit, et on réagit au changement seulement.
+        if monitor.settings_changed:
+            monitor.settings_changed = False
+            _reload_settings()
+        wanted = get_setting_bool("safe_mode", default=False)
+        if wanted != safe_mode:
+            safe_mode = wanted
+            if safe_mode:
+                _log("mode minimal activé depuis les paramètres")
+                tasks = None
+            else:
+                _log("mode minimal retiré : cache des listes et relevé des événements actifs")
+                tasks = BackgroundTasks(monitor)
+                healthy_at = time.time() + startup_guard.HEALTHY_AFTER
+
         # 1. Handle player tracking
         if player.isPlayingVideo():
             player.check_periodic_progress()
 
-        # 2. Check ArrMada notifications / downloads / auto-scan
+        # 2. Cache des flux et événements du serveur (au plus 2 petites requêtes)
+        if tasks is not None:
+            tasks.tick()
+            if healthy_at and time.time() >= healthy_at:
+                _save_guard(guard_file, startup_guard.healthy())  # démarrage réussi
+                healthy_at = 0.0
+
+        # 3. Check ArrMada notifications / downloads / auto-scan
         now = time.time()
         interval = get_setting_int("check_interval", 15)
 
-        # Ancienne surveillance par interrogation : seulement si le temps réel
-        # est coupé (sinon les notifications arriveraient en double).
+        # Ancienne surveillance par interrogation : seulement si les événements
+        # du serveur ne sont pas relevés (sinon les notifications arriveraient
+        # en double).
         if (
-            not listener.connected
+            not (tasks is not None and tasks.connected)
             and get_setting_bool("enable_notifications")
             and (now - last_notification_check >= interval)
         ):
@@ -229,11 +327,9 @@ def main():
         if monitor.waitForAbort(1):
             break
 
-    # Arrêt propre des fils de fond : Kodi tue le service s'il traîne > 5 s
-    listener.stop()
-    refresher.stop()
-    listener.join(3)
-    refresher.join(3)
+    # Arrêt propre (sortie de Kodi, mise à jour de l'add-on) : ce n'est pas
+    # un plantage, le disjoncteur repart de zéro.
+    _save_guard(guard_file, startup_guard.healthy())
     xbmc.log("[ArrMada] Service stopped", level=xbmc.LOGINFO)
 
 

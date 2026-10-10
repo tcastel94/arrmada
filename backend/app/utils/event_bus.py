@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+import uuid
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from typing import Any
@@ -58,6 +59,10 @@ class EventBus:
     def __init__(self) -> None:
         self._subscribers: list[asyncio.Queue[SSEEvent]] = []
         self._event_counter = 0
+        # Identifiant de ce démarrage : les numéros d'événement repartent de 1
+        # quand le serveur redémarre, un client qui relève /api/events/recent
+        # s'en aperçoit en voyant cet identifiant changer.
+        self.boot_id = uuid.uuid4().hex[:12]
         self._lock = asyncio.Lock()
         self._history: list[SSEEvent] = []  # Keep last 50 events for reconnection
         self._max_history = 50
@@ -112,6 +117,11 @@ class EventBus:
     def client_count(self) -> int:
         """Number of connected SSE clients."""
         return len(self._subscribers)
+
+    @property
+    def last_id(self) -> int:
+        """Numéro du dernier événement publié depuis le démarrage (0 = aucun)."""
+        return self._event_counter
 
     def get_recent_events(self, since_id: int = 0) -> list[SSEEvent]:
         """Return events since the given ID (for reconnection)."""
