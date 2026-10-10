@@ -221,6 +221,23 @@ SiLVO**) :
 > par `&reload=$INFO[Window(Home).Property(arrmada.reload)]` (chemin
 > personnalisé dans Skin Shortcuts) se recharge alors tout seul.
 
+### 10 bis. 🎬 Films et Séries : toute la bibliothèque (1.9.0)
+Menu ArrMada → **Films** ou **Séries** : toute la bibliothèque de Radarr /
+Sonarr, pas seulement les ajouts récents.
+
+| Vue | Contenu |
+|---|---|
+| Tous, de A à Z | Toute la bibliothèque, sans tenir compte des majuscules ni des accents |
+| Ajoutés récemment | Les derniers ajoutés à Radarr / Sonarr en premier |
+| Par genre | Genres traduits, avec le nombre de titres (« Science-fiction (42) ») |
+| En 4K | Films dont le fichier est en 2160p |
+| Pas encore disponibles | Suivis, sans fichier sur le NAS pour l'instant |
+
+- OK ouvre la **fiche ArrMada** ; appui long : *Lire*, *Fiche*, *Meilleure version*. Un titre sans fichier est marqué « pas encore disponible » (pas de *Lire*).
+- Le **serveur** trie et filtre toute la bibliothèque, et la TV reçoit **100 titres à la fois**, avec une entrée **Page suivante** en bas. Les tris de Kodi (titre, année, note) restent disponibles, mais ne s'appliquent qu'à la page affichée.
+- Widgets SiLVO en plus : *Films en 4K*, *Films ajoutés récemment*, *Séries ajoutées récemment* (Widgets pour l'accueil de SiLVO).
+- Différence avec la médiathèque Kodi : ici, on voit aussi les titres suivis mais pas encore téléchargés, avec leur qualité. Pour reprendre un film là où on l'a arrêté, *Lire* passe par la médiathèque Kodi, comme ailleurs dans l'appli.
+
 ### 11. ⚡ Cache local et événements (service)
 Le service de l'add-on (toujours actif) :
 - **préchauffe un cache** sur la TV : ajouts récents (10 min), à venir (30 min), téléchargements (30 s), pour toi (6 h), manquants (30 min), notifications (2 min). Listes et widgets lisent ce cache : **affichage instantané, même serveur coupé**. Serveur injoignable : nouvel essai 2 min plus tard ;
@@ -343,6 +360,7 @@ Copiez le dossier `script.arrmada/` dans le dossier des extensions de Kodi :
 | Remplissage des écrans, fils d'arrière-plan | `script.arrmada/lib/{home,detail,downloads,salon,pair}_window.py` |
 | Appairage : jeton de la TV, logique pure | `script.arrmada/lib/device.py`, `script.arrmada/lib/pairing_data.py` |
 | Navigation native, widgets (Kodi) | `script.arrmada/lib/navigation.py`, `script.arrmada/lib/listing.py` |
+| Films / Séries : vues, pages, genres (logique pure) | `script.arrmada/lib/library_data.py` |
 | Flux en cache, événements, conversion en listes — sans Kodi | `script.arrmada/lib/feeds.py`, `script.arrmada/lib/catalog_data.py` |
 | Travail de fond du service (cache + événements, sans fil) | `script.arrmada/lib/background.py` |
 | Disjoncteur de démarrage (mode minimal) — sans Kodi | `script.arrmada/lib/startup_guard.py` |
@@ -361,7 +379,7 @@ Le script lance un faux backend et un Kodi sans écran (Xvfb) avec les polices
 de SiLVO. Il rejoue un parcours à la télécommande (menu, intro, accueil,
 fiche film et série, téléchargements, salon avec et sans lecture,
 diagnostic, appairage, listes natives, widgets, événement serveur, cache, panne
-serveur, TV refusée, QR codes, favoris, bulle pendant un film) et dépose 40 captures dans
+serveur, TV refusée, QR codes, favoris, bulle pendant un film, Films et Séries) et dépose 45 captures dans
 `/tmp/arrmada-kodi-bench/shots/`. Le Kodi du système n'est pas modifié : tout
 se passe dans un profil jetable. Le rendu final reste à valider sur la Shield.
 

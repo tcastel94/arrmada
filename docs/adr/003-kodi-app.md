@@ -84,6 +84,7 @@ Racine de l'appli, calquée sur la web app :
 | Entrée | Contenu | Actions (menu contextuel / OK) |
 |---|---|---|
 | Accueil | Ouvre l'écran sur mesure « Accueil » | — |
+| Films / Séries (1.9.0) | Toute la bibliothèque : A à Z, ajoutés récemment, par genre, 4K, pas encore disponibles ; pages de 100 triées par le serveur | Fiche, Lire, meilleure version |
 | Découvrir | Tendances, « Parce que tu as aimé… », « À partir de… » | Ajouter, fiche |
 | Manquants | Titres surveillés sans fichier | Recherche auto, fiche |
 | Rechercher | Clavier Kodi, recherche TMDB / indexeurs | Ajouter |

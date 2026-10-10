@@ -234,6 +234,76 @@ def missing(base: str) -> dict:
     return {"items": items, "total": len(items)}
 
 
+GENRES = ("Science Fiction", "Drama", "Adventure", "Comedy", "Animation", "Thriller")
+
+
+def library(base: str) -> list[dict]:
+    """Toute la bibliothèque (Films / Séries, 1.9.0) : le catalogue de test +
+    130 films de remplissage, pour avoir plus d'une page (100 titres) de films."""
+    items = []
+    for idx, item in enumerate(recent(base)):
+        items.append(dict(
+            item,
+            genres=[GENRES[idx % len(GENRES)], GENRES[(idx + 2) % len(GENRES)]],
+            added=f"2026-10-{(idx % 9) + 1:02d}T12:00:00Z",
+            size_bytes=(idx + 1) * 7_000_000_000,
+            rating=6.5 + (idx % 4) / 2,
+            monitored=True,
+            has_file=idx not in (7, 11),  # deux films pas encore téléchargés
+        ))
+    for n in range(130):
+        idx = n % 10
+        items.append({
+            "external_id": str(1000 + n),
+            "title": f"Film de test {n + 1:03d}",
+            "year": 1990 + n % 35,
+            "type": "movie",
+            "resolution": 2160 if n % 5 == 0 else 1080,
+            "genres": [GENRES[n % len(GENRES)]],
+            "poster_url": f"{base}/img/poster-{idx}.jpg",
+            "fanart_url": f"{base}/img/fanart-{idx}.jpg",
+            "overview": "Film de remplissage du banc de test.",
+            "added": f"2025-0{(n % 9) + 1}-15T12:00:00Z",
+            "size_bytes": 2_000_000_000 + n * 50_000_000,
+            "rating": 5.0 + (n % 5),
+            "monitored": True,
+            "has_file": True,
+        })
+    return items
+
+
+def media_page(base: str, query: dict) -> dict:
+    """GET /api/media : mêmes filtres, tri et pagination que le vrai serveur."""
+    media = library(base)
+    if query.get("type"):
+        media = [m for m in media if m["type"] == query["type"]]
+    if query.get("availability") == "missing":
+        media = [m for m in media if not m.get("has_file")]
+    if query.get("genre"):
+        media = [m for m in media if query["genre"] in m.get("genres", [])]
+    if query.get("min_resolution"):
+        media = [m for m in media if (m.get("resolution") or 0) >= int(query["min_resolution"])]
+    key = {"size": "size_bytes"}.get(query.get("sort", "title"), query.get("sort", "title"))
+    media.sort(key=lambda m: str(m.get(key) or "").casefold() if key == "title" else m.get(key) or 0,
+               reverse=query.get("order") == "desc")
+    page, per_page = int(query.get("page") or 1), int(query.get("per_page") or 50)
+    total = len(media)
+    return {
+        "items": media[(page - 1) * per_page:page * per_page],
+        "pagination": {"page": page, "per_page": per_page, "total": total,
+                       "total_pages": max(1, (total + per_page - 1) // per_page)},
+    }
+
+
+def media_facets(base: str, kind: str) -> dict:
+    counts: dict = {}
+    for m in library(base):
+        if not kind or m["type"] == kind:
+            for genre in m.get("genres", []):
+                counts[genre] = counts.get(genre, 0) + 1
+    return {"genres": sorted(counts), "genre_counts": counts, "qualities": [], "total": 0}
+
+
 def recommendations(base: str) -> dict:
     def tmdb(idx: int, in_library: bool = False) -> dict:
         title, year, kind, _, _ = TITLES[idx]
@@ -602,7 +672,7 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
                 self._json(dashboard())
             elif path == "/api/kodi/widgets/recent":
                 self._json(recent(base))
-            elif path.startswith("/api/media/"):
+            elif path.startswith("/api/media/") and path != "/api/media/facets":
                 _, _, _, kind, arr_id = path.split("/")[:5]
                 payload = detail(base, kind, int(arr_id)) if arr_id.isdigit() else None
                 if payload is None:
@@ -614,7 +684,18 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
             elif path == "/api/calendar":
                 self._json(calendar(base))
             elif path == "/api/media":
-                self._json(missing(base))
+                from urllib.parse import parse_qs, urlsplit
+
+                query = {k: v[0] for k, v in parse_qs(urlsplit(self.path).query).items()}
+                if query.get("availability") == "missing" and query.get("monitored"):
+                    self._json(missing(base))  # flux « Manquants » (service)
+                else:
+                    self._json(media_page(base, query))  # Films / Séries (1.9.0)
+            elif path == "/api/media/facets":
+                from urllib.parse import parse_qs, urlsplit
+
+                query = {k: v[0] for k, v in parse_qs(urlsplit(self.path).query).items()}
+                self._json(media_facets(base, query.get("type", "")))
             elif path == "/api/recommendations":
                 self._json(recommendations(base))
             elif path == "/api/notifications":

@@ -41,6 +41,24 @@ class TestLibrary:
         ).json()
         assert [m["year"] for m in by_year["items"]] == [2023, 2021, 1999]
 
+    async def test_tv_browsing_filters(self, client: AsyncClient, arr_stack: dict) -> None:
+        """Films / Séries sur la TV : 4K, tri par taille, nombre de titres par genre."""
+        uhd = (
+            await client.get("/api/media?type=movie&min_resolution=2160", headers=arr_stack)
+        ).json()
+        assert [m["title"] for m in uhd["items"]] == ["Dune"]
+
+        by_size = (
+            await client.get("/api/media?type=movie&sort=size&order=desc", headers=arr_stack)
+        ).json()
+        sizes = [m["size_bytes"] for m in by_size["items"]]
+        assert sizes == sorted(sizes, reverse=True)  # « size » était ignoré (tri par titre)
+
+        facets = (await client.get("/api/media/facets?type=series", headers=arr_stack)).json()
+        assert facets["total"] == 1
+        assert sum(facets["genre_counts"].values()) >= 1
+        assert set(facets["genre_counts"]) == set(facets["genres"])
+
     async def test_facets(self, client: AsyncClient, arr_stack: dict) -> None:
         resp = await client.get("/api/media/facets", headers=arr_stack)
         assert resp.status_code == 200

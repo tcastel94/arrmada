@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import contextlib
+import unicodedata
+from typing import Any
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
@@ -233,26 +235,65 @@ async def trigger_scrape(
     return {"status": "scraping started", "items_count": len(items)}
 
 
+def _fold(text: Any) -> str:
+    """Clé de tri alphabétique : sans casse ni accents (« Élémentaire » avant « Zodiac »)."""
+    decomposed = unicodedata.normalize("NFKD", str(text or ""))
+    return "".join(ch for ch in decomposed if not unicodedata.combining(ch)).casefold()
+
+
+def _resolution(item: dict) -> int:
+    value = item.get("resolution")
+    return value if isinstance(value, int) else 0
+
+
+def sort_media(media: list[dict], sort: str, order: str) -> list[dict]:
+    """Tri de la bibliothèque, sans plantage sur une valeur absente.
+
+    `sort` : title | year | added | size. Les titres sans valeur pour ce
+    critère (année inconnue, film jamais téléchargé…) vont toujours à la
+    fin, quel que soit le sens : comparer un nombre à un texte vide ferait
+    planter le tri.
+    """
+    key = {"size": "size_bytes"}.get(sort, sort)
+    if key not in ("title", "year", "added", "size_bytes"):
+        key = "title"
+    present = [m for m in media if m.get(key) not in (None, "")]
+    absent = [m for m in media if m.get(key) in (None, "")]
+    present.sort(
+        key=lambda m: _fold(m[key]) if key == "title" else m[key],
+        reverse=order.lower() == "desc",
+    )
+    return present + absent
+
+
 @router.get("/facets")
-async def media_facets(db: AsyncSession = Depends(get_db)):
+async def media_facets(
+    type: str | None = Query(None, description="Limit to one type: movie, series"),
+    db: AsyncSession = Depends(get_db),
+):
     """Distinct filter values across the whole library (for filter dropdowns).
 
     Returns the sorted list of genres and (file) qualities present in the
     library, plus how many items are missing (no file) — used to populate the
     médiathèque filter bar and the "Manquants" badge without loading every page.
+    `genre_counts` (titles per genre) feeds the TV's « Par genre » list.
     """
 
     async def _fetch():
         return await media_aggregator.fetch_all_media(db)
 
     media = list(await cache.get_or_set("media:all", _fetch, ttl_seconds=300))
+    if type:
+        media = [m for m in media if m.get("type") == type]
 
     genres: set[str] = set()
+    genre_counts: dict[str, int] = {}
     qualities: set[str] = set()
     for m in media:
         for g in m.get("genres") or []:
             if g:
                 genres.add(g)
+                genre_counts[g] = genre_counts.get(g, 0) + 1
         q = m.get("quality")
         # Only movies expose a human quality name; series store a profile id (int).
         if isinstance(q, str) and q:
@@ -261,6 +302,7 @@ async def media_facets(db: AsyncSession = Depends(get_db)):
     missing = [m for m in media if not m.get("has_file")]
     return {
         "genres": sorted(genres, key=str.lower),
+        "genre_counts": genre_counts,
         "qualities": sorted(qualities, key=str.lower),
         "total": len(media),
         "missing_count": len(missing),
@@ -280,6 +322,9 @@ async def list_media(
         None, description="Filter by file presence: available | missing"
     ),
     monitored: bool | None = Query(None, description="Filter by monitored flag"),
+    min_resolution: int | None = Query(
+        None, ge=1, description="Minimum video resolution of the file (2160 = 4K)"
+    ),
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
@@ -319,12 +364,12 @@ async def list_media(
     if quality:
         media = [m for m in media if m.get("quality") == quality]
 
-    # Sort
-    sort_key = sort if sort in ("title", "year", "added", "size_bytes") else "title"
-    if sort_key == "size":
-        sort_key = "size_bytes"
-    reverse = order.lower() == "desc"
-    media.sort(key=lambda m: m.get(sort_key) or "", reverse=reverse)
+    # Resolution (4K: 2160)
+    if min_resolution:
+        media = [m for m in media if _resolution(m) >= min_resolution]
+
+    # Sort (title without case/accents; missing values last)
+    media = sort_media(media, sort, order)
 
     # Pagination
     total = len(media)

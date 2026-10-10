@@ -127,6 +127,16 @@ class ArrMadaAPI:
         return cls._request(path, method="GET", timeout=timeout)
 
     @classmethod
+    def get_media(cls, params: dict) -> dict:
+        """Une page de la bibliothèque (Films / Séries, 1.9.0), triée et filtrée par le serveur."""
+        return cls._request(f"/api/media?{urllib.parse.urlencode(params)}", method="GET", timeout=15)
+
+    @classmethod
+    def get_media_facets(cls, kind: str) -> dict:
+        """Genres présents (et nombre de titres) pour un type : movie | series."""
+        return cls._request(f"/api/media/facets?type={kind}", method="GET", timeout=15)
+
+    @classmethod
     def get_qr(cls, path: str = "", youtube: str = "") -> dict:
         """QR code vers la web app ou YouTube : {"url", "png" (base64)} (phase 3)."""
         query = {"youtube": youtube} if youtube else {"path": path or "/"}

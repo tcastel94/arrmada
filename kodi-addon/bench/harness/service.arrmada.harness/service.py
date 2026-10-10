@@ -247,6 +247,16 @@ log(f"favori Salon : fenêtre {xbmc.getInfoLabel('System.CurrentWindow')}")
 press("Back")
 wait(1.5)
 
+# ── 6e. Films / Séries : toute la bibliothèque (1.9.0) ─────────────────────
+open_list("?action=library&kind=movie", "15a-films")
+open_list("?action=browse&kind=movie&view=all", "15b-films-a-z")
+log(f"films, page 1 : dernier élément « {xbmc.getInfoLabel('Container.ListItemAbsolute(100).Label')} »")
+open_list("?action=browse&kind=movie&view=all&page=2", "15c-films-page-2")
+open_list("?action=genres&kind=movie", "15d-films-genres")
+open_list("?action=browse&kind=series&view=all", "15e-series")
+press("Back")
+wait(1.0)
+
 # ── 7. Réouverture (cache), panne serveur ──────────────────────────────────
 run_plugin("home")
 wait(1.2)

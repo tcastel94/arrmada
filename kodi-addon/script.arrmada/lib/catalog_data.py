@@ -141,8 +141,12 @@ def entries_media(items: List[Dict[str, Any]], missing: bool = False) -> List[Di
         tech = badges(item)
         meta = [str(item["year"])] if item.get("year") else []
         meta.append("Série" if kind == "tvshow" else "Film")
+        # Bibliothèque complète (1.9.0) : un titre suivi sans fichier est signalé
+        unavailable = missing or item.get("has_file") is False
         if missing:
             meta.append("manquant")
+        elif unavailable:
+            meta.append("pas encore disponible")
         else:
             meta.extend(tech)
         runtime = int(item.get("runtime") or 0)
@@ -166,8 +170,8 @@ def entries_media(items: List[Dict[str, Any]], missing: bool = False) -> List[Di
                     item.get("clearlogo_url") or "",
                 ),
                 "action": _detail_action(kind, item.get("external_id"), item, ids),
-                "context": ["detail", "upgrade"] if missing else ["play", "detail", "upgrade"],
-                "props": {"badge": tech[0] if tech and not missing else ""},
+                "context": ["detail", "upgrade"] if unavailable else ["play", "detail", "upgrade"],
+                "props": {"badge": tech[0] if tech and not unavailable else ""},
             }
         )
     return out

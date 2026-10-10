@@ -3,7 +3,7 @@
 
 Racine calquée sur la web app :
 
-  Accueil · Découvrir · Manquants · Rechercher · Calendrier ·
+  Accueil · Films · Séries · Découvrir · Manquants · Rechercher · Calendrier ·
   Téléchargements · Notifications · Salon · Appairage ·
   Widgets pour SiLVO · Sur ton téléphone · Outils (ancien menu) · Paramètres
 
@@ -31,6 +31,11 @@ from api import ArrMadaAPI
 ADDON = xbmcaddon.Addon("script.arrmada")
 
 WIDGETS = ("recent", "upcoming", "downloads", "foryou", "missing")
+LIBRARY_WIDGETS = (
+    ("Films en 4K", {"kind": "movie", "view": "uhd"}),
+    ("Films ajoutés récemment", {"kind": "movie", "view": "recent"}),
+    ("Séries ajoutées récemment", {"kind": "series", "view": "recent"}),
+)
 DISCOVER = (
     ("foryou", "Pour toi", "Selon ta médiathèque, sans ce que tu as déjà"),
     ("movies", "Films tendance", "Les films les plus regardés cette semaine (TMDB)"),
@@ -112,6 +117,18 @@ def show_root(handle: int, base: str) -> None:
     )
     entries = [
         listing.action_entry("Accueil", {"action": "home"}, icon, "L'écran d'accueil ArrMada"),
+        listing.folder(
+            "Films",
+            {"action": "library", "kind": "movie"},
+            "DefaultMovies.png",
+            "Toute la bibliothèque Radarr : A à Z, récents, genres, 4K, pas encore disponibles",
+        ),
+        listing.folder(
+            "Séries",
+            {"action": "library", "kind": "series"},
+            "DefaultTVShows.png",
+            "Toute la bibliothèque Sonarr : A à Z, récentes, genres, pas encore disponibles",
+        ),
         listing.folder("Découvrir", {"action": "discover"}, "DefaultMovies.png"),
         listing.folder(
             "Manquants",
@@ -166,6 +183,90 @@ def show_discover(handle: int, base: str) -> None:
     listing.add_entries(handle, base, entries, content="files", category="Découvrir", empty=None)
 
 
+# ── Films et Séries : toute la bibliothèque (1.9.0) ─────────────────────────
+
+
+def show_library(handle: int, base: str, kind: str) -> None:
+    """Vues d'un type : Tous, Ajoutés récemment, Par genre, En 4K, Pas encore disponibles."""
+    import library_data
+
+    if kind not in library_data.KINDS:
+        listing.add_entries(handle, base, [], empty="Liste inconnue")
+        return
+    entries = [
+        listing.folder(
+            view.label,
+            {"action": "genres", "kind": kind}
+            if view.key == "genres"
+            else {"action": "browse", "kind": kind, "view": view.key},
+            "",
+            view.plot,
+        )
+        for view in library_data.views_for(kind)
+    ]
+    listing.add_entries(
+        handle, base, entries, content="files", category=library_data.KINDS[kind][0], empty=None
+    )
+
+
+def show_genres(handle: int, base: str, kind: str) -> None:
+    """Genres présents dans la bibliothèque, avec le nombre de titres."""
+    import library_data
+
+    facets = ArrMadaAPI.get_media_facets(kind)
+    if feeds.is_error(facets):
+        listing.LAST_ERROR.clear()
+        listing.LAST_ERROR.update(facets)
+        listing.add_entries(handle, base, [], empty=_empty_after_error())
+        return
+    entries = [
+        listing.folder(label, {"action": "browse", "kind": kind, "view": "genre", "genre": name})
+        for name, label in library_data.genre_choices(facets)
+    ]
+    title = f"{library_data.KINDS.get(kind, ('ArrMada', ''))[0]} · Par genre"
+    listing.add_entries(handle, base, entries, content="files", category=title)
+
+
+def show_browse(handle: int, base: str, params: dict, widget: bool = False) -> None:
+    """Une page de la bibliothèque, triée par le serveur, avec « Page suivante »."""
+    import library_data
+
+    kind, view, genre = params.get("kind", ""), params.get("view", ""), params.get("genre", "")
+    page = int(params["page"]) if str(params.get("page") or "").isdigit() else 1
+    try:
+        query = library_data.browse_query(kind, view, genre, page)
+    except ValueError:
+        listing.add_entries(handle, base, [], empty="Liste inconnue")
+        return
+    payload = ArrMadaAPI.get_media(query)
+    if feeds.is_error(payload):
+        listing.LAST_ERROR.clear()
+        listing.LAST_ERROR.update(payload)
+        listing.add_entries(handle, base, [], empty=None if widget else _empty_after_error())
+        return
+    entries = catalog_data.entries_media(payload.get("items") or [], missing=view == "missing")
+    current, pages, total = library_data.page_info(payload)
+    if current < pages and not widget:
+        following = dict(params, action="browse", page=str(current + 1))
+        entries.append(
+            listing.folder(
+                library_data.next_page_label(current, pages),
+                following,
+                "DefaultFolder.png",
+                f"{total} titres en tout",
+            )
+        )
+    listing.add_entries(
+        handle,
+        base,
+        entries,
+        content=library_data.KINDS[kind][1],
+        category=library_data.view_title(kind, view, genre),
+        empty=None if widget else "Aucun titre",
+        sortable=True,
+    )
+
+
 def show_widgets(handle: int, base: str) -> None:
     """Dossiers que Skin Shortcuts (SiLVO) propose comme widgets."""
     entries = [
@@ -177,6 +278,12 @@ def show_widgets(handle: int, base: str) -> None:
         )
         for name in WIDGETS
     ]
+    # Bibliothèque (1.9.0) : une page de titres, sans « Page suivante »
+    for label, params in LIBRARY_WIDGETS:
+        path = listing.plugin_url("plugin://script.arrmada/", dict(params, action="widget_browse"))
+        entries.append(
+            listing.folder(label, dict(params, action="widget_browse"), "", f"Chemin : {path}")
+        )
     listing.add_entries(handle, base, entries, content="files", category="Widgets", empty=None)
 
 

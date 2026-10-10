@@ -120,15 +120,28 @@ def add_entries(
     content: str = "movies",
     category: str = "",
     empty: str | None = "Rien pour l'instant",
+    sortable: bool = False,
 ) -> None:
     """Remplit le dossier et le termine (sans cache disque : toujours à jour).
 
     `empty` : texte affiché si la liste est vide ; None pour un widget (un
     widget vide est masqué par le skin, c'est le comportement attendu).
+    `sortable` : propose aussi les tris de Kodi (titre, année, note), qui ne
+    s'appliquent qu'à la page affichée ; par défaut, l'ordre du serveur.
     """
     if category:
         xbmcplugin.setPluginCategory(handle, category)
     xbmcplugin.setContent(handle, content)
+    # 1er tri = celui affiché d'office : l'ordre préparé par le serveur ou
+    # l'appli (sinon Kodi choisit lui-même, par date par exemple).
+    xbmcplugin.addSortMethod(handle, xbmcplugin.SORT_METHOD_UNSORTED)
+    if sortable:
+        for method in (
+            xbmcplugin.SORT_METHOD_LABEL_IGNORE_THE,
+            xbmcplugin.SORT_METHOD_VIDEO_YEAR,
+            xbmcplugin.SORT_METHOD_VIDEO_RATING,
+        ):
+            xbmcplugin.addSortMethod(handle, method)
     items = [
         (plugin_url(base, entry["action"]), make_listitem(entry, base), bool(entry.get("folder")))
         for entry in entries

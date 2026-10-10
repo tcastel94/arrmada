@@ -439,6 +439,16 @@ def main():
         navigation.show_root(HANDLE, PLUGIN_URL)
     elif action == "legacy":
         show_legacy_menu()
+    elif action == "library":
+        # Films / Séries : toute la bibliothèque (1.9.0)
+        import navigation
+        navigation.show_library(HANDLE, PLUGIN_URL, params.get("kind", ""))
+    elif action == "genres":
+        import navigation
+        navigation.show_genres(HANDLE, PLUGIN_URL, params.get("kind", ""))
+    elif action in ("browse", "widget_browse"):
+        import navigation
+        navigation.show_browse(HANDLE, PLUGIN_URL, params, widget=action == "widget_browse")
     elif action == "discover":
         import navigation
         navigation.show_discover(HANDLE, PLUGIN_URL)
