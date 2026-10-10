@@ -17,11 +17,13 @@ out/
 .turbo/
 
 # Environment — NEVER commit these
+# `.env.*` couvre aussi les copies (.env.bak-unraid, .env.old…) : une
+# sauvegarde de .env contient les mêmes secrets que l'original.
 .env
-.env.local
-.env.*.local
-.env.production
-.env.development
+.env.*
+!.env.example
+*.bak
+*.bak-*
 
 # Data & Database
 data/
