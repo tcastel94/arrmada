@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { fadeIn } from "@/lib/motion";
 import { MediaThumb } from "./media-thumb";
 import type { SubState, WatchState } from "./enrichment";
+import { translateGenre } from "@/lib/genres";
 
 /** Lien vers la fiche d'un média. */
 export const mediaHref = (item: Pick<MediaItem, "type" | "external_id">) => `/media/${item.type}/${item.external_id}`;
@@ -103,7 +104,7 @@ export function MediaPosterCard({ item, sub, watch, selectable, selected, onTogg
                     ) : null}
                     {item.genres.slice(0, 3).map((g) => (
                         <span key={g} className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-white/80 backdrop-blur">
-                            {g}
+                            {translateGenre(g)}
                         </span>
                     ))}
                     {item.size_bytes > 0 && (
@@ -165,7 +166,7 @@ export function MediaListRow({ item, sub, watch, selectable, selected, onToggleS
                         <TypeIcon className="h-3 w-3" />
                         {item.year ?? "—"}
                     </span>
-                    {item.genres.length > 0 && <span className="hidden truncate lg:inline">{item.genres.slice(0, 2).join(" · ")}</span>}
+                    {item.genres.length > 0 && <span className="hidden truncate lg:inline">{item.genres.slice(0, 2).map(translateGenre).join(" · ")}</span>}
                     {/* Infos des colonnes, repliées sous le titre sur mobile */}
                     {quality && <span className="md:hidden">{quality}</span>}
                     <span className="tabular-nums md:hidden">{item.size_bytes > 0 ? formatBytes(item.size_bytes) : ""}</span>

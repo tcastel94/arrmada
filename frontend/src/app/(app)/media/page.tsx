@@ -84,6 +84,7 @@ import {
     MediaPosterCard,
     mediaKey,
 } from "@/components/library/media-card";
+import { translateGenre } from "@/lib/genres";
 
 /* ── Constantes ─────────────────────────────────────────────── */
 
@@ -629,7 +630,7 @@ function MediaLibrary() {
                                         label="Genre"
                                         value={genre}
                                         onChange={(v) => setFilter("genre", v)}
-                                        choices={[{ value: "all", label: "Tous" }, ...(facets?.genres ?? []).map((g) => ({ value: g, label: g }))]}
+                                        choices={[{ value: "all", label: "Tous" }, ...(facets?.genres ?? []).map((g) => ({ value: g, label: translateGenre(g) }))]}
                                     />
                                     <FilterSelect
                                         id="f-quality"

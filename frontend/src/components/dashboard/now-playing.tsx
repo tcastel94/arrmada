@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { useKodiNowPlaying, useKodiControl } from "@/hooks/use-kodi";
 import { formatClock } from "@/lib/format";
 import { EASE_OUT } from "@/lib/motion";
+import { translateGenre } from "@/lib/genres";
 
 /** Nombre de canaux audio → notation home-cinéma. */
 function fmtChannels(ch?: number | null): string | null {
@@ -125,7 +126,7 @@ export function NowPlayingCard() {
                                             <Star className="h-3 w-3 fill-amber-400 text-amber-400" /> {np.rating.toFixed(1)}
                                         </span>
                                     ) : null}
-                                    {np.genres && np.genres.length > 0 && <span className="truncate">{np.genres.slice(0, 3).join(" · ")}</span>}
+                                    {np.genres && np.genres.length > 0 && <span className="truncate">{np.genres.slice(0, 3).map(translateGenre).join(" · ")}</span>}
                                 </div>
 
                                 {techBadges.length > 0 && (

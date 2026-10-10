@@ -47,6 +47,7 @@ import {
     statusInfo,
     type StatusTone,
 } from "./labels";
+import { translateGenre } from "@/lib/genres";
 
 /* ════════════════════════════════════════════════════════════════
    Fond plein cadre avec parallaxe
@@ -408,7 +409,7 @@ export function MediaHero({ media, actions }: { media: MediaDetail; actions?: Re
                         )}
                         {genres.map((g) => (
                             <span key={g} className="chip">
-                                {g}
+                                {translateGenre(g)}
                             </span>
                         ))}
                     </motion.div>

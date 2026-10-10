@@ -48,6 +48,7 @@ import { useKodiControl, useKodiNowPlaying, useKodiSettings, type KodiNowPlaying
 import { formatClock } from "@/lib/format";
 import { EASE_OUT, SPRING } from "@/lib/motion";
 import { cn } from "@/lib/utils";
+import { translateGenre } from "@/lib/genres";
 
 const NOW_PLAYING_KEY = ["kodi", "now-playing"];
 
@@ -362,7 +363,7 @@ function Player({ np, fetchedAt }: { np: KodiNowPlaying; fetchedAt: number }) {
                             ) : null}
                             {np.genres?.slice(0, 3).map((g) => (
                                 <span key={g} className="rounded-full bg-white/[0.06] px-2 py-0.5">
-                                    {g}
+                                    {translateGenre(g)}
                                 </span>
                             ))}
                         </div>
