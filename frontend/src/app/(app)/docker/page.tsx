@@ -16,7 +16,7 @@ import {
 import {
     useDockerContainers,
     useDockerAction,
-} from "@/hooks/use-files";
+} from "@/hooks/use-docker";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 

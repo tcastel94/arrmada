@@ -25,8 +25,6 @@ export type SSEEventType =
   | "notification"
   | "webhook_test";
 
-type SSEEventHandler = (data: Record<string, unknown>) => void;
-
 /**
  * Hook to connect to the SSE event stream and auto-invalidate React Query caches.
  *
