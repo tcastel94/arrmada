@@ -14,6 +14,10 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+# Device types living in the services table but not health-checked here
+# (they have their own clients: app/services/kodi.py, app/services/yamaha.py).
+_DEVICE_TYPES = frozenset({"kodi", "yamaha"})
+
 # Service type → client class mapping (expanded in Phase 3)
 _CLIENT_MAP: dict[str, type[ArrBaseClient]] = {}
 
@@ -165,7 +169,9 @@ async def check_all_services(db: AsyncSession) -> list[dict]:
     """
     stmt = select(Service).where(Service.is_enabled == True)  # noqa: E712
     result = await db.execute(stmt)
-    services = result.scalars().all()
+    # Kodi / Yamaha are devices stored in the same table: they have no *arr
+    # API, so probing them with the generic client marked them "offline".
+    services = [s for s in result.scalars().all() if (s.type or "").lower() not in _DEVICE_TYPES]
 
     results = []
     for svc in services:

@@ -34,7 +34,7 @@ import { useSystemOverview } from "@/hooks/use-system";
 import { useCalendar } from "@/hooks/use-calendar";
 import { useNavBadges } from "@/hooks/use-nav-badges";
 import { SERVICE_META } from "@/lib/constants";
-import { percent, plural } from "@/lib/format";
+import { formatBytes, percent, plural } from "@/lib/format";
 import { stagger, fadeUp } from "@/lib/motion";
 
 export default function DashboardPage() {
@@ -115,7 +115,7 @@ export default function DashboardPage() {
                         icon={HardDrive}
                         tone={diskTotal && diskUsed / diskTotal > 0.9 ? "rose" : "emerald"}
                         href="/system"
-                        value={<span className="tabular-nums">{stats?.total_size_human ?? "—"}</span>}
+                        value={<span className="tabular-nums">{stats ? formatBytes(stats.total_size_bytes) : "—"}</span>}
                         sub={stats ? `${stats.total_items} fichiers dans la bibliothèque` : "—"}
                         gauge={diskTotal ? percent(diskUsed, diskTotal) : undefined}
                         gaugeLabel="disque"

@@ -12,6 +12,7 @@ import { Shimmer } from "@/components/shared/loading-skeleton";
 import { EmptyState } from "@/components/shared/empty-state";
 import { GradientProgress } from "@/components/fx/gradient-progress";
 import { stagger, fadeUp } from "@/lib/motion";
+import { formatBytes } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export function StoragePanel() {
@@ -48,7 +49,7 @@ export function StoragePanel() {
                                 </div>
                                 <GradientProgress value={pct} tone={tone} />
                                 <p className="text-[11px] text-muted-foreground">
-                                    <span className="text-foreground/80">{d.free_human}</span> libres sur {d.total_human}
+                                    <span className="text-foreground/80">{formatBytes(d.free_bytes)}</span> libres sur {formatBytes(d.total_bytes)}
                                 </p>
                             </motion.li>
                         );

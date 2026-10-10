@@ -53,7 +53,7 @@ export function UpcomingWidget() {
     }
     const days = Array.from(groups.values()).sort((a, b) => a.date.getTime() - b.date.getTime()).slice(0, 5);
 
-    const hrefOf = (e: CalendarEntry & { series_id?: number; movie_id?: number }) =>
+    const hrefOf = (e: CalendarEntry) =>
         e.type === "movie" && e.movie_id ? `/media/movie/${e.movie_id}` : e.series_id ? `/media/series/${e.series_id}` : "/calendar";
 
     return (

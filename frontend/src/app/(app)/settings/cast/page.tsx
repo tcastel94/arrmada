@@ -1,16 +1,30 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Header } from "@/components/layout/header";
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
+/**
+ * Paramètres → Cast & Jellyfin.
+ * ----------------------------------------------------------------
+ * Jellyfin sert de « transcodeur » : il convertit le film dans un format
+ * que les Chromecast savent lire, puis ArrMada envoie le flux à l'appareil.
+ * Corrections :
+ *  - plus d'IP personnelle codée en dur (http://192.168.2.3:8097) ;
+ *  - « Enregistré » n'est plus affiché quand le backend répond 200 avec
+ *    {status:"error"} (le hook partagé use-cast ne le détecte pas, on le
+ *    vérifie ici) ;
+ *  - suppression d'appareil confirmée, avec chargement et aria-label.
+ */
+import { useEffect, useState, type FormEvent } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Cast, CheckCircle2, Loader2, Radar, Save, Server, Speaker, Tv, XCircle, Zap } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { EmptyState } from "@/components/shared/empty-state";
-import { Cast, Tv, Speaker, Trash2, Loader2, Radar, CheckCircle2, XCircle, Server } from "lucide-react";
-import { motion } from "framer-motion";
-import { toast } from "sonner";
+import { Panel } from "@/components/shared/panel";
+import { EmptyState, ErrorState } from "@/components/shared/empty-state";
+import { Shimmer, TableSkeleton } from "@/components/shared/loading-skeleton";
+import { StatusDot } from "@/components/fx/status-dot";
+import { DeviceRow } from "@/components/settings/device-row";
+import { ScanPulse } from "@/components/settings/discovery-results";
+import { FormField, SecretInput, validateHttpUrl } from "@/components/settings/form-field";
 import {
     useCastDevices,
     useCastDiscover,
@@ -19,141 +33,263 @@ import {
     useSetJellyfin,
     useTestJellyfin,
 } from "@/hooks/use-cast";
+import { plural } from "@/lib/format";
+import { stagger } from "@/lib/motion";
+import { cn } from "@/lib/utils";
 
 export default function CastSettingsPage() {
-    const { data: devices, isLoading } = useCastDevices();
-    const discover = useCastDiscover();
-    const del = useDeleteCastDevice();
-    const { data: jf } = useJellyfinConfig();
+    return (
+        <>
+            <JellyfinPanel />
+            <DevicesPanel />
+        </>
+    );
+}
+
+/* ── Jellyfin ───────────────────────────────────────────────── */
+
+function JellyfinPanel() {
+    const { data: jf, isLoading, isError, error, refetch } = useJellyfinConfig();
     const setJf = useSetJellyfin();
     const testJf = useTestJellyfin();
 
-    const [url, setUrl] = useState("http://192.168.2.3:8097");
+    const [url, setUrl] = useState("");
     const [apiKey, setApiKey] = useState("");
-    const [jfResult, setJfResult] = useState<null | { ok: boolean; label: string }>(null);
+    const [submitted, setSubmitted] = useState(false);
+    const [testResult, setTestResult] = useState<{ ok: boolean; label: string } | null>(null);
 
+    // Pré-remplit l'URL enregistrée une fois chargée (sans écraser une saisie).
     useEffect(() => {
-        if (jf?.url) setUrl(jf.url);
+        if (jf?.url) setUrl((current) => current || jf.url || "");
     }, [jf?.url]);
 
-    return (
-        <>
-            <Header title="Cast" />
-            <motion.div className="p-4 md:p-6 space-y-6 max-w-4xl mx-auto" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                {/* Jellyfin */}
-                <Card className="bg-card/40 border-border/50">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-base">
-                            <Server className="h-5 w-5 text-sky-400" /> Jellyfin (transcodage)
-                        </CardTitle>
-                        <CardDescription>
-                            Jellyfin transcode tes fichiers pour qu&apos;ils soient lisibles par les Chromecast.
-                            {jf?.configured && <span className="ml-1 text-emerald-400">· Configuré</span>}
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div className="space-y-1">
-                                <Label className="text-xs">URL</Label>
-                                <Input value={url} onChange={(e) => setUrl(e.target.value)} className="border-white/10 bg-transparent font-mono text-sm" />
-                            </div>
-                            <div className="space-y-1">
-                                <Label className="text-xs">Clé API {jf?.configured && <span className="text-muted-foreground">(laisser vide pour garder)</span>}</Label>
-                                <Input value={apiKey} onChange={(e) => setApiKey(e.target.value)} type="password" placeholder="••••••••" className="border-white/10 bg-transparent font-mono text-sm" />
-                            </div>
-                        </div>
-                        <div className="flex flex-wrap gap-2 items-center">
-                            <Button
-                                disabled={setJf.isPending}
-                                onClick={() =>
-                                    setJf.mutate(
-                                        { url, api_key: apiKey, name: "Jellyfin" },
-                                        {
-                                            onSuccess: () => { toast.success("Jellyfin enregistré."); setApiKey(""); },
-                                            onError: (e) => toast.error("Échec : " + e.message),
-                                        },
-                                    )
-                                }
-                            >
-                                {setJf.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                                Enregistrer
-                            </Button>
-                            <Button
-                                variant="outline"
-                                className="border-white/10"
-                                disabled={testJf.isPending}
-                                onClick={() =>
-                                    testJf.mutate(undefined, {
-                                        onSuccess: (r) => setJfResult(r.ok ? { ok: true, label: `${r.server} ${r.version}` } : { ok: false, label: r.detail || "injoignable" }),
-                                        onError: (e) => setJfResult({ ok: false, label: e.message }),
-                                    })
-                                }
-                            >
-                                {testJf.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                                Tester
-                            </Button>
-                            {jfResult && (
-                                <span className={`text-xs flex items-center gap-1 ${jfResult.ok ? "text-emerald-400" : "text-red-400"}`}>
-                                    {jfResult.ok ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
-                                    {jfResult.label}
-                                </span>
-                            )}
-                        </div>
-                    </CardContent>
-                </Card>
+    const configured = !!jf?.configured;
+    const urlErr = validateHttpUrl(url, "http://192.168.1.10:8096");
+    const keyErr = !configured && !apiKey.trim() ? "La clé API est obligatoire pour la première configuration." : null;
 
-                {/* Devices */}
-                <Card className="bg-card/40 border-border/50">
-                    <CardHeader>
-                        <div className="flex items-center justify-between gap-2">
-                            <div>
-                                <CardTitle className="flex items-center gap-2 text-base">
-                                    <Cast className="h-5 w-5 text-sky-400" /> Appareils Cast
-                                </CardTitle>
-                                <CardDescription>Chromecast, Google TV et Nest détectés sur ton réseau.</CardDescription>
-                            </div>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                className="border-white/10 shrink-0"
-                                disabled={discover.isPending}
-                                onClick={() =>
-                                    discover.mutate(undefined, {
-                                        onSuccess: (list) => toast.success(`${list.length} appareil(s) détecté(s).`),
-                                        onError: (e) => toast.error("Scan échoué : " + e.message),
-                                    })
-                                }
-                            >
-                                {discover.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Radar className="h-4 w-4 mr-2" />}
-                                Scanner
-                            </Button>
-                        </div>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                        {isLoading ? (
-                            <div className="h-16 rounded-lg bg-muted/15 animate-pulse" />
-                        ) : (devices?.length ?? 0) === 0 ? (
-                            <EmptyState icon={Cast} title="Aucun appareil" description="Lance un scan pour détecter tes Chromecast." />
-                        ) : (
-                            devices!.map((d) => (
-                                <div key={d.id} className="flex items-center gap-3 rounded-lg border border-border/50 bg-card/40 p-3">
-                                    {d.video_capable ? <Tv className="h-5 w-5 text-sky-400 shrink-0" /> : <Speaker className="h-5 w-5 text-muted-foreground shrink-0" />}
-                                    <div className="min-w-0 flex-1">
-                                        <p className="text-sm font-medium truncate">{d.name}</p>
-                                        <p className="text-xs text-muted-foreground font-mono truncate">{d.ip}</p>
-                                    </div>
-                                    <Badge variant="outline" className={`text-[10px] ${d.video_capable ? "border-sky-500/30 text-sky-300" : "border-white/10 text-muted-foreground"}`}>
-                                        {d.video_capable ? "Vidéo" : "Audio"}
-                                    </Badge>
-                                    <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-red-400" onClick={() => del.mutate(d.id, { onSuccess: () => toast.success("Appareil retiré.") })}>
-                                        <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                </div>
-                            ))
+    const save = async (e: FormEvent) => {
+        e.preventDefault();
+        setSubmitted(true);
+        if (urlErr || keyErr) return;
+        try {
+            const r = await setJf.mutateAsync({ url: url.trim().replace(/\/+$/, ""), api_key: apiKey.trim(), name: jf?.name || "Jellyfin" });
+            // Le backend répond 200 même en cas de refus : on vérifie le statut.
+            if (r?.status === "error") {
+                toast.error("Jellyfin non enregistré", { description: r.detail ?? "Le backend a refusé la configuration." });
+                return;
+            }
+            toast.success("Jellyfin enregistré", { description: "Teste la connexion pour vérifier la clé." });
+            setApiKey("");
+            setSubmitted(false);
+            setTestResult(null);
+        } catch (err) {
+            toast.error("Enregistrement impossible", { description: err instanceof Error ? err.message : undefined });
+        }
+    };
+
+    const runTest = () =>
+        testJf.mutate(undefined, {
+            onSuccess: (r) =>
+                setTestResult(
+                    r.ok
+                        ? { ok: true, label: [r.server, r.version && `v${r.version}`].filter(Boolean).join(" · ") || "Connexion OK" }
+                        : { ok: false, label: r.detail || "Jellyfin injoignable" },
+                ),
+            onError: (e) => setTestResult({ ok: false, label: e.message }),
+        });
+
+    return (
+        <Panel
+            title="Jellyfin (transcodage)"
+            icon={Server}
+            iconClassName="text-sky-300"
+            action={
+                !isLoading && !isError ? (
+                    <span
+                        className={cn(
+                            "flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                            configured ? "bg-emerald-500/10 text-emerald-300" : "bg-amber-500/10 text-amber-300",
                         )}
-                    </CardContent>
-                </Card>
-            </motion.div>
-        </>
+                    >
+                        <StatusDot tone={configured ? "online" : "warning"} size="sm" />
+                        {configured ? "Configuré" : "À configurer"}
+                    </span>
+                ) : undefined
+            }
+        >
+            {isLoading ? (
+                <div className="space-y-3">
+                    <Shimmer className="h-10 w-full" />
+                    <Shimmer className="h-10 w-full" />
+                </div>
+            ) : isError ? (
+                <ErrorState compact error={error} onRetry={() => refetch()} />
+            ) : (
+                <form onSubmit={save} className="space-y-4" noValidate>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                        Les Chromecast ne lisent pas tous les formats : Jellyfin convertit le film à la volée. Crée une clé dans{" "}
+                        <span className="text-foreground">Jellyfin → Tableau de bord → Clés API</span>.
+                    </p>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <FormField id="jf-url" label="Adresse de Jellyfin" error={submitted ? urlErr : null}>
+                            <Input
+                                id="jf-url"
+                                value={url}
+                                onChange={(e) => {
+                                    setUrl(e.target.value);
+                                    setTestResult(null);
+                                }}
+                                placeholder="http://192.168.1.10:8096"
+                                inputMode="url"
+                                spellCheck={false}
+                                autoComplete="off"
+                                className="font-mono text-sm"
+                                aria-invalid={submitted && !!urlErr}
+                            />
+                        </FormField>
+                        <FormField
+                            id="jf-key"
+                            label="Clé API"
+                            error={submitted ? keyErr : null}
+                            hint={configured ? "Laisse vide pour conserver la clé enregistrée." : undefined}
+                        >
+                            <SecretInput
+                                id="jf-key"
+                                value={apiKey}
+                                onChange={(e) => setApiKey(e.target.value)}
+                                placeholder={configured ? "•••••••• (inchangée)" : "Colle la clé ici"}
+                                aria-invalid={submitted && !!keyErr}
+                            />
+                        </FormField>
+                    </div>
+
+                    <AnimatePresence initial={false}>
+                        {testResult && (
+                            <motion.p
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: "auto" }}
+                                exit={{ opacity: 0, height: 0 }}
+                                aria-live="polite"
+                                className={cn(
+                                    "flex items-center gap-2 overflow-hidden rounded-xl border px-3.5 py-2.5 text-sm",
+                                    testResult.ok
+                                        ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-300"
+                                        : "border-red-500/25 bg-red-500/10 text-red-300",
+                                )}
+                            >
+                                {testResult.ok ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <XCircle className="h-4 w-4 shrink-0" />}
+                                {testResult.label}
+                            </motion.p>
+                        )}
+                    </AnimatePresence>
+
+                    <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={runTest}
+                            disabled={!configured || testJf.isPending}
+                            title={!configured ? "Enregistre d'abord Jellyfin" : undefined}
+                        >
+                            {testJf.isPending ? <Loader2 className="animate-spin" /> : <Zap />}
+                            Tester la connexion
+                        </Button>
+                        <Button type="submit" disabled={setJf.isPending}>
+                            {setJf.isPending ? <Loader2 className="animate-spin" /> : <Save />}
+                            Enregistrer
+                        </Button>
+                    </div>
+                </form>
+            )}
+        </Panel>
+    );
+}
+
+/* ── Appareils Cast ─────────────────────────────────────────── */
+
+function DevicesPanel() {
+    const { data: devices, isLoading, isError, error, refetch } = useCastDevices();
+    const discover = useCastDiscover();
+    const del = useDeleteCastDevice();
+
+    const scan = () =>
+        discover.mutate(undefined, {
+            onSuccess: (list) =>
+                list.length > 0
+                    ? toast.success(`${plural(list.length, "appareil détecté", "appareils détectés")}`)
+                    : toast.info("Aucun appareil Cast trouvé", { description: "Vérifie qu'ils sont allumés et sur le même réseau." }),
+            onError: (e) => toast.error("Scan impossible", { description: e.message }),
+        });
+
+    return (
+        <Panel
+            title="Appareils Cast"
+            icon={Cast}
+            iconClassName="text-sky-300"
+            action={
+                <Button variant="outline" size="sm" onClick={scan} disabled={discover.isPending}>
+                    {discover.isPending ? <Loader2 className="animate-spin" /> : <Radar />}
+                    {discover.isPending ? "Scan…" : "Scanner le réseau"}
+                </Button>
+            }
+            bodyClassName="space-y-3"
+        >
+            <p className="text-xs text-muted-foreground">Chromecast, Google TV et enceintes Nest détectés sur ton réseau local.</p>
+
+            <AnimatePresence initial={false}>
+                {discover.isPending && (
+                    <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="flex items-center gap-3 overflow-hidden rounded-xl border border-primary/20 bg-primary/[0.06] px-4 py-3 text-sm text-primary"
+                    >
+                        <ScanPulse /> Recherche des appareils Cast (une dizaine de secondes)…
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {isLoading ? (
+                <TableSkeleton rows={2} />
+            ) : isError ? (
+                <ErrorState compact error={error} onRetry={() => refetch()} />
+            ) : !devices || devices.length === 0 ? (
+                <EmptyState
+                    compact
+                    icon={Cast}
+                    title="Aucun appareil"
+                    description="Lance un scan pour détecter tes Chromecast et Google TV."
+                    action={{ label: "Scanner le réseau", onClick: scan }}
+                />
+            ) : (
+                <motion.div variants={stagger(0, 0.05)} initial="hidden" animate="show" className="space-y-2">
+                    <AnimatePresence>
+                        {devices.map((d) => (
+                            <DeviceRow
+                                key={d.id}
+                                icon={d.video_capable ? Tv : Speaker}
+                                tone={d.video_capable ? "sky" : "slate"}
+                                name={d.name}
+                                address={`${d.ip}${d.port ? `:${d.port}` : ""}`}
+                                meta={d.model ?? undefined}
+                                badges={
+                                    <span
+                                        className={cn(
+                                            "rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
+                                            d.video_capable ? "bg-sky-500/15 text-sky-300" : "bg-white/[0.06] text-muted-foreground",
+                                        )}
+                                    >
+                                        {d.video_capable ? "Vidéo" : "Audio"}
+                                    </span>
+                                }
+                                onDelete={() => del.mutateAsync(d.id)}
+                                deleteTitle={`Retirer ${d.name} ?`}
+                                deleteDescription="L'appareil disparaîtra de la liste « Caster sur… ». Un nouveau scan le fera réapparaître s'il est toujours sur le réseau."
+                            />
+                        ))}
+                    </AnimatePresence>
+                </motion.div>
+            )}
+        </Panel>
     );
 }

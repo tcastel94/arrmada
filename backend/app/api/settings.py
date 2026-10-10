@@ -11,6 +11,16 @@ from app.config import settings
 from app.services.telegram import send_message
 from app.utils.logger import get_logger
 
+
+def app_version() -> str:
+    """Version exposed by the FastAPI app (single source: app.main)."""
+    try:
+        from app.main import app
+
+        return app.version
+    except Exception:  # pragma: no cover - defensive
+        return "unknown"
+
 logger = get_logger(__name__)
 
 router = APIRouter(
@@ -34,6 +44,9 @@ async def get_settings():
         },
         "auth": {
             "jwt_expiration_hours": settings.JWT_EXPIRATION_HOURS,
+            # True while the admin password is still the shipped default.
+            "default_secret": settings.ARRMADA_AUTH_SECRET
+            in ("changeme", "changeme_use_a_strong_password", ""),
         },
         "cors": {
             "origins": settings.cors_origin_list,
@@ -41,6 +54,7 @@ async def get_settings():
         "scheduler": {
             "health_check_interval": "60s",
         },
+        "version": app_version(),
     }
 
 

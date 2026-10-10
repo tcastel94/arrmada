@@ -1,426 +1,449 @@
 "use client";
 
-import { Header } from "@/components/layout/header";
-import { PageSkeleton } from "@/components/shared/loading-skeleton";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-    Settings,
-    Bell,
-    Shield,
-    Globe,
-    Clock,
-    Film,
-    CheckCircle,
-    XCircle,
-    Send,
-    Loader2,
-    Server,
-    Key,
-    Target,
-    ChevronRight,
-    Cog,
-    Palette,
-} from "lucide-react";
-import { useSettings, useTestTelegram } from "@/hooks/use-settings";
-import { useServices } from "@/hooks/use-services";
-import { useToast } from "@/components/ui/use-toast";
-import { cn } from "@/lib/utils";
-import { motion } from "framer-motion";
+/**
+ * Paramètres → Général.
+ * ----------------------------------------------------------------
+ * - Vue d'ensemble : une tuile par section (services, Kodi, Cast, Yamaha,
+ *   TRaSH Guides, Salon) avec son état réel → remplace l'ancien bloc
+ *   « Services connectés » qui dupliquait la page Services.
+ * - Notifications Telegram (+ envoi d'un test).
+ * - Configuration de l'application (lue depuis le .env du backend).
+ * - À propos : versions réelles (interface + API), base de données.
+ * Corrections : plus de `return null` si l'API échoue (→ ErrorState),
+ * lignes colorées selon leur VRAI état (avant : toujours vertes), libellés
+ * en français, version plus codée en dur.
+ */
 import Link from "next/link";
+import { motion } from "framer-motion";
+import {
+    AlertTriangle,
+    ArrowUpRight,
+    BellRing,
+    BookMarked,
+    Cast,
+    CheckCircle2,
+    CircleDashed,
+    Clock,
+    Database,
+    Film,
+    Globe,
+    Hash,
+    Info,
+    KeyRound,
+    Loader2,
+    MonitorPlay,
+    Send,
+    Server,
+    ShieldCheck,
+    Sofa,
+    Speaker,
+    XCircle,
+    type LucideIcon,
+} from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Panel } from "@/components/shared/panel";
+import { ErrorState } from "@/components/shared/empty-state";
+import { Shimmer } from "@/components/shared/loading-skeleton";
+import { SpotlightCard } from "@/components/fx/spotlight-card";
+import { RingGauge } from "@/components/fx/ring-gauge";
+import { StatusDot } from "@/components/fx/status-dot";
+import { APP_VERSION } from "@/components/settings/app-version";
+import { useBackendVersion, useSettings, useTestTelegram } from "@/hooks/use-settings";
+import { useServices } from "@/hooks/use-services";
+import { useKodiSettings } from "@/hooks/use-kodi";
+import { useYamahaSettings } from "@/hooks/use-yamaha";
+import { useCastDevices, useJellyfinConfig } from "@/hooks/use-cast";
+import { useSetupStatus } from "@/hooks/use-setup";
+import { plural, percent } from "@/lib/format";
+import { fadeUp, stagger } from "@/lib/motion";
+import { cn } from "@/lib/utils";
 
-const container = {
-    hidden: { opacity: 0 },
-    show: { opacity: 1, transition: { staggerChildren: 0.06 } },
-};
-const fadeUp = {
-    hidden: { opacity: 0, y: 14 },
-    show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" } },
+/* ── Ligne de configuration ─────────────────────────────────── */
+
+/**
+ * ok = configuré et fonctionnel ; warning = optionnel mais absent ;
+ * error = requis et absent ; info = simple information (gris).
+ */
+type RowTone = "ok" | "warning" | "error" | "info";
+
+const ROW_TONES: Record<RowTone, { tile: string; badge: string; label: string; icon: LucideIcon }> = {
+    ok: { tile: "bg-emerald-500/10 text-emerald-400", badge: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300", label: "Configuré", icon: CheckCircle2 },
+    warning: { tile: "bg-amber-500/10 text-amber-400", badge: "border-amber-500/30 bg-amber-500/10 text-amber-300", label: "À configurer", icon: CircleDashed },
+    error: { tile: "bg-red-500/10 text-red-400", badge: "border-red-500/30 bg-red-500/10 text-red-300", label: "Manquant", icon: XCircle },
+    info: { tile: "bg-white/[0.05] text-slate-300", badge: "", label: "", icon: Info },
 };
 
 function ConfigRow({
+    icon: Icon,
     label,
     value,
-    configured,
-    icon: Icon,
+    tone,
+    badge,
 }: {
+    icon: LucideIcon;
     label: string;
-    value: string;
-    configured: boolean;
-    icon: any;
+    value: React.ReactNode;
+    tone: RowTone;
+    /** Remplace le libellé de badge par défaut. */
+    badge?: string;
 }) {
+    const t = ROW_TONES[tone];
     return (
-        <div className="flex items-center justify-between py-3 px-1 group">
-            <div className="flex items-center gap-3">
-                <div
-                    className={cn(
-                        "rounded-lg p-1.5",
-                        configured
-                            ? "bg-emerald-500/10 text-emerald-400"
-                            : "bg-red-500/10 text-red-400"
-                    )}
-                >
-                    <Icon className="h-3.5 w-3.5" />
-                </div>
-                <div>
-                    <p className="text-sm font-medium">{label}</p>
-                    <p className="text-xs text-muted-foreground">{value}</p>
-                </div>
+        <div className="flex items-center gap-3 py-3">
+            <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", t.tile)}>
+                <Icon className="h-4 w-4" />
+            </span>
+            <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">{label}</p>
+                <div className="truncate text-xs text-muted-foreground">{value}</div>
             </div>
-            <Badge
-                variant="outline"
-                className={cn(
-                    "gap-1 text-[10px] h-5",
-                    configured
-                        ? "border-emerald-500/30 text-emerald-400"
-                        : "border-red-500/30 text-red-400"
-                )}
-            >
-                {configured ? (
-                    <CheckCircle className="h-3 w-3" />
-                ) : (
-                    <XCircle className="h-3 w-3" />
-                )}
-                {configured ? "OK" : "Non configuré"}
-            </Badge>
+            {tone !== "info" && (
+                <span className={cn("hidden shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold sm:flex", t.badge)}>
+                    <t.icon className="h-3 w-3" />
+                    {badge ?? t.label}
+                </span>
+            )}
         </div>
     );
 }
 
-function SettingsLink({
+/* ── Tuile de la vue d'ensemble ─────────────────────────────── */
+
+function OverviewTile({
     href,
     icon: Icon,
-    iconColor,
-    iconBg,
+    iconClass,
     title,
-    description,
+    status,
+    tone,
+    gauge,
+    loading,
 }: {
     href: string;
-    icon: any;
-    iconColor: string;
-    iconBg: string;
+    icon: LucideIcon;
+    iconClass: string;
     title: string;
-    description: string;
+    status: React.ReactNode;
+    /** Pastille d'état ; absente pour les simples raccourcis. */
+    tone?: "online" | "warning" | "unknown" | "offline";
+    gauge?: number;
+    loading?: boolean;
 }) {
     return (
         <motion.div variants={fadeUp}>
-            <Link href={href}>
-                <Card className="border-0 ring-1 ring-white/5 bg-card/40 backdrop-blur-sm hover:ring-white/15 hover:scale-[1.01] transition-all duration-200 cursor-pointer group">
-                    <CardContent className="flex items-center gap-4 p-4">
-                        <div className={cn("rounded-xl p-2.5", iconBg)}>
-                            <Icon className={cn("h-5 w-5", iconColor)} />
-                        </div>
-                        <div className="flex-1">
-                            <p className="text-sm font-semibold">{title}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                                {description}
+            <Link href={href} className="block h-full rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <SpotlightCard interactive className="group flex h-full items-center gap-3.5 p-4">
+                    <span className={cn("relative z-[2] flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ring-1 ring-white/[0.08]", iconClass)}>
+                        <Icon className="h-5 w-5" strokeWidth={1.8} />
+                    </span>
+                    <div className="relative z-[2] min-w-0 flex-1">
+                        <p className="flex items-center gap-1.5 text-sm font-semibold">
+                            {title}
+                            <ArrowUpRight className="h-3.5 w-3.5 -translate-x-1 text-muted-foreground opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100" />
+                        </p>
+                        {loading ? (
+                            <Shimmer className="mt-1.5 h-3 w-24 rounded-md" />
+                        ) : (
+                            <p className="mt-0.5 flex items-center gap-1.5 truncate text-xs text-muted-foreground">
+                                {tone && <StatusDot tone={tone} size="sm" pulse={false} />}
+                                <span className="truncate">{status}</span>
                             </p>
-                        </div>
-                        <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-foreground transition-colors" />
-                    </CardContent>
-                </Card>
+                        )}
+                    </div>
+                    {gauge !== undefined && !loading && (
+                        <RingGauge value={gauge} size={44} stroke={4} tone={gauge >= 100 ? "emerald" : gauge >= 50 ? "amber" : "rose"} className="relative z-[2]">
+                            <span className="text-[10px] font-semibold tabular-nums">{Math.round(gauge)}%</span>
+                        </RingGauge>
+                    )}
+                </SpotlightCard>
             </Link>
         </motion.div>
     );
 }
 
-export default function SettingsPage() {
-    const { data: settings, isLoading } = useSettings();
-    const { data: services } = useServices();
+/* ── Page ───────────────────────────────────────────────────── */
+
+export default function SettingsGeneralPage() {
+    const { data: settings, isLoading, isError, error, refetch } = useSettings();
+    const { data: backendVersion } = useBackendVersion();
+    const { data: setup } = useSetupStatus();
+    const services = useServices();
+    const kodis = useKodiSettings();
+    const amps = useYamahaSettings();
+    const cast = useCastDevices();
+    const jellyfin = useJellyfinConfig();
     const testTelegram = useTestTelegram();
-    const { toast } = useToast();
 
-    const handleTestTelegram = async () => {
-        try {
-            const result = (await testTelegram.mutateAsync(undefined)) as {
-                success: boolean;
-            };
-            if (result.success) {
-                toast({
-                    title: "Notification envoyée",
-                    description: "Vérifiez votre chat Telegram",
-                });
-            } else {
-                toast({
-                    title: "Échec",
-                    description: "Telegram n'a pas répondu",
-                    variant: "destructive",
-                });
-            }
-        } catch {
-            toast({
-                title: "Erreur",
-                description: "Impossible d'envoyer la notification",
-                variant: "destructive",
-            });
-        }
-    };
+    const enabled = services.data?.filter((s) => s.is_enabled) ?? [];
+    const online = enabled.filter((s) => s.last_status === "online").length;
+    const servicesGauge = enabled.length ? percent(online, enabled.length) : 0;
 
-    if (isLoading) {
-        return (
-            <>
-                <Header title="Paramètres" />
-                <div className="p-6">
-                    <PageSkeleton />
-                </div>
-            </>
-        );
-    }
-
-    if (!settings) return null;
+    const handleTestTelegram = () =>
+        testTelegram.mutate(undefined, {
+            onSuccess: (r) =>
+                r?.success
+                    ? toast.success("Notification envoyée", { description: "Jette un œil à ton chat Telegram." })
+                    : toast.error("Telegram n'a pas accepté le message", {
+                          description: "Vérifie le jeton du bot et l'identifiant du chat.",
+                      }),
+            onError: (e) => toast.error("Envoi impossible", { description: e.message }),
+        });
 
     return (
-        <>
-            <Header title="Paramètres" />
-            <motion.div
-                className="p-4 md:p-6 space-y-5 max-w-3xl mx-auto"
-                variants={container}
-                initial="hidden"
-                animate="show"
-            >
-                {/* Hero Header */}
-                <motion.div variants={fadeUp}>
-                    <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-slate-600/20 via-zinc-600/10 to-transparent ring-1 ring-white/5 p-6">
-                        <div className="flex items-center gap-4">
-                            <div className="rounded-xl bg-slate-500/20 p-3">
-                                <Cog className="h-6 w-6 text-slate-400" />
-                            </div>
-                            <div>
-                                <h2 className="text-2xl font-bold tracking-tight">
-                                    Paramètres
-                                </h2>
-                                <p className="text-sm text-muted-foreground mt-0.5">
-                                    Configuration de l&apos;application ArrMada
-                                </p>
-                            </div>
-                        </div>
-                        <div className="absolute -top-16 -right-16 w-48 h-48 rounded-full bg-slate-500/10 blur-3xl" />
+        <motion.div variants={stagger(0, 0.06)} initial="hidden" animate="show" className="space-y-6">
+            {/* ── Vue d'ensemble ─────────────────────────────── */}
+            <section aria-labelledby="overview-title" className="space-y-3">
+                <h2 id="overview-title" className="eyebrow">
+                    Vue d&apos;ensemble
+                </h2>
+                <motion.div variants={stagger(0, 0.05)} className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    <OverviewTile
+                        href="/settings/services"
+                        icon={Server}
+                        iconClass="bg-primary/15 text-primary"
+                        title="Services *arr"
+                        loading={services.isLoading}
+                        tone={enabled.length === 0 ? "unknown" : online === enabled.length ? "online" : "warning"}
+                        status={
+                            services.isError
+                                ? "État indisponible"
+                                : enabled.length === 0
+                                  ? "Aucun service actif"
+                                  : `${online}/${enabled.length} en ligne`
+                        }
+                        gauge={enabled.length ? servicesGauge : undefined}
+                    />
+                    <OverviewTile
+                        href="/settings/kodi"
+                        icon={MonitorPlay}
+                        iconClass="bg-violet-500/15 text-violet-300"
+                        title="Kodi"
+                        loading={kodis.isLoading}
+                        tone={kodis.data?.length ? "online" : "unknown"}
+                        status={kodis.data?.length ? plural(kodis.data.length, "lecteur configuré", "lecteurs configurés") : "Aucun lecteur"}
+                    />
+                    <OverviewTile
+                        href="/settings/cast"
+                        icon={Cast}
+                        iconClass="bg-sky-500/15 text-sky-300"
+                        title="Cast & Jellyfin"
+                        loading={cast.isLoading || jellyfin.isLoading}
+                        tone={jellyfin.data?.configured ? "online" : "warning"}
+                        status={
+                            jellyfin.data?.configured
+                                ? `Jellyfin prêt · ${plural(cast.data?.length ?? 0, "appareil")}`
+                                : "Jellyfin à configurer"
+                        }
+                    />
+                    <OverviewTile
+                        href="/settings/yamaha"
+                        icon={Speaker}
+                        iconClass="bg-orange-500/15 text-orange-300"
+                        title="Ampli Yamaha"
+                        loading={amps.isLoading}
+                        tone={amps.data?.length ? "online" : "unknown"}
+                        status={amps.data?.length ? plural(amps.data.length, "ampli configuré", "amplis configurés") : "Aucun ampli"}
+                    />
+                    <OverviewTile
+                        href="/trash-guides"
+                        icon={BookMarked}
+                        iconClass="bg-amber-500/15 text-amber-300"
+                        title="TRaSH Guides"
+                        status="Profils par média & SABnzbd"
+                    />
+                    <OverviewTile
+                        href="/remote"
+                        icon={Sofa}
+                        iconClass="bg-fuchsia-500/15 text-fuchsia-300"
+                        title="Salon"
+                        status="Télécommandes Kodi, ampli et Cast"
+                    />
+                </motion.div>
+            </section>
+
+            {/* ── Alerte sécurité (si le backend l'expose) ───── */}
+            {settings?.auth.default_secret && (
+                <motion.div
+                    variants={fadeUp}
+                    role="alert"
+                    className="flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4"
+                >
+                    <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
+                    <div className="text-sm">
+                        <p className="font-semibold text-amber-200">Mot de passe d&apos;administration par défaut</p>
+                        <p className="mt-0.5 text-amber-100/80">
+                            Change <code className="rounded bg-black/30 px-1 font-mono text-xs">ARRMADA_AUTH_SECRET</code> dans ton
+                            fichier .env puis redémarre le conteneur : tant qu&apos;il garde la valeur d&apos;exemple, n&apos;importe qui sur
+                            ton réseau peut se connecter.
+                        </p>
                     </div>
                 </motion.div>
+            )}
 
-                {/* Telegram */}
-                <motion.div variants={fadeUp}>
-                    <Card className="border-0 ring-1 ring-white/5 bg-card/40 backdrop-blur-sm overflow-hidden">
-                        <CardContent className="p-0">
-                            <div className="flex items-center justify-between px-5 py-3 border-b border-white/5">
-                                <div className="flex items-center gap-2">
-                                    <Bell className="h-4 w-4 text-blue-400" />
-                                    <span className="text-sm font-semibold">
-                                        Notifications Telegram
-                                    </span>
-                                </div>
-                                <Badge
-                                    variant="outline"
+            {isError ? (
+                <motion.div variants={fadeUp} className="glass rounded-2xl">
+                    <ErrorState error={error} onRetry={() => refetch()} title="Impossible de lire la configuration" />
+                </motion.div>
+            ) : isLoading || !settings ? (
+                <motion.div variants={fadeUp} className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                    {[0, 1].map((i) => (
+                        <div key={i} className="glass space-y-3 rounded-2xl p-5">
+                            <Shimmer className="h-4 w-40 rounded-md" />
+                            {[0, 1, 2].map((j) => (
+                                <Shimmer key={j} className="h-12 w-full" />
+                            ))}
+                        </div>
+                    ))}
+                </motion.div>
+            ) : (
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                    {/* ── Telegram ─────────────────────────────── */}
+                    <motion.div variants={fadeUp}>
+                        <Panel
+                            title="Notifications Telegram"
+                            icon={BellRing}
+                            iconClassName="text-sky-400"
+                            className="h-full"
+                            action={
+                                <span
                                     className={cn(
-                                        "text-[10px]",
-                                        settings.telegram.configured
-                                            ? "border-emerald-500/30 text-emerald-400"
-                                            : "border-red-500/30 text-red-400"
+                                        "flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                                        settings.telegram.configured ? "bg-emerald-500/10 text-emerald-300" : "bg-slate-500/10 text-slate-300",
                                     )}
                                 >
+                                    <StatusDot tone={settings.telegram.configured ? "online" : "unknown"} size="sm" />
                                     {settings.telegram.configured ? "Actif" : "Inactif"}
-                                </Badge>
-                            </div>
-                            <div className="px-5 py-3 space-y-1 divide-y divide-white/5">
+                                </span>
+                            }
+                            bodyClassName="py-2"
+                        >
+                            <div className="divide-y divide-white/[0.05]">
                                 <ConfigRow
-                                    label="Bot Token"
+                                    icon={KeyRound}
+                                    label="Jeton du bot"
+                                    tone={settings.telegram.bot_token_set ? "ok" : "warning"}
                                     value={
-                                        settings.telegram.bot_token_set
-                                            ? "Configuré dans .env"
-                                            : "TELEGRAM_BOT_TOKEN non défini"
+                                        settings.telegram.bot_token_set ? (
+                                            "Défini dans le .env"
+                                        ) : (
+                                            <>
+                                                Ajoute <code className="font-mono">TELEGRAM_BOT_TOKEN</code> au .env
+                                            </>
+                                        )
                                     }
-                                    configured={settings.telegram.bot_token_set}
-                                    icon={Key}
                                 />
                                 <ConfigRow
-                                    label="Chat ID"
+                                    icon={Hash}
+                                    label="Identifiant du chat"
+                                    tone={settings.telegram.chat_id_set ? "ok" : "warning"}
                                     value={
-                                        settings.telegram.chat_id_set
-                                            ? "Configuré dans .env"
-                                            : "TELEGRAM_CHAT_ID non défini"
+                                        settings.telegram.chat_id_set ? (
+                                            "Défini dans le .env"
+                                        ) : (
+                                            <>
+                                                Ajoute <code className="font-mono">TELEGRAM_CHAT_ID</code> au .env
+                                            </>
+                                        )
                                     }
-                                    configured={settings.telegram.chat_id_set}
-                                    icon={Send}
                                 />
                             </div>
-                            <div className="px-5 pb-4 pt-1">
+                            <div className="flex flex-wrap items-center gap-3 pb-2 pt-3">
                                 <Button
-                                    variant="outline"
+                                    variant="glow"
                                     size="sm"
                                     onClick={handleTestTelegram}
-                                    disabled={
-                                        !settings.telegram.configured ||
-                                        testTelegram.isPending
-                                    }
-                                    className="gap-2 border-white/10"
+                                    disabled={!settings.telegram.configured || testTelegram.isPending}
                                 >
-                                    {testTelegram.isPending ? (
-                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                    ) : (
-                                        <Send className="h-3.5 w-3.5" />
-                                    )}
+                                    {testTelegram.isPending ? <Loader2 className="animate-spin" /> : <Send />}
                                     Envoyer un test
                                 </Button>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </motion.div>
-
-                {/* Services Summary */}
-                <motion.div variants={fadeUp}>
-                    <Card className="border-0 ring-1 ring-white/5 bg-card/40 backdrop-blur-sm overflow-hidden">
-                        <CardContent className="p-0">
-                            <div className="flex items-center justify-between px-5 py-3 border-b border-white/5">
-                                <div className="flex items-center gap-2">
-                                    <Server className="h-4 w-4 text-indigo-400" />
-                                    <span className="text-sm font-semibold">
-                                        Services connectés
-                                    </span>
-                                </div>
-                                <Badge variant="outline" className="text-[10px]">
-                                    {services?.length ?? 0} service{(services?.length ?? 0) > 1 ? "s" : ""}
-                                </Badge>
-                            </div>
-                            <div className="px-5 py-3">
-                                {services && services.length > 0 ? (
-                                    <div className="space-y-1 divide-y divide-white/5">
-                                        {services.map((svc) => (
-                                            <div
-                                                key={svc.id}
-                                                className="flex items-center justify-between py-2.5"
-                                            >
-                                                <div className="flex items-center gap-3">
-                                                    <div className="relative">
-                                                        <span
-                                                            className={cn(
-                                                                "block h-2.5 w-2.5 rounded-full",
-                                                                svc.last_status === "online"
-                                                                    ? "bg-emerald-400"
-                                                                    : "bg-red-400"
-                                                            )}
-                                                        />
-                                                        {svc.last_status === "online" && (
-                                                            <span className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-30" />
-                                                        )}
-                                                    </div>
-                                                    <span className="text-sm font-medium">
-                                                        {svc.name}
-                                                    </span>
-                                                    <Badge
-                                                        variant="outline"
-                                                        className="text-[10px] h-4 px-1.5 border-white/10"
-                                                    >
-                                                        {svc.type}
-                                                    </Badge>
-                                                </div>
-                                                <span className="text-xs text-muted-foreground/60 font-mono">
-                                                    {svc.url}
-                                                </span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <p className="text-sm text-muted-foreground py-4 text-center">
-                                        Aucun service configuré
-                                    </p>
+                                {!settings.telegram.configured && (
+                                    <p className="text-xs text-muted-foreground">Renseigne les deux variables puis redémarre le backend.</p>
                                 )}
                             </div>
-                        </CardContent>
-                    </Card>
-                </motion.div>
+                        </Panel>
+                    </motion.div>
 
-                {/* Application Config */}
-                <motion.div variants={fadeUp}>
-                    <Card className="border-0 ring-1 ring-white/5 bg-card/40 backdrop-blur-sm overflow-hidden">
-                        <CardContent className="p-0">
-                            <div className="flex items-center gap-2 px-5 py-3 border-b border-white/5">
-                                <Shield className="h-4 w-4 text-emerald-400" />
-                                <span className="text-sm font-semibold">
-                                    Application
-                                </span>
-                            </div>
-                            <div className="px-5 py-3 space-y-1 divide-y divide-white/5">
+                    {/* ── Application ──────────────────────────── */}
+                    <motion.div variants={fadeUp}>
+                        <Panel title="Application" icon={ShieldCheck} iconClassName="text-emerald-400" className="h-full" bodyClassName="py-2">
+                            <div className="divide-y divide-white/[0.05]">
                                 <ConfigRow
+                                    icon={ShieldCheck}
                                     label="Authentification"
-                                    value={`Session JWT de ${settings.auth.jwt_expiration_hours}h`}
-                                    configured={true}
-                                    icon={Shield}
+                                    tone={settings.auth.default_secret ? "error" : "info"}
+                                    badge={settings.auth.default_secret ? "Mot de passe par défaut" : undefined}
+                                    value={`Session valable ${plural(settings.auth.jwt_expiration_hours, "heure")}`}
                                 />
                                 <ConfigRow
-                                    label="TMDB"
-                                    value={
-                                        settings.tmdb.configured
-                                            ? "Clé API configurée"
-                                            : "TMDB_API_KEY non définie"
-                                    }
-                                    configured={settings.tmdb.configured}
                                     icon={Film}
+                                    label="TMDB (affiches, tendances)"
+                                    tone={settings.tmdb.configured ? "ok" : "warning"}
+                                    value={
+                                        settings.tmdb.configured ? (
+                                            "Clé API définie"
+                                        ) : (
+                                            <>
+                                                Ajoute <code className="font-mono">TMDB_API_KEY</code> au .env
+                                            </>
+                                        )
+                                    }
                                 />
                                 <ConfigRow
-                                    label="CORS Origins"
-                                    value={settings.cors.origins.join(", ")}
-                                    configured={true}
                                     icon={Globe}
+                                    label="Origines autorisées (CORS)"
+                                    tone="info"
+                                    value={
+                                        settings.cors.origins.length ? (
+                                            <span className="font-mono" title={settings.cors.origins.join(", ")}>
+                                                {settings.cors.origins.join(", ")}
+                                            </span>
+                                        ) : (
+                                            "Aucune restriction déclarée"
+                                        )
+                                    }
                                 />
                                 <ConfigRow
-                                    label="Health Checks"
-                                    value={`Intervalle: ${settings.scheduler.health_check_interval}`}
-                                    configured={true}
                                     icon={Clock}
+                                    label="Contrôles de santé"
+                                    tone="info"
+                                    value={`Toutes les ${settings.scheduler.health_check_interval.replace(/s$/, " s")}`}
                                 />
                             </div>
-                        </CardContent>
-                    </Card>
-                </motion.div>
-
-                {/* Quick Links */}
-                <div className="space-y-2">
-                    <SettingsLink
-                        href="/settings/profile-overrides"
-                        icon={Target}
-                        iconColor="text-violet-400"
-                        iconBg="bg-violet-500/20"
-                        title="Profils TRaSH par média"
-                        description="Assigner un profil TRaSH spécifique à une série ou un film"
-                    />
-                    <SettingsLink
-                        href="/settings/sabnzbd-config"
-                        icon={Shield}
-                        iconColor="text-orange-400"
-                        iconBg="bg-orange-500/20"
-                        title="SABnzbd — TRaSH Config"
-                        description="Audit et optimisation SABnzbd selon TRaSH Guides"
-                    />
+                        </Panel>
+                    </motion.div>
                 </div>
+            )}
 
-                {/* App Info */}
-                <motion.div variants={fadeUp}>
-                    <Card className="border-0 ring-1 ring-white/5 bg-card/20 backdrop-blur-sm">
-                        <CardContent className="p-4">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <Palette className="h-4 w-4 text-muted-foreground/40" />
-                                    <div>
-                                        <p className="text-sm font-semibold">
-                                            ArrMada
-                                        </p>
-                                        <p className="text-xs text-muted-foreground">
-                                            v0.1.0 — Unified *arr stack management
-                                        </p>
-                                    </div>
-                                </div>
-                                <Badge
-                                    variant="outline"
-                                    className="font-mono text-[10px] border-white/10"
-                                >
-                                    FastAPI + Next.js 14
-                                </Badge>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </motion.div>
+            {/* ── À propos ───────────────────────────────────── */}
+            <motion.div variants={fadeUp}>
+                <SpotlightCard interactive={false} className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
+                    <div className="relative z-[2] flex items-center gap-3">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src="/logo-mark.png" alt="" className="h-11 w-11 rounded-xl ring-1 ring-primary/30 shadow-[0_0_20px_-4px_hsl(var(--primary)/0.7)]" />
+                        <div>
+                            <p className="font-semibold">
+                                Arr<span className="text-gradient">Mada</span>
+                            </p>
+                            <p className="text-xs text-muted-foreground">Le poste de commandement de ta stack *arr</p>
+                        </div>
+                    </div>
+                    <div className="relative z-[2] flex flex-wrap gap-2 sm:ml-auto">
+                        <span className="chip">
+                            <Info className="h-3 w-3" /> Interface v{APP_VERSION}
+                        </span>
+                        <span className="chip">
+                            <Server className="h-3 w-3" /> API {backendVersion ? `v${backendVersion}` : "—"}
+                        </span>
+                        {setup?.database_type && (
+                            <span className="chip">
+                                <Database className="h-3 w-3" /> {setup.database_type === "postgresql" ? "PostgreSQL" : "SQLite"}
+                            </span>
+                        )}
+                    </div>
+                </SpotlightCard>
             </motion.div>
-        </>
+        </motion.div>
     );
 }

@@ -1,15 +1,13 @@
 """Yamaha AVR API — discovery, instances and remote control."""
 
-from typing import List
-
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
 from app.models.service import Service
-from app.services.encryption import encrypt_api_key
 from app.services import yamaha as yamaha_service
+from app.services.encryption import encrypt_api_key
 
 router = APIRouter(
     prefix="/api/yamaha",
@@ -19,7 +17,7 @@ router = APIRouter(
 
 
 @router.get("/discover")
-async def discover(db: AsyncSession = Depends(get_db)) -> List[dict]:
+async def discover(db: AsyncSession = Depends(get_db)) -> list[dict]:
     """Find Yamaha AVRs on the LAN (SSDP + YXC probe of known subnets)."""
     return await yamaha_service.discover(db)
 
@@ -98,6 +96,32 @@ async def add_setting(data: dict, db: AsyncSession = Depends(get_db)):
     await db.commit()
     await db.refresh(svc)
     return {"id": svc.id, "message": "Ampli ajouté"}
+
+
+@router.put("/settings/{service_id}")
+async def update_setting(service_id: int, data: dict, db: AsyncSession = Depends(get_db)):
+    """Edit an AVR in place (name / URL) instead of creating a duplicate row."""
+    from app.services.yamaha import _base
+
+    svc = await db.get(Service, service_id)
+    if not svc or svc.type != "yamaha":
+        raise HTTPException(status_code=404, detail="Ampli introuvable")
+
+    url = _base(data.get("url") or "")
+    if url and url != svc.url:
+        dup = await db.execute(
+            select(Service).where(Service.type == "yamaha", Service.url == url, Service.id != service_id)
+        )
+        if dup.scalars().first():
+            raise HTTPException(status_code=409, detail="Un autre ampli utilise déjà cette adresse")
+        svc.url = url
+    if data.get("name"):
+        svc.name = data["name"]
+    if "is_enabled" in data:
+        svc.is_enabled = bool(data["is_enabled"])
+    await db.commit()
+    await db.refresh(svc)
+    return {"id": svc.id, "message": "Ampli mis à jour"}
 
 
 @router.delete("/settings/{service_id}")

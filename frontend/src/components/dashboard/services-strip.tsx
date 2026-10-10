@@ -73,7 +73,7 @@ export function ServicesStrip() {
                     variants={stagger(0.1, 0.05)}
                     initial="hidden"
                     animate="show"
-                    className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6"
+                    className="grid grid-cols-2 gap-2 sm:grid-cols-[repeat(auto-fill,minmax(170px,1fr))]"
                 >
                     {list.map((svc) => {
                         const meta = SERVICE_META[svc.type];

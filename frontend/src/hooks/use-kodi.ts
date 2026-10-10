@@ -132,13 +132,30 @@ export function useKodiDrift(enabled = true) {
     });
 }
 
+/**
+ * Nettoyage de la bibliothèque Kodi (VideoLibrary.Clean : retire les
+ * entrées dont le fichier n'existe plus). Le backend répond 200 même en
+ * cas d'échec ({status:"error"}) : on le convertit en vraie erreur.
+ */
 export function useKodiClean() {
-    return useMutation<{ status: string; detail?: string }, Error, { service_id?: number } | void>({
-        mutationFn: (body) =>
-            apiFetch("/api/kodi/clean", { method: "POST", body: JSON.stringify(body || {}) }),
+    const qc = useQueryClient();
+    return useMutation<{ status: string; detail?: string; kodi?: string }, Error, { service_id?: number } | void>({
+        mutationFn: async (body) => {
+            const res = await apiFetch<{ status: string; detail?: string; kodi?: string }>("/api/kodi/clean", {
+                method: "POST",
+                body: JSON.stringify(body || {}),
+            });
+            if (res?.status === "error") throw new Error(res.detail || "Kodi a refusé le nettoyage");
+            return res;
+        },
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ["kodi", "drift"] });
+            qc.invalidateQueries({ queryKey: ["kodi", "watched"] });
+        },
     });
 }
 
+/** Scan de bibliothèque sur tous les Kodi : renvoie le nombre de succès / échecs. */
 export function useKodiSync() {
     const qc = useQueryClient();
     return useMutation<{ success: number; failed: number }, Error, void>({
@@ -149,12 +166,53 @@ export function useKodiSync() {
 
 /* ── Settings (instances) ──────────────────────────────────── */
 
+/**
+ * Instance Kodi telle que renvoyée par GET /api/kodi/settings.
+ * SÉCURITÉ : le backend ne renvoie plus le mot de passe (avant : en clair),
+ * seulement l'utilisateur et un booléen `has_password`.
+ * `api_key` n'existe plus que pour un backend ancien (non utilisé).
+ */
 export interface KodiInstance {
     id: number;
     name: string;
     url: string;
     is_enabled: boolean;
-    api_key: string;
+    username?: string;
+    has_password?: boolean;
+    /** @deprecated ancien format "user:pass" — n'est plus exposé. */
+    api_key?: string;
+}
+
+/** Utilisateur Kodi, quel que soit le format renvoyé par le backend. */
+export function kodiUsername(k: KodiInstance): string {
+    if (k.username !== undefined) return k.username;
+    return k.api_key?.split(":")[0] ?? "";
+}
+
+/** Corps envoyé pour créer / modifier un Kodi. */
+export interface KodiSettingsPayload {
+    name: string;
+    url: string;
+    username: string;
+    /** Vide = conserver le mot de passe déjà enregistré. */
+    password: string;
+    is_enabled?: boolean;
+}
+
+/**
+ * Convertit le formulaire en corps d'API. `api_key` ("user:pass") n'est
+ * envoyé que si un nouveau mot de passe est saisi, pour qu'un backend
+ * ancien n'écrase jamais le mot de passe existant par un mot de passe vide.
+ */
+function kodiBody(p: KodiSettingsPayload) {
+    return {
+        name: p.name,
+        url: p.url,
+        username: p.username,
+        password: p.password,
+        is_enabled: p.is_enabled ?? true,
+        ...(p.password ? { api_key: `${p.username}:${p.password}` } : {}),
+    };
 }
 
 export function useKodiSettings() {
@@ -166,14 +224,20 @@ export function useKodiSettings() {
 
 export function useAddKodi() {
     const qc = useQueryClient();
-    return useMutation<
-        { id: number; message: string },
-        Error,
-        { name: string; url: string; api_key: string; is_enabled?: boolean }
-    >({
+    return useMutation<{ id: number; message: string }, Error, KodiSettingsPayload>({
         mutationFn: (body) =>
-            apiFetch("/api/kodi/settings", { method: "POST", body: JSON.stringify(body) }),
-        onSuccess: () => qc.invalidateQueries({ queryKey: ["kodi", "settings"] }),
+            apiFetch("/api/kodi/settings", { method: "POST", body: JSON.stringify(kodiBody(body)) }),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ["kodi"] }),
+    });
+}
+
+/** Modifier un Kodi existant (y compris son URL) sans créer de doublon. */
+export function useUpdateKodi() {
+    const qc = useQueryClient();
+    return useMutation<{ id: number; message: string }, Error, { id: number } & KodiSettingsPayload>({
+        mutationFn: ({ id, ...body }) =>
+            apiFetch(`/api/kodi/settings/${id}`, { method: "PUT", body: JSON.stringify(kodiBody(body)) }),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ["kodi"] }),
     });
 }
 
@@ -181,7 +245,7 @@ export function useDeleteKodi() {
     const qc = useQueryClient();
     return useMutation<{ status: string }, Error, number>({
         mutationFn: (id) => apiFetch(`/api/kodi/settings/${id}`, { method: "DELETE" }),
-        onSuccess: () => qc.invalidateQueries({ queryKey: ["kodi", "settings"] }),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ["kodi"] }),
     });
 }
 
@@ -195,6 +259,7 @@ export function useTestKodi() {
     });
 }
 
+/** Découverte mDNS : peut renvoyer plusieurs Kodi (salon, chambre…). */
 export function useKodiDiscover() {
     return useMutation<{ name: string; url: string }[], Error, void>({
         mutationFn: () => apiFetch("/api/kodi/discover"),

@@ -1,5 +1,37 @@
 import { HealthStatusType, ServiceType } from ".";
 
+/**
+ * Types des « services » ArrMada.
+ * ----------------------------------------------------------------
+ * En base, la table `services` contient À LA FOIS les services *arr
+ * (Sonarr, Radarr…) et des appareils du salon (Kodi, ampli Yamaha) qui
+ * réutilisent la même table pour stocker URL + identifiants chiffrés.
+ * Côté interface on les sépare : les appareils ont leurs propres pages
+ * (/settings/kodi, /settings/yamaha) et ne doivent jamais apparaître dans
+ * la liste des services *arr (avant : carte grise avec icône inconnue).
+ */
+
+/** Types d'appareils stockés dans la table services mais gérés à part. */
+export const DEVICE_TYPES = ["kodi", "yamaha"] as const;
+export type DeviceType = (typeof DEVICE_TYPES)[number];
+
+/** Liste ordonnée des services *arr gérables depuis /settings/services. */
+export const ARR_SERVICE_TYPES: ServiceType[] = [
+    "sonarr",
+    "radarr",
+    "lidarr",
+    "readarr",
+    "prowlarr",
+    "bazarr",
+    "jellyfin",
+    "sabnzbd",
+];
+
+/** Vrai si l'entrée est un service *arr (et pas un appareil Kodi/Yamaha). */
+export function isArrService(service: { type: string }): boolean {
+    return (ARR_SERVICE_TYPES as string[]).includes(service.type?.toLowerCase());
+}
+
 /** A connected *arr service */
 export interface ArrService {
     id: number;
@@ -43,6 +75,18 @@ export interface TestConnectionResult {
     latency_ms: number | null;
     version: string | null;
     error: string | null;
+}
+
+/**
+ * Test d'une configuration AVANT enregistrement (POST /api/services/test).
+ * En modification, `api_key` peut rester vide : le backend réutilise alors
+ * la clé déjà stockée pour `service_id`.
+ */
+export interface TestServiceDraftPayload {
+    type: ServiceType;
+    url: string;
+    api_key?: string;
+    service_id?: number;
 }
 
 /** Create service payload */

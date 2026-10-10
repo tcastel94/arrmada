@@ -1,150 +1,159 @@
 "use client";
 
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-    Film,
-    Tv,
-    Music,
-    BookOpen,
-    Search,
-    Subtitles,
-    PlayCircle,
-    Download,
-    MoreVertical,
-    Trash2,
-    Zap,
-    Pencil,
-} from "lucide-react";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { cn } from "@/lib/utils";
-import { SERVICE_META, STATUS_COLORS } from "@/lib/constants";
-import { ArrService } from "@/types/service";
+/**
+ * Carte d'un service *arr (page Paramètres → Services *arr).
+ * ----------------------------------------------------------------
+ * - Bouton « Tester » visible (avant : caché dans un menu « ⋮ »), avec son
+ *   PROPRE état de chargement (avant : un isPending global grisait toutes
+ *   les cartes en même temps).
+ * - Interrupteur Activé/Désactivé direct (mise à jour optimiste).
+ * - Statut en français + date du dernier contrôle.
+ * - Suppression → confirmation gérée par la page (ConfirmDialog).
+ */
 import { motion } from "framer-motion";
-import type { LucideIcon } from "lucide-react";
-
-const ICON_MAP: Record<string, LucideIcon> = {
-    tv: Tv,
-    film: Film,
-    music: Music,
-    "book-open": BookOpen,
-    search: Search,
-    subtitles: Subtitles,
-    "play-circle": PlayCircle,
-    download: Download,
-};
+import { Clock, Loader2, Pencil, Trash2, Zap } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { SpotlightCard } from "@/components/fx/spotlight-card";
+import { StatusDot } from "@/components/fx/status-dot";
+import { TypeIcon } from "@/components/services/service-config";
+import { serviceVisual, statusLabel } from "@/components/services/service-meta";
+import { useTestConnection, useUpdateService } from "@/hooks/use-services";
+import { formatLongDateTime, timeAgo } from "@/lib/format";
+import { scaleIn } from "@/lib/motion";
+import { cn } from "@/lib/utils";
+import type { ArrService } from "@/types/service";
 
 interface ServiceCardProps {
     service: ArrService;
-    onTest: (id: number) => void;
     onEdit: (service: ArrService) => void;
-    onDelete: (id: number) => void;
-    isTesting?: boolean;
+    onDelete: (service: ArrService) => void;
 }
 
-export function ServiceCard({
-    service,
-    onTest,
-    onEdit,
-    onDelete,
-    isTesting,
-}: ServiceCardProps) {
-    const meta = SERVICE_META[service.type] || {
-        label: service.type,
-        color: "#888",
-        icon: "search",
-    };
-    const Icon = ICON_MAP[meta.icon] || Search;
-    const statusColor = STATUS_COLORS[service.last_status] || STATUS_COLORS.unknown;
+export function ServiceCard({ service, onEdit, onDelete }: ServiceCardProps) {
+    const visual = serviceVisual(service.type);
+    const test = useTestConnection();
+    const update = useUpdateService();
+
+    const disabled = !service.is_enabled;
+    const status = disabled ? "unknown" : service.last_status ?? "unknown";
+    const lastCheck = service.last_health_check;
+
+    const runTest = () =>
+        test.mutate(service.id, {
+            onSuccess: (r) =>
+                r.success
+                    ? toast.success(`${service.name} répond`, {
+                          description: [r.latency_ms != null ? `${r.latency_ms} ms` : null, r.version ? `v${r.version}` : null]
+                              .filter(Boolean)
+                              .join(" · "),
+                      })
+                    : toast.error(`${service.name} ne répond pas`, { description: r.error ?? statusLabel(r.status) }),
+            onError: (e) => toast.error(`Test de ${service.name} impossible`, { description: e.message }),
+        });
+
+    const toggle = (next: boolean) =>
+        update.mutate(
+            { id: service.id, data: { is_enabled: next } },
+            {
+                onSuccess: () => toast.success(next ? `${service.name} réactivé` : `${service.name} désactivé`),
+                onError: (e) => toast.error("Changement refusé", { description: e.message }),
+            },
+        );
 
     return (
-        <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.2 }}
-        >
-            <Card className="transition-all duration-200 hover:border-primary/20 hover:scale-[1.02]">
-                <CardContent className="p-5">
-                    <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-3">
-                            <div
-                                className="flex h-10 w-10 items-center justify-center rounded-lg"
-                                style={{ backgroundColor: `${meta.color}20` }}
-                            >
-                                <Icon className="h-5 w-5" style={{ color: meta.color }} />
-                            </div>
-                            <div>
-                                <h3 className="font-semibold">{service.name}</h3>
-                                <p className="text-xs text-muted-foreground">{meta.label}</p>
-                            </div>
-                        </div>
+        <motion.div layout variants={scaleIn} exit={{ opacity: 0, scale: 0.94, transition: { duration: 0.2 } }}>
+            <SpotlightCard interactive className={cn("group relative h-full overflow-hidden", disabled && "opacity-70")}>
+                {/* Lueur aux couleurs de l'application */}
+                <span
+                    aria-hidden
+                    className="pointer-events-none absolute -left-10 -top-10 h-32 w-32 rounded-full opacity-20 blur-2xl transition-opacity duration-500 group-hover:opacity-40"
+                    style={{ background: visual.color }}
+                />
 
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8">
-                                    <MoreVertical className="h-4 w-4" />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => onTest(service.id)}>
-                                    <Zap className="h-4 w-4 mr-2" />
-                                    Tester la connexion
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => onEdit(service)}>
-                                    <Pencil className="h-4 w-4 mr-2" />
-                                    Modifier
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                    onClick={() => onDelete(service.id)}
-                                    className="text-destructive focus:text-destructive"
-                                >
-                                    <Trash2 className="h-4 w-4 mr-2" />
-                                    Supprimer
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+                <div className="relative z-[2] flex h-full flex-col gap-4 p-4">
+                    {/* En-tête : icône, nom, interrupteur */}
+                    <div className="flex items-start gap-3">
+                        <TypeIcon type={service.type} />
+                        <div className="min-w-0 flex-1">
+                            <h3 className="truncate font-semibold leading-tight">{service.name}</h3>
+                            {/* Type + rôle ; le type est omis s'il est déjà le nom (« Radarr / Radarr »). */}
+                            <p className="truncate text-xs text-muted-foreground">
+                                {service.name.trim().toLowerCase() === visual.label.toLowerCase() ? visual.role : `${visual.label} · ${visual.role}`}
+                            </p>
+                        </div>
+                        <Switch
+                            checked={service.is_enabled}
+                            onCheckedChange={toggle}
+                            disabled={update.isPending}
+                            aria-label={service.is_enabled ? `Désactiver ${service.name}` : `Activer ${service.name}`}
+                        />
                     </div>
 
-                    {/* URL & Status */}
-                    <div className="mt-4 space-y-2">
-                        <p className="text-xs text-muted-foreground truncate font-mono">
-                            {service.url}
-                        </p>
+                    <p className="truncate rounded-lg bg-background/40 px-2.5 py-1.5 font-mono text-xs text-muted-foreground" title={service.url}>
+                        {service.url}
+                    </p>
 
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <span className={cn("h-2 w-2 rounded-full", statusColor)} />
-                                <span className="text-sm capitalize">{service.last_status}</span>
-                            </div>
-
-                            {service.last_latency_ms !== null && (
-                                <Badge variant="outline" className="text-xs">
-                                    {service.last_latency_ms}ms
-                                </Badge>
+                    {/* Statut + latence + version */}
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <span
+                            className={cn(
+                                "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 font-medium",
+                                disabled
+                                    ? "bg-slate-500/10 text-slate-300"
+                                    : status === "online"
+                                      ? "bg-emerald-500/10 text-emerald-300"
+                                      : status === "offline"
+                                        ? "bg-red-500/10 text-red-300"
+                                        : status === "degraded"
+                                          ? "bg-amber-500/10 text-amber-300"
+                                          : "bg-slate-500/10 text-slate-300",
                             )}
-                        </div>
-
+                        >
+                            <StatusDot tone={status} size="sm" />
+                            {disabled ? "Désactivé" : statusLabel(status)}
+                        </span>
+                        {!disabled && status === "online" && service.last_latency_ms != null && (
+                            <span className="rounded-full bg-white/[0.04] px-2 py-0.5 tabular-nums text-muted-foreground">
+                                {service.last_latency_ms} ms
+                            </span>
+                        )}
                         {service.version && (
-                            <p className="text-xs text-muted-foreground">
-                                v{service.version}
-                            </p>
+                            <span className="rounded-full bg-white/[0.04] px-2 py-0.5 font-mono text-muted-foreground">v{service.version}</span>
                         )}
                     </div>
 
-                    {/* Disabled badge */}
-                    {!service.is_enabled && (
-                        <Badge variant="secondary" className="mt-2">
-                            Désactivé
-                        </Badge>
-                    )}
-                </CardContent>
-            </Card>
+                    <div className="mt-auto flex items-center gap-1.5 border-t border-white/[0.05] pt-3">
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <span className="mr-auto flex min-w-0 items-center gap-1 text-[11px] text-muted-foreground">
+                                    <Clock className="h-3 w-3 shrink-0" />
+                                    <span className="truncate">{lastCheck ? timeAgo(lastCheck) : "Jamais vérifié"}</span>
+                                </span>
+                            </TooltipTrigger>
+                            {lastCheck && <TooltipContent>Dernier contrôle : {formatLongDateTime(lastCheck)}</TooltipContent>}
+                        </Tooltip>
+                        <Button size="sm" variant="outline" onClick={runTest} disabled={test.isPending || disabled}>
+                            {test.isPending ? <Loader2 className="animate-spin" /> : <Zap />}
+                            Tester
+                        </Button>
+                        <Button size="icon-sm" variant="ghost" onClick={() => onEdit(service)} aria-label={`Modifier ${service.name}`}>
+                            <Pencil />
+                        </Button>
+                        <Button
+                            size="icon-sm"
+                            variant="ghost"
+                            className="text-muted-foreground hover:bg-red-500/10 hover:text-red-400"
+                            onClick={() => onDelete(service)}
+                            aria-label={`Supprimer ${service.name}`}
+                        >
+                            <Trash2 />
+                        </Button>
+                    </div>
+                </div>
+            </SpotlightCard>
         </motion.div>
     );
 }

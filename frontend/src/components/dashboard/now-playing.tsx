@@ -163,7 +163,7 @@ export function NowPlayingCard() {
                                 </div>
 
                                 {/* Commandes */}
-                                <div className="mt-3 flex items-center gap-2">
+                                <div className="mt-3 flex min-w-0 items-center gap-2">
                                     <Button size="sm" onClick={() => send("playpause")} disabled={control.isPending}>
                                         {np.paused ? <Play className="fill-current" /> : <Pause className="fill-current" />}
                                         {np.paused ? "Reprendre" : "Pause"}
@@ -179,7 +179,7 @@ export function NowPlayingCard() {
                                         <Square className="fill-current" />
                                     </Button>
                                     <div className="ml-auto flex items-center gap-3 text-xs">
-                                        <Link href="/remote" className="text-muted-foreground transition-colors hover:text-primary">
+                                        <Link href="/remote" className="hidden text-muted-foreground transition-colors hover:text-primary sm:inline">
                                             Télécommande
                                         </Link>
                                         {np.media_id && np.media_type && (

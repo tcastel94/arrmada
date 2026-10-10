@@ -1,15 +1,15 @@
 """Kodi API — settings and synchronization."""
 
-from typing import Any, List
+from typing import Any
 
-from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
 from app.models.service import Service
-from app.services.encryption import encrypt_api_key, decrypt_api_key
 from app.services import kodi as kodi_service
+from app.services.encryption import decrypt_api_key, encrypt_api_key
 from app.services.kodi import discover_kodi, sync_kodi
 from app.utils.cache import cache
 
@@ -20,7 +20,7 @@ router = APIRouter(
 )
 
 @router.get("/discover")
-async def discover_instances() -> List[dict]:
+async def discover_instances() -> list[dict]:
     """Discover Kodi instances using mDNS."""
     return await discover_kodi()
 
@@ -98,23 +98,69 @@ async def test_kodi(service_id: int, db: AsyncSession = Depends(get_db)):
     """Ping a Kodi instance and read its version."""
     return await kodi_service.test_connection(db, service_id)
 
+# ── Settings (instances) ──────────────────────────────────────
+# Les identifiants Kodi sont stockés chiffrés dans `Service.api_key` sous la
+# forme "utilisateur:motdepasse" (format attendu par app.services.kodi).
+
+
+def _split_creds(service: Service) -> tuple[str, str]:
+    """Return (username, password) decrypted from the stored 'user:pass'."""
+    if not service.api_key:
+        return "", ""
+    creds = decrypt_api_key(service.api_key) or ""
+    user, _, password = creds.partition(":")
+    return user, password
+
+
+def _public(service: Service) -> dict[str, Any]:
+    """Public view of a Kodi instance.
+
+    SECURITY: the password is never sent back to the browser (it used to be
+    returned decrypted, in clear text). Only the username and a boolean.
+    """
+    user, password = _split_creds(service)
+    return {
+        "id": service.id,
+        "name": service.name,
+        "url": service.url,
+        "is_enabled": service.is_enabled,
+        "username": user,
+        "has_password": bool(password),
+    }
+
+
+def _new_creds(data: dict, existing: Service | None) -> str | None:
+    """Build the 'user:pass' string to store, or None to keep the current one.
+
+    Accepts the new ``username`` / ``password`` fields, or the legacy
+    ``api_key`` ("user:pass"). An EMPTY password never overwrites the stored
+    one: re-saving the form (e.g. to rename the instance) used to wipe the
+    password because the field is always blank in the UI.
+    """
+    if "username" in data or "password" in data:
+        user = (data.get("username") or "").strip()
+        password = data.get("password") or ""
+    elif data.get("api_key") is not None:
+        user, _, password = str(data.get("api_key")).partition(":")
+    else:
+        return None
+
+    if not password and existing is not None:
+        old_user, old_password = _split_creds(existing)
+        user = user or old_user
+        password = old_password
+    if not user and not password:
+        return ""
+    return f"{user}:{password}"
+
+
 @router.get("/settings")
 async def get_kodi_settings(db: AsyncSession = Depends(get_db)):
-    """Fetch all Kodi services from database."""
-    stmt = select(Service).where(Service.type == "kodi")
+    """Fetch all Kodi services from database (password never included)."""
+    stmt = select(Service).where(Service.type == "kodi").order_by(Service.name)
     result = await db.execute(stmt)
-    kodis = result.scalars().all()
-    
-    return [
-        {
-            "id": k.id,
-            "name": k.name,
-            "url": k.url,
-            "is_enabled": k.is_enabled,
-            "api_key": decrypt_api_key(k.api_key) if k.api_key else ""
-        }
-        for k in kodis
-    ]
+    return [_public(k) for k in result.scalars().all()]
+
 
 @router.post("/settings")
 async def add_kodi_setting(data: dict, db: AsyncSession = Depends(get_db)):
@@ -123,35 +169,66 @@ async def add_kodi_setting(data: dict, db: AsyncSession = Depends(get_db)):
     Adding the same Kodi (same URL) twice used to create a duplicate row, so a
     sync would scan the same Kodi several times. We now reuse the existing entry.
     """
-    url = (data.get("url") or "").strip()
+    url = (data.get("url") or "").strip().rstrip("/")
+    if not url:
+        return {"status": "error", "detail": "URL requise"}
 
-    existing = None
-    if url:
-        res = await db.execute(
-            select(Service).where(Service.type == "kodi", Service.url == url)
-        )
-        existing = res.scalars().first()
+    res = await db.execute(select(Service).where(Service.type == "kodi", Service.url == url))
+    existing = res.scalars().first()
 
     if existing:
-        existing.name = data.get("name", existing.name)
-        if data.get("api_key"):
-            existing.api_key = encrypt_api_key(data.get("api_key", ""))
+        existing.name = data.get("name") or existing.name
+        creds = _new_creds(data, existing)
+        if creds is not None:
+            existing.api_key = encrypt_api_key(creds)
         existing.is_enabled = data.get("is_enabled", True)
         await db.commit()
         await db.refresh(existing)
         return {"id": existing.id, "message": "Kodi mis à jour"}
 
     new_kodi = Service(
-        name=data.get("name", "Kodi"),
+        name=data.get("name") or "Kodi",
         type="kodi",
         url=url,
-        api_key=encrypt_api_key(data.get("api_key", "")),
-        is_enabled=data.get("is_enabled", True)
+        api_key=encrypt_api_key(_new_creds(data, None) or ""),
+        is_enabled=data.get("is_enabled", True),
     )
     db.add(new_kodi)
     await db.commit()
     await db.refresh(new_kodi)
-    return {"id": new_kodi.id, "message": "Kodi added"}
+    return {"id": new_kodi.id, "message": "Kodi ajouté"}
+
+
+@router.put("/settings/{service_id}")
+async def update_kodi_setting(service_id: int, data: dict, db: AsyncSession = Depends(get_db)):
+    """Edit an existing Kodi in place (name, URL, credentials).
+
+    Changing the URL through POST created a second row; editing by id keeps a
+    single instance. An empty password keeps the stored one.
+    """
+    svc = await db.get(Service, service_id)
+    if not svc or svc.type != "kodi":
+        raise HTTPException(status_code=404, detail="Kodi introuvable")
+
+    url = (data.get("url") or "").strip().rstrip("/")
+    if url and url != svc.url:
+        dup = await db.execute(
+            select(Service).where(Service.type == "kodi", Service.url == url, Service.id != service_id)
+        )
+        if dup.scalars().first():
+            raise HTTPException(status_code=409, detail="Un autre Kodi utilise déjà cette URL")
+        svc.url = url
+    if data.get("name"):
+        svc.name = data["name"]
+    creds = _new_creds(data, svc)
+    if creds is not None:
+        svc.api_key = encrypt_api_key(creds)
+    if "is_enabled" in data:
+        svc.is_enabled = bool(data["is_enabled"])
+    await db.commit()
+    await db.refresh(svc)
+    return {"id": svc.id, "message": "Kodi mis à jour"}
+
 
 @router.delete("/settings/{service_id}")
 async def delete_kodi_setting(service_id: int, db: AsyncSession = Depends(get_db)):

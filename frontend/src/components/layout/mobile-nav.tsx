@@ -61,7 +61,7 @@ export function MobileNav() {
                                     <motion.span
                                         layoutId="mobile-tab-pill"
                                         transition={SPRING}
-                                        className="absolute inset-x-1.5 inset-y-2 rounded-2xl bg-primary/12 shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.25),0_0_24px_-6px_hsl(var(--primary)/0.7)]"
+                                        className="absolute inset-x-1.5 inset-y-2 rounded-2xl bg-primary/[0.12] shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.25),0_0_24px_-6px_hsl(var(--primary)/0.7)]"
                                     />
                                 )}
                                 <span className="relative">
@@ -88,7 +88,7 @@ export function MobileNav() {
                             <motion.span
                                 layoutId="mobile-tab-pill"
                                 transition={SPRING}
-                                className="absolute inset-x-1.5 inset-y-2 rounded-2xl bg-primary/12 shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.25)]"
+                                className="absolute inset-x-1.5 inset-y-2 rounded-2xl bg-primary/[0.12] shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.25)]"
                             />
                         )}
                         <span className="relative">
@@ -170,7 +170,7 @@ function MenuTile({ item, active, badge = 0, wide = false }: { item: NavItem; ac
                     "relative flex h-full items-center gap-2 rounded-2xl border p-3 transition-all",
                     wide ? "justify-start" : "flex-col justify-center text-center",
                     active
-                        ? "border-primary/40 bg-primary/12 text-primary shadow-[0_0_24px_-8px_hsl(var(--primary)/0.7)]"
+                        ? "border-primary/40 bg-primary/[0.12] text-primary shadow-[0_0_24px_-8px_hsl(var(--primary)/0.7)]"
                         : "border-white/[0.06] bg-white/[0.02] text-foreground active:scale-95",
                 )}
             >

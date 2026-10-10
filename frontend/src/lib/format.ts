@@ -82,11 +82,18 @@ export function timeAgo(value: string | number | Date | null | undefined, opts: 
         const m = Math.max(1, Math.round(diff / 60));
         return short ? `${m} min` : `il y a ${m} min`;
     }
-    if (diff < 86400) {
+    if (diff < 3 * 3600) {
         const h = Math.round(diff / 3600);
         return short ? `${h} h` : `il y a ${h} h`;
     }
-    const days = Math.floor(diff / 86400);
+    // Différence en jours CALENDAIRES (minuit local) : un évènement d'hier
+    // 23 h vu aujourd'hui à 8 h est « hier », même s'il date de moins de 24 h.
+    const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+    const days = Math.round((startOf(new Date()) - startOf(d)) / 86_400_000);
+    if (days === 0) {
+        const h = Math.round(diff / 3600);
+        return short ? `${h} h` : `il y a ${h} h`;
+    }
     if (days === 1) return "hier";
     if (days < 7) return short ? `${days} j` : `il y a ${days} j`;
     return formatShortDate(d);

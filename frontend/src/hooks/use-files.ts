@@ -1,9 +1,16 @@
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+/**
+ * Imports de fichiers : historique SABnzbd, chemins NAS, téléchargements
+ * terminés mais jamais importés (« bloqués »), import manuel / groupé et
+ * rapports de l'auto-import périodique.
+ * Utilisé par l'onglet « Imports » de /downloads (ex-page /fichiers).
+ * (Les hooks Docker ont déménagé dans use-docker.ts.)
+ */
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api-client";
 
-// ── SABnzbd History ──────────────────────────────────────────
+// ── Historique SABnzbd ───────────────────────────────────────
 
 export interface StageAction {
     stage: string;
@@ -13,10 +20,12 @@ export interface StageAction {
 export interface HistoryItem {
     nzo_id: string;
     name: string;
+    /** Statut SABnzbd brut (anglais) : Completed | Failed | Extracting… */
     status: string;
     category: string;
     size_bytes: number;
     size_human: string;
+    /** Fin du téléchargement, en secondes UNIX (SABnzbd). */
     completed_at: number | null;
     storage_path: string;
     download_path: string;
@@ -33,14 +42,21 @@ export interface HistoryResponse {
     stuck_count: number;
 }
 
-export function useSabnzbdHistory(limit = 50) {
+/** Plafond côté backend (Query le=200). */
+export const SAB_HISTORY_MAX = 200;
+
+export function useSabnzbdHistory(limit = 50, enabled = true) {
     return useQuery<HistoryResponse>({
         queryKey: ["sabnzbd-history", limit],
-        queryFn: () => apiFetch(`/api/files/history?limit=${limit}`),
+        queryFn: () => apiFetch(`/api/files/history?limit=${Math.min(limit, SAB_HISTORY_MAX)}`),
+        enabled,
+        // « Voir plus » augmente `limit` : on garde la liste affichée pendant
+        // le chargement de la suivante (pas de retour aux squelettes).
+        placeholderData: keepPreviousData,
     });
 }
 
-// ── NAS Paths ────────────────────────────────────────────────
+// ── Chemins NAS ──────────────────────────────────────────────
 
 export interface PathMappings {
     service_mounts: Record<string, Array<{ host: string; container: string; rw: boolean }>>;
@@ -53,15 +69,17 @@ export function usePathMappings() {
     return useQuery<PathMappings>({
         queryKey: ["path-mappings"],
         queryFn: () => apiFetch("/api/files/paths"),
+        staleTime: 10 * 60_000, // config statique : inutile de la relire souvent
     });
 }
 
-// ── Stuck Downloads ──────────────────────────────────────────
+// ── Téléchargements bloqués (terminés mais pas importés) ─────
 
 export interface StuckDownload {
     nzo_id: string;
     name: string;
     category: string;
+    /** "movie" | "series" | "unknown" (détection automatique côté backend). */
     media_type: string;
     size_human: string;
     storage_path: string;
@@ -77,10 +95,12 @@ export function useStuckDownloads() {
     return useQuery<StuckResponse>({
         queryKey: ["stuck-downloads"],
         queryFn: () => apiFetch("/api/files/stuck"),
+        // Avant : jamais rafraîchi → un import réussi restait affiché.
+        refetchInterval: 60_000,
     });
 }
 
-// ── Manual Import ────────────────────────────────────────────
+// ── Import manuel ────────────────────────────────────────────
 
 export interface ImportResponse {
     success: boolean;
@@ -92,9 +112,14 @@ export interface ImportResponse {
     candidates_total?: number;
 }
 
+export interface ImportPayload {
+    download_path: string;
+    media_type: string;
+}
+
 export function useManualImport() {
     const queryClient = useQueryClient();
-    return useMutation<ImportResponse, Error, { download_path: string; media_type: string }>({
+    return useMutation<ImportResponse, Error, ImportPayload>({
         mutationFn: (payload) =>
             apiFetch("/api/files/import", {
                 method: "POST",
@@ -107,9 +132,13 @@ export function useManualImport() {
     });
 }
 
+/**
+ * Import groupé : le backend répond IMMÉDIATEMENT puis traite les fichiers
+ * en tâche de fond. Un succès signifie donc « lancé », pas « importé ».
+ */
 export function useBulkImport() {
     const queryClient = useQueryClient();
-    return useMutation<{ success: boolean; message: string }, Error, { items: { download_path: string; media_type: string }[] }>({
+    return useMutation<{ success: boolean; message: string }, Error, { items: ImportPayload[] }>({
         mutationFn: (payload) =>
             apiFetch("/api/files/import/bulk", {
                 method: "POST",
@@ -121,6 +150,8 @@ export function useBulkImport() {
         },
     });
 }
+
+// ── Rapports d'auto-import ───────────────────────────────────
 
 export interface AutoImportReportItem {
     name: string;
@@ -139,10 +170,16 @@ export interface AutoImportReport {
     items: AutoImportReportItem[];
 }
 
-export function useAutoImportReports() {
+/**
+ * @param live  vrai quand la section est affichée : le rafraîchissement
+ *              toutes les 30 s ne tourne QUE dans ce cas (avant, il tournait
+ *              en permanence, même section masquée).
+ */
+export function useAutoImportReports(live = true) {
     return useQuery<AutoImportReport[]>({
         queryKey: ["auto-import-reports"],
         queryFn: () => apiFetch("/api/files/auto-import/reports"),
-        refetchInterval: 30_000,
+        enabled: live,
+        refetchInterval: live ? 30_000 : false,
     });
 }

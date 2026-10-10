@@ -108,9 +108,11 @@ const config: Config = {
                     "0%": { transform: "scale(1)", opacity: "0.7" },
                     "100%": { transform: "scale(2.6)", opacity: "0" },
                 },
+                // Uniquement opacity/transform : animer `filter` écraserait les
+                // classes blur-* posées sur les halos (ils deviendraient des disques pleins).
                 "pulse-glow": {
-                    "0%, 100%": { opacity: "0.55", filter: "brightness(1)" },
-                    "50%": { opacity: "1", filter: "brightness(1.25)" },
+                    "0%, 100%": { opacity: "0.55", transform: "scale(1)" },
+                    "50%": { opacity: "1", transform: "scale(1.06)" },
                 },
                 "gradient-x": {
                     "0%, 100%": { backgroundPosition: "0% 50%" },

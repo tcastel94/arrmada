@@ -23,16 +23,16 @@ def normalize_title(title: str) -> str:
 
 
 def format_bytes(size_bytes: int | None) -> str:
-    """Human-readable file size."""
+    """Human-readable file size, French units (Ko, Mo, Go, To) to match the UI."""
     if size_bytes is None or size_bytes == 0:
-        return "0 B"
-    units = ["B", "KB", "MB", "GB", "TB"]
+        return "0 o"
+    units = ["o", "Ko", "Mo", "Go", "To", "Po"]
     idx = 0
     size = float(size_bytes)
     while size >= 1024 and idx < len(units) - 1:
         size /= 1024
         idx += 1
-    return f"{size:.1f} {units[idx]}"
+    return f"{size:.1f}".replace(".", ",") + f" {units[idx]}"
 
 
 def format_duration_ms(ms: int | None) -> str:

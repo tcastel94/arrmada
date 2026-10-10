@@ -1,7 +1,12 @@
 "use client";
 
+/**
+ * Réglages généraux d'ArrMada (lecture seule : ils viennent du fichier
+ * .env du backend) + version de l'application.
+ */
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api-client";
+import { API_URL } from "@/lib/constants";
 
 export interface AppSettings {
     telegram: {
@@ -14,6 +19,11 @@ export interface AppSettings {
     };
     auth: {
         jwt_expiration_hours: number;
+        /**
+         * Vrai si ARRMADA_AUTH_SECRET vaut encore la valeur d'exemple.
+         * Champ optionnel : affiché seulement si le backend l'expose.
+         */
+        default_secret?: boolean;
     };
     cors: {
         origins: string[];
@@ -21,6 +31,8 @@ export interface AppSettings {
     scheduler: {
         health_check_interval: string;
     };
+    /** Version du backend, si l'API la fournit ici. */
+    version?: string;
 }
 
 export function useSettings() {
@@ -30,12 +42,30 @@ export function useSettings() {
     });
 }
 
+/**
+ * Version du backend via /api/health (route publique, sans jeton).
+ * Échec silencieux : on affichera simplement la version de l'interface.
+ */
+export function useBackendVersion() {
+    return useQuery<string | null>({
+        queryKey: ["backend-version"],
+        queryFn: async () => {
+            const res = await fetch(`${API_URL}/api/health`);
+            if (!res.ok) return null;
+            const body = (await res.json().catch(() => null)) as { version?: string } | null;
+            return body?.version ?? null;
+        },
+        staleTime: 10 * 60_000,
+        retry: false,
+    });
+}
+
 export function useTestTelegram() {
-    return useMutation({
-        mutationFn: (message?: string) =>
+    return useMutation<{ success: boolean }, Error, string | undefined>({
+        mutationFn: (message) =>
             apiFetch("/api/settings/telegram/test", {
                 method: "POST",
-                body: JSON.stringify({ message: message || "🧪 Test de notification ArrMada" }),
+                body: JSON.stringify({ message: message || "🧪 Test de notification ArrMada : tout fonctionne !" }),
             }),
     });
 }

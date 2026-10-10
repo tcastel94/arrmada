@@ -1,188 +1,308 @@
 "use client";
 
-import { useState } from "react";
-import { Header } from "@/components/layout/header";
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
+/**
+ * Paramètres → Ampli Yamaha.
+ * ----------------------------------------------------------------
+ * La télécommande a déménagé dans le Salon (/remote) : ici on ne fait
+ * QUE configurer. Corrections : IP personnelle codée en dur retirée,
+ * `DeviceRow` partagé avec Kodi (au lieu d'un copier-coller), suppression
+ * confirmée, édition sans doublon, tous les amplis détectés sélectionnables
+ * (avant : seul le premier pré-remplissait le formulaire).
+ */
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import Link from "next/link";
+import { AnimatePresence, motion } from "framer-motion";
+import { ArrowRight, Loader2, Plus, Radar, Save, Sofa, Speaker } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { EmptyState } from "@/components/shared/empty-state";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Panel } from "@/components/shared/panel";
+import { EmptyState, ErrorState } from "@/components/shared/empty-state";
+import { TableSkeleton } from "@/components/shared/loading-skeleton";
+import { SpotlightCard } from "@/components/fx/spotlight-card";
+import { DeviceRow } from "@/components/settings/device-row";
+import { useStickyValue } from "@/components/settings/use-sticky-value";
+import { DiscoveryResults, type DiscoveredDevice } from "@/components/settings/discovery-results";
+import { FormField } from "@/components/settings/form-field";
 import {
-    Speaker,
-    Trash2,
-    CheckCircle2,
-    XCircle,
-    Loader2,
-    Plus,
-    Radar,
-} from "lucide-react";
-import { motion } from "framer-motion";
-import { toast } from "sonner";
-import {
-    useYamahaSettings,
     useAddYamaha,
     useDeleteYamaha,
     useTestYamaha,
+    useUpdateYamaha,
     useYamahaDiscover,
+    useYamahaSettings,
     type YamahaInstance,
 } from "@/hooks/use-yamaha";
-import { YamahaRemote } from "@/components/yamaha-remote";
+import { plural } from "@/lib/format";
+import { stagger } from "@/lib/motion";
 
-function InstanceRow({ y }: { y: YamahaInstance }) {
-    const test = useTestYamaha();
-    const del = useDeleteYamaha();
-    const [result, setResult] = useState<null | { ok: boolean; label: string }>(null);
-
-    const runTest = () =>
-        test.mutate(y.id, {
-            onSuccess: (r) =>
-                setResult(
-                    r.ok
-                        ? { ok: true, label: `${r.model} · ${r.power} · ${r.volume_pct}%` }
-                        : { ok: false, label: r.detail || "injoignable" },
-                ),
-            onError: (e) => setResult({ ok: false, label: e.message }),
-        });
-
-    return (
-        <div className="flex items-center gap-3 rounded-lg border border-border/50 bg-card/40 p-3">
-            <Speaker className="h-5 w-5 text-orange-400 shrink-0" />
-            <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium truncate">{y.name}</p>
-                <p className="text-xs text-muted-foreground font-mono truncate">{y.url}</p>
-            </div>
-            {result && (
-                <span className={`text-xs flex items-center gap-1 ${result.ok ? "text-emerald-400" : "text-red-400"}`}>
-                    {result.ok ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
-                    {result.label}
-                </span>
-            )}
-            <Button size="sm" variant="outline" className="border-white/10" disabled={test.isPending} onClick={runTest}>
-                {test.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Tester"}
-            </Button>
-            <Button
-                size="icon"
-                variant="ghost"
-                className="h-8 w-8 text-muted-foreground hover:text-red-400"
-                onClick={() => del.mutate(y.id, { onSuccess: () => toast.success("Ampli supprimé.") })}
-            >
-                <Trash2 className="h-4 w-4" />
-            </Button>
-        </div>
-    );
+/** Normalise une adresse (« 192.168.1.30 » → « http://192.168.1.30 ») pour comparer. */
+function normalizeAddress(value: string): string {
+    const v = value.trim().replace(/\/+$/, "");
+    if (!v) return v;
+    return v.startsWith("http") ? v : `http://${v}`;
 }
 
 export default function YamahaSettingsPage() {
-    const { data: instances, isLoading } = useYamahaSettings();
+    const { data: instances, isLoading, isError, error, refetch } = useYamahaSettings();
     const add = useAddYamaha();
+    const update = useUpdateYamaha();
+    const del = useDeleteYamaha();
+    const test = useTestYamaha();
     const discover = useYamahaDiscover();
 
-    const [name, setName] = useState("Ampli Yamaha");
-    const [url, setUrl] = useState("http://192.168.2.70");
+    const [editing, setEditing] = useState<YamahaInstance | null>(null);
+    // Reste affiché pendant l'animation de fermeture de la boîte « Modifier ».
+    const shownEditing = useStickyValue(editing);
+    const [found, setFound] = useState<DiscoveredDevice[] | null>(null);
+    const [prefill, setPrefill] = useState<{ name: string; url: string; nonce: number } | null>(null);
 
-    const submit = () => {
-        if (!url) return;
-        add.mutate(
-            { name, url, is_enabled: true },
-            {
-                onSuccess: (r) => toast.success(r.message || "Ampli enregistré."),
-                onError: (e) => toast.error("Échec : " + e.message),
+    const known = useMemo(() => new Set((instances ?? []).map((y) => normalizeAddress(y.url))), [instances]);
+
+    const runDiscover = () =>
+        discover.mutate(undefined, {
+            onSuccess: (list) => {
+                const devices = (list ?? []).map((d) => ({
+                    key: d.device_id || d.url,
+                    name: d.model_name || "Ampli Yamaha",
+                    url: d.url,
+                    known: known.has(normalizeAddress(d.url)),
+                }));
+                setFound(devices);
+                if (devices.length === 1 && !devices[0].known) {
+                    // Un seul ampli : on pré-remplit directement (gain d'un clic).
+                    setPrefill({ name: devices[0].name, url: devices[0].url, nonce: Date.now() });
+                }
+                if (devices.length === 0) toast.info("Aucun ampli Yamaha détecté sur le réseau.");
             },
-        );
-    };
-
-    const hasInstances = instances && instances.length > 0;
+            onError: (e) => toast.error("Détection impossible", { description: e.message }),
+        });
 
     return (
         <>
-            <Header title="Ampli Yamaha" />
-            <motion.div className="p-4 md:p-6 space-y-6 max-w-4xl mx-auto" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                {/* Live control */}
-                {hasInstances && (
-                    <Card className="bg-card/40 border-border/50">
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2 text-base">
-                                <Speaker className="h-5 w-5 text-orange-400" /> Télécommande
-                            </CardTitle>
-                            <CardDescription>Marche/veille, volume, sourdine et sélection d&apos;entrée en direct.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <YamahaRemote card={false} />
-                        </CardContent>
-                    </Card>
+            {/* Raccourci vers la télécommande (désormais dans le Salon) */}
+            <Link href="/remote" className="block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <SpotlightCard interactive className="group flex items-center gap-4 p-4">
+                    <span className="relative z-[2] flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500/30 to-fuchsia-500/10 text-violet-300 ring-1 ring-violet-400/25">
+                        <Sofa className="h-5 w-5" />
+                    </span>
+                    <div className="relative z-[2] min-w-0 flex-1">
+                        <p className="text-sm font-semibold">La télécommande est dans le Salon</p>
+                        <p className="text-xs text-muted-foreground">Marche/veille, volume, sourdine et entrées, à côté du lecteur Kodi.</p>
+                    </div>
+                    <ArrowRight className="relative z-[2] h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-foreground" />
+                </SpotlightCard>
+            </Link>
+
+            {/* ── Amplis configurés ───────────────────────────── */}
+            <Panel
+                title="Amplis configurés"
+                icon={Speaker}
+                iconClassName="text-orange-300"
+                action={instances && instances.length > 0 ? <span className="text-xs text-muted-foreground">{plural(instances.length, "ampli")}</span> : undefined}
+            >
+                {isLoading ? (
+                    <TableSkeleton rows={1} />
+                ) : isError ? (
+                    <ErrorState compact error={error} onRetry={() => refetch()} />
+                ) : !instances || instances.length === 0 ? (
+                    <EmptyState
+                        compact
+                        icon={Speaker}
+                        title="Aucun ampli"
+                        description="Détecte ou ajoute ton ampli ci-dessous (MusicCast / YamahaExtendedControl, aucun mot de passe requis)."
+                    />
+                ) : (
+                    <motion.div variants={stagger(0, 0.05)} initial="hidden" animate="show" className="space-y-2">
+                        <AnimatePresence>
+                            {instances.map((y) => (
+                                <DeviceRow
+                                    key={y.id}
+                                    icon={Speaker}
+                                    tone="orange"
+                                    name={y.name}
+                                    address={y.url}
+                                    badges={!y.is_enabled ? <span className="rounded-full bg-slate-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-slate-300">Désactivé</span> : null}
+                                    autoTest={y.is_enabled}
+                                    onTest={async () => {
+                                        const r = await test.mutateAsync(y.id);
+                                        if (!r.ok) return { ok: false, label: r.detail || "Injoignable" };
+                                        const power = r.power === "on" ? "allumé" : r.power === "standby" ? "en veille" : r.power;
+                                        return {
+                                            ok: true,
+                                            label: [r.model, power, r.volume_pct != null ? `volume ${r.volume_pct} %` : null].filter(Boolean).join(" · "),
+                                        };
+                                    }}
+                                    onEdit={() => setEditing(y)}
+                                    onDelete={() => del.mutateAsync(y.id)}
+                                    deleteDescription="L'ampli disparaîtra de la télécommande du Salon. L'appareil lui-même n'est pas modifié."
+                                />
+                            ))}
+                        </AnimatePresence>
+                    </motion.div>
                 )}
+            </Panel>
 
-                {/* Instances */}
-                <Card className="bg-card/40 border-border/50">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-base">
-                            <Speaker className="h-5 w-5 text-orange-400" /> Amplis configurés
-                        </CardTitle>
-                        <CardDescription>Les récepteurs Yamaha (MusicCast / YamahaExtendedControl) de ton réseau.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                        {isLoading ? (
-                            <div className="h-16 rounded-lg bg-muted/15 animate-pulse" />
-                        ) : hasInstances ? (
-                            instances!.map((y) => <InstanceRow key={y.id} y={y} />)
-                        ) : (
-                            <EmptyState icon={Speaker} title="Aucun ampli" description="Détecte ou ajoute ton ampli ci-dessous." />
-                        )}
-                    </CardContent>
-                </Card>
+            {/* ── Ajouter ─────────────────────────────────────── */}
+            <Panel
+                title="Ajouter un ampli"
+                icon={Plus}
+                iconClassName="text-primary"
+                action={
+                    <Button variant="outline" size="sm" onClick={runDiscover} disabled={discover.isPending}>
+                        {discover.isPending ? <Loader2 className="animate-spin" /> : <Radar />}
+                        Détecter
+                    </Button>
+                }
+                bodyClassName="space-y-5"
+            >
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                    L&apos;ampli doit être branché au réseau (Ethernet ou Wi-Fi) et compatible MusicCast. Aucune authentification n&apos;est nécessaire.
+                </p>
+                <DiscoveryResults
+                    devices={found}
+                    scanning={discover.isPending}
+                    icon={Speaker}
+                    selectedKey={prefill ? found?.find((f) => f.url === prefill.url)?.key : null}
+                    onPick={(d) => setPrefill({ name: d.name, url: d.url, nonce: Date.now() })}
+                />
+                <YamahaForm
+                    idPrefix="yamaha-add"
+                    prefill={prefill}
+                    pending={add.isPending}
+                    submitLabel="Enregistrer"
+                    submitIcon={<Plus />}
+                    resetOnSuccess
+                    onSubmit={async (payload) => {
+                        try {
+                            const r = await add.mutateAsync({ ...payload, is_enabled: true });
+                            toast.success(r?.message ?? "Ampli enregistré", { description: payload.url });
+                            setPrefill(null);
+                        } catch (e) {
+                            toast.error("Enregistrement impossible", { description: e instanceof Error ? e.message : undefined });
+                            throw e;
+                        }
+                    }}
+                />
+            </Panel>
 
-                {/* Add */}
-                <Card className="bg-card/40 border-border/50">
-                    <CardHeader>
-                        <CardTitle className="text-base">Ajouter un ampli</CardTitle>
-                        <CardDescription>L&apos;ampli doit être connecté au réseau (aucune authentification requise).</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div className="space-y-1">
-                                <Label className="text-xs">Nom</Label>
-                                <Input value={name} onChange={(e) => setName(e.target.value)} className="border-white/10 bg-transparent" />
-                            </div>
-                            <div className="space-y-1">
-                                <Label className="text-xs">URL / IP</Label>
-                                <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="http://192.168.2.70" className="border-white/10 bg-transparent font-mono text-sm" />
-                            </div>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                            <Button onClick={submit} disabled={add.isPending}>
-                                {add.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
-                                Enregistrer
-                            </Button>
-                            <Button
-                                variant="outline"
-                                className="border-white/10"
-                                disabled={discover.isPending}
-                                onClick={() =>
-                                    discover.mutate(undefined, {
-                                        onSuccess: (list) => {
-                                            if (list && list.length > 0) {
-                                                setName(list[0].model_name || "Yamaha");
-                                                setUrl(list[0].url);
-                                                toast.success(
-                                                    list.length === 1
-                                                        ? `${list[0].model_name} détecté — champs pré-remplis.`
-                                                        : `${list.length} amplis détectés : ${list.map((l) => l.model_name).join(", ")}`,
-                                                );
-                                            } else {
-                                                toast.info("Aucun ampli Yamaha détecté sur le réseau.");
-                                            }
-                                        },
-                                        onError: (e) => toast.error("Découverte échouée : " + e.message),
-                                    })
+            {/* ── Modifier ────────────────────────────────────── */}
+            <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
+                <DialogContent className="sm:max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle>Modifier {shownEditing?.name}</DialogTitle>
+                        <DialogDescription>Change le nom ou l&apos;adresse de l&apos;ampli sans créer de doublon.</DialogDescription>
+                    </DialogHeader>
+                    {shownEditing && (
+                        <YamahaForm
+                            key={shownEditing.id}
+                            idPrefix="yamaha-edit"
+                            initial={shownEditing}
+                            pending={update.isPending}
+                            submitLabel="Enregistrer"
+                            onCancel={() => setEditing(null)}
+                            onSubmit={async (payload) => {
+                                try {
+                                    await update.mutateAsync({ id: shownEditing.id, ...payload });
+                                    toast.success("Ampli mis à jour", { description: payload.name });
+                                    setEditing(null);
+                                } catch (e) {
+                                    toast.error("Modification impossible", { description: e instanceof Error ? e.message : undefined });
+                                    throw e;
                                 }
-                            >
-                                {discover.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Radar className="h-4 w-4 mr-2" />}
-                                Détecter sur le réseau
-                            </Button>
-                        </div>
-                    </CardContent>
-                </Card>
-            </motion.div>
+                            }}
+                        />
+                    )}
+                </DialogContent>
+            </Dialog>
         </>
+    );
+}
+
+/* ── Formulaire ampli (ajout + modification) ─────────────────── */
+
+function YamahaForm({
+    idPrefix,
+    initial,
+    prefill,
+    pending,
+    submitLabel,
+    submitIcon,
+    resetOnSuccess,
+    onSubmit,
+    onCancel,
+}: {
+    idPrefix: string;
+    initial?: YamahaInstance | null;
+    prefill?: { name: string; url: string; nonce: number } | null;
+    pending?: boolean;
+    submitLabel: string;
+    submitIcon?: React.ReactNode;
+    resetOnSuccess?: boolean;
+    onSubmit: (payload: { name: string; url: string }) => Promise<unknown>;
+    onCancel?: () => void;
+}) {
+    const [name, setName] = useState(initial?.name ?? "");
+    const [url, setUrl] = useState(initial?.url ?? "");
+    const [submitted, setSubmitted] = useState(false);
+
+    useEffect(() => {
+        if (!prefill) return;
+        setName(prefill.name);
+        setUrl(prefill.url);
+    }, [prefill]);
+
+    // L'ampli accepte une IP seule : on n'exige donc pas « http:// ».
+    const urlErr = !url.trim() ? "L'adresse est obligatoire." : /\s/.test(url.trim()) ? "L'adresse ne doit pas contenir d'espace." : null;
+
+    const handleSubmit = async (e: FormEvent) => {
+        e.preventDefault();
+        setSubmitted(true);
+        if (urlErr) return;
+        try {
+            await onSubmit({ name: name.trim() || "Ampli Yamaha", url: normalizeAddress(url) });
+            if (resetOnSuccess) {
+                setName("");
+                setUrl("");
+                setSubmitted(false);
+            }
+        } catch {
+            // Toast affiché par le parent ; on garde la saisie.
+        }
+    };
+
+    return (
+        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <FormField id={`${idPrefix}-name`} label="Nom">
+                    <Input id={`${idPrefix}-name`} value={name} onChange={(e) => setName(e.target.value)} placeholder="Ampli du salon" />
+                </FormField>
+                <FormField id={`${idPrefix}-url`} label="Adresse IP ou URL" error={submitted ? urlErr : null}>
+                    <Input
+                        id={`${idPrefix}-url`}
+                        value={url}
+                        onChange={(e) => setUrl(e.target.value)}
+                        placeholder="192.168.1.30"
+                        inputMode="url"
+                        spellCheck={false}
+                        autoComplete="off"
+                        className="font-mono text-sm"
+                        aria-invalid={submitted && !!urlErr}
+                    />
+                </FormField>
+            </div>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                {onCancel && (
+                    <Button type="button" variant="ghost" onClick={onCancel} disabled={pending}>
+                        Annuler
+                    </Button>
+                )}
+                <Button type="submit" disabled={pending}>
+                    {pending ? <Loader2 className="animate-spin" /> : submitIcon ?? <Save />}
+                    {submitLabel}
+                </Button>
+            </div>
+        </form>
     );
 }

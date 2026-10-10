@@ -42,32 +42,27 @@ export function AnimatedNumber({
         }),
     );
 
+    const hasValue = typeof value === "number" && Number.isFinite(value);
+    const format = (n: number) => `${prefix}${formatter.current.format(n)}${suffix}`;
+
+    // Lance l'animation vers la valeur cible dès que l'élément est visible.
     useEffect(() => {
-        if (inView && typeof value === "number" && Number.isFinite(value)) {
-            motionValue.set(value);
-        }
-    }, [inView, value, motionValue]);
+        if (inView && hasValue) motionValue.set(value as number);
+    }, [inView, hasValue, value, motionValue]);
 
-    // On écrit directement dans le DOM (pas de re-render React à chaque frame).
-    useEffect(
-        () =>
-            spring.on("change", (latest) => {
-                if (ref.current) {
-                    ref.current.textContent = `${prefix}${formatter.current.format(latest)}${suffix}`;
-                }
-            }),
-        [spring, prefix, suffix],
-    );
+    // Le texte est piloté EXCLUSIVEMENT ici (écriture directe dans le DOM,
+    // sans re-render React à chaque frame). Le même <span> porteur de la ref
+    // est toujours rendu : sinon l'observateur de visibilité ne s'accroche
+    // jamais et le compteur reste bloqué à 0.
+    useEffect(() => {
+        if (!ref.current) return;
+        ref.current.textContent = hasValue ? format(spring.get()) : fallback;
+        if (!hasValue) return;
+        return spring.on("change", (latest) => {
+            if (ref.current) ref.current.textContent = format(latest);
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [spring, hasValue, fallback, prefix, suffix]);
 
-    if (value === null || value === undefined || !Number.isFinite(value)) {
-        return <span className={className}>{fallback}</span>;
-    }
-
-    return (
-        <span ref={ref} className={cn("tabular-nums", className)}>
-            {prefix}
-            {formatter.current.format(0)}
-            {suffix}
-        </span>
-    );
+    return <span ref={ref} className={cn("tabular-nums", className)} />;
 }
