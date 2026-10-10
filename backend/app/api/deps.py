@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import Depends, HTTPException, Request, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import HTTPException, Request, status
 
 from app.api.auth import verify_token
 from app.database import get_db as _get_db
-
 
 # Re-export for convenience
 get_db = _get_db
@@ -48,4 +46,3 @@ async def get_current_user(request: Request) -> dict:
         )
 
     return verify_token(token)
-

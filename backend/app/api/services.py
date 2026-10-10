@@ -16,8 +16,7 @@ from app.schemas.service import (
     ServiceUpdate,
     TestConnectionResponse,
 )
-from app.services import encryption
-from app.services import health_checker
+from app.services import encryption, health_checker
 
 router = APIRouter(
     prefix="/api/services",

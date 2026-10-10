@@ -52,7 +52,11 @@ async def probe(ip_or_base: str, *, timeout: float = 1.5) -> dict[str, Any] | No
     try:
         info = await _get(base, "/system/getDeviceInfo", timeout=timeout)
         if info.get("response_code") == 0 and info.get("model_name"):
-            return {"url": base, "model_name": info["model_name"], "device_id": info.get("device_id")}
+            return {
+                "url": base,
+                "model_name": info["model_name"],
+                "device_id": info.get("device_id"),
+            }
     except Exception:
         return None
     return None
@@ -60,19 +64,23 @@ async def probe(ip_or_base: str, *, timeout: float = 1.5) -> dict[str, Any] | No
 
 # ── Discovery ──────────────────────────────────────────────────
 
+
 def _ssdp_search(timeout: float = 3.0) -> set[str]:
     """SSDP M-SEARCH → set of candidate host IPs (best-effort; may be empty)."""
     hosts: set[str] = set()
-    msg = "\r\n".join(
-        [
-            "M-SEARCH * HTTP/1.1",
-            "HOST:239.255.255.250:1900",
-            'MAN:"ssdp:discover"',
-            "MX:2",
-            "ST:ssdp:all",
-            "",
-        ]
-    ) + "\r\n"
+    msg = (
+        "\r\n".join(
+            [
+                "M-SEARCH * HTTP/1.1",
+                "HOST:239.255.255.250:1900",
+                'MAN:"ssdp:discover"',
+                "MX:2",
+                "ST:ssdp:all",
+                "",
+            ]
+        )
+        + "\r\n"
+    )
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -84,7 +92,7 @@ def _ssdp_search(timeout: float = 3.0) -> set[str]:
         while time.monotonic() - start < timeout + 1:
             try:
                 data, addr = s.recvfrom(2048)
-            except socket.timeout:
+            except TimeoutError:
                 break
             low = data.decode(errors="ignore").lower()
             if "yamaha" in low or "mediarenderer" in low or "av_receiver" in low:
@@ -149,6 +157,7 @@ async def discover(db: AsyncSession) -> list[dict[str, Any]]:
 
 
 # ── Instances ──────────────────────────────────────────────────
+
 
 async def _enabled(db: AsyncSession) -> list[Service]:
     res = await db.execute(
@@ -237,7 +246,9 @@ async def control(
         elif action == "volume_step":
             # value = +N / -N relative step
             step = int(value)
-            await _get(base, f"/{zone}/setVolume?volume={'up' if step > 0 else 'down'}&step={abs(step)}")
+            await _get(
+                base, f"/{zone}/setVolume?volume={'up' if step > 0 else 'down'}&step={abs(step)}"
+            )
         elif action == "mute":
             enable = "true" if value else "false"
             await _get(base, f"/{zone}/setMute?enable={enable}")
@@ -320,7 +331,9 @@ async def get_room_profiles(db: AsyncSession) -> dict[str, Any]:
     return stored or DEFAULT_PROFILES
 
 
-async def save_room_profile(db: AsyncSession, room: str, profile_data: dict[str, Any]) -> dict[str, Any]:
+async def save_room_profile(
+    db: AsyncSession, room: str, profile_data: dict[str, Any]
+) -> dict[str, Any]:
     """Save or update audio settings for a room profile."""
     from app.utils.cache import cache
 
@@ -436,6 +449,7 @@ async def apply_preset(
 
         # Log event in activity history
         from app.services.activity_log import log_event
+
         await log_event(
             category="yamaha",
             action="apply_preset",
@@ -450,7 +464,10 @@ async def apply_preset(
 
     except Exception as exc:
         logger.error("Failed to apply Yamaha sound preset %s on %s: %s", room_key, base, exc)
-        return {"status": "error", "detail": f"Échec de l'application du préréglage : {type(exc).__name__}"}
+        return {
+            "status": "error",
+            "detail": f"Échec de l'application du préréglage : {type(exc).__name__}",
+        }
 
 
 async def test_connection(db: AsyncSession, service_id: int) -> dict[str, Any]:
@@ -484,4 +501,3 @@ async def list_inputs(db: AsyncSession, service_id: int | None = None) -> list[s
         return list(main.get("input_list", [])) if main else []
     except Exception:
         return []
-

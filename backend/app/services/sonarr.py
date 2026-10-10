@@ -29,7 +29,9 @@ class SonarrClient(ArrBaseClient):
         """Add a new series to Sonarr."""
         return await self.post("/series", data=data)
 
-    async def delete_series(self, series_id: int, delete_files: bool = False, add_exclusion: bool = False) -> None:
+    async def delete_series(
+        self, series_id: int, delete_files: bool = False, add_exclusion: bool = False
+    ) -> None:
         """Delete a series from Sonarr, optionally adding it to the import-list exclusions."""
         url = (
             f"/series/{series_id}?deleteFiles={str(delete_files).lower()}"
@@ -49,7 +51,9 @@ class SonarrClient(ArrBaseClient):
         return await self.get("/rootfolder")
 
     # ── Calendar ──────────────────────────────────────────────
-    async def get_calendar(self, start: str | None = None, end: str | None = None) -> list[dict[str, Any]]:
+    async def get_calendar(
+        self, start: str | None = None, end: str | None = None
+    ) -> list[dict[str, Any]]:
         """Fetch upcoming episodes."""
         params: dict[str, str] = {}
         if start:
@@ -161,8 +165,7 @@ class SonarrClient(ArrBaseClient):
     ) -> None:
         """Remove a queue item, optionally from the download client and/or blocklisting it."""
         params = (
-            f"removeFromClient={str(remove_from_client).lower()}"
-            f"&blocklist={str(blocklist).lower()}"
+            f"removeFromClient={str(remove_from_client).lower()}&blocklist={str(blocklist).lower()}"
         )
         url = f"{self.API_PREFIX}/queue/{queue_id}?{params}"
         resp = await self.client.delete(url)

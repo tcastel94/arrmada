@@ -12,10 +12,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.service import Service
+from app.services.bazarr import BazarrClient
 from app.services.encryption import decrypt_api_key
 from app.services.radarr import RadarrClient
 from app.services.sonarr import SonarrClient
-from app.services.bazarr import BazarrClient
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -69,9 +69,7 @@ def _format_file_info(movie_file: dict[str, Any]) -> dict[str, Any]:
         "run_time": media_info.get("runTime", ""),
         "release_group": movie_file.get("releaseGroup", ""),
         "edition": movie_file.get("edition", ""),
-        "languages": [
-            lang.get("name", "") for lang in movie_file.get("languages", [])
-        ],
+        "languages": [lang.get("name", "") for lang in movie_file.get("languages", [])],
         "date_added": movie_file.get("dateAdded"),
     }
 
@@ -84,7 +82,8 @@ async def get_movie_detail(
 
     # Get Radarr service
     stmt = select(Service).where(
-        Service.is_enabled == True, Service.type == "radarr"  # noqa: E712
+        Service.is_enabled == True,
+        Service.type == "radarr",  # noqa: E712
     )
     result = await db.execute(stmt)
     radarr_service = result.scalars().first()
@@ -201,7 +200,8 @@ async def get_series_detail(
 
     # Get Sonarr service
     stmt = select(Service).where(
-        Service.is_enabled == True, Service.type == "sonarr"  # noqa: E712
+        Service.is_enabled == True,
+        Service.type == "sonarr",  # noqa: E712
     )
     result = await db.execute(stmt)
     sonarr_service = result.scalars().first()
@@ -247,17 +247,19 @@ async def get_series_detail(
         ep_file = ep_files_by_id.get(ep_file_id)
         file_info = _format_file_info(ep_file) if ep_file else None
 
-        seasons[sn].append({
-            "id": ep.get("id"),
-            "episode_number": ep.get("episodeNumber"),
-            "season_number": sn,
-            "title": ep.get("title", ""),
-            "overview": ep.get("overview", ""),
-            "air_date": ep.get("airDate"),
-            "has_file": ep.get("hasFile", False),
-            "monitored": ep.get("monitored", False),
-            "file": file_info,
-        })
+        seasons[sn].append(
+            {
+                "id": ep.get("id"),
+                "episode_number": ep.get("episodeNumber"),
+                "season_number": sn,
+                "title": ep.get("title", ""),
+                "overview": ep.get("overview", ""),
+                "air_date": ep.get("airDate"),
+                "has_file": ep.get("hasFile", False),
+                "monitored": ep.get("monitored", False),
+                "file": file_info,
+            }
+        )
 
     # Sort episodes within each season
     for sn in seasons:
@@ -265,21 +267,22 @@ async def get_series_detail(
 
     # Per-season monitored flags from the raw Sonarr series object
     season_monitored = {
-        s.get("seasonNumber"): s.get("monitored", False)
-        for s in (raw.get("seasons") or [])
+        s.get("seasonNumber"): s.get("monitored", False) for s in (raw.get("seasons") or [])
     }
 
     # Season summaries
     season_list = []
     for sn_num in sorted(seasons.keys()):
         eps = seasons[sn_num]
-        season_list.append({
-            "season_number": sn_num,
-            "episode_count": len(eps),
-            "episodes_have": sum(1 for e in eps if e["has_file"]),
-            "monitored": season_monitored.get(sn_num, False),
-            "episodes": eps,
-        })
+        season_list.append(
+            {
+                "season_number": sn_num,
+                "episode_count": len(eps),
+                "episodes_have": sum(1 for e in eps if e["has_file"]),
+                "monitored": season_monitored.get(sn_num, False),
+                "episodes": eps,
+            }
+        )
 
     detail = {
         "id": raw.get("id"),
@@ -331,7 +334,8 @@ async def _get_bazarr_movie_subtitles(
         return []
 
     stmt = select(Service).where(
-        Service.is_enabled == True, Service.type == "bazarr"  # noqa: E712
+        Service.is_enabled == True,
+        Service.type == "bazarr",  # noqa: E712
     )
     result = await db.execute(stmt)
     bazarr_service = result.scalars().first()
@@ -353,24 +357,28 @@ async def _get_bazarr_movie_subtitles(
 
             subtitles = []
             for sub in m.get("subtitles", []):
-                subtitles.append({
-                    "language": sub.get("name", ""),
-                    "code2": sub.get("code2", ""),
-                    "code3": sub.get("code3", ""),
-                    "path": sub.get("path", ""),
-                    "forced": sub.get("forced", False),
-                    "hi": sub.get("hi", False),
-                })
+                subtitles.append(
+                    {
+                        "language": sub.get("name", ""),
+                        "code2": sub.get("code2", ""),
+                        "code3": sub.get("code3", ""),
+                        "path": sub.get("path", ""),
+                        "forced": sub.get("forced", False),
+                        "hi": sub.get("hi", False),
+                    }
+                )
 
             missing = []
             for ms in m.get("missing_subtitles", []):
-                missing.append({
-                    "language": ms.get("name", ""),
-                    "code2": ms.get("code2", ""),
-                    "code3": ms.get("code3", ""),
-                    "forced": ms.get("forced", False),
-                    "hi": ms.get("hi", False),
-                })
+                missing.append(
+                    {
+                        "language": ms.get("name", ""),
+                        "code2": ms.get("code2", ""),
+                        "code3": ms.get("code3", ""),
+                        "forced": ms.get("forced", False),
+                        "hi": ms.get("hi", False),
+                    }
+                )
 
             return [{"radarr_id": radarr_id, "subtitles": subtitles, "missing": missing}]
 
@@ -388,7 +396,8 @@ async def _get_bazarr_series_subtitles(
 ) -> list[dict[str, Any]]:
     """Fetch subtitle info for a series from Bazarr."""
     stmt = select(Service).where(
-        Service.is_enabled == True, Service.type == "bazarr"  # noqa: E712
+        Service.is_enabled == True,
+        Service.type == "bazarr",  # noqa: E712
     )
     result = await db.execute(stmt)
     bazarr_service = result.scalars().first()
@@ -407,32 +416,38 @@ async def _get_bazarr_series_subtitles(
         for ep in items:
             ep_subs = []
             for sub in ep.get("subtitles", []):
-                ep_subs.append({
-                    "language": sub.get("name", ""),
-                    "code2": sub.get("code2", ""),
-                    "path": sub.get("path", ""),
-                    "forced": sub.get("forced", False),
-                    "hi": sub.get("hi", False),
-                })
+                ep_subs.append(
+                    {
+                        "language": sub.get("name", ""),
+                        "code2": sub.get("code2", ""),
+                        "path": sub.get("path", ""),
+                        "forced": sub.get("forced", False),
+                        "hi": sub.get("hi", False),
+                    }
+                )
 
             ep_missing = []
             for ms in ep.get("missing_subtitles", []):
-                ep_missing.append({
-                    "language": ms.get("name", ""),
-                    "code2": ms.get("code2", ""),
-                    "forced": ms.get("forced", False),
-                    "hi": ms.get("hi", False),
-                })
+                ep_missing.append(
+                    {
+                        "language": ms.get("name", ""),
+                        "code2": ms.get("code2", ""),
+                        "forced": ms.get("forced", False),
+                        "hi": ms.get("hi", False),
+                    }
+                )
 
-            subtitles_info.append({
-                "episode_id": ep.get("sonarrEpisodeId"),
-                "season": ep.get("season"),
-                "episode": ep.get("episode"),
-                "title": ep.get("title", ""),
-                "monitored": ep.get("monitored", False),
-                "subtitles": ep_subs,
-                "missing": ep_missing,
-            })
+            subtitles_info.append(
+                {
+                    "episode_id": ep.get("sonarrEpisodeId"),
+                    "season": ep.get("season"),
+                    "episode": ep.get("episode"),
+                    "title": ep.get("title", ""),
+                    "monitored": ep.get("monitored", False),
+                    "subtitles": ep_subs,
+                    "missing": ep_missing,
+                }
+            )
 
         return subtitles_info
     except Exception as exc:

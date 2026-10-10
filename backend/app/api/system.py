@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import time
 from typing import Any
 
 from fastapi import APIRouter, Depends
@@ -60,18 +59,20 @@ async def _fetch_disk_space(db: AsyncSession) -> list[dict[str, Any]]:
                     free = d.get("freeSpace", 0)
                     used = total - free
 
-                    disks.append({
-                        "path": path,
-                        "label": d.get("label", path.split("/")[-1] or path),
-                        "total_bytes": total,
-                        "free_bytes": free,
-                        "used_bytes": used,
-                        "total_human": format_bytes(total),
-                        "free_human": format_bytes(free),
-                        "used_human": format_bytes(used),
-                        "usage_percent": round((used / total * 100), 1) if total > 0 else 0,
-                        "source_service": svc.name,
-                    })
+                    disks.append(
+                        {
+                            "path": path,
+                            "label": d.get("label", path.split("/")[-1] or path),
+                            "total_bytes": total,
+                            "free_bytes": free,
+                            "used_bytes": used,
+                            "total_human": format_bytes(total),
+                            "free_human": format_bytes(free),
+                            "used_human": format_bytes(used),
+                            "usage_percent": round((used / total * 100), 1) if total > 0 else 0,
+                            "source_service": svc.name,
+                        }
+                    )
             finally:
                 await client.close()
 
@@ -193,8 +194,16 @@ async def _fetch_kodi_sessions(db: AsyncSession) -> list[dict[str, Any]]:
                         "method": "Player.GetItem",
                         "params": {
                             "playerid": player_id,
-                            "properties": ["title", "showtitle", "season", "episode",
-                                           "runtime", "thumbnail", "year", "file"],
+                            "properties": [
+                                "title",
+                                "showtitle",
+                                "season",
+                                "episode",
+                                "runtime",
+                                "thumbnail",
+                                "year",
+                                "file",
+                            ],
                         },
                         "id": 2,
                     }
@@ -225,21 +234,31 @@ async def _fetch_kodi_sessions(db: AsyncSession) -> list[dict[str, Any]]:
 
                     # Format time
                     total_time = props_data.get("totaltime", {})
-                    total_seconds = total_time.get("hours", 0) * 3600 + total_time.get("minutes", 0) * 60 + total_time.get("seconds", 0)
+                    total_seconds = (
+                        total_time.get("hours", 0) * 3600
+                        + total_time.get("minutes", 0) * 60
+                        + total_time.get("seconds", 0)
+                    )
                     current_time = props_data.get("time", {})
-                    current_seconds = current_time.get("hours", 0) * 3600 + current_time.get("minutes", 0) * 60 + current_time.get("seconds", 0)
+                    current_seconds = (
+                        current_time.get("hours", 0) * 3600
+                        + current_time.get("minutes", 0) * 60
+                        + current_time.get("seconds", 0)
+                    )
 
-                    sessions.append({
-                        "instance": kodi.name,
-                        "title": display_title,
-                        "type": player_type,
-                        "year": item_data.get("year"),
-                        "progress_percent": round(props_data.get("percentage", 0), 1),
-                        "is_paused": props_data.get("speed", 1) == 0,
-                        "elapsed_seconds": current_seconds,
-                        "total_seconds": total_seconds,
-                        "thumbnail": item_data.get("thumbnail", ""),
-                    })
+                    sessions.append(
+                        {
+                            "instance": kodi.name,
+                            "title": display_title,
+                            "type": player_type,
+                            "year": item_data.get("year"),
+                            "progress_percent": round(props_data.get("percentage", 0), 1),
+                            "is_paused": props_data.get("speed", 1) == 0,
+                            "elapsed_seconds": current_seconds,
+                            "total_seconds": total_seconds,
+                            "thumbnail": item_data.get("thumbnail", ""),
+                        }
+                    )
 
         except Exception as exc:
             logger.debug("Kodi session fetch failed for %s: %s", kodi.name, exc)
@@ -250,6 +269,7 @@ async def _fetch_kodi_sessions(db: AsyncSession) -> list[dict[str, Any]]:
 @router.get("/disk")
 async def get_disk_space(db: AsyncSession = Depends(get_db)):
     """Fetch disk space from all Sonarr/Radarr root folders."""
+
     async def _fetch():
         return await _fetch_disk_space(db)
 
@@ -278,6 +298,7 @@ async def get_kodi_sessions(db: AsyncSession = Depends(get_db)):
 @router.get("/overview")
 async def system_overview(db: AsyncSession = Depends(get_db)):
     """Combined system overview: disks + resources + Kodi sessions."""
+
     async def _fetch_disks():
         return await _fetch_disk_space(db)
 

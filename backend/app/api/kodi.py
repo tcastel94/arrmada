@@ -1,15 +1,13 @@
 """Kodi API — settings and synchronization."""
 
-from typing import Any, List
-
 from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
 from app.models.service import Service
-from app.services.encryption import encrypt_api_key, decrypt_api_key
 from app.services import kodi as kodi_service
+from app.services.encryption import decrypt_api_key, encrypt_api_key
 from app.services.kodi import discover_kodi, sync_kodi
 from app.utils.cache import cache
 
@@ -19,10 +17,12 @@ router = APIRouter(
     dependencies=[Depends(get_current_user)],
 )
 
+
 @router.get("/discover")
-async def discover_instances() -> List[dict]:
+async def discover_instances() -> list[dict]:
     """Discover Kodi instances using mDNS."""
     return await discover_kodi()
+
 
 @router.post("/sync")
 async def trigger_kodi_sync(db: AsyncSession = Depends(get_db)):
@@ -40,6 +40,7 @@ async def play_on_kodi(data: dict, db: AsyncSession = Depends(get_db)):
     result = await kodi_service.play_movie(db, int(tmdb_id), data.get("service_id"), room=room)
 
     from app.services.activity_log import log_event
+
     ok = result.get("status") == "ok"
     await log_event(
         category="playback",
@@ -75,6 +76,7 @@ async def control(data: dict, db: AsyncSession = Depends(get_db)):
 @router.get("/watched-status")
 async def watched_status(db: AsyncSession = Depends(get_db)):
     """Watched/resume state per TMDB id from Kodi (cached 60s)."""
+
     async def _compute():
         return await kodi_service.get_watched_status(db)
 
@@ -99,23 +101,25 @@ async def test_kodi(service_id: int, db: AsyncSession = Depends(get_db)):
     """Ping a Kodi instance and read its version."""
     return await kodi_service.test_connection(db, service_id)
 
+
 @router.get("/settings")
 async def get_kodi_settings(db: AsyncSession = Depends(get_db)):
     """Fetch all Kodi services from database."""
     stmt = select(Service).where(Service.type == "kodi")
     result = await db.execute(stmt)
     kodis = result.scalars().all()
-    
+
     return [
         {
             "id": k.id,
             "name": k.name,
             "url": k.url,
             "is_enabled": k.is_enabled,
-            "api_key": decrypt_api_key(k.api_key) if k.api_key else ""
+            "api_key": decrypt_api_key(k.api_key) if k.api_key else "",
         }
         for k in kodis
     ]
+
 
 @router.post("/settings")
 async def add_kodi_setting(data: dict, db: AsyncSession = Depends(get_db)):
@@ -128,9 +132,7 @@ async def add_kodi_setting(data: dict, db: AsyncSession = Depends(get_db)):
 
     existing = None
     if url:
-        res = await db.execute(
-            select(Service).where(Service.type == "kodi", Service.url == url)
-        )
+        res = await db.execute(select(Service).where(Service.type == "kodi", Service.url == url))
         existing = res.scalars().first()
 
     if existing:
@@ -147,12 +149,13 @@ async def add_kodi_setting(data: dict, db: AsyncSession = Depends(get_db)):
         type="kodi",
         url=url,
         api_key=encrypt_api_key(data.get("api_key", "")),
-        is_enabled=data.get("is_enabled", True)
+        is_enabled=data.get("is_enabled", True),
     )
     db.add(new_kodi)
     await db.commit()
     await db.refresh(new_kodi)
     return {"id": new_kodi.id, "message": "Kodi added"}
+
 
 @router.delete("/settings/{service_id}")
 async def delete_kodi_setting(service_id: int, db: AsyncSession = Depends(get_db)):
@@ -175,7 +178,6 @@ async def addon_subtitles_action(data: dict, db: AsyncSession = Depends(get_db))
 async def addon_subtitles_sync_action(data: dict, db: AsyncSession = Depends(get_db)):
     """Trigger Bazarr FFsubsync audio-aligned subtitle synchronization from Kodi add-on."""
     return await kodi_service.handle_addon_sync_subtitles(db, data)
-
 
 
 @router.post("/actions/search")
@@ -202,7 +204,6 @@ async def addon_dashboard(db: AsyncSession = Depends(get_db)):
     return await kodi_service.get_addon_full_dashboard(db)
 
 
-
 # ── Kodi Media Discovery & Releases ───────────────────────────
 @router.get("/media/lookup")
 async def addon_media_lookup(q: str, type: str = "all", db: AsyncSession = Depends(get_db)):
@@ -214,7 +215,6 @@ async def addon_media_lookup(q: str, type: str = "all", db: AsyncSession = Depen
 async def addon_media_recommendations(db: AsyncSession = Depends(get_db)):
     """Get trending and recommended movies/series for Kodi."""
     return await kodi_service.get_recommendations_for_addon(db)
-
 
 
 @router.get("/media/options")
@@ -251,7 +251,9 @@ async def addon_queue_remove(
     """Cancel / remove download from Kodi."""
     payload = data or {}
     return await kodi_service.remove_queue_item_for_addon(
-        db, type, id,
+        db,
+        type,
+        id,
         remove_from_client=payload.get("remove_from_client", True),
         blocklist=payload.get("blocklist", False),
     )
@@ -269,7 +271,6 @@ async def addon_queue_pause(type: str, id: int, db: AsyncSession = Depends(get_d
     return await kodi_service.pause_queue_item_for_addon(db, type, id)
 
 
-
 # ── Kodi Maintenance & Cleanup ────────────────────────────────
 @router.post("/maintenance/clean-orphans")
 async def addon_clean_orphans(db: AsyncSession = Depends(get_db)):
@@ -282,6 +283,3 @@ async def addon_clean_orphans(db: AsyncSession = Depends(get_db)):
 async def addon_widgets_recent(db: AsyncSession = Depends(get_db)):
     """Return recently added items for Kodi home screen widgets."""
     return await kodi_service.get_recent_media_for_addon(db)
-
-
-

@@ -1,7 +1,5 @@
 """Cast API — discover Google Cast devices and cast Jellyfin streams to them."""
 
-from typing import List
-
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,8 +8,8 @@ from app.api.deps import get_current_user, get_db
 from app.models.service import Service
 from app.services import cast as cast_service
 from app.services import jellyfin as jellyfin_service
-from app.services.encryption import encrypt_api_key
 from app.services.activity_log import log_event
+from app.services.encryption import encrypt_api_key
 
 router = APIRouter(
     prefix="/api/cast",
@@ -21,13 +19,13 @@ router = APIRouter(
 
 
 @router.get("/devices")
-async def devices(db: AsyncSession = Depends(get_db)) -> List[dict]:
+async def devices(db: AsyncSession = Depends(get_db)) -> list[dict]:
     """List known Cast devices."""
     return await cast_service.list_devices(db)
 
 
 @router.post("/discover")
-async def discover(db: AsyncSession = Depends(get_db)) -> List[dict]:
+async def discover(db: AsyncSession = Depends(get_db)) -> list[dict]:
     """Scan the LAN for Cast devices (TCP :8009 + connect) and persist them."""
     return await cast_service.discover(db)
 
@@ -53,7 +51,11 @@ async def play(data: dict, db: AsyncSession = Depends(get_db)):
         }
 
     result = await cast_service.cast_stream(
-        db, int(device_id), stream["url"], stream["content_type"], stream["title"] or data.get("title"),
+        db,
+        int(device_id),
+        stream["url"],
+        stream["content_type"],
+        stream["title"] or data.get("title"),
     )
 
     dev = await cast_service._get(db, int(device_id))
@@ -92,13 +94,20 @@ async def status(device_id: int, db: AsyncSession = Depends(get_db)):
 
 # ── Jellyfin config (backing store for cast streams) ───────────
 
+
 @router.get("/jellyfin")
 async def get_jellyfin(db: AsyncSession = Depends(get_db)):
     res = await db.execute(select(Service).where(Service.type == "jellyfin"))
     svc = res.scalars().first()
     if not svc:
         return {"configured": False}
-    return {"configured": True, "id": svc.id, "name": svc.name, "url": svc.url, "is_enabled": svc.is_enabled}
+    return {
+        "configured": True,
+        "id": svc.id,
+        "name": svc.name,
+        "url": svc.url,
+        "is_enabled": svc.is_enabled,
+    }
 
 
 @router.post("/jellyfin")

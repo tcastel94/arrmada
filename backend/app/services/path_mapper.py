@@ -63,11 +63,13 @@ async def get_path_mappings() -> dict[str, Any]:
         mounts = []
         for m in c.get("mounts", []):
             if isinstance(m, dict):
-                mounts.append({
-                    "host": m.get("Source", ""),
-                    "container": m.get("Destination", ""),
-                    "rw": m.get("RW", False),
-                })
+                mounts.append(
+                    {
+                        "host": m.get("Source", ""),
+                        "container": m.get("Destination", ""),
+                        "rw": m.get("RW", False),
+                    }
+                )
         service_mounts[svc_type] = mounts
 
     # Derive key paths

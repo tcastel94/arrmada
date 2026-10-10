@@ -18,6 +18,7 @@ logger = get_logger(__name__)
 
 # ── Normalisation helpers ──────────────────────────────────────
 
+
 def _normalise_movie(raw: dict[str, Any], service_name: str) -> dict[str, Any]:
     """Normalise a Radarr movie to a unified media item."""
     size = 0
@@ -28,8 +29,24 @@ def _normalise_movie(raw: dict[str, Any], service_name: str) -> dict[str, Any]:
         size = raw["sizeOnDisk"]
 
     images = raw.get("images") or []
-    poster = next((img.get("remoteUrl") or img.get("url") for img in images if (img.get("coverType") or "").lower() == "poster" and (img.get("remoteUrl") or img.get("url"))), None)
-    clearlogo = next((img.get("remoteUrl") or img.get("url") for img in images if (img.get("coverType") or "").lower() in ("clearlogo", "logo", "fanartlogo") and (img.get("remoteUrl") or img.get("url"))), None)
+    poster = next(
+        (
+            img.get("remoteUrl") or img.get("url")
+            for img in images
+            if (img.get("coverType") or "").lower() == "poster"
+            and (img.get("remoteUrl") or img.get("url"))
+        ),
+        None,
+    )
+    clearlogo = next(
+        (
+            img.get("remoteUrl") or img.get("url")
+            for img in images
+            if (img.get("coverType") or "").lower() in ("clearlogo", "logo", "fanartlogo")
+            and (img.get("remoteUrl") or img.get("url"))
+        ),
+        None,
+    )
 
     media_info = movie_file.get("mediaInfo") or {}
     quality_obj = movie_file.get("quality", {}).get("quality", {}) if movie_file else {}
@@ -44,7 +61,8 @@ def _normalise_movie(raw: dict[str, Any], service_name: str) -> dict[str, Any]:
         "quality": quality_obj.get("name") if movie_file else None,
         "resolution": quality_obj.get("resolution") or media_info.get("resolution"),
         "video_codec": media_info.get("videoCodec"),
-        "video_dynamic_range": media_info.get("videoDynamicRange") or media_info.get("videoDynamicRangeType"),
+        "video_dynamic_range": media_info.get("videoDynamicRange")
+        or media_info.get("videoDynamicRangeType"),
         "audio_codec": media_info.get("audioCodec"),
         "audio_channels": media_info.get("audioChannels"),
         "studio": raw.get("studio"),
@@ -65,8 +83,24 @@ def _normalise_movie(raw: dict[str, Any], service_name: str) -> dict[str, Any]:
 def _normalise_series(raw: dict[str, Any], service_name: str) -> dict[str, Any]:
     """Normalise a Sonarr series to a unified media item."""
     images = raw.get("images") or []
-    poster = next((img.get("remoteUrl") or img.get("url") for img in images if (img.get("coverType") or "").lower() == "poster" and (img.get("remoteUrl") or img.get("url"))), None)
-    clearlogo = next((img.get("remoteUrl") or img.get("url") for img in images if (img.get("coverType") or "").lower() in ("clearlogo", "logo", "fanartlogo") and (img.get("remoteUrl") or img.get("url"))), None)
+    poster = next(
+        (
+            img.get("remoteUrl") or img.get("url")
+            for img in images
+            if (img.get("coverType") or "").lower() == "poster"
+            and (img.get("remoteUrl") or img.get("url"))
+        ),
+        None,
+    )
+    clearlogo = next(
+        (
+            img.get("remoteUrl") or img.get("url")
+            for img in images
+            if (img.get("coverType") or "").lower() in ("clearlogo", "logo", "fanartlogo")
+            and (img.get("remoteUrl") or img.get("url"))
+        ),
+        None,
+    )
 
     stats = raw.get("statistics") or {}
 
@@ -97,6 +131,7 @@ def _normalise_series(raw: dict[str, Any], service_name: str) -> dict[str, Any]:
 
 
 # ── Public API ─────────────────────────────────────────────────
+
 
 async def fetch_all_media(db: AsyncSession) -> list[dict[str, Any]]:
     """Fetch media from all connected *arr services and return unified list."""
@@ -191,30 +226,38 @@ async def get_queue_items(db: AsyncSession) -> list[dict[str, Any]]:
                 data = await client.get_queue()
                 records = data.get("records", []) if isinstance(data, dict) else []
                 for item in records:
-                    queue_items.append({
-                        "id": item.get("id"),
-                        "title": item.get("title", "Unknown"),
-                        "status": item.get("status", "unknown"),
-                        "progress": _calc_progress(item),
-                        "size_bytes": item.get("size", 0),
-                        "size_left_bytes": item.get("sizeleft", 0),
-                        "time_left": item.get("timeleft"),
-                        "source_service": svc.name,
-                        "service_type": svc.type,
-                        "movie_id": item.get("movieId"),
-                        "series_id": item.get("seriesId"),
-                        "download_client": item.get("downloadClient", ""),
-                        "protocol": item.get("protocol", ""),  # usenet | torrent
-                        "tracked_state": item.get("trackedDownloadState", ""),  # downloading | importPending | importing | ...
-                        "error": item.get("errorMessage") or "",  # real client/download error
-                        "detail": next(  # first status message (e.g. why import is pending)
-                            (msg for m in (item.get("statusMessages") or [])
-                             for msg in (m.get("messages") or []) if msg),
-                            "",
-                        ),
-                        "indexer": item.get("indexer", ""),
-                        "quality": item.get("quality", {}).get("quality", {}).get("name", ""),
-                    })
+                    queue_items.append(
+                        {
+                            "id": item.get("id"),
+                            "title": item.get("title", "Unknown"),
+                            "status": item.get("status", "unknown"),
+                            "progress": _calc_progress(item),
+                            "size_bytes": item.get("size", 0),
+                            "size_left_bytes": item.get("sizeleft", 0),
+                            "time_left": item.get("timeleft"),
+                            "source_service": svc.name,
+                            "service_type": svc.type,
+                            "movie_id": item.get("movieId"),
+                            "series_id": item.get("seriesId"),
+                            "download_client": item.get("downloadClient", ""),
+                            "protocol": item.get("protocol", ""),  # usenet | torrent
+                            "tracked_state": item.get(
+                                "trackedDownloadState", ""
+                            ),  # downloading | importPending | importing | ...
+                            "error": item.get("errorMessage") or "",  # real client/download error
+                            "detail": next(  # first status message (e.g. why import is pending)
+                                (
+                                    msg
+                                    for m in (item.get("statusMessages") or [])
+                                    for msg in (m.get("messages") or [])
+                                    if msg
+                                ),
+                                "",
+                            ),
+                            "indexer": item.get("indexer", ""),
+                            "quality": item.get("quality", {}).get("quality", {}).get("name", ""),
+                        }
+                    )
             finally:
                 await client.close()
         except Exception as exc:

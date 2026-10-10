@@ -11,7 +11,8 @@ from __future__ import annotations
 import asyncio
 import fnmatch
 import time
-from typing import Any, Callable, Coroutine
+from collections.abc import Callable, Coroutine
+from typing import Any
 
 from app.utils.logger import get_logger
 
@@ -80,7 +81,9 @@ class TTLCache:
         return {
             "entries": len(self._store),
             "keys": list(self._store.keys()),
-            "oldest_age_seconds": round(now - min((v[0] for v in self._store.values()), default=now), 1),
+            "oldest_age_seconds": round(
+                now - min((v[0] for v in self._store.values()), default=now), 1
+            ),
         }
 
 

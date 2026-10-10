@@ -56,7 +56,9 @@ def _format_tmdb_movie(raw: dict[str, Any]) -> dict[str, Any]:
         "vote_count": raw.get("vote_count", 0),
         "popularity": raw.get("popularity", 0),
         "poster_url": f"{TMDB_IMG}/w342{raw['poster_path']}" if raw.get("poster_path") else None,
-        "backdrop_url": f"{TMDB_IMG}/w780{raw['backdrop_path']}" if raw.get("backdrop_path") else None,
+        "backdrop_url": f"{TMDB_IMG}/w780{raw['backdrop_path']}"
+        if raw.get("backdrop_path")
+        else None,
         "genre_ids": raw.get("genre_ids", []),
     }
 
@@ -75,7 +77,9 @@ def _format_tmdb_series(raw: dict[str, Any]) -> dict[str, Any]:
         "vote_count": raw.get("vote_count", 0),
         "popularity": raw.get("popularity", 0),
         "poster_url": f"{TMDB_IMG}/w342{raw['poster_path']}" if raw.get("poster_path") else None,
-        "backdrop_url": f"{TMDB_IMG}/w780{raw['backdrop_path']}" if raw.get("backdrop_path") else None,
+        "backdrop_url": f"{TMDB_IMG}/w780{raw['backdrop_path']}"
+        if raw.get("backdrop_path")
+        else None,
         "genre_ids": raw.get("genre_ids", []),
     }
 
@@ -91,6 +95,7 @@ async def get_recommendations(db: AsyncSession = Depends(get_db)):
     - library_select_items: items from user library for custom recommendation selector
     - wanted: monitored but not downloaded items from library
     """
+
     async def _fetch():
         result: dict[str, Any] = {
             "trending_movies": [],
@@ -167,15 +172,16 @@ async def get_recommendations(db: AsyncSession = Depends(get_db)):
             logger.error("TMDB trending series failed: %s", exc)
 
         # 5. "Because you have X" — pick random library movies AND series with tmdb_id
-        media_with_tmdb = [
-            m for m in media
-            if m.get("tmdb_id") and m.get("has_file")
-        ]
+        media_with_tmdb = [m for m in media if m.get("tmdb_id") and m.get("has_file")]
         sample_items = random.sample(media_with_tmdb, min(4, len(media_with_tmdb)))
 
         for base_item in sample_items:
             m_type = base_item.get("type", "movie")
-            tmdb_endpoint = f"/movie/{base_item['tmdb_id']}/recommendations" if m_type == "movie" else f"/tv/{base_item['tmdb_id']}/recommendations"
+            tmdb_endpoint = (
+                f"/movie/{base_item['tmdb_id']}/recommendations"
+                if m_type == "movie"
+                else f"/tv/{base_item['tmdb_id']}/recommendations"
+            )
             formatter = _format_tmdb_movie if m_type == "movie" else _format_tmdb_series
 
             try:
@@ -192,13 +198,15 @@ async def get_recommendations(db: AsyncSession = Depends(get_db)):
                             rec_items.append(item)
 
                     if rec_items:
-                        result["because_you_have"].append({
-                            "base_id": base_item.get("id"),
-                            "base_title": base_item["title"],
-                            "base_type": m_type,
-                            "base_poster": base_item.get("poster_url"),
-                            "recommendations": rec_items[:4],
-                        })
+                        result["because_you_have"].append(
+                            {
+                                "base_id": base_item.get("id"),
+                                "base_title": base_item["title"],
+                                "base_type": m_type,
+                                "base_poster": base_item.get("poster_url"),
+                                "recommendations": rec_items[:4],
+                            }
+                        )
             except Exception as exc:
                 logger.debug("TMDB recs for %s failed: %s", base_item.get("title"), exc)
 
@@ -237,11 +245,15 @@ async def get_tmdb_detail(
         cast = []
         if "credits" in raw and "cast" in raw["credits"]:
             for c in raw["credits"]["cast"][:8]:
-                cast.append({
-                    "name": c.get("name"),
-                    "character": c.get("character"),
-                    "profile_path": f"{TMDB_IMG}/w185{c['profile_path']}" if c.get("profile_path") else None,
-                })
+                cast.append(
+                    {
+                        "name": c.get("name"),
+                        "character": c.get("character"),
+                        "profile_path": f"{TMDB_IMG}/w185{c['profile_path']}"
+                        if c.get("profile_path")
+                        else None,
+                    }
+                )
 
         # Parse director
         director = None
@@ -281,9 +293,14 @@ async def get_tmdb_detail(
             "rating": raw.get("vote_average"),
             "vote_count": raw.get("vote_count", 0),
             "popularity": raw.get("popularity", 0),
-            "runtime": raw.get("runtime") or (raw.get("episode_run_time")[0] if raw.get("episode_run_time") else None),
-            "poster_url": f"{TMDB_IMG}/w500{raw['poster_path']}" if raw.get("poster_path") else None,
-            "backdrop_url": f"{TMDB_IMG}/w1280{raw['backdrop_path']}" if raw.get("backdrop_path") else None,
+            "runtime": raw.get("runtime")
+            or (raw.get("episode_run_time")[0] if raw.get("episode_run_time") else None),
+            "poster_url": f"{TMDB_IMG}/w500{raw['poster_path']}"
+            if raw.get("poster_path")
+            else None,
+            "backdrop_url": f"{TMDB_IMG}/w1280{raw['backdrop_path']}"
+            if raw.get("backdrop_path")
+            else None,
             "genres": genres,
             "cast": cast,
             "director": director,
@@ -292,7 +309,9 @@ async def get_tmdb_detail(
             "library_item": {
                 "id": library_match.get("id"),
                 "type": library_match.get("type"),
-            } if library_match else None,
+            }
+            if library_match
+            else None,
         }
 
     return await cache.get_or_set(cache_key, _fetch, ttl_seconds=3600)
@@ -308,7 +327,11 @@ async def get_recommendations_based_on(
     if not settings.TMDB_API_KEY:
         return {"items": []}
 
-    endpoint = f"/movie/{tmdb_id}/recommendations" if media_type == "movie" else f"/tv/{tmdb_id}/recommendations"
+    endpoint = (
+        f"/movie/{tmdb_id}/recommendations"
+        if media_type == "movie"
+        else f"/tv/{tmdb_id}/recommendations"
+    )
     formatter = _format_tmdb_movie if media_type == "movie" else _format_tmdb_series
 
     cache_key = f"recs_based_on:{media_type}:{tmdb_id}"
@@ -326,8 +349,7 @@ async def get_recommendations_based_on(
         for raw in data.get("results", [])[:12]:
             item = formatter(raw)
             item["in_library"] = (
-                item["tmdb_id"] in existing_tmdb_ids
-                or item["title"].lower() in existing_titles
+                item["tmdb_id"] in existing_tmdb_ids or item["title"].lower() in existing_titles
             )
             items.append(item)
 
@@ -362,7 +384,11 @@ async def discover_media(
             genre_data = await _tmdb_get(f"/genre/{media_type}/list")
             if genre_data:
                 genre_id = next(
-                    (g["id"] for g in genre_data.get("genres", []) if g["name"].lower() == genre.lower()),
+                    (
+                        g["id"]
+                        for g in genre_data.get("genres", [])
+                        if g["name"].lower() == genre.lower()
+                    ),
                     None,
                 )
                 if genre_id:

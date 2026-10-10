@@ -114,14 +114,16 @@ class UnraidClient:
             # It must stay intact: it's unique per container (used as the React
             # key) and it's the PrefixedID the start/stop/restart mutations expect.
             # Truncating it collapsed every container to the same host prefix.
-            containers.append({
-                "name": name,
-                "status": "running" if state_raw == "RUNNING" else "stopped",
-                "image": c.get("image", ""),
-                "id": c.get("id") or "",
-                "status_text": c.get("status", ""),
-                "state_raw": state_raw,
-            })
+            containers.append(
+                {
+                    "name": name,
+                    "status": "running" if state_raw == "RUNNING" else "stopped",
+                    "image": c.get("image", ""),
+                    "id": c.get("id") or "",
+                    "status_text": c.get("status", ""),
+                    "state_raw": state_raw,
+                }
+            )
         return containers
 
     async def docker_action(self, container_id: str, action: str) -> str:

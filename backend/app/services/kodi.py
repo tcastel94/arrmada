@@ -1,18 +1,20 @@
 """Kodi service for discovering instances and triggering library scans."""
 
 import asyncio
-import httpx
-from typing import List, Dict, Any
-from zeroconf import ServiceBrowser, Zeroconf
+from typing import Any
 
-from sqlalchemy.ext.asyncio import AsyncSession
+import httpx
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from zeroconf import ServiceBrowser, Zeroconf
 
 from app.models.service import Service
 from app.services.encryption import decrypt_api_key
 from app.utils.logger import get_logger
+import contextlib
 
 logger = get_logger(__name__)
+
 
 class KodiListener:
     def __init__(self):
@@ -27,31 +29,37 @@ class KodiListener:
             ip = ".".join([str(c) for c in info.addresses[0]])
             port = info.port
             url = f"http://{ip}:{port}"
-            self.found.append({
-                "name": name.split(".")[0],
-                "url": url,
-            })
+            self.found.append(
+                {
+                    "name": name.split(".")[0],
+                    "url": url,
+                }
+            )
 
     def update_service(self, zeroconf, type, name):
         pass
 
-async def discover_kodi() -> List[Dict[str, str]]:
+
+async def discover_kodi() -> list[dict[str, str]]:
     """Discover local Kodi instances via ZeroConf (mDNS)."""
     zeroconf = Zeroconf()
     listener = KodiListener()
-    
+
     # Listen for kodi web interfaces
     # Usually Kodi broadcasts _http._tcp.local or _xbmc-jsonrpc._tcp.local
     # Let's check _http._tcp.local
     browser = ServiceBrowser(zeroconf, "_http._tcp.local.", listener)
-    
-    await asyncio.sleep(3) # Wait for discovery
-    
+
+    await asyncio.sleep(3)  # Wait for discovery
+
     zeroconf.close()
-    
+
     # Filter for Kodi
-    kodi_instances = [s for s in listener.found if "kodi" in s["name"].lower() or "xbmc" in s["name"].lower()]
+    kodi_instances = [
+        s for s in listener.found if "kodi" in s["name"].lower() or "xbmc" in s["name"].lower()
+    ]
     return kodi_instances
+
 
 async def sync_kodi(db: AsyncSession) -> dict[str, Any]:
     """Trigger VideoLibrary.Scan on all registered Kodi instances."""
@@ -71,7 +79,7 @@ async def sync_kodi(db: AsyncSession) -> dict[str, Any]:
 
     success = 0
     failed = 0
-    
+
     async with httpx.AsyncClient(timeout=10.0) as client:
         for kodi in kodis:
             url = f"{kodi.url}/jsonrpc"
@@ -81,19 +89,19 @@ async def sync_kodi(db: AsyncSession) -> dict[str, Any]:
                 creds = decrypt_api_key(kodi.api_key)
                 if ":" in creds:
                     auth = tuple(creds.split(":", 1))
-            
+
             payload = {
                 "jsonrpc": "2.0",
                 "method": "VideoLibrary.Scan",
-                "id": sum(ord(c) for c in kodi.name)
+                "id": sum(ord(c) for c in kodi.name),
             }
-            
+
             try:
                 if auth:
                     resp = await client.post(url, json=payload, auth=auth)
                 else:
                     resp = await client.post(url, json=payload)
-                    
+
                 resp.raise_for_status()
                 data = resp.json()
                 if "error" in data:
@@ -142,7 +150,9 @@ async def _pick(db: AsyncSession, service_id: int | None) -> Service | None:
     return kodis[0]
 
 
-async def _rpc(client: httpx.AsyncClient, base_url: str, auth, method: str, params: dict | None = None):
+async def _rpc(
+    client: httpx.AsyncClient, base_url: str, auth, method: str, params: dict | None = None
+):
     """Perform one Kodi JSON-RPC call; raise on Kodi-level error."""
     payload = {"jsonrpc": "2.0", "method": method, "params": params or {}, "id": 1}
     resp = await client.post(f"{base_url}/jsonrpc", json=payload, auth=auth)
@@ -167,20 +177,26 @@ async def play_movie(
     auth = _auth_of(kodi)
     try:
         async with httpx.AsyncClient(timeout=12.0) as client:
-            res = await _rpc(client, kodi.url, auth, "VideoLibrary.GetMovies", {"properties": ["uniqueid"]})
+            res = await _rpc(
+                client, kodi.url, auth, "VideoLibrary.GetMovies", {"properties": ["uniqueid"]}
+            )
             movieid = None
             for m in (res or {}).get("movies", []):
                 if str((m.get("uniqueid") or {}).get("tmdb")) == str(tmdb_id):
                     movieid = m.get("movieid")
                     break
             if movieid is None:
-                return {"status": "not_found", "detail": "Film absent de la bibliothèque Kodi (à scanner ?)"}
+                return {
+                    "status": "not_found",
+                    "detail": "Film absent de la bibliothèque Kodi (à scanner ?)",
+                }
             await _rpc(client, kodi.url, auth, "Player.Open", {"item": {"movieid": movieid}})
 
             # Auto-tune AVR sound settings for the target room (Salon vs Salle de cinéma)
             avr_res = None
             try:
                 from app.services import yamaha as yamaha_service
+
                 avr_res = await yamaha_service.apply_preset(db, room=room, media_type="movie")
             except Exception as avr_exc:
                 logger.debug("Yamaha auto-preset failed during Kodi play: %s", avr_exc)
@@ -207,7 +223,10 @@ async def get_watched_status(db: AsyncSession) -> dict[str, Any]:
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             res = await _rpc(
-                client, kodi.url, auth, "VideoLibrary.GetMovies",
+                client,
+                kodi.url,
+                auth,
+                "VideoLibrary.GetMovies",
                 {"properties": ["playcount", "resume", "uniqueid", "lastplayed", "title", "year"]},
             )
     except Exception as exc:
@@ -258,10 +277,10 @@ def _resolution_label(width: int | None, height: int | None) -> str | None:
 
 def _tech_details(it: dict) -> dict[str, Any]:
     """Extract video/audio/subtitle technical info from a Kodi item's streamdetails."""
-    sd = (it.get("streamdetails") or {})
-    video = (sd.get("video") or [{}])
-    audio = (sd.get("audio") or [{}])
-    subs = (sd.get("subtitle") or [])
+    sd = it.get("streamdetails") or {}
+    video = sd.get("video") or [{}]
+    audio = sd.get("audio") or [{}]
+    subs = sd.get("subtitle") or []
     v = video[0] if video else {}
     a = audio[0] if audio else {}
     return {
@@ -293,18 +312,40 @@ async def get_now_playing(db: AsyncSession) -> dict[str, Any]:
                 return {"playing": False, "kodi": kodi.name}
             pid = player["playerid"]
             props = await _rpc(
-                client, kodi.url, auth, "Player.GetProperties",
+                client,
+                kodi.url,
+                auth,
+                "Player.GetProperties",
                 {"playerid": pid, "properties": ["speed", "time", "totaltime", "percentage"]},
             )
             item = await _rpc(
-                client, kodi.url, auth, "Player.GetItem",
-                {"playerid": pid, "properties": [
-                    "title", "showtitle", "season", "episode", "uniqueid", "year",
-                    "plot", "runtime", "genre", "rating", "streamdetails",
-                ]},
+                client,
+                kodi.url,
+                auth,
+                "Player.GetItem",
+                {
+                    "playerid": pid,
+                    "properties": [
+                        "title",
+                        "showtitle",
+                        "season",
+                        "episode",
+                        "uniqueid",
+                        "year",
+                        "plot",
+                        "runtime",
+                        "genre",
+                        "rating",
+                        "streamdetails",
+                    ],
+                },
             )
             appp = await _rpc(
-                client, kodi.url, auth, "Application.GetProperties", {"properties": ["volume", "muted"]},
+                client,
+                kodi.url,
+                auth,
+                "Application.GetProperties",
+                {"properties": ["volume", "muted"]},
             )
             it = (item or {}).get("item", {}) or {}
             subtitle = ""
@@ -387,7 +428,9 @@ async def control_player(db: AsyncSession, action: str, value: Any = None) -> di
         async with httpx.AsyncClient(timeout=8.0) as client:
             if action in ("playpause", "stop", "seek"):
                 players = await _rpc(client, kodi.url, auth, "Player.GetActivePlayers")
-                player = next((p for p in (players or []) if p.get("type") in ("video", "audio")), None)
+                player = next(
+                    (p for p in (players or []) if p.get("type") in ("video", "audio")), None
+                )
                 if not player:
                     return {"status": "error", "detail": "Rien en lecture"}
                 pid = player["playerid"]
@@ -397,11 +440,16 @@ async def control_player(db: AsyncSession, action: str, value: Any = None) -> di
                     await _rpc(client, kodi.url, auth, "Player.Stop", {"playerid": pid})
                 elif action == "seek":
                     await _rpc(
-                        client, kodi.url, auth, "Player.Seek",
+                        client,
+                        kodi.url,
+                        auth,
+                        "Player.Seek",
                         {"playerid": pid, "value": {"percentage": float(value or 0)}},
                     )
             elif action == "volume":
-                await _rpc(client, kodi.url, auth, "Application.SetVolume", {"volume": int(value or 0)})
+                await _rpc(
+                    client, kodi.url, auth, "Application.SetVolume", {"volume": int(value or 0)}
+                )
             elif action == "mute":
                 await _rpc(client, kodi.url, auth, "Application.SetMute", {"mute": "toggle"})
             else:
@@ -437,9 +485,19 @@ async def test_connection(db: AsyncSession, service_id: int) -> dict[str, Any]:
     try:
         async with httpx.AsyncClient(timeout=8.0) as client:
             await _rpc(client, svc.url, auth, "JSONRPC.Ping")
-            app = await _rpc(client, svc.url, auth, "Application.GetProperties", {"properties": ["version", "name"]})
+            app = await _rpc(
+                client,
+                svc.url,
+                auth,
+                "Application.GetProperties",
+                {"properties": ["version", "name"]},
+            )
         v = (app or {}).get("version", {})
-        return {"ok": True, "version": f"{v.get('major', '?')}.{v.get('minor', '')}", "name": (app or {}).get("name", "Kodi")}
+        return {
+            "ok": True,
+            "version": f"{v.get('major', '?')}.{v.get('minor', '')}",
+            "name": (app or {}).get("name", "Kodi"),
+        }
     except Exception as exc:
         return {"ok": False, "detail": f"{type(exc).__name__}"}
 
@@ -461,7 +519,10 @@ async def get_drift(db: AsyncSession) -> dict[str, Any]:
         try:
             for m in await client.get("/movie"):
                 if m.get("tmdbId") and m.get("hasFile"):
-                    radarr_by_tmdb[str(m["tmdbId"])] = {"title": m.get("title"), "year": m.get("year")}
+                    radarr_by_tmdb[str(m["tmdbId"])] = {
+                        "title": m.get("title"),
+                        "year": m.get("year"),
+                    }
         except Exception as exc:
             logger.warning("Drift: Radarr fetch failed: %s", exc)
         finally:
@@ -474,7 +535,9 @@ async def get_drift(db: AsyncSession) -> dict[str, Any]:
         auth = _auth_of(kodi)
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
-                res = await _rpc(client, kodi.url, auth, "VideoLibrary.GetMovies", {"properties": ["uniqueid"]})
+                res = await _rpc(
+                    client, kodi.url, auth, "VideoLibrary.GetMovies", {"properties": ["uniqueid"]}
+                )
             for m in (res or {}).get("movies", []):
                 t = (m.get("uniqueid") or {}).get("tmdb")
                 if t:
@@ -496,6 +559,7 @@ async def get_drift(db: AsyncSession) -> dict[str, Any]:
 # ── Feature: Kodi Add-on integration ─────────────────────────
 async def _get_radarr_client(db: AsyncSession):
     from app.services.radarr import RadarrClient
+
     stmt = select(Service).where(Service.is_enabled == True, Service.type == "radarr")
     svc = (await db.execute(stmt)).scalars().first()
     if not svc:
@@ -505,6 +569,7 @@ async def _get_radarr_client(db: AsyncSession):
 
 async def _get_sonarr_client(db: AsyncSession):
     from app.services.sonarr import SonarrClient
+
     stmt = select(Service).where(Service.is_enabled == True, Service.type == "sonarr")
     svc = (await db.execute(stmt)).scalars().first()
     if not svc:
@@ -514,6 +579,7 @@ async def _get_sonarr_client(db: AsyncSession):
 
 async def _get_bazarr_client(db: AsyncSession):
     from app.services.bazarr import BazarrClient
+
     stmt = select(Service).where(Service.is_enabled == True, Service.type == "bazarr")
     svc = (await db.execute(stmt)).scalars().first()
     if not svc:
@@ -525,7 +591,9 @@ async def handle_addon_subtitles(db: AsyncSession, data: dict[str, Any]) -> dict
     """Trigger Bazarr subtitle download from Kodi context action."""
     from app.services.activity_log import log_event
 
-    media_type = data.get("media_type") or ("episode" if data.get("season") is not None else "movie")
+    media_type = data.get("media_type") or (
+        "episode" if data.get("season") is not None else "movie"
+    )
     tmdb_id = data.get("tmdb_id")
     imdb_id = data.get("imdb_id")
     tvdb_id = data.get("tvdb_id")
@@ -543,7 +611,7 @@ async def handle_addon_subtitles(db: AsyncSession, data: dict[str, Any]) -> dict
             radarr = await _get_radarr_client(db)
             if not radarr:
                 return {"status": "error", "message": "Radarr n'est pas configuré"}
-            
+
             movies = await radarr.get_movies()
             match = None
             for m in movies:
@@ -562,7 +630,7 @@ async def handle_addon_subtitles(db: AsyncSession, data: dict[str, Any]) -> dict
 
             radarr_id = match["id"]
             await bazarr.download_movie_subtitle(radarr_id=radarr_id, language=language)
-            
+
             await log_event(
                 category="subtitle",
                 action="kodi_sub_search",
@@ -604,15 +672,22 @@ async def handle_addon_subtitles(db: AsyncSession, data: dict[str, Any]) -> dict
             episodes = await sonarr.get(f"/episode?seriesId={series_id}")
             match_ep = None
             for ep in episodes:
-                if int(ep.get("seasonNumber", -1)) == int(season or 0) and int(ep.get("episodeNumber", -1)) == int(episode or 0):
+                if int(ep.get("seasonNumber", -1)) == int(season or 0) and int(
+                    ep.get("episodeNumber", -1)
+                ) == int(episode or 0):
                     match_ep = ep
                     break
 
             if not match_ep:
-                return {"status": "error", "message": f"Épisode S{season:02d}E{episode:02d} introuvable dans Sonarr"}
+                return {
+                    "status": "error",
+                    "message": f"Épisode S{season:02d}E{episode:02d} introuvable dans Sonarr",
+                }
 
             episode_id = match_ep["id"]
-            await bazarr.download_episode_subtitle(series_id=series_id, episode_id=episode_id, language=language)
+            await bazarr.download_episode_subtitle(
+                series_id=series_id, episode_id=episode_id, language=language
+            )
 
             await log_event(
                 category="subtitle",
@@ -638,7 +713,9 @@ async def handle_addon_sync_subtitles(db: AsyncSession, data: dict[str, Any]) ->
     """Trigger Bazarr FFsubsync audio-aligned subtitle synchronization."""
     from app.services.activity_log import log_event
 
-    media_type = data.get("media_type") or ("episode" if data.get("season") is not None else "movie")
+    media_type = data.get("media_type") or (
+        "episode" if data.get("season") is not None else "movie"
+    )
     tmdb_id = data.get("tmdb_id")
     imdb_id = data.get("imdb_id")
     tvdb_id = data.get("tvdb_id")
@@ -674,13 +751,15 @@ async def handle_addon_sync_subtitles(db: AsyncSession, data: dict[str, Any]) ->
                 return {"status": "error", "message": f"Film '{title}' introuvable dans Radarr"}
 
             radarr_id = match["id"]
-            
+
             # Fetch subtitles from Bazarr for this movie
             b_movies = await bazarr.get("/movies", params={"radarrid[]": radarr_id})
             movie_data = (b_movies.get("data") or [{}])[0] if isinstance(b_movies, dict) else {}
             subtitles = movie_data.get("subtitles") or []
 
-            target_sub = next((s for s in subtitles if s.get("code2") == language and s.get("path")), None)
+            target_sub = next(
+                (s for s in subtitles if s.get("code2") == language and s.get("path")), None
+            )
             if not target_sub:
                 target_sub = next((s for s in subtitles if s.get("path")), None)
 
@@ -713,7 +792,7 @@ async def handle_addon_sync_subtitles(db: AsyncSession, data: dict[str, Any]) ->
                 media_type="movie",
                 title=match.get("title", title),
                 tmdb_id=match.get("tmdbId"),
-                detail=f"Re-synchronisation audio (FFsubsync) via Kodi Add-on",
+                detail="Re-synchronisation audio (FFsubsync) via Kodi Add-on",
             )
 
             return {
@@ -747,12 +826,17 @@ async def handle_addon_sync_subtitles(db: AsyncSession, data: dict[str, Any]) ->
             episodes = await sonarr.get(f"/episode?seriesId={series_id}")
             match_ep = None
             for ep in episodes:
-                if int(ep.get("seasonNumber", -1)) == int(season or 0) and int(ep.get("episodeNumber", -1)) == int(episode or 0):
+                if int(ep.get("seasonNumber", -1)) == int(season or 0) and int(
+                    ep.get("episodeNumber", -1)
+                ) == int(episode or 0):
                     match_ep = ep
                     break
 
             if not match_ep:
-                return {"status": "error", "message": f"Épisode S{season:02d}E{episode:02d} introuvable dans Sonarr"}
+                return {
+                    "status": "error",
+                    "message": f"Épisode S{season:02d}E{episode:02d} introuvable dans Sonarr",
+                }
 
             episode_id = match_ep["id"]
 
@@ -760,7 +844,9 @@ async def handle_addon_sync_subtitles(db: AsyncSession, data: dict[str, Any]) ->
             ep_data = (b_eps.get("data") or [{}])[0] if isinstance(b_eps, dict) else {}
             subtitles = ep_data.get("subtitles") or []
 
-            target_sub = next((s for s in subtitles if s.get("code2") == language and s.get("path")), None)
+            target_sub = next(
+                (s for s in subtitles if s.get("code2") == language and s.get("path")), None
+            )
             if not target_sub:
                 target_sub = next((s for s in subtitles if s.get("path")), None)
 
@@ -792,7 +878,7 @@ async def handle_addon_sync_subtitles(db: AsyncSession, data: dict[str, Any]) ->
                 source="kodi",
                 media_type="series",
                 title=f"{match_series.get('title')} S{season:02d}E{episode:02d}",
-                detail=f"Re-synchronisation audio (FFsubsync) via Kodi Add-on",
+                detail="Re-synchronisation audio (FFsubsync) via Kodi Add-on",
             )
 
             return {
@@ -810,7 +896,9 @@ async def handle_addon_search(db: AsyncSession, data: dict[str, Any]) -> dict[st
     """Trigger Radarr/Sonarr media search from Kodi context action."""
     from app.services.activity_log import log_event
 
-    media_type = data.get("media_type") or ("episode" if data.get("season") is not None else "movie")
+    media_type = data.get("media_type") or (
+        "episode" if data.get("season") is not None else "movie"
+    )
     tmdb_id = data.get("tmdb_id")
     imdb_id = data.get("imdb_id")
     tvdb_id = data.get("tvdb_id")
@@ -883,12 +971,17 @@ async def handle_addon_search(db: AsyncSession, data: dict[str, Any]) -> dict[st
                 episodes = await sonarr.get(f"/episode?seriesId={series_id}")
                 match_ep = None
                 for ep in episodes:
-                    if int(ep.get("seasonNumber", -1)) == int(season) and int(ep.get("episodeNumber", -1)) == int(episode):
+                    if int(ep.get("seasonNumber", -1)) == int(season) and int(
+                        ep.get("episodeNumber", -1)
+                    ) == int(episode):
                         match_ep = ep
                         break
 
                 if not match_ep:
-                    return {"status": "error", "message": f"Épisode S{int(season):02d}E{int(episode):02d} introuvable"}
+                    return {
+                        "status": "error",
+                        "message": f"Épisode S{int(season):02d}E{int(episode):02d} introuvable",
+                    }
 
                 await sonarr.search_episodes([match_ep["id"]])
                 desc = f"Recherche épisode S{int(season):02d}E{int(episode):02d}"
@@ -921,8 +1014,8 @@ async def handle_addon_search(db: AsyncSession, data: dict[str, Any]) -> dict[st
 
 async def handle_addon_scrobble(db: AsyncSession, data: dict[str, Any]) -> dict[str, Any]:
     """Handle live playback scrobble from Kodi addon service."""
-    from app.utils.event_bus import event_bus
     from app.services.activity_log import log_event
+    from app.utils.event_bus import event_bus
 
     event_type = data.get("event", "progress")  # play, pause, stop, progress
     title = data.get("title", "Inconnu")
@@ -935,7 +1028,7 @@ async def handle_addon_scrobble(db: AsyncSession, data: dict[str, Any]) -> dict[
         data={
             **data,
             "device": kodi_device,
-        }
+        },
     )
 
     if event_type == "stop" and float(percentage or 0) >= 90:
@@ -955,38 +1048,45 @@ async def handle_addon_scrobble(db: AsyncSession, data: dict[str, Any]) -> dict[
 
 async def get_addon_dashboard_status(db: AsyncSession) -> dict[str, Any]:
     """Return download queue, recent events and quick summary for Kodi addon background service."""
-    from app.services import media_aggregator
-    from app.models.activity import ActivityEvent
     from sqlalchemy import select
+
+    from app.models.activity import ActivityEvent
+    from app.services import media_aggregator
 
     queue_items = await media_aggregator.get_queue_items(db)
     formatted_queue = []
     for it in queue_items:
-        formatted_queue.append({
-            "title": it.get("title") or it.get("name") or "Téléchargement",
-            "status": it.get("status", "downloading"),
-            "progress": round(it.get("progress", 0), 1),
-            "size": it.get("size", 0),
-            "timeleft": it.get("timeleft") or it.get("eta") or "",
-            "service": it.get("service_type") or it.get("service") or "",
-        })
+        formatted_queue.append(
+            {
+                "title": it.get("title") or it.get("name") or "Téléchargement",
+                "status": it.get("status", "downloading"),
+                "progress": round(it.get("progress", 0), 1),
+                "size": it.get("size", 0),
+                "timeleft": it.get("timeleft") or it.get("eta") or "",
+                "service": it.get("service_type") or it.get("service") or "",
+            }
+        )
 
     # Recent import events for auto-scan trigger
     recent_events = []
     try:
-        stmt = select(ActivityEvent).where(
-            ActivityEvent.category.in_(["download", "media"]),
-            ActivityEvent.status == "ok"
-        ).order_by(ActivityEvent.id.desc()).limit(8)
+        stmt = (
+            select(ActivityEvent)
+            .where(ActivityEvent.category.in_(["download", "media"]), ActivityEvent.status == "ok")
+            .order_by(ActivityEvent.id.desc())
+            .limit(8)
+        )
         res = await db.execute(stmt)
         for ev in res.scalars().all():
-            recent_events.append({
-                "id": ev.id,
-                "action": ev.action,
-                "title": ev.title,
-                "detail": ev.detail,
-                "timestamp": ev.created_at.timestamp() if ev.created_at else 0,
-            })
+            recent_events.append(
+                {
+                    "id": ev.id,
+                    "action": ev.action,
+                    "title": ev.title,
+                    "detail": ev.detail,
+                    "timestamp": ev.created_at.timestamp() if ev.created_at else 0,
+                }
+            )
     except Exception:
         pass
 
@@ -1001,12 +1101,14 @@ async def get_addon_dashboard_status(db: AsyncSession) -> dict[str, Any]:
 async def get_addon_full_dashboard(db: AsyncSession) -> dict[str, Any]:
     """Return complete system health, storage, services, and activity history for Kodi (parallel & cached)."""
     import asyncio
-    from app.services import media_aggregator
-    from app.models.service import Service
-    from app.models.activity import ActivityEvent
-    from app.utils.helpers import format_bytes
-    from app.utils.cache import cache
+
     from sqlalchemy import select
+
+    from app.models.activity import ActivityEvent
+    from app.models.service import Service
+    from app.services import media_aggregator
+    from app.utils.cache import cache
+    from app.utils.helpers import format_bytes
 
     async def _fetch():
         # 1. Services & Activities from DB
@@ -1014,37 +1116,39 @@ async def get_addon_full_dashboard(db: AsyncSession) -> dict[str, Any]:
         stmt_act = select(ActivityEvent).order_by(ActivityEvent.id.desc()).limit(15)
 
         res_svc, res_act = await asyncio.gather(
-            db.execute(stmt_svc),
-            db.execute(stmt_act),
-            return_exceptions=True
+            db.execute(stmt_svc), db.execute(stmt_act), return_exceptions=True
         )
 
         services_list = []
         if not isinstance(res_svc, Exception):
             for s in res_svc.scalars().all():
-                services_list.append({
-                    "id": s.id,
-                    "name": s.name,
-                    "type": s.type,
-                    "is_enabled": s.is_enabled,
-                    "url": s.url,
-                    "status": "online" if s.is_enabled else "disabled",
-                })
+                services_list.append(
+                    {
+                        "id": s.id,
+                        "name": s.name,
+                        "type": s.type,
+                        "is_enabled": s.is_enabled,
+                        "url": s.url,
+                        "status": "online" if s.is_enabled else "disabled",
+                    }
+                )
 
         recent_activities = []
         if not isinstance(res_act, Exception):
             for ev in res_act.scalars().all():
                 time_str = ev.created_at.strftime("%H:%M") if ev.created_at else ""
-                recent_activities.append({
-                    "id": ev.id,
-                    "time": time_str,
-                    "category": ev.category,
-                    "action": ev.action,
-                    "status": ev.status,
-                    "title": ev.title,
-                    "subtitle": ev.subtitle or "",
-                    "detail": ev.detail or "",
-                })
+                recent_activities.append(
+                    {
+                        "id": ev.id,
+                        "time": time_str,
+                        "category": ev.category,
+                        "action": ev.action,
+                        "status": ev.status,
+                        "title": ev.title,
+                        "subtitle": ev.subtitle or "",
+                        "detail": ev.detail or "",
+                    }
+                )
 
         # 2. Parallel fetch stats, disks, and queue
         async def _safe_stats():
@@ -1056,6 +1160,7 @@ async def get_addon_full_dashboard(db: AsyncSession) -> dict[str, Any]:
         async def _safe_disks():
             try:
                 from app.api.system import _fetch_disk_space
+
                 return await _fetch_disk_space(db)
             except Exception:
                 return []
@@ -1078,22 +1183,24 @@ async def get_addon_full_dashboard(db: AsyncSession) -> dict[str, Any]:
         stats = {
             "movies_count": movies_block.get("total", 0) or raw_stats.get("total_movies", 0),
             "series_count": series_block.get("total", 0) or raw_stats.get("total_series", 0),
-            "episodes_count": series_block.get("total_episodes", 0) or raw_stats.get("total_episodes", 0),
+            "episodes_count": series_block.get("total_episodes", 0)
+            or raw_stats.get("total_episodes", 0),
             "total_size_bytes": raw_stats.get("total_size_bytes", 0),
             "total_size_human": format_bytes(raw_stats.get("total_size_bytes", 0)),
         }
 
-
         formatted_queue = []
-        for it in (queue_items if isinstance(queue_items, list) else []):
-            formatted_queue.append({
-                "title": it.get("title") or it.get("name") or "Téléchargement",
-                "status": it.get("status", "downloading"),
-                "progress": round(it.get("progress", 0), 1),
-                "size": it.get("size", 0),
-                "timeleft": it.get("timeleft") or it.get("eta") or "",
-                "service": it.get("service_type") or it.get("service") or "",
-            })
+        for it in queue_items if isinstance(queue_items, list) else []:
+            formatted_queue.append(
+                {
+                    "title": it.get("title") or it.get("name") or "Téléchargement",
+                    "status": it.get("status", "downloading"),
+                    "progress": round(it.get("progress", 0), 1),
+                    "size": it.get("size", 0),
+                    "timeleft": it.get("timeleft") or it.get("eta") or "",
+                    "service": it.get("service_type") or it.get("service") or "",
+                }
+            )
 
         return {
             "status": "ok",
@@ -1108,10 +1215,10 @@ async def get_addon_full_dashboard(db: AsyncSession) -> dict[str, Any]:
     return await cache.get_or_set("kodi_addon_full_dashboard", _fetch, ttl_seconds=15)
 
 
-
-
 # ── Feature: Kodi Media Discovery & Interactive Release Grab ──
-async def lookup_media_for_addon(db: AsyncSession, q: str, media_type: str = "all") -> list[dict[str, Any]]:
+async def lookup_media_for_addon(
+    db: AsyncSession, q: str, media_type: str = "all"
+) -> list[dict[str, Any]]:
     """Lookup movies and series across Radarr/Sonarr for Kodi UI."""
     results: list[dict[str, Any]] = []
 
@@ -1123,19 +1230,28 @@ async def lookup_media_for_addon(db: AsyncSession, q: str, media_type: str = "al
                 raw_movies = await radarr.lookup_movie(q)
                 for item in raw_movies[:10]:
                     images = item.get("images", [])
-                    poster = next((img["remoteUrl"] for img in images if img.get("coverType") == "poster" and img.get("remoteUrl")), None)
+                    poster = next(
+                        (
+                            img["remoteUrl"]
+                            for img in images
+                            if img.get("coverType") == "poster" and img.get("remoteUrl")
+                        ),
+                        None,
+                    )
                     arr_id = item.get("id") or 0
-                    results.append({
-                        "title": item.get("title", ""),
-                        "year": item.get("year"),
-                        "type": "movie",
-                        "tmdb_id": item.get("tmdbId"),
-                        "imdb_id": item.get("imdbId"),
-                        "overview": item.get("overview") or "",
-                        "poster_url": poster,
-                        "in_library": arr_id > 0,
-                        "arr_id": arr_id or None,
-                    })
+                    results.append(
+                        {
+                            "title": item.get("title", ""),
+                            "year": item.get("year"),
+                            "type": "movie",
+                            "tmdb_id": item.get("tmdbId"),
+                            "imdb_id": item.get("imdbId"),
+                            "overview": item.get("overview") or "",
+                            "poster_url": poster,
+                            "in_library": arr_id > 0,
+                            "arr_id": arr_id or None,
+                        }
+                    )
             except Exception as exc:
                 logger.error("Addon Radarr lookup failed: %s", exc)
 
@@ -1147,26 +1263,37 @@ async def lookup_media_for_addon(db: AsyncSession, q: str, media_type: str = "al
                 raw_series = await sonarr.lookup_series(q)
                 for item in raw_series[:10]:
                     images = item.get("images", [])
-                    poster = next((img["remoteUrl"] for img in images if img.get("coverType") == "poster" and img.get("remoteUrl")), None)
+                    poster = next(
+                        (
+                            img["remoteUrl"]
+                            for img in images
+                            if img.get("coverType") == "poster" and img.get("remoteUrl")
+                        ),
+                        None,
+                    )
                     arr_id = item.get("id") or 0
-                    results.append({
-                        "title": item.get("title", ""),
-                        "year": item.get("year"),
-                        "type": "series",
-                        "tvdb_id": item.get("tvdbId"),
-                        "imdb_id": item.get("imdbId"),
-                        "overview": item.get("overview") or "",
-                        "poster_url": poster,
-                        "in_library": arr_id > 0,
-                        "arr_id": arr_id or None,
-                    })
+                    results.append(
+                        {
+                            "title": item.get("title", ""),
+                            "year": item.get("year"),
+                            "type": "series",
+                            "tvdb_id": item.get("tvdbId"),
+                            "imdb_id": item.get("imdbId"),
+                            "overview": item.get("overview") or "",
+                            "poster_url": poster,
+                            "in_library": arr_id > 0,
+                            "arr_id": arr_id or None,
+                        }
+                    )
             except Exception as exc:
                 logger.error("Addon Sonarr lookup failed: %s", exc)
 
     return results
 
 
-async def get_media_options_for_addon(db: AsyncSession, media_type: str = "movie") -> dict[str, Any]:
+async def get_media_options_for_addon(
+    db: AsyncSession, media_type: str = "movie"
+) -> dict[str, Any]:
     """Get available quality profiles and root folders for media type."""
     profiles: list[dict[str, Any]] = []
     root_folders: list[dict[str, Any]] = []
@@ -1178,7 +1305,10 @@ async def get_media_options_for_addon(db: AsyncSession, media_type: str = "movie
                 raw_p = await radarr.get_quality_profiles()
                 profiles = [{"id": p["id"], "name": p["name"]} for p in raw_p]
                 raw_f = await radarr.get_root_folders()
-                root_folders = [{"id": f.get("id"), "path": f.get("path"), "free_space": f.get("freeSpace", 0)} for f in raw_f]
+                root_folders = [
+                    {"id": f.get("id"), "path": f.get("path"), "free_space": f.get("freeSpace", 0)}
+                    for f in raw_f
+                ]
             except Exception as exc:
                 logger.error("Failed to get Radarr options: %s", exc)
     else:
@@ -1188,7 +1318,10 @@ async def get_media_options_for_addon(db: AsyncSession, media_type: str = "movie
                 raw_p = await sonarr.get_quality_profiles()
                 profiles = [{"id": p["id"], "name": p["name"]} for p in raw_p]
                 raw_f = await sonarr.get_root_folders()
-                root_folders = [{"id": f.get("id"), "path": f.get("path"), "free_space": f.get("freeSpace", 0)} for f in raw_f]
+                root_folders = [
+                    {"id": f.get("id"), "path": f.get("path"), "free_space": f.get("freeSpace", 0)}
+                    for f in raw_f
+                ]
             except Exception as exc:
                 logger.error("Failed to get Sonarr options: %s", exc)
 
@@ -1205,7 +1338,6 @@ async def get_media_options_for_addon(db: AsyncSession, media_type: str = "movie
 
     profiles.sort(key=_profile_priority)
     return {"profiles": profiles, "root_folders": root_folders}
-
 
 
 async def add_media_for_addon(db: AsyncSession, data: dict[str, Any]) -> dict[str, Any]:
@@ -1299,13 +1431,17 @@ async def list_releases_for_addon(db: AsyncSession, media_type: str, arr_id: int
     """Fetch releases for a media item from Radarr/Sonarr indexers."""
     client = await _get_radarr_client(db) if media_type == "movie" else await _get_sonarr_client(db)
     if not client:
-        return {"status": "error", "message": f"{media_type.capitalize()} n'est pas configuré", "releases": []}
+        return {
+            "status": "error",
+            "message": f"{media_type.capitalize()} n'est pas configuré",
+            "releases": [],
+        }
 
     try:
         raw_releases = await client.get_releases(arr_id)
         formatted: list[dict[str, Any]] = []
 
-        for r in (raw_releases or []):
+        for r in raw_releases or []:
             if not isinstance(r, dict):
                 continue
             proto = (r.get("protocol") or "torrent").lower()
@@ -1313,20 +1449,24 @@ async def list_releases_for_addon(db: AsyncSession, media_type: str, arr_id: int
             quality_name = quality_info.get("name") or "Inconnu"
             size_bytes = r.get("size") or 0
 
-            formatted.append({
-                "guid": r.get("guid"),
-                "indexer_id": r.get("indexerId"),
-                "indexer": r.get("indexer", "Indexeur"),
-                "title": r.get("title", ""),
-                "protocol": proto,
-                "protocol_icon": "⚡ USENET" if proto == "usenet" else f"📥 TORRENT ({r.get('seeders', 0)} seeds)",
-                "quality": quality_name,
-                "size_bytes": size_bytes,
-                "size_human": _format_size(size_bytes),
-                "seeders": r.get("seeders", 0),
-                "rejected": bool(r.get("rejected", False)),
-                "rejections": r.get("rejections") or [],
-            })
+            formatted.append(
+                {
+                    "guid": r.get("guid"),
+                    "indexer_id": r.get("indexerId"),
+                    "indexer": r.get("indexer", "Indexeur"),
+                    "title": r.get("title", ""),
+                    "protocol": proto,
+                    "protocol_icon": "⚡ USENET"
+                    if proto == "usenet"
+                    else f"📥 TORRENT ({r.get('seeders', 0)} seeds)",
+                    "quality": quality_name,
+                    "size_bytes": size_bytes,
+                    "size_human": _format_size(size_bytes),
+                    "seeders": r.get("seeders", 0),
+                    "rejected": bool(r.get("rejected", False)),
+                    "rejections": r.get("rejections") or [],
+                }
+            )
 
         # Sort: Non-rejected first, then higher seeders/size
         formatted.sort(key=lambda x: (x["rejected"], -(x["seeders"] or 0), -(x["size_bytes"] or 0)))
@@ -1374,6 +1514,7 @@ async def grab_release_for_addon(db: AsyncSession, data: dict[str, Any]) -> dict
 async def get_recommendations_for_addon(db: AsyncSession) -> dict[str, Any]:
     """Fetch trending movies, trending series and smart recommendations for Kodi."""
     from app.api.recommendations import get_recommendations
+
     try:
         res = await get_recommendations(db)
         return {"status": "ok", "data": res}
@@ -1383,15 +1524,25 @@ async def get_recommendations_for_addon(db: AsyncSession) -> dict[str, Any]:
 
 
 async def remove_queue_item_for_addon(
-    db: AsyncSession, service_type: str, item_id: int, remove_from_client: bool = True, blocklist: bool = False
+    db: AsyncSession,
+    service_type: str,
+    item_id: int,
+    remove_from_client: bool = True,
+    blocklist: bool = False,
 ) -> dict[str, Any]:
     """Remove a download queue item via Radarr or Sonarr."""
     from app.api.downloads import _get_arr_client_for_service
+
     try:
         client = await _get_arr_client_for_service(db, service_type)
-        await client.remove_queue_item(item_id, remove_from_client=remove_from_client, blocklist=blocklist)
+        await client.remove_queue_item(
+            item_id, remove_from_client=remove_from_client, blocklist=blocklist
+        )
         await client.close()
-        return {"status": "ok", "message": f"Téléchargement #{item_id} supprimé (blocklist={blocklist})"}
+        return {
+            "status": "ok",
+            "message": f"Téléchargement #{item_id} supprimé (blocklist={blocklist})",
+        }
     except Exception as exc:
         logger.error("Failed to remove queue item from Kodi: %s", exc)
         return {"status": "error", "message": str(exc)}
@@ -1401,10 +1552,11 @@ async def resume_queue_item_for_addon(
     db: AsyncSession, service_type: str, item_id: int
 ) -> dict[str, Any]:
     """Resume / unpause a download."""
-    from app.services.sabnzbd import SabnzbdClient
+    from sqlalchemy import select
+
     from app.models.service import Service
     from app.services.encryption import decrypt_api_key
-    from sqlalchemy import select
+    from app.services.sabnzbd import SabnzbdClient
 
     # 1. Unpause SABnzbd if present
     try:
@@ -1420,12 +1572,11 @@ async def resume_queue_item_for_addon(
 
     # 2. Trigger Sonarr / Radarr refresh
     from app.api.downloads import _get_arr_client_for_service
+
     try:
         client = await _get_arr_client_for_service(db, service_type)
-        try:
+        with contextlib.suppress(Exception):
             await client._post("command", json={"name": "RefreshMonitoredDownloads"})
-        except Exception:
-            pass
         await client.close()
         return {"status": "ok", "message": f"Reprise envoyée pour le téléchargement #{item_id}"}
     except Exception as exc:
@@ -1437,10 +1588,11 @@ async def pause_queue_item_for_addon(
     db: AsyncSession, service_type: str, item_id: int
 ) -> dict[str, Any]:
     """Pause a download."""
-    from app.services.sabnzbd import SabnzbdClient
+    from sqlalchemy import select
+
     from app.models.service import Service
     from app.services.encryption import decrypt_api_key
-    from sqlalchemy import select
+    from app.services.sabnzbd import SabnzbdClient
 
     try:
         stmt = select(Service).where(Service.is_enabled == True, Service.type == "sabnzbd")
@@ -1456,14 +1608,13 @@ async def pause_queue_item_for_addon(
         return {"status": "error", "message": str(exc)}
 
 
-
-
 async def clean_orphans_for_addon(db: AsyncSession) -> dict[str, Any]:
     """Clean empty folders and non-media orphan files in download directories."""
     import asyncio
-    from pathlib import Path
+
     try:
-        from scripts.import_orphans import clean_empty_and_orphans, DOWNLOAD_SOURCES
+        from scripts.import_orphans import DOWNLOAD_SOURCES, clean_empty_and_orphans
+
         # Execute in thread pool to avoid blocking async event loop
         loop = asyncio.get_running_loop()
         deleted_dirs, deleted_files = await loop.run_in_executor(
@@ -1483,6 +1634,7 @@ async def clean_orphans_for_addon(db: AsyncSession) -> dict[str, Any]:
 async def get_recent_media_for_addon(db: AsyncSession) -> list[dict[str, Any]]:
     """Return recently added movies and series for Kodi widgets."""
     from app.services.media_aggregator import fetch_all_media
+
     try:
         all_media = await fetch_all_media(db)
         # Sort by added date or id descending
@@ -1495,9 +1647,3 @@ async def get_recent_media_for_addon(db: AsyncSession) -> list[dict[str, Any]]:
     except Exception as exc:
         logger.error("Failed to fetch recent media for Kodi: %s", exc)
         return []
-
-
-
-
-
-

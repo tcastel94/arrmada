@@ -23,14 +23,25 @@ logger = get_logger(__name__)
 # Quality tiers (lower = worse)
 QUALITY_TIERS = {
     # SD
-    "SDTV": 1, "DVD": 2, "DVDR": 2,
+    "SDTV": 1,
+    "DVD": 2,
+    "DVDR": 2,
     # 720p
-    "WEBDL-720p": 3, "WEBRip-720p": 3, "Bluray-720p": 4, "HDTV-720p": 3,
+    "WEBDL-720p": 3,
+    "WEBRip-720p": 3,
+    "Bluray-720p": 4,
+    "HDTV-720p": 3,
     # 1080p
-    "WEBDL-1080p": 5, "WEBRip-1080p": 5, "Bluray-1080p": 6, "HDTV-1080p": 5,
+    "WEBDL-1080p": 5,
+    "WEBRip-1080p": 5,
+    "Bluray-1080p": 6,
+    "HDTV-1080p": 5,
     "Remux-1080p": 7,
     # 2160p
-    "WEBDL-2160p": 8, "WEBRip-2160p": 8, "Bluray-2160p": 9, "HDTV-2160p": 8,
+    "WEBDL-2160p": 8,
+    "WEBRip-2160p": 8,
+    "Bluray-2160p": 9,
+    "HDTV-2160p": 8,
     "Remux-2160p": 10,
 }
 
@@ -76,7 +87,9 @@ async def _analyze_quality(db: AsyncSession) -> dict[str, Any]:
                         if not m.get("hasFile"):
                             continue
                         movie_file = m.get("movieFile", {})
-                        quality_name = movie_file.get("quality", {}).get("quality", {}).get("name", "Unknown")
+                        quality_name = (
+                            movie_file.get("quality", {}).get("quality", {}).get("name", "Unknown")
+                        )
                         size = movie_file.get("size", 0)
                         profile_name = profile_map.get(m.get("qualityProfileId"), "Unknown")
 
@@ -116,17 +129,19 @@ async def _analyze_quality(db: AsyncSession) -> dict[str, Any]:
                         size = stats.get("sizeOnDisk", 0)
 
                         if episode_count > 0:
-                            episode_qualities.append({
-                                "title": s.get("title", "Unknown"),
-                                "year": s.get("year"),
-                                "type": "series",
-                                "episodes": episode_count,
-                                "size_bytes": size,
-                                "size_human": format_bytes(size),
-                                "profile": profile_name,
-                                "service": svc.name,
-                                "external_id": s.get("id"),
-                            })
+                            episode_qualities.append(
+                                {
+                                    "title": s.get("title", "Unknown"),
+                                    "year": s.get("year"),
+                                    "type": "series",
+                                    "episodes": episode_count,
+                                    "size_bytes": size,
+                                    "size_human": format_bytes(size),
+                                    "profile": profile_name,
+                                    "service": svc.name,
+                                    "external_id": s.get("id"),
+                                }
+                            )
                 finally:
                     await client.close()
 
@@ -192,6 +207,7 @@ async def _analyze_quality(db: AsyncSession) -> dict[str, Any]:
 @router.get("")
 async def get_quality_overview(db: AsyncSession = Depends(get_db)):
     """Analyze quality distribution and find upgrade opportunities."""
+
     async def _fetch():
         return await _analyze_quality(db)
 

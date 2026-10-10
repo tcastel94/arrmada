@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import re
 import time
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.config import settings
 from app.database import async_session_factory
-from app.services.media_mover import get_stuck_downloads, trigger_manual_import
 from app.services.auto_import_reports import add_report
+from app.services.media_mover import get_stuck_downloads, trigger_manual_import
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -55,7 +56,7 @@ async def auto_import_job() -> None:
     """Periodically scan for stuck downloads, import them and save a report."""
     logger.info("Starting scheduled auto-import scan...")
     start_time = time.monotonic()
-    
+
     scanned_count = 0
     imported_count = 0
     failed_count = 0
@@ -90,58 +91,73 @@ async def auto_import_job() -> None:
                         logger.info("Detected media type for '%s': %s", name, media_type)
 
                     try:
-                        logger.info("Auto-importing '%s' (%s) from path '%s'", name, media_type, storage_path)
+                        logger.info(
+                            "Auto-importing '%s' (%s) from path '%s'",
+                            name,
+                            media_type,
+                            storage_path,
+                        )
                         res = await trigger_manual_import(
-                            db, storage_path, media_type,
+                            db,
+                            storage_path,
+                            media_type,
                             allow_overwrite=settings.AUTO_IMPORT_ALLOW_OVERWRITE,
                         )
-                        
+
                         if res.get("success"):
                             imported_count += 1
-                            items_report.append({
-                                "name": name,
-                                "storage_path": storage_path,
-                                "media_type": media_type,
-                                "status": "success",
-                                "message": res.get("message", "Importé avec succès"),
-                            })
+                            items_report.append(
+                                {
+                                    "name": name,
+                                    "storage_path": storage_path,
+                                    "media_type": media_type,
+                                    "status": "success",
+                                    "message": res.get("message", "Importé avec succès"),
+                                }
+                            )
                             logger.info("Successfully auto-imported '%s'", name)
                             _skipped_until.pop(storage_path, None)
                         elif res.get("skipped"):
                             skipped_count += 1
-                            _skipped_until[storage_path] = (
-                                time.monotonic() + _SKIP_BACKOFF_SECONDS
+                            _skipped_until[storage_path] = time.monotonic() + _SKIP_BACKOFF_SECONDS
+                            items_report.append(
+                                {
+                                    "name": name,
+                                    "storage_path": storage_path,
+                                    "media_type": media_type,
+                                    "status": "skipped",
+                                    "message": res.get("error", "Écarté par sécurité"),
+                                }
                             )
-                            items_report.append({
-                                "name": name,
-                                "storage_path": storage_path,
-                                "media_type": media_type,
-                                "status": "skipped",
-                                "message": res.get("error", "Écarté par sécurité"),
-                            })
                             logger.info(
                                 "Skipped '%s' — %s (pas de nouvelle tentative avant %dh)",
-                                name, res.get("error"), _SKIP_BACKOFF_SECONDS // 3600,
+                                name,
+                                res.get("error"),
+                                _SKIP_BACKOFF_SECONDS // 3600,
                             )
                         else:
                             failed_count += 1
-                            items_report.append({
+                            items_report.append(
+                                {
+                                    "name": name,
+                                    "storage_path": storage_path,
+                                    "media_type": media_type,
+                                    "status": "failed",
+                                    "message": res.get("error", "Erreur lors de l'import"),
+                                }
+                            )
+                            logger.warning("Failed to auto-import '%s': %s", name, res.get("error"))
+                    except Exception as exc:
+                        failed_count += 1
+                        items_report.append(
+                            {
                                 "name": name,
                                 "storage_path": storage_path,
                                 "media_type": media_type,
                                 "status": "failed",
-                                "message": res.get("error", "Erreur lors de l'import"),
-                            })
-                            logger.warning("Failed to auto-import '%s': %s", name, res.get("error"))
-                    except Exception as exc:
-                        failed_count += 1
-                        items_report.append({
-                            "name": name,
-                            "storage_path": storage_path,
-                            "media_type": media_type,
-                            "status": "failed",
-                            "message": str(exc),
-                        })
+                                "message": str(exc),
+                            }
+                        )
                         logger.error("Error auto-importing '%s': %s", name, exc)
             else:
                 logger.info("No stuck downloads found.")
@@ -150,7 +166,7 @@ async def auto_import_job() -> None:
             logger.error("Auto-import task failed during scanning: %s", exc)
 
     duration = time.monotonic() - start_time
-    
+
     # Save the execution report (even if empty, to show the task ran!)
     try:
         add_report(
@@ -168,10 +184,7 @@ async def auto_import_job() -> None:
 def register(scheduler: AsyncIOScheduler) -> None:
     """Register the auto-import job with the scheduler."""
     if not settings.AUTO_IMPORT_ENABLED:
-        logger.info(
-            "auto_import_downloads job NOT registered "
-            "(AUTO_IMPORT_ENABLED=false)"
-        )
+        logger.info("auto_import_downloads job NOT registered (AUTO_IMPORT_ENABLED=false)")
         return
 
     minutes = max(1, settings.AUTO_IMPORT_INTERVAL_MINUTES)
@@ -185,5 +198,6 @@ def register(scheduler: AsyncIOScheduler) -> None:
     )
     logger.info(
         "Registered auto_import_downloads job (every %d minutes, overwrite=%s)",
-        minutes, settings.AUTO_IMPORT_ALLOW_OVERWRITE,
+        minutes,
+        settings.AUTO_IMPORT_ALLOW_OVERWRITE,
     )

@@ -10,7 +10,7 @@ grouping-by-média view.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,7 +30,7 @@ router = APIRouter(
 )
 
 
-def _split(v: Optional[str]) -> Optional[list[str]]:
+def _split(v: str | None) -> list[str] | None:
     if not v:
         return None
     return [p.strip() for p in v.split(",") if p.strip()]
@@ -75,7 +75,9 @@ def _group_key(item: dict[str, Any]) -> str:
 
 @router.get("/timeline")
 async def timeline(
-    categories: str | None = Query(None, description="Comma list: download,subtitle,playback,library,telegram,system"),
+    categories: str | None = Query(
+        None, description="Comma list: download,subtitle,playback,library,telegram,system"
+    ),
     statuses: str | None = Query(None, description="Comma list: ok,ko,info"),
     source: str | None = Query(None),
     media_type: str | None = Query(None),

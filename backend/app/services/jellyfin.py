@@ -10,7 +10,7 @@ Two concerns live here:
 from __future__ import annotations
 
 import time
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import urlencode, urlsplit
 
 import httpx
@@ -100,6 +100,7 @@ class JellyfinClient(ArrBaseClient):
 
 # ── Cast helpers ───────────────────────────────────────────────
 
+
 def _base(url: str) -> str:
     u = (url or "").strip().rstrip("/")
     if u and not u.startswith("http"):
@@ -108,7 +109,7 @@ def _base(url: str) -> str:
     return f"{p.scheme}://{p.netloc}"
 
 
-async def get_config(db: AsyncSession) -> Optional[tuple[str, str]]:
+async def get_config(db: AsyncSession) -> tuple[str, str] | None:
     """Return (base_url, api_key) for the enabled Jellyfin service, or None."""
     res = await db.execute(
         select(Service).where(Service.type == "jellyfin", Service.is_enabled == True)  # noqa: E712
@@ -119,7 +120,7 @@ async def get_config(db: AsyncSession) -> Optional[tuple[str, str]]:
     return _base(svc.url), decrypt_api_key(svc.api_key)
 
 
-async def find_movie_item(db: AsyncSession, tmdb_id: int) -> Optional[dict[str, Any]]:
+async def find_movie_item(db: AsyncSession, tmdb_id: int) -> dict[str, Any] | None:
     """Find the Jellyfin movie whose TMDB provider id matches, else None."""
     cfg = await get_config(db)
     if not cfg:
@@ -146,7 +147,9 @@ async def find_movie_item(db: AsyncSession, tmdb_id: int) -> Optional[dict[str, 
     return None
 
 
-def stream_url(base: str, key: str, item_id: str, *, max_width: int = 1920, bitrate: int = 8_000_000) -> str:
+def stream_url(
+    base: str, key: str, item_id: str, *, max_width: int = 1920, bitrate: int = 8_000_000
+) -> str:
     """Build a progressive MP4 URL Jellyfin transcodes to Chromecast-friendly H.264/AAC.
 
     We deliberately use a progressive (single-file) MP4 stream rather than HLS.
@@ -176,7 +179,7 @@ def stream_url(base: str, key: str, item_id: str, *, max_width: int = 1920, bitr
     return f"{base}/Videos/{item_id}/stream.mp4?{urlencode(params)}"
 
 
-async def build_movie_stream(db: AsyncSession, tmdb_id: int) -> Optional[dict[str, Any]]:
+async def build_movie_stream(db: AsyncSession, tmdb_id: int) -> dict[str, Any] | None:
     """Resolve a movie by TMDB and return {url, title, item_id} ready to cast."""
     cfg = await get_config(db)
     if not cfg:

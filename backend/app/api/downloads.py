@@ -33,6 +33,7 @@ async def list_downloads(db: AsyncSession = Depends(get_db)):
 
 # ── Queue actions ─────────────────────────────────────────────
 
+
 async def _get_arr_client_for_service(db: AsyncSession, service_type: str, *, timeout: int = 30):
     """Resolve the enabled Radarr/Sonarr client for a queue item's service type."""
     if service_type not in ("radarr", "sonarr"):

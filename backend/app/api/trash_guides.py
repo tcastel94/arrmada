@@ -5,7 +5,7 @@ based on user preferences, audit current Sonarr/Radarr config,
 and apply recommended Custom Formats / Quality Profiles.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -19,8 +19,11 @@ _security = HTTPBearer()
 async def _get_user(credentials: HTTPAuthorizationCredentials = Depends(_security)) -> str:
     """Verify JWT token — lazy import to break circular dependency."""
     from app.api.auth import verify_token
+
     payload = verify_token(credentials.credentials)
     return payload.get("sub", "arrmada_user")
+
+
 from app.schemas.trash_guides import (
     ApplyResult,
     AuditResult,
@@ -32,6 +35,7 @@ from app.schemas.trash_guides import (
 from app.services.trash_guides import get_trash_cache
 from app.services.trash_profiles import generate_recommendations
 from app.utils.logger import get_logger
+import contextlib
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/trash-guides", tags=["TRaSH Guides"])
@@ -39,18 +43,16 @@ router = APIRouter(prefix="/api/trash-guides", tags=["TRaSH Guides"])
 
 # ── Request models ────────────────────────────────────────────
 
+
 class SyncRequest(BaseModel):
     force: bool = Field(default=False, description="Force re-fetch ignoring cache TTL")
 
 
 class ApplyRequest(BaseModel):
     service_id: int = Field(description="ArrMada service ID to apply to")
-    recommendations: list[str] = Field(
-        description="List of profile IDs to apply"
-    )
+    recommendations: list[str] = Field(description="List of profile IDs to apply")
     dry_run: bool = Field(
-        default=False,
-        description="If true, only simulate — don't actually modify"
+        default=False, description="If true, only simulate — don't actually modify"
     )
 
 
@@ -59,6 +61,7 @@ class AuditRequest(BaseModel):
 
 
 # ── Endpoints ─────────────────────────────────────────────────
+
 
 @router.get(
     "/status",
@@ -77,7 +80,7 @@ async def get_status(_auth: str = Depends(_get_user)):
     summary="Sync TRaSH Guides data from GitHub",
 )
 async def sync_data(
-    body: Optional[SyncRequest] = None,
+    body: SyncRequest | None = None,
     _auth: str = Depends(_get_user),
 ):
     """Fetch or refresh all TRaSH Guides data from GitHub.
@@ -109,8 +112,8 @@ async def sync_data(
 )
 async def list_custom_formats(
     service: str = "sonarr",
-    search: Optional[str] = None,
-    category: Optional[str] = None,
+    search: str | None = None,
+    category: str | None = None,
     _auth: str = Depends(_get_user),
 ):
     """List all TRaSH Custom Formats, optionally filtered.
@@ -122,22 +125,21 @@ async def list_custom_formats(
     if cache.is_stale:
         await cache.sync()
 
-    if search:
-        cfs = cache.search_cfs(search, service)
-    else:
-        cfs = cache.get_custom_formats(service)
+    cfs = cache.search_cfs(search, service) if search else cache.get_custom_formats(service)
 
     summaries = []
     for cf in cfs:
         cat = _categorize_cf_name(cf.get("_source_file", cf.get("name", "")))
         if category and cat != category:
             continue
-        summaries.append(TrashCFSummary(
-            trash_id=cf["trash_id"],
-            name=cf["name"],
-            scores=cf.get("trash_scores"),
-            category=cat,
-        ))
+        summaries.append(
+            TrashCFSummary(
+                trash_id=cf["trash_id"],
+                name=cf["name"],
+                scores=cf.get("trash_scores"),
+                category=cat,
+            )
+        )
 
     return summaries
 
@@ -193,6 +195,7 @@ async def audit_config(
     Returns compliance percentage, missing CFs, and outdated CFs.
     """
     from sqlalchemy import select
+
     from app.database import async_session_factory
     from app.models.service import Service
 
@@ -202,9 +205,7 @@ async def audit_config(
 
     # Get service from DB
     async with async_session_factory() as session:
-        result = await session.execute(
-            select(Service).where(Service.id == body.service_id)
-        )
+        result = await session.execute(select(Service).where(Service.id == body.service_id))
         service = result.scalar_one_or_none()
 
     if not service:
@@ -249,12 +250,14 @@ async def audit_config(
     missing = []
     for cf in all_trash_cfs[:50]:  # Limit to top 50 most important
         if cf["name"].lower() not in current_cf_names:
-            missing.append(TrashCFSummary(
-                trash_id=cf["trash_id"],
-                name=cf["name"],
-                scores=cf.get("trash_scores"),
-                category=_categorize_cf_name(cf.get("_source_file", "")),
-            ))
+            missing.append(
+                TrashCFSummary(
+                    trash_id=cf["trash_id"],
+                    name=cf["name"],
+                    scores=cf.get("trash_scores"),
+                    category=_categorize_cf_name(cf.get("_source_file", "")),
+                )
+            )
 
     # Calculate compliance
     total_recommended = len(all_trash_cfs[:50])
@@ -266,10 +269,7 @@ async def audit_config(
         service_type=service_type,
         compliance_pct=round(compliance, 1),
         missing_cfs=missing[:20],  # Top 20 missing
-        extra_cfs=[
-            name for name in current_cf_names
-            if name not in trash_cf_names
-        ][:10],
+        extra_cfs=[name for name in current_cf_names if name not in trash_cf_names][:10],
     )
 
 
@@ -287,6 +287,7 @@ async def apply_recommendations(
     Use dry_run=true to preview changes without modifying anything.
     """
     from sqlalchemy import select
+
     from app.database import async_session_factory
     from app.models.service import Service
 
@@ -296,9 +297,7 @@ async def apply_recommendations(
 
     # Get service from DB
     async with async_session_factory() as session:
-        result = await session.execute(
-            select(Service).where(Service.id == body.service_id)
-        )
+        result = await session.execute(select(Service).where(Service.id == body.service_id))
         service = result.scalar_one_or_none()
 
     if not service:
@@ -330,15 +329,11 @@ async def apply_recommendations(
     try:
         # Get current CFs to avoid duplicates
         current_cfs = await client.get("/customformat")
-        current_by_name: dict[str, dict] = {
-            cf["name"].lower(): cf for cf in current_cfs
-        }
+        current_by_name: dict[str, dict] = {cf["name"].lower(): cf for cf in current_cfs}
 
         # Get ALL TRaSH CFs for this service
         all_trash_cfs = cache.get_custom_formats(service_type)
-        trash_by_id: dict[str, dict] = {
-            cf["trash_id"]: cf for cf in all_trash_cfs
-        }
+        trash_by_id: dict[str, dict] = {cf["trash_id"]: cf for cf in all_trash_cfs}
 
         for rec_id in body.recommendations:
             # Find QP by source filename (profile_id IS the filename)
@@ -424,6 +419,7 @@ async def get_compliance(
     only against the applied profiles' CFs.
     """
     from sqlalchemy import select
+
     from app.database import async_session_factory
     from app.models.service import Service
     from app.services.arr_client import ArrBaseClient
@@ -431,16 +427,12 @@ async def get_compliance(
 
     cache = get_trash_cache()
     if cache.is_stale:
-        try:
+        with contextlib.suppress(Exception):
             await cache.sync()
-        except Exception:
-            pass
 
     async with async_session_factory() as session:
         result = await session.execute(
-            select(Service).where(
-                Service.type.in_(["Sonarr", "Radarr", "sonarr", "radarr"])
-            )
+            select(Service).where(Service.type.in_(["Sonarr", "Radarr", "sonarr", "radarr"]))
         )
         services = result.scalars().all()
 
@@ -508,20 +500,23 @@ async def get_compliance(
             total = 0
             pct = 0
 
-        results.append({
-            "service_id": svc.id,
-            "service_name": svc.name,
-            "service_type": svc_type,
-            "trash_total": total,
-            "trash_found": found,
-            "compliance_pct": pct,
-            "applied_profiles": applied_profiles,
-        })
+        results.append(
+            {
+                "service_id": svc.id,
+                "service_name": svc.name,
+                "service_type": svc_type,
+                "trash_total": total,
+                "trash_found": found,
+                "compliance_pct": pct,
+                "applied_profiles": applied_profiles,
+            }
+        )
 
     return results
 
 
 # ── Helpers ───────────────────────────────────────────────────
+
 
 def _categorize_cf_name(name: str) -> str:
     """Categorize a CF by its filename/name."""
@@ -557,16 +552,16 @@ def _build_cf_payload(trash_cf: dict[str, Any]) -> dict[str, Any]:
         fields = spec.get("fields", {})
         if isinstance(fields, dict):
             for field_name, field_value in fields.items():
-                sonarr_spec["fields"].append({
-                    "name": field_name,
-                    "value": field_value,
-                })
+                sonarr_spec["fields"].append(
+                    {
+                        "name": field_name,
+                        "value": field_value,
+                    }
+                )
         specs.append(sonarr_spec)
 
     return {
         "name": trash_cf["name"],
-        "includeCustomFormatWhenRenaming": trash_cf.get(
-            "includeCustomFormatWhenRenaming", False
-        ),
+        "includeCustomFormatWhenRenaming": trash_cf.get("includeCustomFormatWhenRenaming", False),
         "specifications": specs,
     }

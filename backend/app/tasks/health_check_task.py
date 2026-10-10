@@ -19,9 +19,7 @@ async def _run_health_checks() -> None:
             results = await check_all_services(session)
             online = sum(1 for r in results if r["status"] == "online")
             total = len(results)
-            logger.info(
-                "Health check complete: %d/%d services online", online, total
-            )
+            logger.info("Health check complete: %d/%d services online", online, total)
         except Exception as exc:
             logger.error("Scheduled health check failed: %s", exc)
 

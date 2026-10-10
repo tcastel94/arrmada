@@ -48,26 +48,32 @@ async def _fetch_calendar_data(db: AsyncSession, start: str, end: str) -> list[d
                         series_title = ep.get("series", {}).get("title", "Unknown")
                         images = ep.get("series", {}).get("images", [])
                         poster = next(
-                            (img.get("remoteUrl") for img in images if img.get("coverType") == "poster" and img.get("remoteUrl")),
+                            (
+                                img.get("remoteUrl")
+                                for img in images
+                                if img.get("coverType") == "poster" and img.get("remoteUrl")
+                            ),
                             None,
                         )
-                        entries.append({
-                            "id": f"sonarr-{ep.get('id')}",
-                            "title": series_title,
-                            "subtitle": ep.get("title", ""),
-                            "type": "episode",
-                            "season": ep.get("seasonNumber"),
-                            "episode": ep.get("episodeNumber"),
-                            "label": f"S{ep.get('seasonNumber', 0):02d}E{ep.get('episodeNumber', 0):02d}",
-                            "air_date": ep.get("airDateUtc") or ep.get("airDate"),
-                            "has_file": ep.get("hasFile", False),
-                            "monitored": ep.get("monitored", False),
-                            "poster_url": poster,
-                            "overview": ep.get("overview", ""),
-                            "service": svc.name,
-                            "service_type": "sonarr",
-                            "series_id": ep.get("seriesId"),
-                        })
+                        entries.append(
+                            {
+                                "id": f"sonarr-{ep.get('id')}",
+                                "title": series_title,
+                                "subtitle": ep.get("title", ""),
+                                "type": "episode",
+                                "season": ep.get("seasonNumber"),
+                                "episode": ep.get("episodeNumber"),
+                                "label": f"S{ep.get('seasonNumber', 0):02d}E{ep.get('episodeNumber', 0):02d}",
+                                "air_date": ep.get("airDateUtc") or ep.get("airDate"),
+                                "has_file": ep.get("hasFile", False),
+                                "monitored": ep.get("monitored", False),
+                                "poster_url": poster,
+                                "overview": ep.get("overview", ""),
+                                "service": svc.name,
+                                "service_type": "sonarr",
+                                "series_id": ep.get("seriesId"),
+                            }
+                        )
                 finally:
                     await client.close()
 
@@ -82,7 +88,11 @@ async def _fetch_calendar_data(db: AsyncSession, start: str, end: str) -> list[d
                     for movie in movies:
                         images = movie.get("images", [])
                         poster = next(
-                            (img.get("remoteUrl") for img in images if img.get("coverType") == "poster" and img.get("remoteUrl")),
+                            (
+                                img.get("remoteUrl")
+                                for img in images
+                                if img.get("coverType") == "poster" and img.get("remoteUrl")
+                            ),
                             None,
                         )
                         # Radarr uses different date fields
@@ -91,24 +101,26 @@ async def _fetch_calendar_data(db: AsyncSession, start: str, end: str) -> list[d
                             or movie.get("physicalRelease")
                             or movie.get("inCinemas")
                         )
-                        entries.append({
-                            "id": f"radarr-{movie.get('id')}",
-                            "title": movie.get("title", "Unknown"),
-                            "subtitle": "",
-                            "type": "movie",
-                            "season": None,
-                            "episode": None,
-                            "label": str(movie.get("year", "")),
-                            "air_date": release_date,
-                            "has_file": movie.get("hasFile", False),
-                            "monitored": movie.get("monitored", False),
-                            "poster_url": poster,
-                            "overview": movie.get("overview", ""),
-                            "service": svc.name,
-                            "service_type": "radarr",
-                            "movie_id": movie.get("id"),
-                            "genres": movie.get("genres", []),
-                        })
+                        entries.append(
+                            {
+                                "id": f"radarr-{movie.get('id')}",
+                                "title": movie.get("title", "Unknown"),
+                                "subtitle": "",
+                                "type": "movie",
+                                "season": None,
+                                "episode": None,
+                                "label": str(movie.get("year", "")),
+                                "air_date": release_date,
+                                "has_file": movie.get("hasFile", False),
+                                "monitored": movie.get("monitored", False),
+                                "poster_url": poster,
+                                "overview": movie.get("overview", ""),
+                                "service": svc.name,
+                                "service_type": "radarr",
+                                "movie_id": movie.get("id"),
+                                "genres": movie.get("genres", []),
+                            }
+                        )
                 finally:
                     await client.close()
 

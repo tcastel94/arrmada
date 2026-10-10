@@ -23,9 +23,10 @@ async def event_stream(request: Request, _user=Depends(get_current_user)):
         es.addEventListener('download_update', (e) => { ... });
         es.addEventListener('service_status', (e) => { ... });
     """
+
     async def generate():
         # Send initial connection event
-        yield f"event: connected\ndata: {{\"clients\": {event_bus.client_count + 1}}}\n\n"
+        yield f'event: connected\ndata: {{"clients": {event_bus.client_count + 1}}}\n\n'
 
         async for event in event_bus.subscribe():
             # Check if client disconnected
@@ -53,8 +54,7 @@ async def recent_events(
     events = event_bus.get_recent_events(since_id)
     return {
         "events": [
-            {"id": e.id, "type": e.type, "data": e.data, "timestamp": e.timestamp}
-            for e in events
+            {"id": e.id, "type": e.type, "data": e.data, "timestamp": e.timestamp} for e in events
         ],
         "clients": event_bus.client_count,
     }

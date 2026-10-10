@@ -44,17 +44,19 @@ async def _fetch_prowlarr_stats(db: AsyncSession) -> dict[str, Any]:
             # Fetch indexer list
             indexers = await client.get_indexers()
             for idx in indexers:
-                all_indexers.append({
-                    "id": idx.get("id"),
-                    "name": idx.get("name", "Unknown"),
-                    "protocol": idx.get("protocol", "unknown"),
-                    "privacy": idx.get("privacy", "unknown"),
-                    "enable": idx.get("enable", False),
-                    "status_messages": idx.get("statusMessages", []),
-                    "priority": idx.get("priority", 25),
-                    "tags": idx.get("tags", []),
-                    "source": svc.name,
-                })
+                all_indexers.append(
+                    {
+                        "id": idx.get("id"),
+                        "name": idx.get("name", "Unknown"),
+                        "protocol": idx.get("protocol", "unknown"),
+                        "privacy": idx.get("privacy", "unknown"),
+                        "enable": idx.get("enable", False),
+                        "status_messages": idx.get("statusMessages", []),
+                        "priority": idx.get("priority", 25),
+                        "tags": idx.get("tags", []),
+                        "source": svc.name,
+                    }
+                )
 
             # Fetch stats
             stats = await client.get_indexer_stats()
@@ -68,7 +70,9 @@ async def _fetch_prowlarr_stats(db: AsyncSession) -> dict[str, Any]:
 
                 success_rate = 0
                 if total_queries > 0:
-                    success_rate = round(((total_queries - failed_queries) / total_queries) * 100, 1)
+                    success_rate = round(
+                        ((total_queries - failed_queries) / total_queries) * 100, 1
+                    )
 
                 grab_rate = 0
                 if total_grabs > 0:
@@ -77,18 +81,20 @@ async def _fetch_prowlarr_stats(db: AsyncSession) -> dict[str, Any]:
                 # Find matching indexer name
                 indexer_name = s.get("indexerName", "Unknown")
 
-                all_stats.append({
-                    "indexer_id": s.get("indexerId"),
-                    "indexer_name": indexer_name,
-                    "queries": total_queries,
-                    "grabs": total_grabs,
-                    "failed_queries": failed_queries,
-                    "failed_grabs": failed_grabs,
-                    "success_rate": success_rate,
-                    "grab_rate": grab_rate,
-                    "avg_response_time": s.get("averageResponseTime", 0),
-                    "source": svc.name,
-                })
+                all_stats.append(
+                    {
+                        "indexer_id": s.get("indexerId"),
+                        "indexer_name": indexer_name,
+                        "queries": total_queries,
+                        "grabs": total_grabs,
+                        "failed_queries": failed_queries,
+                        "failed_grabs": failed_grabs,
+                        "success_rate": success_rate,
+                        "grab_rate": grab_rate,
+                        "avg_response_time": s.get("averageResponseTime", 0),
+                        "source": svc.name,
+                    }
+                )
 
         except Exception as exc:
             logger.error("Prowlarr stats fetch failed for %s: %s", svc.name, exc)
@@ -125,6 +131,7 @@ async def _fetch_prowlarr_stats(db: AsyncSession) -> dict[str, Any]:
 @router.get("/stats")
 async def get_prowlarr_stats(db: AsyncSession = Depends(get_db)):
     """Fetch indexer statistics from Prowlarr."""
+
     async def _fetch():
         return await _fetch_prowlarr_stats(db)
 
@@ -139,6 +146,7 @@ async def get_prowlarr_indexers(db: AsyncSession = Depends(get_db)):
 
 
 # ── Indexer management (test / enable-disable / delete) ───────
+
 
 async def _get_prowlarr_client_for_indexer(db: AsyncSession, indexer_id: int) -> ProwlarrClient:
     """Resolve the enabled Prowlarr client that owns the given indexer.
@@ -204,7 +212,11 @@ async def toggle_prowlarr_indexer(
     try:
         updated = await client.toggle_indexer(indexer_id, payload.enable)
         cache.invalidate("prowlarr:stats")
-        return {"status": "updated", "id": indexer_id, "enable": updated.get("enable", payload.enable)}
+        return {
+            "status": "updated",
+            "id": indexer_id,
+            "enable": updated.get("enable", payload.enable),
+        }
     except HTTPException:
         raise
     except Exception as exc:

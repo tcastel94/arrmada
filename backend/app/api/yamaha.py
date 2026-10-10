@@ -1,15 +1,13 @@
 """Yamaha AVR API — discovery, instances and remote control."""
 
-from typing import List
-
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
 from app.models.service import Service
-from app.services.encryption import encrypt_api_key
 from app.services import yamaha as yamaha_service
+from app.services.encryption import encrypt_api_key
 
 router = APIRouter(
     prefix="/api/yamaha",
@@ -19,7 +17,7 @@ router = APIRouter(
 
 
 @router.get("/discover")
-async def discover(db: AsyncSession = Depends(get_db)) -> List[dict]:
+async def discover(db: AsyncSession = Depends(get_db)) -> list[dict]:
     """Find Yamaha AVRs on the LAN (SSDP + YXC probe of known subnets)."""
     return await yamaha_service.discover(db)
 
@@ -109,9 +107,7 @@ async def add_setting(data: dict, db: AsyncSession = Depends(get_db)):
     if not url:
         return {"status": "error", "detail": "url requise"}
 
-    res = await db.execute(
-        select(Service).where(Service.type == "yamaha", Service.url == url)
-    )
+    res = await db.execute(select(Service).where(Service.type == "yamaha", Service.url == url))
     existing = res.scalars().first()
     if existing:
         existing.name = data.get("name", existing.name)

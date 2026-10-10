@@ -11,11 +11,7 @@ class HealthResponse(BaseModel):
     status: str = Field(default="ok", description="Service health status")
     service: str = Field(default="arrmada", description="Service name")
 
-    model_config = {
-        "json_schema_extra": {
-            "examples": [{"status": "ok", "service": "arrmada"}]
-        }
-    }
+    model_config = {"json_schema_extra": {"examples": [{"status": "ok", "service": "arrmada"}]}}
 
 
 class PaginationMeta(BaseModel):
@@ -32,11 +28,7 @@ class ErrorResponse(BaseModel):
 
     detail: str = Field(description="Human-readable error message")
 
-    model_config = {
-        "json_schema_extra": {
-            "examples": [{"detail": "Not found"}]
-        }
-    }
+    model_config = {"json_schema_extra": {"examples": [{"detail": "Not found"}]}}
 
 
 class MessageResponse(BaseModel):

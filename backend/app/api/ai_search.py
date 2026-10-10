@@ -105,12 +105,9 @@ def _apply_filters(media: list[dict], filters: dict[str, Any]) -> list[dict]:
     if genres:
         genre_lower = [g.lower() for g in genres]
         results = [
-            m for m in results
-            if any(
-                gl in g.lower()
-                for g in (m.get("genres") or [])
-                for gl in genre_lower
-            )
+            m
+            for m in results
+            if any(gl in g.lower() for g in (m.get("genres") or []) for gl in genre_lower)
         ]
 
     # Title keywords
@@ -118,8 +115,7 @@ def _apply_filters(media: list[dict], filters: dict[str, Any]) -> list[dict]:
     if title_kw:
         kw_lower = [k.lower() for k in title_kw]
         results = [
-            m for m in results
-            if any(kw in (m.get("title") or "").lower() for kw in kw_lower)
+            m for m in results if any(kw in (m.get("title") or "").lower() for kw in kw_lower)
         ]
 
     # Quality keywords
@@ -127,8 +123,7 @@ def _apply_filters(media: list[dict], filters: dict[str, Any]) -> list[dict]:
     if quality_kw:
         kw_lower = [k.lower() for k in quality_kw]
         results = [
-            m for m in results
-            if any(kw in (m.get("quality") or "").lower() for kw in kw_lower)
+            m for m in results if any(kw in (m.get("quality") or "").lower() for kw in kw_lower)
         ]
 
     # Has file filter

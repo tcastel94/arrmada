@@ -7,6 +7,7 @@ needed. We only pull logs for the containers that match registered services
 (same filtered set as the Docker page), classify each line's level, merge them
 and return the most recent lines across all containers.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -65,9 +66,9 @@ def _demux(raw: bytes) -> bytes:
     while i + 8 <= n:
         if raw[i] not in (0, 1, 2):
             return raw
-        size = int.from_bytes(raw[i + 4:i + 8], "big")
+        size = int.from_bytes(raw[i + 4 : i + 8], "big")
         i += 8
-        out += raw[i:i + size]
+        out += raw[i : i + size]
         i += size
     return bytes(out)
 
@@ -117,14 +118,16 @@ async def get_aggregated_logs(
             msg = _INNER_TS_RE.sub("", msg).rstrip()
             if not msg:
                 continue
-            entries.append({
-                "ts": ts,
-                "time": ts[11:19] if len(ts) >= 19 else ts,
-                "container": c["name"],
-                "service": c.get("service_name") or c["name"],
-                "level": _classify(msg),
-                "message": msg,
-            })
+            entries.append(
+                {
+                    "ts": ts,
+                    "time": ts[11:19] if len(ts) >= 19 else ts,
+                    "container": c["name"],
+                    "service": c.get("service_name") or c["name"],
+                    "level": _classify(msg),
+                    "message": msg,
+                }
+            )
 
     entries.sort(key=lambda e: e["ts"], reverse=True)
     return entries[:limit]
@@ -242,13 +245,17 @@ async def analyze_logs(db: AsyncSession, tail: int = 150) -> dict[str, Any]:
         key = (e["service"], e["message"])
         g = groups.get(key)
         if g is None:
-            groups[key] = {"service": e["service"], "level": e["level"],
-                           "message": e["message"], "count": 1}
+            groups[key] = {
+                "service": e["service"],
+                "level": e["level"],
+                "message": e["message"],
+                "count": 1,
+            }
         else:
             g["count"] += 1
     digest = sorted(groups.values(), key=lambda g: g["count"], reverse=True)[:80]
     log_text = "\n".join(
-        f'[{g["service"]}/{g["level"]}] (x{g["count"]}) {g["message"][:300]}' for g in digest
+        f"[{g['service']}/{g['level']}] (x{g['count']}) {g['message'][:300]}" for g in digest
     )
     user_msg = f"Logs (erreurs/avertissements dédupliqués) :\n\n{log_text}"
 

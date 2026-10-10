@@ -12,18 +12,14 @@ class TestRequestsEndpoints:
         resp = await client.get("/api/requests")
         assert resp.status_code == 401
 
-    async def test_list_requests_empty(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_list_requests_empty(self, client: AsyncClient, auth_headers: dict) -> None:
         resp = await client.get("/api/requests", headers=auth_headers)
         assert resp.status_code == 200
         data = resp.json()
         assert "items" in data
         assert data["total"] == 0
 
-    async def test_create_request(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_create_request(self, client: AsyncClient, auth_headers: dict) -> None:
         resp = await client.post(
             "/api/requests",
             json={
@@ -39,9 +35,7 @@ class TestRequestsEndpoints:
         assert data["title"] == "Test Movie Request"
         assert data["status"] in ("pending", "searching")
 
-    async def test_create_and_delete_request(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_create_and_delete_request(self, client: AsyncClient, auth_headers: dict) -> None:
         # Create
         create_resp = await client.post(
             "/api/requests",
@@ -52,9 +46,7 @@ class TestRequestsEndpoints:
         req_id = create_resp.json()["id"]
 
         # Delete
-        del_resp = await client.delete(
-            f"/api/requests/{req_id}", headers=auth_headers
-        )
+        del_resp = await client.delete(f"/api/requests/{req_id}", headers=auth_headers)
         assert del_resp.status_code == 204
 
     async def test_delete_nonexistent_request(
@@ -77,9 +69,7 @@ class TestSearchEndpoints:
         resp = await client.get("/api/search?q=a", headers=auth_headers)
         assert resp.status_code == 422  # validation error
 
-    async def test_search_returns_structure(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_search_returns_structure(self, client: AsyncClient, auth_headers: dict) -> None:
         resp = await client.get("/api/search?q=test", headers=auth_headers)
         assert resp.status_code == 200
         data = resp.json()

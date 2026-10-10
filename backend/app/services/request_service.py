@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
 
 import httpx
 from sqlalchemy import select
@@ -16,6 +15,7 @@ from app.services.radarr import RadarrClient
 from app.services.sonarr import SonarrClient
 from app.services.telegram import notify_new_media
 from app.utils.logger import get_logger
+import contextlib
 
 logger = get_logger(__name__)
 
@@ -28,7 +28,7 @@ def _utcnow() -> datetime:
     datetime for such a column raises DataError and aborts the whole
     executemany batch, so the value must be stripped of its tzinfo.
     """
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 def _resolve_quality_profile_id(profiles: list[dict], name: str | None) -> int:
@@ -55,8 +55,6 @@ def _resolve_quality_profile_id(profiles: list[dict], name: str | None) -> int:
             return p["id"]
 
     return profiles[0]["id"]
-
-
 
 
 async def create_request(
@@ -95,10 +93,8 @@ async def create_request(
     await db.refresh(req)
 
     # Telegram notification
-    try:
+    with contextlib.suppress(Exception):
         await notify_new_media(req.title, req.type, req.year)
-    except Exception:
-        pass
 
     return req
 
@@ -156,7 +152,9 @@ async def _send_to_arr(db: AsyncSession, req: MediaRequest) -> None:
                 "title": movie_data.get("title", req.title),
                 "tmdbId": tmdb_id,
                 "year": movie_data.get("year", req.year),
-                "qualityProfileId": _resolve_quality_profile_id(quality_profiles, req.quality_profile),
+                "qualityProfileId": _resolve_quality_profile_id(
+                    quality_profiles, req.quality_profile
+                ),
                 "rootFolderPath": root_folders[0]["path"],
                 "monitored": True,
                 "addOptions": {"searchForMovie": True},
@@ -195,7 +193,9 @@ async def _send_to_arr(db: AsyncSession, req: MediaRequest) -> None:
                 "title": series_data.get("title", req.title),
                 "tvdbId": series_data.get("tvdbId"),
                 "year": series_data.get("year", req.year),
-                "qualityProfileId": _resolve_quality_profile_id(quality_profiles, req.quality_profile),
+                "qualityProfileId": _resolve_quality_profile_id(
+                    quality_profiles, req.quality_profile
+                ),
                 "rootFolderPath": root_folders[0]["path"],
                 "monitored": True,
                 "addOptions": {"searchForMissingEpisodes": True},
@@ -264,9 +264,7 @@ async def sync_active_requests(db: AsyncSession) -> None:
                 logger.error("Failed to get Radarr queue: %s", exc)
 
             queue_items = queue_data.get("records", [])
-            downloading_movie_ids = {
-                item["movieId"] for item in queue_items if "movieId" in item
-            }
+            downloading_movie_ids = {item["movieId"] for item in queue_items if "movieId" in item}
 
             for req in radarr_requests:
                 if not req.arr_id:
@@ -284,7 +282,9 @@ async def sync_active_requests(db: AsyncSession) -> None:
                                     req.arr_id = existing.get("id")
                                     break
                     except Exception as lookup_exc:
-                        logger.error("Radarr lookup failed during sync for %s: %s", req.title, lookup_exc)
+                        logger.error(
+                            "Radarr lookup failed during sync for %s: %s", req.title, lookup_exc
+                        )
 
                 if req.arr_id:
                     try:
@@ -299,7 +299,11 @@ async def sync_active_requests(db: AsyncSession) -> None:
                     except httpx.HTTPStatusError as exc:
                         if exc.response.status_code == 404:
                             req.status = "failed"
-                            logger.warning("Movie %s (arr_id=%s) not found in Radarr, marking as failed", req.title, req.arr_id)
+                            logger.warning(
+                                "Movie %s (arr_id=%s) not found in Radarr, marking as failed",
+                                req.title,
+                                req.arr_id,
+                            )
                         else:
                             logger.error("Failed to sync Radarr movie %s: %s", req.title, exc)
                     except Exception as exc:
@@ -339,7 +343,9 @@ async def sync_active_requests(db: AsyncSession) -> None:
                                     req.arr_id = existing.get("id")
                                     break
                     except Exception as lookup_exc:
-                        logger.error("Sonarr lookup failed during sync for %s: %s", req.title, lookup_exc)
+                        logger.error(
+                            "Sonarr lookup failed during sync for %s: %s", req.title, lookup_exc
+                        )
 
                 if req.arr_id:
                     try:
@@ -361,7 +367,11 @@ async def sync_active_requests(db: AsyncSession) -> None:
                     except httpx.HTTPStatusError as exc:
                         if exc.response.status_code == 404:
                             req.status = "failed"
-                            logger.warning("Series %s (arr_id=%s) not found in Sonarr, marking as failed", req.title, req.arr_id)
+                            logger.warning(
+                                "Series %s (arr_id=%s) not found in Sonarr, marking as failed",
+                                req.title,
+                                req.arr_id,
+                            )
                         else:
                             logger.error("Failed to sync Sonarr series %s: %s", req.title, exc)
                     except Exception as exc:

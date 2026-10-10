@@ -6,10 +6,10 @@ can apply the optimal configuration.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from app.api.deps import get_current_user, get_db
 from app.utils.logger import get_logger
@@ -58,16 +58,16 @@ TRASH_RECOMMENDED = {
     "switches": {
         "direct_unpack": True,
         "pause_on_post_processing": False,
-        "flat_unpack": True,          # unpack in same folder for Sonarr/Radarr
-        "safe_postproc": True,        # only unpack verified jobs
-        "enable_recursive": True,     # unpack archives within archives
+        "flat_unpack": True,  # unpack in same folder for Sonarr/Radarr
+        "safe_postproc": True,  # only unpack verified jobs
+        "enable_recursive": True,  # unpack archives within archives
         "enable_unrar": True,
         "enable_unzip": True,
         "enable_7zip": True,
         "enable_filejoin": True,
         "enable_par_cleanup": True,
         "deobfuscate_final_filenames": True,
-        "ignore_samples": 0,          # let Sonarr/Radarr handle samples
+        "ignore_samples": 0,  # let Sonarr/Radarr handle samples
     },
     "sorting": {
         # TRaSH says: MAKE SURE THAT SORTING IS ENTIRELY DISABLED
@@ -80,8 +80,10 @@ TRASH_RECOMMENDED = {
 
 # ── Schemas ──────────────────────────────────────────────────
 
+
 class ConfigCheck(BaseModel):
     """One setting check result."""
+
     key: str
     label: str
     current_value: Any
@@ -92,6 +94,7 @@ class ConfigCheck(BaseModel):
 
 class AuditResult(BaseModel):
     """Full audit result."""
+
     service_name: str
     total_checks: int
     passed: int
@@ -102,6 +105,7 @@ class AuditResult(BaseModel):
 
 class ApplyResult(BaseModel):
     """Result of applying TRaSH config."""
+
     success: bool
     categories_created: int = 0
     settings_updated: int = 0
@@ -110,12 +114,14 @@ class ApplyResult(BaseModel):
 
 # ── Helpers ──────────────────────────────────────────────────
 
+
 async def _get_sabnzbd_client(db):
     """Get the first enabled SABnzbd service and build a client."""
     from sqlalchemy import select
+
     from app.models.service import Service
-    from app.services.sabnzbd import SabnzbdClient
     from app.services.encryption import decrypt_api_key
+    from app.services.sabnzbd import SabnzbdClient
 
     stmt = (
         select(Service)
@@ -143,6 +149,7 @@ async def _get_sabnzbd_client(db):
 
 # ── Endpoints ────────────────────────────────────────────────
 
+
 @router.get(
     "/audit",
     response_model=AuditResult,
@@ -167,27 +174,31 @@ async def audit_sabnzbd(db=Depends(get_db)):
             cat_name = rec_cat["name"]
             existing = existing_cats.get(cat_name.lower())
             is_ok = existing is not None
-            checks.append(ConfigCheck(
-                key=f"category_{cat_name}",
-                label=f"Catégorie '{cat_name}'",
-                current_value="Existe" if is_ok else "Manquante",
-                recommended_value="Doit exister",
-                is_compliant=is_ok,
-                category="categories",
-            ))
+            checks.append(
+                ConfigCheck(
+                    key=f"category_{cat_name}",
+                    label=f"Catégorie '{cat_name}'",
+                    current_value="Existe" if is_ok else "Manquante",
+                    recommended_value="Doit exister",
+                    is_compliant=is_ok,
+                    category="categories",
+                )
+            )
 
             if existing:
                 # Check if dir is set
                 cat_dir = existing.get("dir", "")
                 dir_ok = cat_dir.lower() == cat_name.lower() or cat_name.lower() in cat_dir.lower()
-                checks.append(ConfigCheck(
-                    key=f"category_{cat_name}_dir",
-                    label=f"Catégorie '{cat_name}' → dossier",
-                    current_value=cat_dir or "(vide)",
-                    recommended_value=cat_name,
-                    is_compliant=dir_ok,
-                    category="categories",
-                ))
+                checks.append(
+                    ConfigCheck(
+                        key=f"category_{cat_name}_dir",
+                        label=f"Catégorie '{cat_name}' → dossier",
+                        current_value=cat_dir or "(vide)",
+                        recommended_value=cat_name,
+                        is_compliant=dir_ok,
+                        category="categories",
+                    )
+                )
 
         # ── Check Switches ─────────────────────────────────
         switch_labels = {
@@ -226,14 +237,16 @@ async def audit_sabnzbd(db=Depends(get_db)):
                 is_ok = current == recommended
                 display_current = current
 
-            checks.append(ConfigCheck(
-                key=f"switch_{key}",
-                label=switch_labels.get(key, key),
-                current_value=display_current,
-                recommended_value=recommended,
-                is_compliant=is_ok,
-                category="switches",
-            ))
+            checks.append(
+                ConfigCheck(
+                    key=f"switch_{key}",
+                    label=switch_labels.get(key, key),
+                    current_value=display_current,
+                    recommended_value=recommended,
+                    is_compliant=is_ok,
+                    category="switches",
+                )
+            )
 
         # ── Check Sorting ──────────────────────────────────
         sorting_labels = {
@@ -254,26 +267,30 @@ async def audit_sabnzbd(db=Depends(get_db)):
             else:
                 current = bool(current)
 
-            checks.append(ConfigCheck(
-                key=f"sorting_{key}",
-                label=sorting_labels.get(key, key),
-                current_value=current,
-                recommended_value=recommended,
-                is_compliant=current == recommended,
-                category="sorting",
-            ))
+            checks.append(
+                ConfigCheck(
+                    key=f"sorting_{key}",
+                    label=sorting_labels.get(key, key),
+                    current_value=current,
+                    recommended_value=recommended,
+                    is_compliant=current == recommended,
+                    category="sorting",
+                )
+            )
 
         # ── Check Completed Download Folder ────────────────
         complete_dir = misc.get("complete_dir", "")
         has_complete = bool(complete_dir)
-        checks.append(ConfigCheck(
-            key="complete_dir",
-            label="Dossier de téléchargement terminé",
-            current_value=complete_dir or "(non défini)",
-            recommended_value="Doit être configuré",
-            is_compliant=has_complete,
-            category="general",
-        ))
+        checks.append(
+            ConfigCheck(
+                key="complete_dir",
+                label="Dossier de téléchargement terminé",
+                current_value=complete_dir or "(non défini)",
+                recommended_value="Doit être configuré",
+                is_compliant=has_complete,
+                category="general",
+            )
+        )
 
     except Exception as e:
         logger.error("SABnzbd audit failed: %s", e, exc_info=True)
@@ -320,13 +337,16 @@ async def apply_trash_config(db=Depends(get_db)):
         for rec_cat in TRASH_RECOMMENDED["categories"]:
             if rec_cat["name"].lower() not in existing_cats:
                 try:
-                    await client._call("set_config", {
-                        "section": "categories",
-                        "keyword": rec_cat["name"],
-                        "name": rec_cat["name"],
-                        "dir": rec_cat["dir"],
-                        "priority": rec_cat["priority"],
-                    })
+                    await client._call(
+                        "set_config",
+                        {
+                            "section": "categories",
+                            "keyword": rec_cat["name"],
+                            "name": rec_cat["name"],
+                            "dir": rec_cat["dir"],
+                            "priority": rec_cat["priority"],
+                        },
+                    )
                     cats_created += 1
                     logger.info("Created SABnzbd category: %s", rec_cat["name"])
                 except Exception as e:
@@ -336,11 +356,14 @@ async def apply_trash_config(db=Depends(get_db)):
         for key, value in TRASH_RECOMMENDED["switches"].items():
             try:
                 sab_value = 1 if value is True else (0 if value is False else value)
-                result = await client._call("set_config", {
-                    "section": "misc",
-                    "keyword": key,
-                    "value": sab_value,
-                })
+                result = await client._call(
+                    "set_config",
+                    {
+                        "section": "misc",
+                        "keyword": key,
+                        "value": sab_value,
+                    },
+                )
                 logger.info("SABnzbd set_config misc.%s = %s → %s", key, sab_value, result)
                 settings_updated += 1
             except Exception as e:
@@ -351,11 +374,14 @@ async def apply_trash_config(db=Depends(get_db)):
         for key, value in TRASH_RECOMMENDED["sorting"].items():
             try:
                 sab_value = 1 if value is True else 0
-                result = await client._call("set_config", {
-                    "section": "misc",
-                    "keyword": key,
-                    "value": sab_value,
-                })
+                result = await client._call(
+                    "set_config",
+                    {
+                        "section": "misc",
+                        "keyword": key,
+                        "value": sab_value,
+                    },
+                )
                 logger.info("SABnzbd set_config misc.%s = %s → %s", key, sab_value, result)
                 settings_updated += 1
             except Exception as e:
@@ -365,13 +391,13 @@ async def apply_trash_config(db=Depends(get_db)):
         # Create notification
         try:
             from app.services.notification_service import create_notification
+
             await create_notification(
                 db,
                 type="sabnzbd_config",
                 title="SABnzbd TRaSH Config appliqué",
                 message=(
-                    f"{cats_created} catégories créées, "
-                    f"{settings_updated} réglages mis à jour"
+                    f"{cats_created} catégories créées, {settings_updated} réglages mis à jour"
                 ),
                 severity="success" if not errors else "warning",
                 service_name=service.name,

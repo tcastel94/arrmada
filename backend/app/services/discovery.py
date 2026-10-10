@@ -18,14 +18,14 @@ logger = get_logger(__name__)
 
 # Known *arr service ports and their API health endpoints
 SERVICE_SIGNATURES: list[dict[str, Any]] = [
-    {"type": "sonarr",   "port": 8989, "api_path": "/api/v3/system/status", "name": "Sonarr"},
-    {"type": "radarr",   "port": 7878, "api_path": "/api/v3/system/status", "name": "Radarr"},
-    {"type": "lidarr",   "port": 8686, "api_path": "/api/v1/system/status", "name": "Lidarr"},
-    {"type": "readarr",  "port": 8787, "api_path": "/api/v1/system/status", "name": "Readarr"},
+    {"type": "sonarr", "port": 8989, "api_path": "/api/v3/system/status", "name": "Sonarr"},
+    {"type": "radarr", "port": 7878, "api_path": "/api/v3/system/status", "name": "Radarr"},
+    {"type": "lidarr", "port": 8686, "api_path": "/api/v1/system/status", "name": "Lidarr"},
+    {"type": "readarr", "port": 8787, "api_path": "/api/v1/system/status", "name": "Readarr"},
     {"type": "prowlarr", "port": 9696, "api_path": "/api/v1/system/status", "name": "Prowlarr"},
-    {"type": "bazarr",   "port": 6767, "api_path": "/api/system/status",   "name": "Bazarr"},
-    {"type": "jellyfin", "port": 8096, "api_path": "/System/Info/Public",   "name": "Jellyfin"},
-    {"type": "sabnzbd",  "port": 8080, "api_path": "/api?mode=version",     "name": "SABnzbd"},
+    {"type": "bazarr", "port": 6767, "api_path": "/api/system/status", "name": "Bazarr"},
+    {"type": "jellyfin", "port": 8096, "api_path": "/System/Info/Public", "name": "Jellyfin"},
+    {"type": "sabnzbd", "port": 8080, "api_path": "/api?mode=version", "name": "SABnzbd"},
 ]
 
 
@@ -101,7 +101,7 @@ async def discover_services(
         subnet = _get_local_subnet()
         # Scan gateway, common NAS IPs, and a small range
         scan_hosts = [
-            f"{subnet}.1",    # Gateway
+            f"{subnet}.1",  # Gateway
             f"{subnet}.2",
             f"{subnet}.10",
             f"{subnet}.50",

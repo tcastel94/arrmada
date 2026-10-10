@@ -2,23 +2,23 @@
 
 from __future__ import annotations
 
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from pydantic import BaseModel
-from fastapi import APIRouter, Depends, Query, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
+from app.database import async_session_factory
+from app.services.docker_logs import analyze_logs, get_aggregated_logs
 from app.services.file_manager import (
-    get_sabnzbd_history,
-    get_docker_containers,
     docker_action,
+    get_docker_containers,
+    get_sabnzbd_history,
 )
 from app.services.media_mover import (
     get_path_mappings,
     get_stuck_downloads,
     trigger_manual_import,
 )
-from app.database import async_session_factory
-from app.services.docker_logs import get_aggregated_logs, analyze_logs
 
 router = APIRouter(
     prefix="/api/files",
@@ -86,6 +86,7 @@ async def analyze_docker_logs(
 
 # ── Media Mover ───────────────────────────────────────────────
 
+
 @router.get("/paths")
 async def nas_paths():
     """Get NAS path mappings derived from Docker volume mounts."""
@@ -119,7 +120,9 @@ async def manual_import(payload: ImportPayload, db: AsyncSession = Depends(get_d
     and trigger Bazarr for subtitles + Jellyfin library update.
     """
     return await trigger_manual_import(
-        db, payload.download_path, payload.media_type,
+        db,
+        payload.download_path,
+        payload.media_type,
         allow_overwrite=payload.allow_overwrite,
     )
 
@@ -134,27 +137,41 @@ async def bulk_import(
     background_tasks: BackgroundTasks,
 ):
     """Trigger manual import for multiple files in the background."""
+
     async def run_imports():
         import logging
+
         logger = logging.getLogger("app.api.files")
-        
+
         for idx, item in enumerate(payload.items):
             try:
-                logger.info("Background bulk import [%d/%d]: %s (%s)", idx + 1, len(payload.items), item.download_path, item.media_type)
+                logger.info(
+                    "Background bulk import [%d/%d]: %s (%s)",
+                    idx + 1,
+                    len(payload.items),
+                    item.download_path,
+                    item.media_type,
+                )
                 async with async_session_factory() as db:
                     await trigger_manual_import(
-                        db, item.download_path, item.media_type,
+                        db,
+                        item.download_path,
+                        item.media_type,
                         allow_overwrite=item.allow_overwrite,
                     )
             except Exception as exc:
                 logger.error("Failed background bulk import for %s: %s", item.download_path, exc)
 
     background_tasks.add_task(run_imports)
-    return {"success": True, "message": f"Importation en arrière-plan démarrée pour {len(payload.items)} fichiers !"}
+    return {
+        "success": True,
+        "message": f"Importation en arrière-plan démarrée pour {len(payload.items)} fichiers !",
+    }
 
 
 @router.get("/auto-import/reports")
 async def get_auto_import_reports():
     """Get the 10 most recent auto-import execution reports."""
     from app.services.auto_import_reports import get_reports
+
     return get_reports()

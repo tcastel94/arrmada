@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
 
 from sqlalchemy import String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
@@ -25,5 +24,5 @@ class Notification(Base):
     title: Mapped[str] = mapped_column(String(255))
     message: Mapped[str] = mapped_column(Text, default="")
     is_read: Mapped[bool] = mapped_column(default=False)
-    service_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    service_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=func.now())

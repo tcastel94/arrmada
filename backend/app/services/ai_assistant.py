@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import os
+
 import httpx
+
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -12,6 +14,7 @@ logger = get_logger(__name__)
 OLLAMA_URL = os.environ.get("OLLAMA_URL") or "http://192.168.2.3:11434"
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL") or "gemma4:e4b"
 
+
 async def _call_ollama(system_prompt: str, user_prompt: str, temperature: float = 0.7) -> str:
     """Helper function to call Ollama Chat API."""
     if not OLLAMA_URL:
@@ -19,16 +22,14 @@ async def _call_ollama(system_prompt: str, user_prompt: str, temperature: float 
         return "⚠️ L'assistant IA n'est pas configuré (Ollama introuvable)."
 
     url = f"{OLLAMA_URL.rstrip('/')}/api/generate"
-    
+
     prompt = f"{system_prompt}\n\n{user_prompt}"
-    
+
     payload = {
         "model": OLLAMA_MODEL,
         "prompt": prompt,
         "stream": False,
-        "options": {
-            "temperature": temperature
-        }
+        "options": {"temperature": temperature},
     }
 
     try:
@@ -56,7 +57,7 @@ async def suggest_media(prompt: str) -> str:
 
 async def generate_weekly_summary(added_movies: list[str], added_shows: list[str]) -> str:
     """Generates a weekly summary of added media using Ollama to make it fun."""
-    
+
     if not added_movies and not added_shows:
         return "ℹ️ Bilan Hebdo : Aucun nouveau contenu ajouté cette semaine."
 
@@ -69,7 +70,9 @@ async def generate_weekly_summary(added_movies: list[str], added_shows: list[str
         "Mets en valeur les ajouts importants de façon synthétique et élégante. Formate pour Telegram (HTML). "
         "N'invente pas de films, utilise uniquement la liste fournie."
     )
-    
-    user_prompt = f"Films ajoutés cette semaine : {movies_str}\nSéries ajoutées cette semaine : {shows_str}"
+
+    user_prompt = (
+        f"Films ajoutés cette semaine : {movies_str}\nSéries ajoutées cette semaine : {shows_str}"
+    )
 
     return await _call_ollama(system_prompt, user_prompt, temperature=0.8)

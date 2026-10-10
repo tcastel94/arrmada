@@ -4,39 +4,39 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.api.auth import router as auth_router
-from app.api.services import router as services_router
-from app.api.dashboard import router as dashboard_router
-from app.api.media import router as media_router
-from app.api.downloads import router as downloads_router
-from app.api.analytics import router as analytics_router
-from app.api.duplicates import router as duplicates_router
-from app.api.search import router as search_router
-from app.api.requests import router as requests_router
-from app.api.settings import router as settings_router
-from app.api.recommendations import router as recommendations_router
-from app.api.files import router as files_router
-from app.api.setup import router as setup_router
-from app.api.trash_guides import router as trash_guides_router
-from app.api.notifications import router as notifications_router
-from app.api.profile_overrides import router as profile_overrides_router
-from app.api.sabnzbd_config import router as sabnzbd_config_router
 from app.api.activity import router as activity_router
-from app.api.kodi import router as kodi_router
-from app.api.yamaha import router as yamaha_router
 from app.api.activity_timeline import router as activity_timeline_router
+from app.api.ai_search import router as ai_search_router
+from app.api.analytics import router as analytics_router
+from app.api.auth import router as auth_router
+from app.api.calendar import router as calendar_router
 from app.api.cast import router as cast_router
+from app.api.cleanup import router as cleanup_router
+from app.api.dashboard import router as dashboard_router
+from app.api.downloads import router as downloads_router
+from app.api.duplicates import router as duplicates_router
 
 # New feature routers
 from app.api.events import router as events_router
-from app.api.webhooks import router as webhooks_router
-from app.api.calendar import router as calendar_router
-from app.api.system import router as system_router
+from app.api.files import router as files_router
+from app.api.kodi import router as kodi_router
+from app.api.media import router as media_router
+from app.api.notifications import router as notifications_router
+from app.api.profile_overrides import router as profile_overrides_router
 from app.api.prowlarr_stats import router as prowlarr_stats_router
 from app.api.quality import router as quality_router
-from app.api.cleanup import router as cleanup_router
-from app.api.ai_search import router as ai_search_router
+from app.api.recommendations import router as recommendations_router
+from app.api.requests import router as requests_router
+from app.api.sabnzbd_config import router as sabnzbd_config_router
+from app.api.search import router as search_router
+from app.api.services import router as services_router
+from app.api.settings import router as settings_router
+from app.api.setup import router as setup_router
 from app.api.subtitles import router as subtitles_router
+from app.api.system import router as system_router
+from app.api.trash_guides import router as trash_guides_router
+from app.api.webhooks import router as webhooks_router
+from app.api.yamaha import router as yamaha_router
 
 # Main router that includes all sub-routers
 api_router = APIRouter()

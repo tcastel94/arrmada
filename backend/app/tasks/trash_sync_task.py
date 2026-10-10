@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from app.services.trash_guides import get_trash_cache
 from app.services.notification_service import create_notification_standalone
+from app.services.trash_guides import get_trash_cache
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
