@@ -18,7 +18,9 @@
 <window>
 	<defaultcontrol always="true">100</defaultcontrol>
 	<backgroundcolor>FF0A0E16</backgroundcolor>
-	<animation effect="fade" start="0" end="100" time="350" tween="sine" easing="out">WindowOpen</animation>
+	<!-- Fondu d'ouverture seulement sans intro : Kodi l'applique calque par calque,
+	     l'accueil transparaîtrait à travers l'intro pendant 350 ms. -->
+	<animation effect="fade" start="0" end="100" time="350" tween="sine" easing="out" condition="!String.IsEmpty(Window(Home).Property(ArrMada.IntroSeen))">WindowOpen</animation>
 	<animation effect="fade" start="100" end="0" time="200">WindowClose</animation>
 	<controls>
 
@@ -62,7 +64,8 @@
 
 		<!-- ═══════════════ BANDEAU : logo, aperçu, boutons, heure ═══════════════ -->
 		<control type="group">
-			<animation effect="slide" start="0,-40" end="0,0" time="450" tween="cubic" easing="out">WindowOpen</animation>
+			<animation effect="slide" start="0,-40" end="0,0" time="450" tween="cubic" easing="out" condition="!String.IsEmpty(Window(Home).Property(ArrMada.IntroSeen))">WindowOpen</animation>
+			<animation effect="slide" start="0,-40" end="0,0" time="450" tween="cubic" easing="out" condition="String.IsEqual(Window.Property(revealed),1)" reversible="false">Conditional</animation>
 			<control type="image">
 				<left>96</left><top>40</top><width>60</width><height>60</height>
 				<aspectratio>scale</aspectratio>
@@ -88,17 +91,30 @@
 			</control>
 			<!-- Indicateur de chargement : tourne pendant un rafraîchissement. -->
 			<control type="image">
-				<left>1066</left><top>54</top><width>36</width><height>36</height>
+				<left>846</left><top>54</top><width>36</width><height>36</height>
 				<texture colordiffuse="FF4A9EFF">arrmada/spinner.png</texture>
 				<visible>!String.IsEmpty(Window.Property(loading))</visible>
 				<animation effect="rotate" end="-360" center="auto" time="900" loop="true" condition="true">Conditional</animation>
 				<animation effect="fade" time="200">VisibleChange</animation>
 			</control>
 			<control type="grouplist" id="400">
-				<left>1120</left><top>44</top><width>420</width><height>56</height>
+				<left>904</left><top>44</top><width>636</width><height>56</height>
 				<orientation>horizontal</orientation>
 				<itemgap>16</itemgap>
 				<ondown>100</ondown>
+				<!-- Rechercher : clavier Kodi (avec micro sur Android pour dicter) -->
+				<control type="button" id="403">
+					<width>200</width><height>56</height>
+					<label>Rechercher</label>
+					<font>font12</font>
+					<textcolor>D9F5F7FA</textcolor>
+					<focusedcolor>FF0A0E16</focusedcolor>
+					<align>center</align><aligny>center</aligny>
+					<texturenofocus border="14" colordiffuse="1AFFFFFF">arrmada/rounded-12.png</texturenofocus>
+					<texturefocus border="14" colordiffuse="FF4A9EFF">arrmada/rounded-12.png</texturefocus>
+					<animation effect="zoom" start="100" end="106" time="160" tween="cubic" easing="out" center="auto">Focus</animation>
+					<animation effect="zoom" start="106" end="100" time="160" tween="cubic" easing="out" center="auto">UnFocus</animation>
+				</control>
 				<control type="button" id="401">
 					<width>200</width><height>56</height>
 					<label>Actualiser</label>
@@ -142,8 +158,10 @@
 
 		<!-- ═══════════════ SALUTATION + RÉSUMÉ DE LA FLOTTE ═══════════════ -->
 		<control type="group">
-			<animation effect="slide" start="-60,0" end="0,0" time="500" delay="80" tween="cubic" easing="out">WindowOpen</animation>
-			<animation effect="fade" start="0" end="100" time="500" delay="80">WindowOpen</animation>
+			<animation effect="slide" start="-60,0" end="0,0" time="500" delay="80" tween="cubic" easing="out" condition="!String.IsEmpty(Window(Home).Property(ArrMada.IntroSeen))">WindowOpen</animation>
+			<animation effect="slide" start="-60,0" end="0,0" time="500" delay="80" tween="cubic" easing="out" condition="String.IsEqual(Window.Property(revealed),1)" reversible="false">Conditional</animation>
+			<animation effect="fade" start="0" end="100" time="500" delay="80" condition="!String.IsEmpty(Window(Home).Property(ArrMada.IntroSeen))">WindowOpen</animation>
+			<animation effect="fade" start="0" end="100" time="500" delay="80" condition="String.IsEqual(Window.Property(revealed),1)" reversible="false">Conditional</animation>
 			<control type="label">
 				<left>96</left><top>124</top><width>1060</width><height>76</height>
 				<font>font52_bold</font>
@@ -174,8 +192,10 @@
 		<!-- Tuile 1 : films -->
 		<control type="group">
 			<left>96</left><top>262</top><width>252</width><height>150</height>
-			<animation effect="slide" start="0,60" end="0,0" time="500" delay="160" tween="cubic" easing="out">WindowOpen</animation>
-			<animation effect="fade" start="0" end="100" time="400" delay="160">WindowOpen</animation>
+			<animation effect="slide" start="0,60" end="0,0" time="500" delay="160" tween="cubic" easing="out" condition="!String.IsEmpty(Window(Home).Property(ArrMada.IntroSeen))">WindowOpen</animation>
+			<animation effect="slide" start="0,60" end="0,0" time="500" delay="160" tween="cubic" easing="out" condition="String.IsEqual(Window.Property(revealed),1)" reversible="false">Conditional</animation>
+			<animation effect="fade" start="0" end="100" time="400" delay="160" condition="!String.IsEmpty(Window(Home).Property(ArrMada.IntroSeen))">WindowOpen</animation>
+			<animation effect="fade" start="0" end="100" time="400" delay="160" condition="String.IsEqual(Window.Property(revealed),1)" reversible="false">Conditional</animation>
 			<control type="image">
 				<left>0</left><top>0</top><width>252</width><height>150</height>
 				<texture border="26" colordiffuse="14FFFFFF">arrmada/rounded-24.png</texture>
@@ -220,8 +240,10 @@
 		<!-- Tuile 2 : séries -->
 		<control type="group">
 			<left>364</left><top>262</top><width>252</width><height>150</height>
-			<animation effect="slide" start="0,60" end="0,0" time="500" delay="230" tween="cubic" easing="out">WindowOpen</animation>
-			<animation effect="fade" start="0" end="100" time="400" delay="230">WindowOpen</animation>
+			<animation effect="slide" start="0,60" end="0,0" time="500" delay="230" tween="cubic" easing="out" condition="!String.IsEmpty(Window(Home).Property(ArrMada.IntroSeen))">WindowOpen</animation>
+			<animation effect="slide" start="0,60" end="0,0" time="500" delay="230" tween="cubic" easing="out" condition="String.IsEqual(Window.Property(revealed),1)" reversible="false">Conditional</animation>
+			<animation effect="fade" start="0" end="100" time="400" delay="230" condition="!String.IsEmpty(Window(Home).Property(ArrMada.IntroSeen))">WindowOpen</animation>
+			<animation effect="fade" start="0" end="100" time="400" delay="230" condition="String.IsEqual(Window.Property(revealed),1)" reversible="false">Conditional</animation>
 			<control type="image">
 				<left>0</left><top>0</top><width>252</width><height>150</height>
 				<texture border="26" colordiffuse="14FFFFFF">arrmada/rounded-24.png</texture>
@@ -266,8 +288,10 @@
 		<!-- Tuile 3 : stockage (avec jauge de remplissage du disque) -->
 		<control type="group">
 			<left>632</left><top>262</top><width>252</width><height>150</height>
-			<animation effect="slide" start="0,60" end="0,0" time="500" delay="300" tween="cubic" easing="out">WindowOpen</animation>
-			<animation effect="fade" start="0" end="100" time="400" delay="300">WindowOpen</animation>
+			<animation effect="slide" start="0,60" end="0,0" time="500" delay="300" tween="cubic" easing="out" condition="!String.IsEmpty(Window(Home).Property(ArrMada.IntroSeen))">WindowOpen</animation>
+			<animation effect="slide" start="0,60" end="0,0" time="500" delay="300" tween="cubic" easing="out" condition="String.IsEqual(Window.Property(revealed),1)" reversible="false">Conditional</animation>
+			<animation effect="fade" start="0" end="100" time="400" delay="300" condition="!String.IsEmpty(Window(Home).Property(ArrMada.IntroSeen))">WindowOpen</animation>
+			<animation effect="fade" start="0" end="100" time="400" delay="300" condition="String.IsEqual(Window.Property(revealed),1)" reversible="false">Conditional</animation>
 			<control type="image">
 				<left>0</left><top>0</top><width>252</width><height>150</height>
 				<texture border="26" colordiffuse="14FFFFFF">arrmada/rounded-24.png</texture>
@@ -318,8 +342,10 @@
 		<!-- Tuile 4 : téléchargements -->
 		<control type="group">
 			<left>900</left><top>262</top><width>252</width><height>150</height>
-			<animation effect="slide" start="0,60" end="0,0" time="500" delay="370" tween="cubic" easing="out">WindowOpen</animation>
-			<animation effect="fade" start="0" end="100" time="400" delay="370">WindowOpen</animation>
+			<animation effect="slide" start="0,60" end="0,0" time="500" delay="370" tween="cubic" easing="out" condition="!String.IsEmpty(Window(Home).Property(ArrMada.IntroSeen))">WindowOpen</animation>
+			<animation effect="slide" start="0,60" end="0,0" time="500" delay="370" tween="cubic" easing="out" condition="String.IsEqual(Window.Property(revealed),1)" reversible="false">Conditional</animation>
+			<animation effect="fade" start="0" end="100" time="400" delay="370" condition="!String.IsEmpty(Window(Home).Property(ArrMada.IntroSeen))">WindowOpen</animation>
+			<animation effect="fade" start="0" end="100" time="400" delay="370" condition="String.IsEqual(Window.Property(revealed),1)" reversible="false">Conditional</animation>
 			<control type="image">
 				<left>0</left><top>0</top><width>252</width><height>150</height>
 				<texture border="26" colordiffuse="14FFFFFF">arrmada/rounded-24.png</texture>
@@ -365,8 +391,10 @@
 		<!-- ═══════════════ PANNEAU TÉLÉCHARGEMENTS (3 emplacements, mis à jour en direct) ═══════════════ -->
 		<control type="group">
 			<left>1200</left><top>128</top><width>624</width><height>284</height>
-			<animation effect="slide" start="60,0" end="0,0" time="500" delay="220" tween="cubic" easing="out">WindowOpen</animation>
-			<animation effect="fade" start="0" end="100" time="400" delay="220">WindowOpen</animation>
+			<animation effect="slide" start="60,0" end="0,0" time="500" delay="220" tween="cubic" easing="out" condition="!String.IsEmpty(Window(Home).Property(ArrMada.IntroSeen))">WindowOpen</animation>
+			<animation effect="slide" start="60,0" end="0,0" time="500" delay="220" tween="cubic" easing="out" condition="String.IsEqual(Window.Property(revealed),1)" reversible="false">Conditional</animation>
+			<animation effect="fade" start="0" end="100" time="400" delay="220" condition="!String.IsEmpty(Window(Home).Property(ArrMada.IntroSeen))">WindowOpen</animation>
+			<animation effect="fade" start="0" end="100" time="400" delay="220" condition="String.IsEqual(Window.Property(revealed),1)" reversible="false">Conditional</animation>
 			<control type="image">
 				<left>0</left><top>0</top><width>624</width><height>284</height>
 				<texture border="26" colordiffuse="14FFFFFF">arrmada/rounded-24.png</texture>
@@ -490,8 +518,10 @@
 
 		<!-- ═══════════════ RANGÉE « AJOUTS RÉCENTS » ═══════════════ -->
 		<control type="group">
-			<animation effect="slide" start="0,80" end="0,0" time="600" delay="300" tween="cubic" easing="out">WindowOpen</animation>
-			<animation effect="fade" start="0" end="100" time="500" delay="300">WindowOpen</animation>
+			<animation effect="slide" start="0,80" end="0,0" time="600" delay="300" tween="cubic" easing="out" condition="!String.IsEmpty(Window(Home).Property(ArrMada.IntroSeen))">WindowOpen</animation>
+			<animation effect="slide" start="0,80" end="0,0" time="600" delay="300" tween="cubic" easing="out" condition="String.IsEqual(Window.Property(revealed),1)" reversible="false">Conditional</animation>
+			<animation effect="fade" start="0" end="100" time="500" delay="300" condition="!String.IsEmpty(Window(Home).Property(ArrMada.IntroSeen))">WindowOpen</animation>
+			<animation effect="fade" start="0" end="100" time="500" delay="300" condition="String.IsEqual(Window.Property(revealed),1)" reversible="false">Conditional</animation>
 			<control type="image">
 				<left>96</left><top>446</top><width>6</width><height>28</height>
 				<texture colordiffuse="FF4A9EFF">arrmada/white.png</texture>
@@ -502,6 +532,66 @@
 				<textcolor>FFF5F7FA</textcolor>
 				<aligny>center</aligny>
 				<label>Ajouts récents$INFO[Window.Property(recent_count),[COLOR 80C9D3E0]  ·  , titres[/COLOR]]</label>
+			</control>
+
+			<!-- Aide des touches de la télécommande (rangée sélectionnée) -->
+			<control type="group">
+				<visible>Control.HasFocus(100)</visible>
+				<animation effect="fade" time="250">VisibleChange</animation>
+				<control type="image">
+					<left>1176</left><top>445</top><width>54</width><height>30</height>
+					<texture border="14" colordiffuse="1FFFFFFF">arrmada/rounded-12.png</texture>
+				</control>
+				<control type="label">
+					<left>1176</left><top>445</top><width>54</width><height>30</height>
+					<font>font10</font>
+					<textcolor>E6F5F7FA</textcolor>
+					<align>center</align><aligny>center</aligny>
+					<label>OK</label>
+				</control>
+				<control type="label">
+					<left>1240</left><top>445</top><width>160</width><height>30</height>
+					<font>font10</font>
+					<textcolor>99C9D3E0</textcolor>
+					<aligny>center</aligny>
+					<label>fiche</label>
+				</control>
+				<control type="image">
+					<left>1318</left><top>445</top><width>128</width><height>30</height>
+					<texture border="14" colordiffuse="1FFFFFFF">arrmada/rounded-12.png</texture>
+				</control>
+				<control type="label">
+					<left>1318</left><top>445</top><width>128</width><height>30</height>
+					<font>font10</font>
+					<textcolor>E6F5F7FA</textcolor>
+					<align>center</align><aligny>center</aligny>
+					<label>OK maintenu</label>
+				</control>
+				<control type="label">
+					<left>1456</left><top>445</top><width>160</width><height>30</height>
+					<font>font10</font>
+					<textcolor>99C9D3E0</textcolor>
+					<aligny>center</aligny>
+					<label>actions</label>
+				</control>
+				<control type="image">
+					<left>1564</left><top>445</top><width>96</width><height>30</height>
+					<texture border="14" colordiffuse="1FFFFFFF">arrmada/rounded-12.png</texture>
+				</control>
+				<control type="label">
+					<left>1564</left><top>445</top><width>96</width><height>30</height>
+					<font>font10</font>
+					<textcolor>E6F5F7FA</textcolor>
+					<align>center</align><aligny>center</aligny>
+					<label>Lecture</label>
+				</control>
+				<control type="label">
+					<left>1670</left><top>445</top><width>160</width><height>30</height>
+					<font>font10</font>
+					<textcolor>99C9D3E0</textcolor>
+					<aligny>center</aligny>
+					<label>lire / ouvrir</label>
+				</control>
 			</control>
 
 			<!-- Squelettes d'affiches pendant le premier chargement -->
@@ -903,6 +993,124 @@
 				<align>center</align><aligny>center</aligny>
 				<texturenofocus border="14" colordiffuse="1AFFFFFF">arrmada/rounded-12.png</texturenofocus>
 				<texturefocus border="14" colordiffuse="FF4A9EFF">arrmada/rounded-12.png</texturefocus>
+			</control>
+		</control>
+
+		<!-- ═══════════════ INTRO (≈ 2,4 s, une fois par session Kodi, n'importe quelle touche la passe) ═══════════════
+		     Le logo se construit : les deux jambes du « A » se rejoignent, le bouton lecture apparaît avec
+		     un rebond, deux ondes s'élargissent, un reflet traverse, puis le nom et l'accroche montent.
+		     Calques produits par branding/export.py (brand-*.png) depuis le logo SVG.
+		     Python (home_window.py) pose « intro_done » à la fin : la surimpression s'efface en avançant
+		     vers l'écran (zoom + fondu) et l'accueil se dévoile en cascade. -->
+		<control type="group">
+			<visible>String.IsEmpty(Window(Home).Property(ArrMada.IntroSeen)) + String.IsEmpty(Window.Property(intro_done))</visible>
+			<animation type="Hidden">
+				<effect type="fade" start="100" end="0" time="520" tween="sine" easing="in"/>
+				<effect type="zoom" start="100" end="112" time="520" tween="cubic" easing="in" center="960,540"/>
+			</animation>
+			<control type="image">
+				<left>0</left><top>0</top><width>1920</width><height>1080</height>
+				<texture colordiffuse="FF0A0E16">arrmada/white.png</texture>
+			</control>
+			<!-- Lumières d'ambiance -->
+			<control type="image">
+				<left>360</left><top>-120</top><width>1200</width><height>1100</height>
+				<texture colordiffuse="664A9EFF">arrmada/blob.png</texture>
+				<animation type="WindowOpen">
+					<effect type="fade" start="0" end="100" time="1400" tween="sine" easing="out"/>
+					<effect type="zoom" start="70" end="100" time="1800" tween="cubic" easing="out" center="960,430"/>
+				</animation>
+			</control>
+			<control type="image">
+				<left>-200</left><top>520</top><width>1100</width><height>900</height>
+				<texture colordiffuse="3322E0EE">arrmada/blob.png</texture>
+				<animation effect="fade" start="0" end="100" time="1600" delay="300" tween="sine">WindowOpen</animation>
+			</control>
+			<!-- Deux ondes qui partent du logo -->
+			<control type="image">
+				<left>750</left><top>220</top><width>420</width><height>420</height>
+				<texture colordiffuse="FF4A9EFF">arrmada/ring-circle.png</texture>
+				<animation type="WindowOpen">
+					<effect type="zoom" start="35" end="190" time="1300" delay="620" tween="quadratic" easing="out" center="960,430"/>
+					<effect type="fade" start="0" end="90" time="120" delay="620"/>
+					<effect type="fade" start="100" end="0" time="1100" delay="760"/>
+				</animation>
+			</control>
+			<control type="image">
+				<left>750</left><top>220</top><width>420</width><height>420</height>
+				<texture colordiffuse="9922E0EE">arrmada/ring-circle.png</texture>
+				<animation type="WindowOpen">
+					<effect type="zoom" start="35" end="150" time="1300" delay="820" tween="quadratic" easing="out" center="960,430"/>
+					<effect type="fade" start="0" end="80" time="120" delay="820"/>
+					<effect type="fade" start="100" end="0" time="1100" delay="960"/>
+				</animation>
+			</control>
+			<!-- Halo derrière le logo -->
+			<control type="image">
+				<left>700</left><top>170</top><width>520</width><height>520</height>
+				<texture colordiffuse="994A9EFF">arrmada/blob.png</texture>
+				<animation effect="fade" start="0" end="100" time="700" delay="560" tween="sine">WindowOpen</animation>
+				<animation effect="fade" start="100" end="65" time="1200" tween="sine" pulse="true" condition="true">Conditional</animation>
+			</control>
+			<!-- Le logo, en trois pièces (cadre 360 × 360 centré en 960, 430) -->
+			<control type="image">
+				<left>780</left><top>250</top><width>360</width><height>360</height>
+				<texture>arrmada/brand-leg-left.png</texture>
+				<animation type="WindowOpen">
+					<effect type="slide" start="-110,90" end="0,0" time="620" delay="120" tween="cubic" easing="out"/>
+					<effect type="fade" start="0" end="100" time="300" delay="120"/>
+				</animation>
+			</control>
+			<control type="image">
+				<left>780</left><top>250</top><width>360</width><height>360</height>
+				<texture>arrmada/brand-leg-right.png</texture>
+				<animation type="WindowOpen">
+					<effect type="slide" start="110,90" end="0,0" time="620" delay="260" tween="cubic" easing="out"/>
+					<effect type="fade" start="0" end="100" time="300" delay="260"/>
+				</animation>
+			</control>
+			<control type="image">
+				<left>780</left><top>250</top><width>360</width><height>360</height>
+				<texture>arrmada/brand-play.png</texture>
+				<animation type="WindowOpen">
+					<effect type="zoom" start="0" end="100" time="520" delay="700" tween="back" easing="out" center="971,486"/>
+					<effect type="fade" start="0" end="100" time="160" delay="700"/>
+				</animation>
+			</control>
+			<!-- Reflet qui traverse le logo -->
+			<control type="image">
+				<left>690</left><top>230</top><width>170</width><height>400</height>
+				<texture colordiffuse="4DFFFFFF">arrmada/sweep.png</texture>
+				<animation type="WindowOpen">
+					<effect type="slide" start="0,0" end="380,0" time="700" delay="1000" tween="sine" easing="inout"/>
+					<effect type="fade" start="0" end="100" time="200" delay="1000"/>
+					<effect type="fade" start="100" end="0" time="300" delay="1400"/>
+				</animation>
+			</control>
+			<!-- Nom (police de la web app) et accroche -->
+			<control type="image">
+				<left>634</left><top>660</top><width>652</width><height>108</height>
+				<texture>arrmada/brand-wordmark.png</texture>
+				<animation type="WindowOpen">
+					<effect type="slide" start="0,46" end="0,0" time="700" delay="980" tween="cubic" easing="out"/>
+					<effect type="fade" start="0" end="100" time="500" delay="980"/>
+				</animation>
+			</control>
+			<control type="image">
+				<left>757</left><top>800</top><width>406</width><height>24</height>
+				<texture>arrmada/brand-tagline.png</texture>
+				<animation type="WindowOpen">
+					<effect type="slide" start="0,24" end="0,0" time="600" delay="1280" tween="cubic" easing="out"/>
+					<effect type="fade" start="0" end="100" time="500" delay="1280"/>
+				</animation>
+			</control>
+			<control type="label">
+				<left>0</left><top>1000</top><width>1920</width><height>30</height>
+				<font>font10</font>
+				<textcolor>66C9D3E0</textcolor>
+				<align>center</align><aligny>center</aligny>
+				<label>v$INFO[Window.Property(version)]</label>
+				<animation effect="fade" start="0" end="100" time="600" delay="1500">WindowOpen</animation>
 			</control>
 		</control>
 	</controls>

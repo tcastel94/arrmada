@@ -57,9 +57,11 @@ for _ in range(3):  # 1er élément = « .. » si Kodi affiche le dossier parent
     press("Down", 1, 0.5)
 log(f"entrée sélectionnée : {xbmc.getInfoLabel('ListItem.Label')}")
 press("Select", 1, 0.1)
-wait(0.8)
-shot("01-ouverture")  # squelettes : le serveur n'a pas encore répondu
-wait(6)
+wait(0.6)
+shot("01a-intro-logo")  # intro : le logo se construit
+wait(0.2)
+shot("01b-intro-nom")  # intro : le nom et l'accroche montent
+wait(5)
 shot("02-accueil")
 
 # 2. Focus et navigation
@@ -69,16 +71,33 @@ shot("03-focus-affiche")
 press("Right", 7, 0.5)
 wait(1.5)
 shot("04-sans-affiche")
+
+# 2 bis. Télécommande : appui long sur OK (= menu contextuel) et touche Lecture
+press("ContextMenu")
+wait(1.2)
+shot("04b-actions-rapides")
+press("Back")
+press("PlayPause")
+wait(1.2)
+shot("04c-lecture-hors-mediatheque")  # titre absent de la médiathèque Kodi du banc
+wait(2.5)
+
 press("Up")
 wait(1.0)
 shot("05-boutons")
-press("Right")
+press("Right", 2)  # Rechercher → Actualiser → Diagnostic
 press("Select")
 wait(2.0)
 shot("06-diagnostic")
 press("Back")
 wait(1.0)
 shot("07-retour")
+press("Left", 2)  # → Rechercher
+press("Select")
+wait(1.5)
+shot("07b-recherche-clavier")
+press("Back")
+wait(1.0)
 press("Back")
 wait(2.0)
 
@@ -90,6 +109,7 @@ shot("08-reouverture-cache")
 # 4. Panne du serveur pendant l'affichage
 urllib.request.urlopen(f"{MOCK}/__down").read()
 press("Up")
+press("Right")  # Rechercher → Actualiser
 press("Select")
 wait(4.0)
 shot("09-hors-ligne")

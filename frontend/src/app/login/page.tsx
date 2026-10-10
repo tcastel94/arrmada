@@ -11,7 +11,7 @@
  */
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
+import { BrandIcon } from "@/components/brand/brand-mark";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowRight, Eye, EyeOff, Loader2, Lock, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -101,7 +101,7 @@ export default function LoginPage() {
                                     >
                                         <div className="absolute -inset-3 rounded-full bg-brand/30 blur-xl animate-pulse-glow" aria-hidden />
                                         <div className="relative h-full w-full overflow-hidden rounded-[26%] ring-1 ring-brand/40 shadow-[0_0_36px_-6px_hsl(var(--brand)/0.9)]">
-                                            <Image src="/logo-mark.png" alt="ArrMada" width={112} height={112} priority className="h-full w-full object-cover" />
+                                            <BrandIcon title="ArrMada" animated delay={0.35} />
                                         </div>
                                     </motion.div>
                                 </div>

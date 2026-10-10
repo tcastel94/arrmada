@@ -98,6 +98,7 @@ def test_python_ids_exist_in_xml(tree: ET.Element) -> None:
         "RAIL",
         "SERVICES",
         "BUTTONS",
+        "BTN_SEARCH",
         "BTN_REFRESH",
         "BTN_DIAG",
         "DIAG_CLOSE",

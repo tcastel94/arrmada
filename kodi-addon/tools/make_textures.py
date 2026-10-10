@@ -150,6 +150,22 @@ def spinner(size: int, thickness: float) -> AlphaFn:
     return fn
 
 
+def circle_ring(size: int, thickness: float) -> AlphaFn:
+    """Cercle fin (onde qui s'élargit pendant l'intro)."""
+
+    def fn(x: float, y: float) -> float:
+        dist = math.hypot(x - size / 2, y - size / 2)
+        r_out = size / 2 - 1
+        return min(coverage(dist - r_out), coverage(r_out - thickness - dist))
+
+    return fn
+
+
+def sweep(w: int, h: int) -> AlphaFn:
+    """Reflet : ovale de lumière, opaque au centre et fondu sur tous les bords."""
+    return lambda x, y: smoothstep(1 - abs(x / w * 2 - 1)) * smoothstep(1 - abs(y / h * 2 - 1))
+
+
 def smoothstep(t: float) -> float:
     t = max(0.0, min(1.0, t))
     return t * t * (3 - 2 * t)
@@ -181,6 +197,8 @@ TEXTURES: dict[str, tuple[int, int, AlphaFn, str]] = {
     "circle.png": (32, 32, disc(32), "pastille d'état"),
     "blob.png": (256, 256, blob(256), "lumière d'ambiance (étirée, sans border)"),
     "spinner.png": (96, 96, spinner(96, 7), "chargement (animation rotate)"),
+    "ring-circle.png": (256, 256, circle_ring(256, 5), "onde de l'intro (zoom + fondu)"),
+    "sweep.png": (64, 128, sweep(64, 128), "reflet qui traverse le logo pendant l'intro"),
     "grad-h.png": (256, 4, grad_h(256), "voile gauche → droite sur le fanart"),
     "grad-v.png": (4, 256, grad_v(256), "voile haut → bas sur le fanart"),
     "poster-mask.png": (

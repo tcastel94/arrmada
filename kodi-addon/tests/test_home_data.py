@@ -147,7 +147,13 @@ RECENT = [
         "clearlogo_url": "l.png",
         "overview": "Arrakis.",
     },
-    {"external_id": "10", "type": "series", "title": "The Expanse", "year": None},
+    {
+        "external_id": "10",
+        "type": "series",
+        "title": "The Expanse",
+        "year": None,
+        "tmdb_id": 280619,
+    },
 ]
 
 
@@ -189,6 +195,9 @@ class TestBuildModel:
         assert dune["meta"] == "2021 · Film · 4K · DV · Atmos"
         assert dune["badge"] == "4K"
         assert (dune["poster"], dune["fanart"], dune["clearlogo"]) == ("p.jpg", "f.jpg", "l.png")
+        assert (dune["tmdb_id"], dune["tvdb_id"]) == ("", "")  # Radarr n'a pas fourni d'ID
+        # Série : Sonarr range l'ID TVDB dans « tmdb_id », il doit ressortir en tvdb_id.
+        assert (expanse["tmdb_id"], expanse["tvdb_id"]) == ("", "280619")
         assert expanse["id"] == "series:10"
         assert expanse["type"] == "tvshow"
         assert expanse["meta"] == "Série"
@@ -207,6 +216,62 @@ class TestBuildModel:
         model = home_data.build_model({"downloads": [{"title": "x", "progress": 50}]}, [], NOW)
         assert model["kpis"]["downloads_hint"] == "téléchargement"
         assert model["summary"].endswith("1 téléchargement en cours")
+
+
+class TestLibraryMatch:
+    MOVIES = [
+        {"movieid": 1, "title": "Dune", "year": 1984},
+        {"movieid": 2, "title": "Dune", "year": 2021},
+        {"movieid": 3, "title": "Dune : Deuxième partie", "year": 2024},
+    ]
+
+    def test_same_title_and_year(self) -> None:
+        assert home_data.pick_library_match(self.MOVIES, "Dune", 2021, "movieid") == 2
+        assert home_data.pick_library_match(self.MOVIES, "dune", 1984, "movieid") == 1
+
+    def test_one_year_tolerance_and_punctuation(self) -> None:
+        assert (
+            home_data.pick_library_match(self.MOVIES, "Dune: Deuxième Partie", 2025, "movieid") == 3
+        )
+
+    def test_ambiguous_or_missing_returns_none(self) -> None:
+        # Deux « Dune » et une année qui ne colle à aucun : on ne devine pas.
+        assert home_data.pick_library_match(self.MOVIES, "Dune", 2030, "movieid") is None
+        assert home_data.pick_library_match(self.MOVIES, "Interstellar", 2014, "movieid") is None
+
+    def test_unique_id_wins_over_title(self) -> None:
+        """Kodi en français, Radarr en anglais : l'ID TMDB fait le lien."""
+        movies = [
+            {
+                "movieid": 9,
+                "title": "Dune : Deuxième partie",
+                "year": 2024,
+                "uniqueid": {"tmdb": "693134"},
+            }
+        ]
+        assert (
+            home_data.pick_library_match(
+                movies, "Dune: Part Two", 2024, "movieid", "tmdb", "693134"
+            )
+            == 9
+        )
+        assert (
+            home_data.pick_library_match(movies, "Dune: Part Two", 2024, "movieid", "tmdb", "1")
+            is None
+        )
+
+    def test_library_filter(self) -> None:
+        by_year = home_data.library_filter("Dune", 2021)
+        assert [f["value"] for f in by_year["or"]] == ["2020", "2021", "2022"]
+        assert home_data.library_filter("Dune", 0) == {
+            "field": "title",
+            "operator": "contains",
+            "value": "Dune",
+        }
+
+    def test_single_candidate_without_year(self) -> None:
+        shows = [{"tvshowid": 7, "title": "The Expanse", "year": 2015}]
+        assert home_data.pick_library_match(shows, "The Expanse", 0, "tvshowid") == 7
 
 
 class TestCache:

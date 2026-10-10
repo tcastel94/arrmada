@@ -1,4 +1,4 @@
-# 🏴‍☠️ ArrMada — Plugin Officiel pour Kodi
+# ArrMada — Plugin Officiel pour Kodi
 
 Le plugin **ArrMada pour Kodi** permet de connecter directement votre médiathèque Kodi à votre stack `*arr` (Radarr, Sonarr, Bazarr, SABnzbd, Torrent) pour une gestion fluide depuis votre canapé.
 
@@ -42,6 +42,27 @@ Premier écran « sur mesure » de la future appli ArrMada pour Kodi
 - **Ouverture instantanée** : le dernier état connu est gardé en cache sur l'appareil, puis mis à jour en arrière-plan. Aucun appel réseau ne fige l'interface.
 - **Hors ligne** : si le serveur ne répond pas, l'écran garde les dernières données, ou affiche l'adresse et l'erreur à vérifier. Il retente toutes les 20 s.
 - Bouton **Diagnostic** : rendu des polices et des accents, version de Kodi et du skin, images/s, et temps mesurés (ouverture, réseau, rendu).
+
+- **Intro** (environ 2,4 s, à la première ouverture de la session Kodi) : les deux jambes du « A » se rejoignent, le bouton lecture apparaît avec un rebond, deux ondes partent du logo, puis le nom et l'accroche montent. N'importe quelle touche la passe.
+
+**Télécommande** (Shield, et toute télécommande Android TV)
+
+| Touche | Action |
+|---|---|
+| Flèches / OK | Naviguer / fiche du titre (la fiche arrive en phase 2) |
+| **OK maintenu** (ou touche Menu) | Actions rapides : *Lire*, *Chercher une meilleure version* (Radarr/Sonarr) |
+| **Lecture/Pause** | Lit le film depuis la médiathèque Kodi de l'appareil (reprise incluse) ; pour une série, ouvre ses saisons |
+| Retour | Passe l'intro, ferme le Diagnostic, puis quitte |
+| Bouton **Rechercher** | Ouvre le clavier de Kodi. Sur Android, il a un bouton **micro** pour dicter |
+
+> Le titre est retrouvé dans la médiathèque Kodi par son identifiant TMDB/TVDB,
+> puis par son titre et son année. Kodi peut donc l'avoir en français et
+> Radarr en anglais. Si le titre est introuvable, un message le dit, plutôt
+> que de lancer le mauvais film.
+>
+> **Voix** : le bouton micro de la télécommande Shield appelle l'Assistant
+> Google, qui ne parle pas à Kodi. Pour dicter une recherche, il faut le
+> micro du clavier de Kodi (bouton « Rechercher »).
 
 **L'ouvrir**
 - Depuis l'add-on : **ArrMada → [NOUVEAU] Accueil ArrMada (apercu v2)**.

@@ -25,7 +25,7 @@ from typing import Any
 
 # Version du format du cache : à incrémenter si la structure du modèle change,
 # pour ignorer proprement un ancien cache au lieu de planter à l'affichage.
-CACHE_VERSION = 2
+CACHE_VERSION = 3
 CACHE_FILE = "home.json"
 
 MAX_DOWNLOADS = 3  # emplacements prévus dans le XML (dl1…dl3)
@@ -271,9 +271,14 @@ def _recent(items: list[dict]) -> list[dict[str, Any]]:
         meta = [str(item["year"])] if item.get("year") else []
         meta.append(kind)
         meta.extend(tech)
+        is_series = item.get("type") == "series"
         out.append(
             {
                 "id": f"{item.get('type', 'movie')}:{item.get('external_id', '')}",
+                # Identifiants pour les actions (recherche *arr) : Sonarr range
+                # l'ID TVDB dans « tmdb_id » (cf. media_aggregator côté serveur).
+                "tmdb_id": "" if is_series else str(item.get("tmdb_id") or ""),
+                "tvdb_id": str(item.get("tmdb_id") or "") if is_series else "",
                 "title": item.get("title") or "Sans titre",
                 "year": item.get("year") or 0,
                 "type": "tvshow" if item.get("type") == "series" else "movie",
@@ -286,6 +291,59 @@ def _recent(items: list[dict]) -> list[dict[str, Any]]:
             }
         )
     return out
+
+
+def _norm_title(title: str) -> str:
+    """Titre comparable : minuscules, sans ponctuation ni espaces multiples."""
+    return " ".join(re.sub(r"[^\w]+", " ", str(title or "").lower()).split())
+
+
+def pick_library_match(
+    candidates: list[dict],
+    title: str,
+    year: int,
+    id_key: str,
+    unique_key: str = "",
+    unique_value: str = "",
+) -> int | None:
+    """Choisit l'élément de la médiathèque Kodi qui correspond à un titre *arr.
+
+    `candidates` : réponse JSON-RPC de Kodi (VideoLibrary.GetMovies /
+    GetTVShows), éléments {id_key, "title", "year", "uniqueid"}.
+    Ordre de préférence :
+      1. même identifiant externe (uniqueid tmdb / tvdb) : fiable même si Kodi
+         a le titre français et Radarr le titre anglais ;
+      2. même titre et même année, puis même titre à un an près (dates de
+         sortie qui diffèrent entre TMDB et Kodi) ;
+      3. même titre si un seul candidat.
+    Sinon None : mieux vaut ne rien lancer que lancer le mauvais film.
+    """
+    if unique_key and unique_value:
+        for candidate in candidates:
+            if str((candidate.get("uniqueid") or {}).get(unique_key, "")) == str(unique_value):
+                return int(candidate[id_key])
+    wanted = _norm_title(title)
+    same_title = [c for c in candidates if _norm_title(c.get("title", "")) == wanted]
+    if year:
+        for tolerance in (0, 1):
+            for candidate in same_title:
+                if abs(int(candidate.get("year") or 0) - int(year)) <= tolerance:
+                    return int(candidate[id_key])
+    if len(same_title) == 1:
+        return int(same_title[0][id_key])
+    return None
+
+
+def library_filter(title: str, year: int) -> dict:
+    """Filtre JSON-RPC Kodi : l'année ± 1 si connue (liste courte), sinon le titre."""
+    if year:
+        return {
+            "or": [
+                {"field": "year", "operator": "is", "value": str(y)}
+                for y in (year - 1, year, year + 1)
+            ]
+        }
+    return {"field": "title", "operator": "contains", "value": title}
 
 
 def build_model(dashboard: dict, recent: list[dict], now: datetime) -> dict[str, Any]:

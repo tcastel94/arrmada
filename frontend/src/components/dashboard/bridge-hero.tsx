@@ -5,7 +5,7 @@
  * Salutation selon l'heure, résumé vivant de la flotte, actions rapides,
  * et l'emblème ArrMada au centre d'un radar animé.
  */
-import Image from "next/image";
+import { BrandIcon } from "@/components/brand/brand-mark";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Plus, Search, Sparkles } from "lucide-react";
@@ -161,7 +161,7 @@ function RadarEmblem() {
             >
                 <div className="absolute -inset-4 rounded-full bg-primary/30 blur-2xl animate-pulse-glow" />
                 <div className="relative h-full w-full overflow-hidden rounded-[28%] ring-1 ring-brand/40 shadow-[0_0_40px_-6px_hsl(var(--brand)/0.8)] animate-float">
-                    <Image src="/logo-mark.png" alt="" width={160} height={160} className="h-full w-full object-cover" priority />
+                    <BrandIcon animated delay={0.45} />
                 </div>
             </motion.div>
         </div>

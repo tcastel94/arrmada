@@ -2,7 +2,7 @@
   <img src="docs/banner.png" alt="ArrMada Banner" width="100%"/>
 </p>
 
-<h1 align="center">🏴‍☠️ ArrMada</h1>
+<h1 align="center">ArrMada</h1>
 
 <p align="center">
   <strong>The unified dashboard for your *arr media stack</strong>

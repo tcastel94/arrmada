@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Généré par branding/export.py depuis arrmada-mark.svg : ne pas modifier à la main. -->
+  <defs>
+    <radialGradient id="tile-bg" cx="0.22" cy="0" r="1.25">
+      <stop offset="0" stop-color="#17223A"/>
+      <stop offset="0.6" stop-color="#0B111D"/>
+      <stop offset="1" stop-color="#080B12"/>
+    </radialGradient>
+    <radialGradient id="tile-glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#4A9EFF" stop-opacity="0.32"/>
+      <stop offset="1" stop-color="#4A9EFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#tile-bg)"/>
+  <circle cx="256" cy="246" r="210" fill="url(#tile-glow)"/>
+  <rect x="2" y="2" width="508" height="508" rx="110" fill="none" stroke="#FFFFFF" stroke-opacity="0.08" stroke-width="4"/>
+  <g transform="translate(96 96) scale(5)">
+    <defs>
+    <linearGradient id="arrmada-g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4A9EFF"/>
+      <stop offset="1" stop-color="#22E0EE"/>
+    </linearGradient>
+  </defs>
+  <path d="M11 54 L32 9 L53 54" fill="none" stroke="url(#arrmada-g)" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M27 34.8v14.4a1.6 1.6 0 0 0 2.4 1.4l11.4-7.2a1.6 1.6 0 0 0 0-2.8l-11.4-7.2a1.6 1.6 0 0 0-2.4 1.4z" fill="#EAF6FF"/>
+  </g>
+</svg>
