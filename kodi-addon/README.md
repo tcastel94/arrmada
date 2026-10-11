@@ -373,9 +373,31 @@ Voir § 8 ci-dessus : une source `http://<serveur>:8420/kodi/repo/`, puis
 `repository.arrmada.zip`, puis « Installer depuis un dépôt ».
 
 ### Méthode 2 : Fichier ZIP
-1. Copiez `kodi-addon/script.arrmada.zip` (toujours la dernière version) sur votre appareil Kodi ou un partage réseau (SMB/NFS) déjà déclaré comme source dans Kodi.
+1. Copiez `kodi-addon/script.arrmada.zip` (toujours la dernière version) sur votre appareil Kodi ou un partage réseau (SMB/NFS) déjà déclaré comme source dans Kodi, **avec la version dans le nom du fichier** :
+   ```bash
+   cd /chemin/vers/arrmada
+   # Version lue dans addon.xml (ex. 1.10.0)
+   V=$(sed -n 's/.*<addon [^>]*version="\([^"]*\)".*/\1/p' kodi-addon/script.arrmada/addon.xml)
+   cp kodi-addon/script.arrmada.zip "/mnt/user/<partage-vu-par-kodi>/script.arrmada-$V.zip"
+   ```
 2. Dans Kodi, allez dans **Extensions / Add-ons** > **Installer depuis un fichier ZIP**.
-3. Sélectionnez `script.arrmada.zip` et validez. Pour une mise à jour, refaites la même manipulation : Kodi remplace l'ancienne version.
+3. Sélectionnez `script.arrmada-<version>.zip` et validez. Pour une mise à jour, refaites la même manipulation (nouveau fichier, nouveau nom) : Kodi remplace l'ancienne version, les réglages et l'appairage sont conservés.
+
+> ⚠️ **Ne jamais écraser un zip sous le même nom pendant que Kodi tourne.**
+> Kodi garde en mémoire la liste des fichiers de chaque zip déjà ouvert,
+> jusqu'à sa fermeture (`DIR_CACHE_ALWAYS` dans `ZipDirectory.h`). Avec un
+> zip écrasé, il lit le **nouvel** `addon.xml` (la nouvelle version
+> s'affiche) mais copie l'**ancienne** liste de fichiers : les fichiers
+> ajoutés manquent. En 1.10.0, c'est `lib/playback_data.py` : le service
+> plante à son démarrage (« Erreur — consultez le journal », et dans
+> `kodi.log` : `No module named 'playback_data'`). Reproduit dans un vrai
+> Kodi. Sur la Shield, Kodi reste ouvert en arrière-plan : revenir à
+> l'accueil Android ne le ferme pas.
+>
+> **Rattrapage** : fermer complètement Kodi (Shield : Paramètres Android →
+> Applications → Kodi → **Forcer l'arrêt**), le relancer, puis réinstaller
+> depuis un fichier au nom neuf (`script.arrmada-<version>.zip`). Réinstaller
+> la même version par zip est permis.
 
 > Reconstruire le zip après une modification : augmentez `version="…"` dans
 > `script.arrmada/addon.xml`, puis lancez `python3 kodi-addon/build_zip.py`.

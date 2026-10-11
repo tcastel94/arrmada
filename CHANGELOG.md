@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add-on 1.10.0: scrobbles read **the player** (`VideoPlayer.*`, `Player.Art`) instead of the selected list item (an auto-played next episode used to be reported as the previous one), send episode title, year, poster and fanart (web addresses only, `image://` unwrapped), a `paused` flag in the 30-second progress report, and the last known position on stop (watched from 90 % when stopping during the credits). `play` is sent on `onAVStarted`, when title and duration are known
 - Tests: now-playing sessions (pause inference, new episode, stale), ambient endpoint, screen scope, column migration, artwork lookup; add-on payloads and image filtering. Bench: the test video is played as an identified episode and the mock server checks what the TV sent (play → pause → stop with series, episode and poster)
 
+#### Documentation
+- Zip install (`kodi-addon/README.md`, method 2): copy the zip under a **versioned name** (`script.arrmada-<version>.zip`). Kodi keeps the file list of every zip it has opened until it quits (`DIR_CACHE_ALWAYS`): a zip overwritten under the same name installs the new `addon.xml` with the old file list, so files added since are missing (1.10.0: `lib/playback_data.py`, the service fails at startup). Reproduced in a real Kodi; recovery steps documented
+
 #### Fixed
 - TV notifications fell back to the library poster through a table that is never filled, and the import error was swallowed: bubbles from webhooks without images had no poster since 1.8.0. The lookup now uses the cached library (TMDB id for movies, TVDB id for series, then the title)
 
