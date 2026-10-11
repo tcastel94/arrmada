@@ -15,5 +15,5 @@ known-first-party = [
     "feeds", "catalog_data", "listing", "background", "navigation", "kodi_helper",
     "startup_guard", "links_data", "qr_window", "migration", "library_data", "playback_data",
     "watch_data", "kodi_library", "series_window", "shell_data", "shell_window", "grid_window",
-    "make_shell_xml",
+    "make_shell_xml", "apps_data", "kodi_sources", "apps_window",
 ]

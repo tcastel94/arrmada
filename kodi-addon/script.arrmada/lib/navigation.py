@@ -158,6 +158,12 @@ def show_root(handle: int, base: str) -> None:
             "DefaultTVShows.png",
             "Toute la bibliothèque Sonarr : A à Z, récentes, genres, pas encore disponibles",
         ),
+        listing.action_entry(
+            "Applis & sources",
+            {"action": "apps"},
+            "DefaultAddonVideo.png",
+            "YouTube, TV en direct, vidéos du NAS, favoris Kodi (ADR-004, phase 4.3)",
+        ),
         listing.folder("Découvrir", {"action": "discover"}, "DefaultMovies.png"),
         listing.folder(
             "Manquants",
@@ -497,6 +503,11 @@ def open_entry(entry: dict) -> None:
         detail_window.open_detail(target)
     elif name == "resume_play":
         resume_play(action, wait=False)
+    elif name == "app":
+        # Tes applis (4.3) : add-on, favori, TV en direct… sans passer par le plugin
+        import apps_window
+
+        apps_window.activate(action)
     elif name and name != "noop":
         xbmc.executebuiltin(f"RunPlugin({listing.plugin_url(PLUGIN_BASE, action)})")
 

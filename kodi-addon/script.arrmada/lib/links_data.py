@@ -98,6 +98,8 @@ WINDOW_ACTIONS = frozenset(
         "settings",
         "resume_play",
         "series",
+        "apps",  # écran Applis & sources (ADR-004, phase 4.3)
+        "app",  # une appli précise : add-on, favori, TV en direct
     }
 )
 

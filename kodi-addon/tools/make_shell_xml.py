@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Génère la mise en page de l'accueil média ArrMada (ADR-004, phase 4.2).
+"""Génère la mise en page de l'accueil média ArrMada (ADR-004, phases 4.2-4.3).
 
 Pourquoi un script plutôt qu'un XML écrit à la main ?
-  Les 4 rangées de l'accueil (Reprendre, Ajouts récents, Pour toi, Bientôt)
-  et les 9 boutons du menu partagent la même mise en page, à quelques
-  valeurs près. Les écrire 4 fois, c'est 4 endroits à corriger à chaque
+  Les 5 rangées de l'accueil (Reprendre, Tes applis, Ajouts récents, Pour
+  toi, Bientôt) et les 10 boutons du menu partagent la même mise en page, à
+  quelques valeurs près. Les écrire 5 fois, c'est 5 endroits à corriger à chaque
   retouche. Le script les écrit à partir d'un seul modèle, comme un gabarit
   Jinja ou Ansible produit des fichiers de configuration.
 
@@ -31,15 +31,17 @@ OUT = (
 # (groupe, liste, titre, forme des vignettes) : ordre de shell_data.ROWS
 ROWS = (
     (601, 610, "Reprendre", "landscape"),
+    (605, 650, "Tes applis", "square"),  # 4.3 : favoris Kodi, TV en direct, add-ons
     (602, 620, "Ajouts récents", "poster"),
     (603, 630, "Pour toi", "poster"),
     (604, 640, "Bientôt", "poster"),
 )
-# Libellés du menu : ordre de shell_data.MENU (boutons 401 à 409)
+# Libellés du menu : ordre de shell_data.MENU (boutons 401 à 410)
 MENU = (
     "Accueil",
     "Films",
     "Séries",
+    "Applis",
     "Découvrir",
     "Rechercher",
     "Téléchargements",
@@ -54,7 +56,7 @@ def menu_button(index: int, label: str) -> str:
 				<width>auto</width><height>56</height>
 				<label>{label}</label>
 				<font>font13</font>
-				<textoffsetx>22</textoffsetx>
+				<textoffsetx>16</textoffsetx>
 				<textcolor>CCF5F7FA</textcolor>
 				<focusedcolor>FF0A0E16</focusedcolor>
 				<aligny>center</aligny>
@@ -217,6 +219,58 @@ def poster(list_id: int, focused: bool) -> str:
 				</control>"""
 
 
+def square(list_id: int, focused: bool) -> str:
+    """Tuile carrée (Tes applis) : icône d'add-on ou de favori sur une carte sombre."""
+    zoom = (
+        f"""					<animation type="Focus">
+						<effect type="zoom" start="100" end="108" time="220" tween="cubic" easing="out" center="102,102"/>
+					</animation>
+					<animation type="UnFocus">
+						<effect type="zoom" start="108" end="100" time="180" tween="cubic" easing="out" center="102,102"/>
+					</animation>
+					<control type="image">
+						<left>-34</left><top>-34</top><width>272</width><height>272</height>
+						<texture border="56" colordiffuse="A64A9EFF">arrmada/glow.png</texture>
+						<visible>Control.HasFocus({list_id})</visible>
+					</control>
+"""
+        if focused
+        else ""
+    )
+    ring = (
+        f"""					<control type="image">
+						<left>0</left><top>0</top><width>204</width><height>204</height>
+						<texture border="26" colordiffuse="FF4A9EFF">arrmada/poster-ring.png</texture>
+						<visible>Control.HasFocus({list_id})</visible>
+					</control>
+"""
+        if focused
+        else ""
+    )
+    card = "FF1A2233" if focused else "17FFFFFF"
+    label_color = "FFF5F7FA" if focused else "B3F5F7FA"
+    return f"""				<control type="group">
+					<left>16</left><top>16</top>
+{zoom}					<control type="image">
+						<left>0</left><top>0</top><width>204</width><height>204</height>
+						<texture border="26" colordiffuse="{card}">arrmada/rounded-24.png</texture>
+					</control>
+					<control type="image">
+						<left>32</left><top>32</top><width>140</width><height>140</height>
+						<aspectratio>keep</aspectratio>
+						<fadetime>200</fadetime>
+						<texture background="true">$INFO[ListItem.Art(thumb)]</texture>
+					</control>
+{ring}				</control>
+				<control type="label">
+					<left>16</left><top>232</top><width>204</width><height>30</height>
+					<font>font10</font>
+					<textcolor>{label_color}</textcolor>
+					<align>center</align><aligny>center</aligny>
+					<label>$INFO[ListItem.Label]</label>
+				</control>"""
+
+
 def row(group_id: int, list_id: int, title: str, shape: str, up: int, down: int) -> str:
     """Une rangée : titre + liste horizontale, masquée si elle est vide.
 
@@ -227,6 +281,8 @@ def row(group_id: int, list_id: int, title: str, shape: str, up: int, down: int)
     """
     if shape == "landscape":
         height, item_w, item_h, layout = 300, 420, 290, landscape
+    elif shape == "square":
+        height, item_w, item_h, layout = 276, 236, 272, square
     else:
         height, item_w, item_h, layout = 380, 236, 376, poster
     down_tag = f"<ondown>{down}</ondown>" if down else ""
@@ -264,16 +320,16 @@ def row(group_id: int, list_id: int, title: str, shape: str, up: int, down: int)
 HEADER = """<?xml version="1.0" encoding="UTF-8"?>
 <!--
   ArrMada — accueil média, la « coquille » qui remplace l'accueil de Kodi
-  (ADR-004, phase 4.2).
+  (ADR-004, phases 4.2-4.3).
 
   FICHIER GÉNÉRÉ par kodi-addon/tools/make_shell_xml.py : modifier le script,
   pas ce fichier (un test vérifie qu'ils correspondent).
 
   Repère 1920 × 1080. Données posées par lib/shell_window.py :
-    - menu principal (400, boutons 401 à 409, ordre de shell_data.MENU) ;
+    - menu principal (400, boutons 401 à 410, ordre de shell_data.MENU) ;
     - en-tête de l'élément sélectionné (propriétés hero_*) ;
-    - rangées (500) : Reprendre (610), Ajouts récents (620), Pour toi (630),
-      Bientôt (640). Une rangée vide disparaît.
+    - rangées (500) : Reprendre (610), Tes applis (650), Ajouts récents
+      (620), Pour toi (630), Bientôt (640). Une rangée vide disparaît.
   Navigation : menu (400) ↓ rangées (500) ; Retour : menu « Quitter ? ».
 -->"""
 
@@ -312,7 +368,7 @@ BODY = """<window>
 
 		<!-- ═══════════════ MENU PRINCIPAL + HEURE ═══════════════ -->
 		<control type="grouplist" id="400">
-			<left>80</left><top>28</top><width>1560</width><height>56</height>
+			<left>80</left><top>28</top><width>1590</width><height>56</height>
 			<orientation>horizontal</orientation>
 			<itemgap>6</itemgap>
 			<ondown>500</ondown>

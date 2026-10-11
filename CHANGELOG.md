@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Kodi add-on 1.13.0 — Apps, live TV and NAS videos inside ArrMada (ADR-004, phase 4.3)
+
+#### Added
+- **Apps & sources screen** (*Apps* in the main menu, `?action=apps`): tabs *Video* (Kodi video add-ons: YouTube, IPTV add-ons…), *Live TV* (channels of Kodi's PVR with the current programme, its end time, a progress bar and the next programme), *Music* (audio add-ons and music sources), *Folders* (video sources declared in Kodi: NAS shares, home videos), *Favourites* (Kodi favourites, ArrMada's own shortcuts hidden) and *Android apps* (Shield only). Tabs without content on the device are hidden (no live TV add-on, not Android)
+- Add-ons and folders are **browsed inside ArrMada** (`Files.GetDirectory`): list with a preview (thumbnail, plot, duration, "Resume at…", "Watched"), breadcrumb, Back goes up one level. Videos play through Kodi's player (`Player.Open`, resume offered for started videos); channels through `Player.Open {channelid}`. Long press: *Open in Kodi* (always available, for add-ons that need Kodi's own interface), *Add-on settings*, *Kodi TV guide*
+- **"Your apps" row** on the media home (2nd row): Kodi favourites first, then a *Live TV* tile, then video add-ons; OK on an add-on opens it directly, Back returns home. Favourites are read from `favourites.xml` (Kodi's API reports add-on favourites — `RunAddon` — as "unknown"); a favourite pointing to an add-on or a folder opens inside ArrMada, others run exactly as in Kodi
+- **Search results in the ArrMada grid** instead of a SiLVO list: tabs *All*, *Movies*, *Series*, *New search*; a followed title opens its detail screen (or the series screen), a missing one the request window
+- `lib/apps_data.py` (pure, tested) and `lib/kodi_sources.py` (JSON-RPC); the media home layout generator gets a square tile row and a 10th menu button
+- Tests: add-ons (sorting, ArrMada hidden, scripts run), sources, Android apps (package names checked), directory entries (order kept, resume, `-1` season/episode ignored), channels (end time in local time, next programme), favourites (quoted commas, escapes, RunAddon), home row (favourites first, no duplicates), long press, search results. Bench: fake video add-on (folders, next page, playable items resolved by the add-on), IPTV Simple with 3 local channels and an XMLTV guide around the run time, a home videos source and Kodi favourites; home row, add-on browsing, playback from the add-on, live TV list and channel playback, folders, favourites, search grid, opening an add-on from the home row
+
+#### Fixed (found on the bench)
+- A list emptied while loading loses Kodi's focus and `getFocusId()` then raises: the apps screen restores the focus itself
+
 ### Kodi add-on 1.12.0 — Kodi starts on ArrMada (ADR-004, phase 4.2)
 
 #### Added

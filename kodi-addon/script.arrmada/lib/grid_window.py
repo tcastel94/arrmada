@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Grille ArrMada : Films, Séries, Découvrir (ADR-004, phase 4.2).
+"""Grille ArrMada : Films, Séries, Découvrir, Recherche (ADR-004, phases 4.2-4.3).
 
 Mise en page : resources/skins/Default/1080i/script-arrmada-grid.xml.
 
@@ -16,6 +16,9 @@ Ajoutés récemment, Par genre, En 4K, Pas encore disponibles) ou de Découvrir
 - OK : la Fiche (film), l'écran Série (série présente dans Kodi), ou la
   fenêtre « Demander » (titre de Découvrir). Appui long : Lire, Fiche,
   Meilleure version, Marquer comme vu / non vu.
+- Recherche (4.3) : les résultats de Radarr / Sonarr s'affichent ici et non
+  plus dans une liste de SiLVO ; onglets Tout / Films / Séries, et
+  « Nouvelle recherche » qui rouvre le clavier.
 
 Règle d'or de l'ADR-003 : les appels réseau passent par un fil
 d'arrière-plan, l'écran ne fige jamais.
@@ -53,13 +56,15 @@ NAV_ACTIONS = (
     xbmcgui.ACTION_PAGE_UP,
     xbmcgui.ACTION_PAGE_DOWN,
 )
-TITLES = {"movie": "Films", "series": "Séries", "discover": "Découvrir"}
+TITLES = {"movie": "Films", "series": "Séries", "discover": "Découvrir", "search": "Recherche"}
 
 
 def _tabs_for(source: str) -> list:
-    """Onglets (clé, libellé) : vues de la bibliothèque ou sous-flux de Découvrir."""
+    """Onglets (clé, libellé) : vues de la bibliothèque, sous-flux de Découvrir, recherche."""
     if source == "discover":
         return list(shell_data.DISCOVER_TABS)
+    if source == "search":
+        return list(shell_data.SEARCH_TABS)
     return [(view.key, view.label) for view in library_data.views_for(source)]
 
 
@@ -78,6 +83,8 @@ class GridWindow(xbmcgui.WindowXML):
         self._stop = threading.Event()
         self._initialized = False
         self._indexes = None  # (films, séries) de la médiathèque Kodi, lus une fois
+        self._query: str = kwargs.get("query") or ""  # recherche (4.3)
+        self._results = None  # réponse du serveur à la recherche, filtrée par onglet
 
     # ── Cycle de vie ────────────────────────────────────────────────────────
 
@@ -100,6 +107,8 @@ class GridWindow(xbmcgui.WindowXML):
     # ── Chargement ─────────────────────────────────────────────────────────
 
     def _subtitle(self) -> str:
+        if self._source == "search":
+            return f"« {self._query} » · {self._tabs[self._tab][1]}"
         if self._genre:
             return self._genre_label
         return self._tabs[self._tab][1] if self._tabs else ""
@@ -169,6 +178,16 @@ class GridWindow(xbmcgui.WindowXML):
     def _fetch(self, page: int) -> tuple:
         """(entrées, page, nombre de pages, total, message d'erreur)."""
         key = self._tabs[self._tab][0]
+        if self._source == "search":
+            if self._results is None:
+                self._results = ArrMadaAPI.lookup_media(self._query)
+            entries = catalog_data.entries_lookup(self._results, key)
+            if not entries:
+                return [], 1, 1, 0, f"Aucun résultat pour « {self._query} »."
+            # Pastilles « Vu » / reprise : seulement pour les titres déjà suivis
+            followed = [e for e in entries if (e.get("action") or {}).get("action") == "detail"]
+            watch_data.annotate(followed, *self._kodi_indexes())
+            return entries, 1, 1, len(entries), ""
         if self._source == "discover":
             data = listing.read_feed("foryou")
             if data is None:
@@ -258,7 +277,14 @@ class GridWindow(xbmcgui.WindowXML):
         if not 0 <= index < len(self._tabs):
             return
         key = self._tabs[index][0]
-        if key == "genres":
+        if key == "new":
+            query = ui.ask_query()
+            if not query:
+                self.getControl(TABS).selectItem(self._tab)  # annulé : l'onglet ne bouge pas
+                return
+            self._query, self._results, index = query, None, 0
+            self.getControl(TABS).selectItem(0)
+        elif key == "genres":
             genre = self._pick_genre()
             if not genre:
                 return
@@ -296,9 +322,11 @@ class GridWindow(xbmcgui.WindowXML):
             item.setProperty("kodi_status", props.get("kodi_status", ""))
 
 
-def open_grid(source: str) -> None:
-    """Ouvre la grille (« movie », « series », « discover ») ; bloque jusqu'à Retour."""
-    window = GridWindow(XML_FILE, ui.ADDON.getAddonInfo("path"), "Default", "1080i", source=source)
+def open_grid(source: str, query: str = "") -> None:
+    """Ouvre la grille (« movie », « series », « discover », « search ») ; bloque jusqu'à Retour."""
+    window = GridWindow(
+        XML_FILE, ui.ADDON.getAddonInfo("path"), "Default", "1080i", source=source, query=query
+    )
     try:
         window.doModal()
     finally:

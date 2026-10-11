@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   ArrMada — accueil média, la « coquille » qui remplace l'accueil de Kodi
-  (ADR-004, phase 4.2).
+  (ADR-004, phases 4.2-4.3).
 
   FICHIER GÉNÉRÉ par kodi-addon/tools/make_shell_xml.py : modifier le script,
   pas ce fichier (un test vérifie qu'ils correspondent).
 
   Repère 1920 × 1080. Données posées par lib/shell_window.py :
-    - menu principal (400, boutons 401 à 409, ordre de shell_data.MENU) ;
+    - menu principal (400, boutons 401 à 410, ordre de shell_data.MENU) ;
     - en-tête de l'élément sélectionné (propriétés hero_*) ;
-    - rangées (500) : Reprendre (610), Ajouts récents (620), Pour toi (630),
-      Bientôt (640). Une rangée vide disparaît.
+    - rangées (500) : Reprendre (610), Tes applis (650), Ajouts récents
+      (620), Pour toi (630), Bientôt (640). Une rangée vide disparaît.
   Navigation : menu (400) ↓ rangées (500) ; Retour : menu « Quitter ? ».
 -->
 <window>
@@ -48,7 +48,7 @@
 
 		<!-- ═══════════════ MENU PRINCIPAL + HEURE ═══════════════ -->
 		<control type="grouplist" id="400">
-			<left>80</left><top>28</top><width>1560</width><height>56</height>
+			<left>80</left><top>28</top><width>1590</width><height>56</height>
 			<orientation>horizontal</orientation>
 			<itemgap>6</itemgap>
 			<ondown>500</ondown>
@@ -57,7 +57,7 @@
 				<width>auto</width><height>56</height>
 				<label>Accueil</label>
 				<font>font13</font>
-				<textoffsetx>22</textoffsetx>
+				<textoffsetx>16</textoffsetx>
 				<textcolor>CCF5F7FA</textcolor>
 				<focusedcolor>FF0A0E16</focusedcolor>
 				<aligny>center</aligny>
@@ -70,7 +70,7 @@
 				<width>auto</width><height>56</height>
 				<label>Films</label>
 				<font>font13</font>
-				<textoffsetx>22</textoffsetx>
+				<textoffsetx>16</textoffsetx>
 				<textcolor>CCF5F7FA</textcolor>
 				<focusedcolor>FF0A0E16</focusedcolor>
 				<aligny>center</aligny>
@@ -83,7 +83,7 @@
 				<width>auto</width><height>56</height>
 				<label>Séries</label>
 				<font>font13</font>
-				<textoffsetx>22</textoffsetx>
+				<textoffsetx>16</textoffsetx>
 				<textcolor>CCF5F7FA</textcolor>
 				<focusedcolor>FF0A0E16</focusedcolor>
 				<aligny>center</aligny>
@@ -94,9 +94,9 @@
 			</control>
 			<control type="button" id="404">
 				<width>auto</width><height>56</height>
-				<label>Découvrir</label>
+				<label>Applis</label>
 				<font>font13</font>
-				<textoffsetx>22</textoffsetx>
+				<textoffsetx>16</textoffsetx>
 				<textcolor>CCF5F7FA</textcolor>
 				<focusedcolor>FF0A0E16</focusedcolor>
 				<aligny>center</aligny>
@@ -107,9 +107,9 @@
 			</control>
 			<control type="button" id="405">
 				<width>auto</width><height>56</height>
-				<label>Rechercher</label>
+				<label>Découvrir</label>
 				<font>font13</font>
-				<textoffsetx>22</textoffsetx>
+				<textoffsetx>16</textoffsetx>
 				<textcolor>CCF5F7FA</textcolor>
 				<focusedcolor>FF0A0E16</focusedcolor>
 				<aligny>center</aligny>
@@ -120,9 +120,9 @@
 			</control>
 			<control type="button" id="406">
 				<width>auto</width><height>56</height>
-				<label>Téléchargements</label>
+				<label>Rechercher</label>
 				<font>font13</font>
-				<textoffsetx>22</textoffsetx>
+				<textoffsetx>16</textoffsetx>
 				<textcolor>CCF5F7FA</textcolor>
 				<focusedcolor>FF0A0E16</focusedcolor>
 				<aligny>center</aligny>
@@ -133,9 +133,9 @@
 			</control>
 			<control type="button" id="407">
 				<width>auto</width><height>56</height>
-				<label>Salon</label>
+				<label>Téléchargements</label>
 				<font>font13</font>
-				<textoffsetx>22</textoffsetx>
+				<textoffsetx>16</textoffsetx>
 				<textcolor>CCF5F7FA</textcolor>
 				<focusedcolor>FF0A0E16</focusedcolor>
 				<aligny>center</aligny>
@@ -146,9 +146,9 @@
 			</control>
 			<control type="button" id="408">
 				<width>auto</width><height>56</height>
-				<label>Tableau de bord</label>
+				<label>Salon</label>
 				<font>font13</font>
-				<textoffsetx>22</textoffsetx>
+				<textoffsetx>16</textoffsetx>
 				<textcolor>CCF5F7FA</textcolor>
 				<focusedcolor>FF0A0E16</focusedcolor>
 				<aligny>center</aligny>
@@ -159,9 +159,22 @@
 			</control>
 			<control type="button" id="409">
 				<width>auto</width><height>56</height>
+				<label>Tableau de bord</label>
+				<font>font13</font>
+				<textoffsetx>16</textoffsetx>
+				<textcolor>CCF5F7FA</textcolor>
+				<focusedcolor>FF0A0E16</focusedcolor>
+				<aligny>center</aligny>
+				<texturenofocus border="14" colordiffuse="00FFFFFF">arrmada/rounded-12.png</texturenofocus>
+				<texturefocus border="14" colordiffuse="FF4A9EFF">arrmada/rounded-12.png</texturefocus>
+				<animation effect="zoom" start="100" end="106" time="160" tween="cubic" easing="out" center="auto">Focus</animation>
+				<animation effect="zoom" start="106" end="100" time="160" tween="cubic" easing="out" center="auto">UnFocus</animation>
+			</control>
+			<control type="button" id="410">
+				<width>auto</width><height>56</height>
 				<label>Réglages</label>
 				<font>font13</font>
-				<textoffsetx>22</textoffsetx>
+				<textoffsetx>16</textoffsetx>
 				<textcolor>CCF5F7FA</textcolor>
 				<focusedcolor>FF0A0E16</focusedcolor>
 				<aligny>center</aligny>
@@ -256,7 +269,7 @@
 				<control type="list" id="610">
 					<left>0</left><top>48</top><width>1840</width><height>300</height>
 					<orientation>horizontal</orientation>
-					<onup>400</onup><ondown>620</ondown>
+					<onup>400</onup><ondown>650</ondown>
 					<scrolltime tween="cubic" easing="out">280</scrolltime>
 					<itemlayout width="420" height="290">
 				<control type="group">
@@ -352,6 +365,89 @@
 					</focusedlayout>
 				</control>
 			</control>
+			<!-- Rangée « Tes applis » -->
+			<control type="group" id="605">
+				<width>1840</width><height>328</height>
+				<defaultcontrol>650</defaultcontrol>
+				<visible>Integer.IsGreater(Container(650).NumItems,0)</visible>
+				<control type="image">
+					<left>16</left><top>14</top><width>6</width><height>26</height>
+					<texture colordiffuse="FF4A9EFF">arrmada/white.png</texture>
+				</control>
+				<control type="label">
+					<left>36</left><top>6</top><width>900</width><height>42</height>
+					<font>font13_title</font>
+					<textcolor>FFF5F7FA</textcolor>
+					<aligny>center</aligny>
+					<label>Tes applis</label>
+				</control>
+				<control type="list" id="650">
+					<left>0</left><top>48</top><width>1840</width><height>276</height>
+					<orientation>horizontal</orientation>
+					<onup>610</onup><ondown>620</ondown>
+					<scrolltime tween="cubic" easing="out">280</scrolltime>
+					<itemlayout width="236" height="272">
+				<control type="group">
+					<left>16</left><top>16</top>
+					<control type="image">
+						<left>0</left><top>0</top><width>204</width><height>204</height>
+						<texture border="26" colordiffuse="17FFFFFF">arrmada/rounded-24.png</texture>
+					</control>
+					<control type="image">
+						<left>32</left><top>32</top><width>140</width><height>140</height>
+						<aspectratio>keep</aspectratio>
+						<fadetime>200</fadetime>
+						<texture background="true">$INFO[ListItem.Art(thumb)]</texture>
+					</control>
+				</control>
+				<control type="label">
+					<left>16</left><top>232</top><width>204</width><height>30</height>
+					<font>font10</font>
+					<textcolor>B3F5F7FA</textcolor>
+					<align>center</align><aligny>center</aligny>
+					<label>$INFO[ListItem.Label]</label>
+				</control>
+					</itemlayout>
+					<focusedlayout width="236" height="272">
+				<control type="group">
+					<left>16</left><top>16</top>
+					<animation type="Focus">
+						<effect type="zoom" start="100" end="108" time="220" tween="cubic" easing="out" center="102,102"/>
+					</animation>
+					<animation type="UnFocus">
+						<effect type="zoom" start="108" end="100" time="180" tween="cubic" easing="out" center="102,102"/>
+					</animation>
+					<control type="image">
+						<left>-34</left><top>-34</top><width>272</width><height>272</height>
+						<texture border="56" colordiffuse="A64A9EFF">arrmada/glow.png</texture>
+						<visible>Control.HasFocus(650)</visible>
+					</control>
+					<control type="image">
+						<left>0</left><top>0</top><width>204</width><height>204</height>
+						<texture border="26" colordiffuse="FF1A2233">arrmada/rounded-24.png</texture>
+					</control>
+					<control type="image">
+						<left>32</left><top>32</top><width>140</width><height>140</height>
+						<aspectratio>keep</aspectratio>
+						<fadetime>200</fadetime>
+						<texture background="true">$INFO[ListItem.Art(thumb)]</texture>
+					</control>
+					<control type="image">
+						<left>0</left><top>0</top><width>204</width><height>204</height>
+						<texture border="26" colordiffuse="FF4A9EFF">arrmada/poster-ring.png</texture>
+						<visible>Control.HasFocus(650)</visible>
+					</control>
+				</control>
+				<control type="label">
+					<left>16</left><top>232</top><width>204</width><height>30</height>
+					<font>font10</font>
+					<textcolor>FFF5F7FA</textcolor>
+					<align>center</align><aligny>center</aligny>
+					<label>$INFO[ListItem.Label]</label>
+				</control>
+					</focusedlayout>
+				</control>
+			</control>
 			<!-- Rangée « Ajouts récents » -->
 			<control type="group" id="602">
 				<width>1840</width><height>432</height>
@@ -371,7 +467,7 @@
 				<control type="list" id="620">
 					<left>0</left><top>48</top><width>1840</width><height>380</height>
 					<orientation>horizontal</orientation>
-					<onup>610</onup><ondown>630</ondown>
+					<onup>650</onup><ondown>630</ondown>
 					<scrolltime tween="cubic" easing="out">280</scrolltime>
 					<itemlayout width="236" height="376">
 				<control type="group">

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Coquille ArrMada : accueil média, grille, retour automatique (ADR-004, phase 4.2).
+"""Coquille ArrMada : accueil média, grille, retour automatique (ADR-004, phases 4.2-4.3).
 
 Logique pure, sans Kodi (testée en CI). Elle décide :
   - du menu principal et des rangées de l'accueil média ;
@@ -21,6 +21,7 @@ MENU: Tuple[Tuple[str, str], ...] = (
     ("home", "Accueil"),
     ("movies", "Films"),
     ("series", "Séries"),
+    ("apps", "Applis"),  # add-ons, TV en direct, dossiers du NAS, favoris (4.3)
     ("discover", "Découvrir"),
     ("search", "Rechercher"),
     ("queue", "Téléchargements"),
@@ -32,6 +33,7 @@ MENU: Tuple[Tuple[str, str], ...] = (
 # Rangées de l'accueil média, de haut en bas (clé, titre).
 ROWS: Tuple[Tuple[str, str], ...] = (
     ("continue", "Reprendre"),
+    ("apps", "Tes applis"),  # favoris Kodi, TV en direct, add-ons vidéo (4.3)
     ("recent", "Ajouts récents"),
     ("foryou", "Pour toi"),
     ("upcoming", "Bientôt"),
@@ -51,6 +53,15 @@ DISCOVER_TABS: Tuple[Tuple[str, str], ...] = (
     ("foryou", "Pour toi"),
     ("movies", "Films tendance"),
     ("tvshows", "Séries tendance"),
+)
+
+# Recherche (4.3) : résultats dans la grille, filtrés par onglet ; « new »
+# rouvre le clavier.
+SEARCH_TABS: Tuple[Tuple[str, str], ...] = (
+    ("all", "Tout"),
+    ("movie", "Films"),
+    ("series", "Séries"),
+    ("new", "Nouvelle recherche"),
 )
 
 GRID_COLUMNS = 7  # affiches par ligne dans la grille (1920 px)
@@ -106,7 +117,8 @@ def hero(entry: Optional[Mapping[str, Any]]) -> Dict[str, str]:
         "meta": meta,
         "plot": plot,
         "status": status,
-        "fanart": art.get("fanart") or art.get("thumb") or "",
+        # Pas de fond : la vignette agrandie, sauf pour une icône (applis, 4.3)
+        "fanart": art.get("fanart") or ("" if props.get("icon_only") else art.get("thumb") or ""),
         "clearlogo": art.get("clearlogo") or "",
     }
 

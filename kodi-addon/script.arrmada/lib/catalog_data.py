@@ -314,6 +314,54 @@ def entries_trending(payload: Any, kind: str) -> List[Dict[str, Any]]:
     return [_tmdb_entry(item) for item in payload.get(key) or []]
 
 
+def entries_lookup(items: Any, kind: str = "all") -> List[Dict[str, Any]]:
+    """Résultats de recherche (/api/kodi/media/lookup), filtrés : all | movie | series.
+
+    Titre déjà suivi par Radarr / Sonarr : OK ouvre sa Fiche (ou l'écran
+    Série), appui long = Lire… comme dans la bibliothèque. Sinon : la fenêtre
+    « Demander » (profil, dossier, release), comme Découvrir.
+    """
+    if not isinstance(items, list):
+        return []
+    out: List[Dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        is_series = item.get("type") in ("series", "tv", "tvshow")
+        if (kind == "movie" and is_series) or (kind == "series" and not is_series):
+            continue
+        if not (item.get("in_library") and item.get("arr_id")):
+            entry = _tmdb_entry(item)
+            if is_series and item.get("tvdb_id"):
+                entry["action"]["tvdb_id"] = str(item["tvdb_id"])  # Sonarr : TVDB
+            out.append(entry)
+            continue
+        entry_kind = "tvshow" if is_series else "movie"
+        raw_id = item.get("tvdb_id") if is_series else item.get("tmdb_id")
+        ids = {("tvdb" if is_series else "tmdb"): str(raw_id)} if raw_id else {}
+        title = item.get("title") or "Sans titre"
+        meta = [str(item["year"])] if item.get("year") else []
+        meta.extend(["Série" if is_series else "Film", "dans la médiathèque"])
+        out.append(
+            {
+                "label": title,
+                "label2": " · ".join(meta),
+                "info": {
+                    "title": title,
+                    "year": int(str(item.get("year") or "0")[:4] or 0),
+                    "plot": item.get("overview") or "",
+                    "mediatype": entry_kind,
+                },
+                "ids": ids,
+                "art": _art(item.get("poster_url") or "", item.get("backdrop_url") or ""),
+                "action": _detail_action(entry_kind, item.get("arr_id"), item, ids),
+                "context": ["play", "detail", "upgrade"],
+                "props": {"badge": ""},
+            }
+        )
+    return out
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Téléchargements, notifications
 # ─────────────────────────────────────────────────────────────────────────────

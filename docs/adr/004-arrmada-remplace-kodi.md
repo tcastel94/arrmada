@@ -134,6 +134,19 @@ s'affiche tout de suite et se remplit ensuite (règle d'or de l'ADR-003).
 > Android, pas à Kodi ; et c'est le retour automatique qui couvre tous les
 > chemins vers l'accueil de Kodi (démarrage, retour d'un add-on).
 
+> **Avancement (11/10/2026, suite)** — Phase 4.3 livrée dans l'add-on 1.13.0 :
+> écran « Applis & sources » (`apps_window.py`) avec onglets Vidéo, TV en
+> direct, Musique, Dossiers, Favoris, Applis Android ; les add-ons et les
+> dossiers se parcourent dans ArrMada (Files.GetDirectory), lecture par Kodi
+> (Player.Open, reprise proposée) ; logique pure dans `apps_data.py`, appels à
+> Kodi dans `kodi_sources.py`. Rangée « Tes applis » sur l'accueil (favoris
+> Kodi, TV en direct, add-ons vidéo). Les résultats de Rechercher passent
+> dans la grille ArrMada. Validé sur le banc avec un faux add-on vidéo et
+> IPTV Simple (3 chaînes locales et leur guide). **Choix** : les favoris sont
+> lus dans `favourites.xml`, l'API de Kodi renvoyant « unknown » pour un
+> add-on mis en favori (`RunAddon`) ; « Ouvrir dans Kodi » reste toujours
+> proposé en appui long, pour un add-on qui a besoin de sa propre interface.
+
 ## Conséquences
 
 ### Positives

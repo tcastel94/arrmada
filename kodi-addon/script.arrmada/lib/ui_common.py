@@ -19,7 +19,6 @@ import json
 import os
 import threading
 import time
-import urllib.parse
 
 import xbmc
 import xbmcaddon
@@ -255,12 +254,18 @@ def search_subtitles(entry: dict) -> None:
     )
 
 
-def open_search() -> None:
+def ask_query(heading: str = "ArrMada : rechercher un film ou une série") -> str:
     """Clavier de Kodi (sur Android, son bouton micro permet de dicter)."""
-    query = xbmcgui.Dialog().input("ArrMada : rechercher un film ou une série")
+    return (xbmcgui.Dialog().input(heading) or "").strip()
+
+
+def open_search() -> None:
+    """Recherche : résultats dans la grille ArrMada (ADR-004, phase 4.3), plus dans SiLVO."""
+    query = ask_query()
     if query:
-        url = f"plugin://script.arrmada/?action=search_results&q={urllib.parse.quote(query)}"
-        xbmc.executebuiltin(f"ActivateWindow(Videos,{url},return)")
+        import grid_window  # import local : évite un import circulaire
+
+        grid_window.open_grid("search", query=query)
 
 
 def run_in_background(target, *args) -> None:

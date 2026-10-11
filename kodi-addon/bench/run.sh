@@ -13,6 +13,7 @@
 #
 # Prérequis (Ubuntu/Debian) :
 #   sudo apt install kodi xvfb python3-pil curl
+#   sudo apt install kodi-pvr-iptvsimple   # TV en direct de test (phase 4.3)
 #
 # Usage :
 #   kodi-addon/bench/run.sh            # captures dans $BENCH_DIR/shots
@@ -116,14 +117,45 @@ cat > "$KODI_DIR/userdata/sources.xml" <<EOF
     <default pathversion="1"></default>
     <source><name>Séries (banc)</name><path pathversion="1">$MEDIA/tv/</path><allowsharing>true</allowsharing></source>
     <source><name>Films (banc)</name><path pathversion="1">$MEDIA/movies/</path><allowsharing>true</allowsharing></source>
+    <source><name>Vidéos perso (banc)</name><path pathversion="1">$BENCH_DIR/apps/perso/</path><allowsharing>true</allowsharing></source>
   </video>
 </sources>
 EOF
 
 # ── 2. Add-ons : version de travail du dépôt + harnais ───────────────────────
-rm -rf "$KODI_DIR/addons/script.arrmada" "$KODI_DIR/addons/service.arrmada.harness"
+rm -rf "$KODI_DIR/addons/script.arrmada" "$KODI_DIR/addons/service.arrmada.harness" \
+       "$KODI_DIR/addons/plugin.video.arrmadabanc"
 cp -r "$REPO/kodi-addon/script.arrmada" "$KODI_DIR/addons/"
 cp -r "$BENCH_SRC/harness/service.arrmada.harness" "$KODI_DIR/addons/"
+cp -r "$BENCH_SRC/harness/plugin.video.arrmadabanc" "$KODI_DIR/addons/"
+
+# ── 2b. Applis & sources (ADR-004, phase 4.3) ────────────────────────────────
+# Faux add-on vidéo (à la place de YouTube), TV en direct IPTV Simple avec 3
+# chaînes locales et leur guide, dossier « vidéos perso », favoris Kodi.
+# Prérequis : sudo apt install kodi-pvr-iptvsimple (sinon : pas d'onglet TV).
+APPS="$BENCH_DIR/apps"
+export BENCH_APPS="$APPS" BENCH_CLIP="$BENCH_DIR/assets/clip-90s.mp4"
+python3 "$BENCH_SRC/make_apps.py" "$APPS" assets/clip-90s.mp4 "$KODI_DIR/addons/plugin.video.arrmadabanc"
+mkdir -p "$KODI_DIR/userdata/addon_data/pvr.iptvsimple"
+cat > "$KODI_DIR/userdata/addon_data/pvr.iptvsimple/instance-settings-1.xml" <<EOF
+<settings version="2">
+    <setting id="kodi_addon_instance_name">Banc</setting>
+    <setting id="kodi_addon_instance_enabled">true</setting>
+    <setting id="m3uPathType">0</setting>
+    <setting id="m3uPath">$APPS/iptv/banc.m3u</setting>
+    <setting id="epgPathType">0</setting>
+    <setting id="epgPath">$APPS/iptv/banc.xml</setting>
+</settings>
+EOF
+# Favoris : l'add-on (RunAddon), un dossier (ActivateWindow), une fenêtre de
+# Kodi ; le harnais y ajoute ensuite les raccourcis ArrMada (masqués à l'écran).
+cat > "$KODI_DIR/userdata/favourites.xml" <<EOF
+<favourites>
+    <favourite name="Banc TV" thumb="$KODI_DIR/addons/plugin.video.arrmadabanc/icon.png">RunAddon(plugin.video.arrmadabanc)</favourite>
+    <favourite name="Vidéos perso" thumb="DefaultFolder.png">ActivateWindow(10025,&quot;$APPS/perso/&quot;,return)</favourite>
+    <favourite name="Guide TV" thumb="DefaultAddonPVRClient.png">ActivateWindow(TVGuide)</favourite>
+</favourites>
+EOF
 cat > "$KODI_DIR/userdata/addon_data/script.arrmada/settings.xml" <<EOF
 <settings version="2">
     <setting id="server_url">$MOCK_URL</setting>
@@ -151,11 +183,20 @@ python3 - "$DB" <<'PY'
 import sqlite3
 import sys
 
+# Add-ons copiés à la main + TV en direct (IPTV Simple et ses lecteurs de flux).
+# Une ligne absente serait créée par Kodi au démarrage, mais DÉSACTIVÉE.
+ADDONS = (
+    "script.arrmada", "service.arrmada.harness", "plugin.video.arrmadabanc",
+    "pvr.iptvsimple", "inputstream.ffmpegdirect", "inputstream.adaptive", "inputstream.rtmp",
+)
 with sqlite3.connect(sys.argv[1]) as db:
-    db.execute(
-        "UPDATE installed SET enabled=1 "
-        "WHERE addonID IN ('script.arrmada', 'service.arrmada.harness')"
-    )
+    for addon in ADDONS:
+        db.execute(
+            "INSERT OR IGNORE INTO installed (addonID, enabled, installDate) "
+            "VALUES (?, 1, datetime('now'))",
+            (addon,),
+        )
+        db.execute("UPDATE installed SET enabled=1, disabledReason=0 WHERE addonID=?", (addon,))
 PY
 # Contenu des sources (Séries / Films, scraper « Informations locales ») : ce
 # que fait « Définir le contenu » dans Kodi. La médiathèque est vidée à chaque

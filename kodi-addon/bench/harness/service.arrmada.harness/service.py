@@ -398,7 +398,13 @@ if shows and movies:
 def counts():
     return ", ".join(
         f"{name} {xbmc.getInfoLabel(f'Container({cid}).NumItems') or 0}"
-        for name, cid in (("reprendre", 610), ("ajouts", 620), ("pour toi", 630), ("bientôt", 640))
+        for name, cid in (
+            ("reprendre", 610),
+            ("applis", 650),
+            ("ajouts", 620),
+            ("pour toi", 630),
+            ("bientôt", 640),
+        )
     )
 
 
@@ -463,6 +469,147 @@ wait(2.0)
 log(f"retour automatique : accueil ArrMada {'rouvert' if shell_open() else 'NON ROUVERT'}")
 shot("17i-retour-automatique")
 leave_shell()  # la suite du parcours se fait dans l'interface Kodi
+
+
+# ── 6h. ADR-004 phase 4.3 : Applis & sources, recherche dans la grille ─────
+def apps_state():
+    return (
+        f"onglet « {xbmc.getInfoLabel('Container(200).ListItem.Label')} », "
+        f"titre « {xbmc.getInfoLabel('Window.Property(title)')} », "
+        f"chemin « {xbmc.getInfoLabel('Window.Property(crumb)')} », "
+        f"{xbmc.getInfoLabel('Window.Property(layout)')} : "
+        f"{xbmc.getInfoLabel('Container(300).NumItems') or 0} tuile(s), "
+        f"{xbmc.getInfoLabel('Container(400).NumItems') or 0} ligne(s), focus {focus()}, "
+        f"message « {xbmc.getInfoLabel('Window.Property(message)')} »"
+    )
+
+
+def labels_of(control):
+    count = int(xbmc.getInfoLabel(f"Container({control}).NumItems") or 0)
+    return [
+        xbmc.getInfoLabel(f"Container({control}).ListItemAbsolute({i}).Label") for i in range(count)
+    ]
+
+
+def playing():
+    """Ce que lit Kodi : « vidéo <fichier> » ou « chaîne « nom » » (sinon « rien »)."""
+    item = rpc("Player.GetItem", {"playerid": 1, "properties": ["file"]}).get("item") or {}
+    if item.get("type") == "channel":
+        return f"chaîne « {item.get('label')} »"
+    player = xbmc.Player()
+    if player.isPlayingVideo():
+        return f"vidéo {player.getPlayingFile()}"
+    return "rien"
+
+
+def wait_loaded(seconds=8.0):
+    for _ in range(int(seconds / 0.5)):
+        if not xbmc.getInfoLabel("Window.Property(loading)"):
+            break
+        wait(0.5)
+    wait(1.0)
+
+
+xbmc.executebuiltin("ActivateWindow(Home)")
+wait(2.0)
+run_plugin("shell")
+wait(5.0)
+log(f"accueil média (4.3) : {counts()}")
+log(f"tes applis : {labels_of(650)}")
+xbmc.executebuiltin("SetFocus(650)")
+wait(1.5)
+log(f"rangée Tes applis : focus {focus()}, en-tête « {xbmc.getInfoLabel('Window.Property(hero_title)')} »")
+shot("18a-accueil-tes-applis")
+xbmc.executebuiltin("SetFocus(404)")  # menu → Applis
+wait(0.8)
+log(f"menu : focus {focus()}")
+press("Select")
+wait(2.0)
+wait_loaded()
+log(f"Applis : {apps_state()} ; tuiles {labels_of(300)}")
+shot("18b-applis-video")
+press("Select")  # Banc TV (faux add-on) : son contenu s'affiche dans ArrMada
+wait_loaded()
+log(f"dans l'add-on : {apps_state()} ; {labels_of(400)}")
+shot("18c-addon-racine")
+press("Select")  # Concerts
+wait_loaded()
+press("Down")
+wait(1.0)
+log(f"Concerts : {apps_state()} ; {labels_of(400)}")
+shot("18d-addon-videos")
+press("ContextMenu")
+wait(1.2)
+shot("18e-appui-long")
+press("Back")
+wait(0.8)
+press("Select")  # lecture de « Festival d'été » (résolue par l'add-on)
+wait(6.0)
+log(f"lecture depuis l'add-on : {playing()}")
+shot("18f-lecture-addon")
+xbmc.executebuiltin("PlayerControl(Stop)")
+wait(3.0)
+log(f"après lecture : {apps_state()}")
+press("Back", 2, 1.0)  # Concerts → racine de l'add-on → onglets
+wait_loaded()
+log(f"retour : {apps_state()}")
+press("Up")  # onglets
+press("Right")  # TV en direct
+press("Select")
+wait_loaded(12.0)
+log(f"TV en direct : {apps_state()} ; {labels_of(400)}")
+log(f"programme : {xbmc.getInfoLabel('Container(400).ListItem.Label2')}")
+shot("18g-tv-en-direct")
+press("Select")  # 1re chaîne
+wait(6.0)
+log(f"chaîne : {playing()}")
+shot("18h-chaine")
+xbmc.executebuiltin("PlayerControl(Stop)")
+wait(3.0)
+press("Up")
+press("Right", 2)  # Musique → Dossiers
+press("Select")
+wait_loaded()
+log(f"Dossiers : {apps_state()} ; {labels_of(300)}")
+shot("18i-dossiers")
+press("Right", 2)  # Vidéos perso (banc)
+press("Select")
+wait_loaded()
+log(f"vidéos perso : {apps_state()} ; {labels_of(400)}")
+shot("18j-videos-perso")
+press("Back")
+wait(1.0)
+press("Up")
+press("Right")  # Favoris
+press("Select")
+wait_loaded()
+log(f"Favoris : {apps_state()} ; {labels_of(300)}")
+shot("18k-favoris")
+press("Back")  # ferme l'écran : retour à l'accueil
+wait(1.5)
+xbmc.executebuiltin("SetFocus(406)")  # menu → Rechercher
+wait(0.8)
+press("Select")
+wait(2.0)
+rpc("Input.SendText", {"text": "dune", "done": True})
+wait(5.0)
+log(
+    f"recherche : {xbmc.getInfoLabel('Window.Property(subtitle)')}, "
+    f"{xbmc.getInfoLabel('Window.Property(status)')}, {labels_of(300)}"
+)
+shot("18l-recherche")
+press("Back")
+wait(1.5)
+xbmc.executebuiltin("SetFocus(650)")  # rangée Tes applis → Banc TV
+wait(1.0)
+press("Select")
+wait_loaded()
+log(f"tuile de l'accueil : {apps_state()}")
+shot("18m-tuile-addon")
+press("Back")  # racine de l'add-on : l'écran se ferme, retour à l'accueil
+wait(1.5)
+log(f"Retour depuis la tuile : accueil ArrMada {'ouvert' if shell_open() else 'fermé'}, focus {focus()}")
+leave_shell()
 
 # ── 7. Réouverture (cache), panne serveur ──────────────────────────────────
 run_plugin("home")

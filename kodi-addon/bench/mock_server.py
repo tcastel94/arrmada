@@ -275,6 +275,29 @@ def library(base: str) -> list[dict]:
     return items
 
 
+def lookup(base: str, term: str) -> list[dict]:
+    """GET /api/kodi/media/lookup (recherche, 4.3) : titres suivis qui contiennent
+    le terme, plus un résultat absent de la médiathèque (« Demander »)."""
+    term = term.casefold().strip()
+    out = []
+    for item in library(base):
+        if term and term in item["title"].casefold():
+            series = item["type"] == "series"
+            out.append({
+                "title": item["title"], "year": item.get("year"), "type": item["type"],
+                "tmdb_id": None if series else item.get("tmdb_id"),
+                "tvdb_id": item.get("tmdb_id") if series else None,
+                "overview": item.get("overview") or "", "poster_url": item.get("poster_url"),
+                "in_library": True, "arr_id": int(item["external_id"]),
+            })
+    out.append({
+        "title": f"{term.title()} : la série", "year": 2025, "type": "series", "tvdb_id": 999001,
+        "overview": "Résultat absent de la médiathèque (banc) : OK ouvre « Demander ».",
+        "poster_url": f"{base}/img/poster-3.jpg", "in_library": False, "arr_id": None,
+    })
+    return out
+
+
 def media_page(base: str, query: dict) -> dict:
     """GET /api/media : mêmes filtres, tri et pagination que le vrai serveur."""
     media = library(base)
@@ -697,6 +720,11 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
                     self._json(missing(base))  # flux « Manquants » (service)
                 else:
                     self._json(media_page(base, query))  # Films / Séries (1.9.0)
+            elif path == "/api/kodi/media/lookup":
+                from urllib.parse import parse_qs, urlsplit
+
+                query = {k: v[0] for k, v in parse_qs(urlsplit(self.path).query).items()}
+                self._json(lookup(base, query.get("q", "")))
             elif path == "/api/media/facets":
                 from urllib.parse import parse_qs, urlsplit
 

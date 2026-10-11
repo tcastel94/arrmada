@@ -218,3 +218,53 @@ def test_notifications() -> None:
         "message": "Dune a été importé.",
     }
     assert cd.unread_count(payload) == 1 and cd.unread_count(None) == 0
+
+
+def test_lookup_results_open_detail_or_request() -> None:
+    items = [
+        {
+            "title": "Dune",
+            "year": 2021,
+            "type": "movie",
+            "tmdb_id": 438631,
+            "in_library": True,
+            "arr_id": 12,
+            "overview": "Arrakis.",
+            "poster_url": "p",
+        },
+        {
+            "title": "Dune: Prophecy",
+            "year": 2024,
+            "type": "series",
+            "tvdb_id": 81189,
+            "in_library": False,
+            "arr_id": None,
+        },
+        {
+            "title": "Severance",
+            "year": 2022,
+            "type": "series",
+            "tvdb_id": 371980,
+            "in_library": True,
+            "arr_id": 7,
+        },
+        "pas un dict",
+    ]
+    entries = cd.entries_lookup(items)
+    assert [e["label"] for e in entries] == ["Dune", "Dune: Prophecy", "Severance"]
+    dune, prophecy, severance = entries
+    # Déjà suivi : la Fiche (ID Radarr), Lire au menu de l'appui long
+    assert dune["action"]["action"] == "detail" and dune["action"]["arr_id"] == "12"
+    assert dune["ids"] == {"tmdb": "438631"} and "play" in dune["context"]
+    assert dune["label2"] == "2021 · Film · dans la médiathèque"
+    # Absent : la fenêtre « Demander », avec l'ID TVDB pour Sonarr
+    assert prophecy["action"]["action"] == "media_details"
+    assert prophecy["action"]["tvdb_id"] == "81189" and prophecy["context"] == []
+    assert severance["action"]["kind"] == "tvshow" and severance["ids"] == {"tvdb": "371980"}
+    # Filtres des onglets
+    assert [e["label"] for e in cd.entries_lookup(items, "movie")] == ["Dune"]
+    assert [e["label"] for e in cd.entries_lookup(items, "series")] == [
+        "Dune: Prophecy",
+        "Severance",
+    ]
+    assert cd.entries_lookup(None) == []

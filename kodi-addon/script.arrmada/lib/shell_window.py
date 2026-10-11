@@ -1,16 +1,18 @@
 # -*- coding: utf-8 -*-
 """Accueil média ArrMada : la « coquille » qui remplace l'accueil de Kodi.
 
-ADR-004, phase 4.2. Mise en page : resources/skins/Default/1080i/script-arrmada-shell.xml.
+ADR-004, phases 4.2-4.3. Mise en page : resources/skins/Default/1080i/script-arrmada-shell.xml
+(générée par tools/make_shell_xml.py).
 
 À l'écran :
-  - en haut, le menu principal : Accueil, Films, Séries, Découvrir,
+  - en haut, le menu principal : Accueil, Films, Séries, Applis, Découvrir,
     Rechercher, Téléchargements, Salon, Tableau de bord (l'ancien Accueil),
     Réglages ;
   - l'en-tête (« héros ») : fond, titre, état et résumé de l'élément
     sélectionné ;
-  - les rangées : Reprendre (médiathèque Kodi de CET appareil), Ajouts
-    récents, Pour toi, Bientôt (caches du service, donc instantanées).
+  - les rangées : Reprendre (médiathèque Kodi de CET appareil), Tes applis
+    (favoris Kodi, TV en direct, add-ons vidéo), Ajouts récents, Pour toi,
+    Bientôt (caches du service, donc instantanées).
 
 Retour ne fait pas tomber dans l'accueil de Kodi : un menu « Quitter ? »
 propose de rester, de passer à l'interface Kodi (jusqu'au prochain
@@ -39,9 +41,9 @@ XML_FILE = "script-arrmada-shell.xml"
 
 # Identifiants des contrôles : DOIVENT correspondre au XML (vérifié par les tests).
 MENU = 400  # groupe des boutons du menu principal
-MENU_BUTTONS = (401, 402, 403, 404, 405, 406, 407, 408, 409)  # ordre de shell_data.MENU
+MENU_BUTTONS = (401, 402, 403, 404, 405, 406, 407, 408, 409, 410)  # ordre de shell_data.MENU
 ROW_GROUPS = 500  # rangées (liste verticale qui défile)
-ROW_LISTS = (610, 620, 630, 640)  # ordre de shell_data.ROWS
+ROW_LISTS = (610, 650, 620, 630, 640)  # ordre de shell_data.ROWS
 
 REFRESH_MINUTES = 2  # relecture des caches tant que l'écran est ouvert
 SHELL_PROP = shell_data.SHELL_PROP
@@ -114,14 +116,20 @@ class ShellWindow(xbmcgui.WindowXML):
 
     @staticmethod
     def _fetch_rows() -> dict:
-        """Médiathèque Kodi (Reprendre) + caches du service (les autres rangées)."""
+        """Médiathèque et applis de Kodi (Reprendre, Tes applis) + caches du service."""
+        import apps_data
         import kodi_library
+        import kodi_sources
 
         rows: dict = {}
         try:
             rows["continue"] = watch_data.continue_entries(kodi_library.continue_watching())
         except Exception as exc:  # médiathèque illisible : les autres rangées s'affichent
             _log(f"« Reprendre » indisponible : {exc}", xbmc.LOGWARNING)
+        try:
+            rows["apps"] = [apps_data.shell_entry(app) for app in kodi_sources.home_apps()]
+        except Exception as exc:
+            _log(f"« Tes applis » indisponible : {exc}", xbmc.LOGWARNING)
         recent = listing.read_feed("recent")
         rows["recent"] = navigation._with_kodi_state(navigation._entries("recent", recent))
         rows["foryou"] = navigation._entries("foryou", listing.read_feed("foryou"), sub="foryou")
@@ -242,6 +250,10 @@ class ShellWindow(xbmcgui.WindowXML):
             import grid_window
 
             grid_window.open_grid({"movies": "movie", "series": "series"}.get(key, key))
+        elif key == "apps":
+            import apps_window
+
+            apps_window.open_apps()
         elif key == "search":
             ui.open_search()
         elif key == "queue":

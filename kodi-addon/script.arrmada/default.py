@@ -473,6 +473,14 @@ def main():
         # Accueil média (ADR-004, phase 4.2) : aussi ouvert par le service au démarrage
         import shell_window
         shell_window.open_shell()
+    elif action == "apps":
+        # Applis & sources (ADR-004, phase 4.3) : add-ons, TV en direct, NAS, favoris
+        import apps_window
+        apps_window.open_apps(params.get("tab", "video"))
+    elif action == "app":
+        # Une appli de la rangée « Tes applis » lancée depuis un widget ou un favori
+        import apps_window
+        apps_window.activate(params)
     elif action == "series":
         # Écran Série : plugin://script.arrmada/?action=series&tvshowid=12
         import navigation
@@ -508,9 +516,9 @@ def main():
         import downloads_window
         downloads_window.open_downloads()
     elif action == "search_input":
-        query = xbmcgui.Dialog().input("ArrMada : Rechercher un film ou une serie")
-        if query:
-            xbmc.executebuiltin(f"ActivateWindow(videos,{PLUGIN_URL}?action=search_results&q={urllib.parse.quote(query)},return)")
+        # Résultats dans la grille ArrMada (ADR-004, phase 4.3), plus dans SiLVO
+        import ui_common
+        ui_common.open_search()
     elif action == "search_results":
         handle_search_results(params.get("q", ""))
     elif action == "trending_movies":

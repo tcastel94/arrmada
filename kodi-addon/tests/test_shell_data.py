@@ -8,7 +8,9 @@ import shell_data as sd
 def test_menu_and_rows_are_stable():
     assert [key for key, _ in sd.MENU][:3] == ["home", "movies", "series"]
     assert "board" in dict(sd.MENU)  # l'ancien Accueil reste joignable
-    assert [key for key, _ in sd.ROWS] == ["continue", "recent", "foryou", "upcoming"]
+    assert [key for key, _ in sd.ROWS] == ["continue", "apps", "recent", "foryou", "upcoming"]
+    assert "apps" in dict(sd.MENU)  # add-ons, TV en direct, dossiers du NAS (4.3)
+    assert sd.SEARCH_TABS[-1][0] == "new"  # nouvelle recherche depuis la grille
     assert sd.QUIT_CHOICES[0][0] == "stay"  # Retour par erreur : rien ne se passe
     assert "kodi" in dict(sd.QUIT_CHOICES)  # toujours une porte de sortie
 
@@ -50,6 +52,9 @@ def test_hero_separates_status_from_plot():
         "l",
     )
     assert sd.hero(None)["title"] == ""
+    # Applis (4.3) : pas d'icône agrandie en fond
+    app = {"label": "YouTube", "art": {"thumb": "yt.png"}, "props": {"icon_only": "1"}}
+    assert sd.hero(app)["fanart"] == ""
 
 
 def test_next_page_is_loaded_two_rows_ahead():

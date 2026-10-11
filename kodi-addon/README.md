@@ -467,19 +467,66 @@ Pour garder l'accueil de Kodi au démarrage, décocher *Paramètres de l'add-on
 > - si l'accueil ArrMada se ferme 3 fois en une minute ;
 > - si on a choisi « Interface Kodi » (jusqu'au prochain démarrage).
 
-> Ce qui reste à Kodi pour l'instant :
-> - la barre de lecture, les réglages et le clavier ;
-> - les add-ons tiers (YouTube, IPTV), qui arrivent dans ArrMada en
->   phase 4.3 ;
-> - les **résultats de Rechercher**, qui s'affichent encore dans une liste
->   de SiLVO.
+> Ce qui reste à Kodi : la barre de lecture, les réglages et le clavier.
+> Depuis la 1.13.0 (§ 18), les add-ons, la TV en direct, les vidéos du NAS
+> et les résultats de Rechercher s'affichent dans ArrMada.
 >
 > Le bouton Accueil de la télécommande Shield ramène au **lanceur Android**,
 > pas à Kodi. En revenant dans Kodi, on retrouve ArrMada.
 
 > La mise en page de l'accueil est **générée** par
-> `kodi-addon/tools/make_shell_xml.py` : les 4 rangées et les 9 boutons du menu
-> partagent le même modèle. Un test vérifie que le fichier versionné est à jour.
+> `kodi-addon/tools/make_shell_xml.py` : les 5 rangées et les 10 boutons du
+> menu partagent le même modèle. Un test vérifie que le fichier versionné est
+> à jour.
+
+### 18. 🧩 Applis, TV en direct et vidéos du NAS (1.13.0, ADR-004)
+Troisième étape de l'[ADR-004](../docs/adr/004-arrmada-remplace-kodi.md) :
+YouTube, l'IPTV et les vidéos perso **sans passer par SiLVO**. Kodi fait
+toujours tourner les add-ons et lit les vidéos ; ArrMada les affiche.
+
+**Écran « Applis & sources »** (menu *Applis* de l'accueil) :
+
+| Onglet | Contenu | OK |
+|---|---|---|
+| Vidéo | Add-ons vidéo de Kodi (YouTube, IPTV en add-on…) | Le contenu de l'add-on, dans ArrMada |
+| TV en direct | Chaînes de la TV en direct de Kodi (IPTV Simple…), programme en cours, heure de fin, barre de progression, programme suivant | La chaîne |
+| Musique | Add-ons audio et dossiers musicaux | Le contenu |
+| Dossiers | Sources vidéo déclarées dans Kodi (partages SMB / NFS du NAS : vidéos perso, concerts) | Le dossier |
+| Favoris | Favoris de Kodi (les raccourcis ArrMada eux-mêmes sont masqués) | Comme dans Kodi |
+| Applis Android | Applis de la Shield (Netflix, Disney+…), sur Android seulement | L'appli |
+
+- Dans un add-on ou un dossier : une **liste** avec un aperçu à droite
+  (vignette, résumé, durée, « Reprendre à … », « Vu »). Le chemin s'affiche
+  en haut (« YouTube › Abonnements »). **Retour** remonte d'un niveau, comme
+  `cd ..`.
+- Une vidéo **commencée** propose « Reprendre à … / Depuis le début ».
+- **Appui long** : *Ouvrir dans Kodi*, issue de secours toujours présente
+  pour un add-on qui a besoin de l'interface de Kodi ; *Réglages de
+  l'add-on* ; *Guide TV de Kodi* sur une chaîne.
+- Un add-on qui demande un texte (recherche YouTube) ouvre le **clavier de
+  Kodi**, comme d'habitude.
+
+**Rangée « Tes applis »** sur l'accueil (2e rangée) : tes **favoris Kodi**
+d'abord, puis la tuile **TV en direct**, puis les add-ons vidéo. OK sur un
+add-on l'ouvre directement ; Retour revient à l'accueil.
+Pour choisir ce qui s'affiche en premier, ajoute l'add-on, le dossier ou
+l'appli aux **favoris de Kodi** (appui long → *Ajouter aux favoris*). Pour une
+appli Android : Kodi → *Programmes → Applications Android*.
+
+**Rechercher** : les résultats s'affichent maintenant dans la **grille
+ArrMada** (onglets *Tout*, *Films*, *Séries*, *Nouvelle recherche*). Un
+titre déjà suivi ouvre sa Fiche (ou l'écran Série) ; un titre absent ouvre
+« Demander ».
+
+> Pièges connus :
+> - **Un add-on qui ne s'ouvre pas ici** (il affiche une fenêtre à lui au
+>   lieu d'une liste) : un message le dit. Appui long → *Ouvrir dans Kodi*.
+> - **Pas d'onglet TV en direct** : aucun add-on de TV en direct n'est
+>   activé dans Kodi (*Add-ons → Mes add-ons → Clients PVR*).
+> - **Liste des chaînes vide juste après le démarrage** : la TV en direct de
+>   Kodi se charge pendant quelques secondes. Ressortir et revenir.
+> - Le **guide TV complet** (grille des programmes) reste celui de Kodi :
+>   appui long sur une chaîne → *Guide TV de Kodi*.
 
 ## 🚀 Installation dans Kodi
 
@@ -570,7 +617,8 @@ Copiez le dossier `script.arrmada/` dans le dossier des extensions de Kodi :
 | Banc de test visuel (vrai Kodi sous écran virtuel) | `kodi-addon/bench/run.sh` |
 
 **Banc de test visuel** : sur une machine Linux (VM ou conteneur Ubuntu),
-`sudo apt install kodi xvfb python3-pil curl ffmpeg`, puis `kodi-addon/bench/run.sh`.
+`sudo apt install kodi kodi-pvr-iptvsimple xvfb python3-pil curl ffmpeg`, puis
+`kodi-addon/bench/run.sh`.
 Le script lance un faux backend et un Kodi sans écran (Xvfb) avec les polices
 de SiLVO, et une **médiathèque Kodi de test** (`bench/make_media.py` : une série
 en 2 saisons et un film, fiches `.nfo`, scraper « Informations locales »). Il
@@ -582,7 +630,11 @@ QR codes, favoris, bulle pendant un film, Films et Séries, puis la phase 4.1 :
 lecture avec épisodes enchaînés, rangée Reprendre ; enfin la phase 4.2 :
 démarrage sur ArrMada, accueil média, grille Films (page 2 chargée d'avance,
 onglets), grille Séries vers l'écran Série, menu « Quitter ? », retour
-automatique) et dépose 65 captures dans
+automatique ; puis la phase 4.3 avec un faux add-on vidéo
+(`bench/harness/plugin.video.arrmadabanc`), IPTV Simple (3 chaînes locales
+et leur guide, `bench/make_apps.py`), un dossier « vidéos perso » et des
+favoris : rangée Tes applis, écran Applis & sources, lecture depuis l'add-on,
+TV en direct, dossiers, favoris, recherche dans la grille) et dépose 71 captures dans
 `/tmp/arrmada-kodi-bench/shots/`. Le Kodi du système n'est pas modifié : tout
 se passe dans un profil jetable. Le rendu final reste à valider sur la Shield.
 
