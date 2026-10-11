@@ -10,6 +10,8 @@
  *                     Salon / Salle de cinéma, autres Kodi, Caster). Le
  *                     backend lance Kodi ET règle l'ampli Yamaha pour la pièce.
  *      sinon        → « Recherche auto »
+ *  - « Sur la TV » (contour, appli Kodi 1.19) : lance le film, ou l'épisode à
+ *    suivre d'une série, sur une TV appairée ; masqué sans TV appairée
  *  - 1 action secondaire (contour) : « Recherche auto » ou « Recherche manuelle »
  *  - Bande-annonce en bouton discret (lecteur YouTube dans une modale)
  *  - un menu « ⋯ » : Éditer, Scraper NFO/Art (films seulement — le backend
@@ -47,6 +49,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { CastDialog } from "@/components/cast-button";
 import { TrailerModal } from "@/components/media/trailer-modal";
+import { PlayOnTvButton, seriesTarget } from "@/components/media/play-on-tv";
+import { episodeCode, useWatchSummary } from "@/hooks/use-watch";
 import { useKodiPlay, useKodiSettings, type KodiInstance, type KodiRoom } from "@/hooks/use-kodi";
 import { useYamahaProfiles, type RoomProfile } from "@/hooks/use-yamaha";
 import { ROOM_META, describeApplied, soundProgramShortLabel, volumePct } from "@/components/remote/yamaha-audio";
@@ -71,6 +75,10 @@ export function ActionBar({ media, onEdit, onMove, onDelete, onManualSearch }: A
     const scrape = useScrapeMedia();
     const playable = isMovie && !!media.has_file && !!media.tmdb_id;
     const missing = !isMovie ? seriesStats(media.seasons).missing : 0;
+    // Vu / reprise partagés par les TV : reprise du film, épisode à suivre
+    const { data: watch } = useWatchSummary();
+    const movieState = isMovie && media.tmdb_id ? watch?.movies[String(media.tmdb_id)] : undefined;
+    const episode = !isMovie ? seriesTarget(media, media.tvdb_id ? watch?.series[String(media.tvdb_id)] : null) : null;
 
     const autoSearch = () =>
         triggerSearch.mutate(
@@ -127,6 +135,21 @@ export function ActionBar({ media, onEdit, onMove, onDelete, onManualSearch }: A
         <div className="flex flex-wrap items-center gap-2">
             {/* ── Action principale ─────────────────────────────── */}
             {playable ? <PlayAction media={media} /> : searchButton(true)}
+
+            {/* ── Sur une TV appairée (appli ArrMada) ───────────── */}
+            {playable && (
+                <PlayOnTvButton
+                    target={{ media_type: "movie", id: media.tmdb_id as number, title: media.title }}
+                    resumeAt={movieState && !movieState.watched ? movieState.position : 0}
+                />
+            )}
+            {episode && (
+                <PlayOnTvButton
+                    target={episode}
+                    resumeAt={episode.resumeAt}
+                    label={`${episodeCode(episode.season, episode.episode)} sur la TV`}
+                />
+            )}
 
             {/* ── Action secondaire ─────────────────────────────── */}
             {playable ? (

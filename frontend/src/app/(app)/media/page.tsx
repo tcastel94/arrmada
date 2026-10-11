@@ -227,7 +227,7 @@ function MediaLibrary() {
     }, [data, isPlaceholderData, page, totalPages, setPage]);
 
     // Filtres ST FR / Vu : appliqués à la page chargée (les statuts viennent
-    // de Bazarr / Kodi, pas de l'API médias paginée côté serveur).
+    // de Bazarr / du vu partagé des TV, pas de l'API médias paginée côté serveur).
     const visibleItems = useMemo(() => {
         const items = data?.items ?? [];
         return items.filter((item) => {
@@ -237,9 +237,11 @@ function MediaLibrary() {
             }
             if (watchFilter !== "all") {
                 const w = watchStateFor(item);
+                // « En cours » : film commencé, ou série entamée (épisodes vus, pas tous)
+                const started = !!w && !w.watched && ((w.progress ?? 0) > 0 || (w.episodes ?? 0) > 0);
                 if (watchFilter === "watched" && !w?.watched) return false;
-                if (watchFilter === "unwatched" && (w?.watched || (w?.progress ?? 0) > 0)) return false;
-                if (watchFilter === "inprogress" && !(w && !w.watched && (w.progress ?? 0) > 0)) return false;
+                if (watchFilter === "unwatched" && (w?.watched || started)) return false;
+                if (watchFilter === "inprogress" && !started) return false;
             }
             return true;
         });
@@ -665,7 +667,7 @@ function MediaLibrary() {
                                         onChange={(v) => setFilter("watch", v)}
                                         choices={WATCH_CHOICES}
                                         disabled={!kodiAvailable}
-                                        hint={kodiAvailable ? undefined : "Kodi injoignable"}
+                                        hint={kodiAvailable ? undefined : "Aucune TV n'a encore partagé son vu"}
                                     />
                                 </div>
                                 <p className="mt-3 flex items-start gap-1.5 text-[11px] text-muted-foreground/80">

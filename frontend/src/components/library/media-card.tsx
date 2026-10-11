@@ -62,12 +62,16 @@ export function MediaStateBadges({ sub, watch }: { sub: SubState; watch: WatchSt
                 </PosterBadge>
             )}
             {watch?.watched ? (
-                <PosterBadge tone="violet" title="Vu sur Kodi">
+                <PosterBadge tone="violet" title="Vu sur une TV">
                     <Check className="h-2.5 w-2.5" strokeWidth={3} /> Vu
                 </PosterBadge>
             ) : watch?.progress ? (
-                <PosterBadge tone="violet" title={`En cours sur Kodi — ${watch.progress} %`}>
+                <PosterBadge tone="violet" title={`En cours sur une TV — ${watch.progress} %`}>
                     ⏵ {watch.progress} %
+                </PosterBadge>
+            ) : watch?.episodes ? (
+                <PosterBadge tone="violet" title={`${watch.episodes} épisode(s) vu(s) sur les TV`}>
+                    <Eye className="h-2.5 w-2.5" strokeWidth={3} /> {watch.episodes} ép.
                 </PosterBadge>
             ) : null}
         </>

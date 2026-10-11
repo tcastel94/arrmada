@@ -805,6 +805,42 @@ l'appui long propose Depuis le début, Marquer comme vu, Ouvrir la série.
 > - les onglets bouclent (Gauche sur « Avant 22:00 » mène à « Sans
 >   limite »), comme toutes les listes de Kodi.
 
+### 24. 📺 Vu partagé dans la web app, « Lire sur la TV » (1.19.0)
+
+Ce que les TV partagent déjà (vu / reprise, § 20) s'affiche aussi dans la
+**web app** :
+
+- **Médiathèque** : badge « Vu », « ⏵ 27 % » (film commencé) ou « 8 ép. »
+  (épisodes vus d'une série), filtres *Vus / Non vus / En cours* ; mis à
+  jour en direct quand une TV s'arrête (événement `watch_state`) ;
+- **Reprendre** (menu *Bibliothèque*, raccourci `g e`) : films et épisodes
+  commencés sur les TV, le plus récent d'abord, avec l'heure d'arrêt, le
+  temps restant et la TV ;
+- **« Sur la TV »** (fiche d'un film présent sur le disque, fiche d'une série
+  → « S02E05 sur la TV », bouton TV de chaque affiche de *Reprendre*) :
+  choisis une TV appairée, *Reprendre à 42:10* ou *Depuis le début*. La TV
+  retrouve le titre dans **sa** médiathèque Kodi et le lance par la logique
+  d'ArrMada (reprise, épisodes suivants en file, préréglage de l'ampli de sa
+  pièce). Pour une série, l'épisode proposé est celui en cours, sinon le
+  suivant du dernier vu.
+
+> Comment ça marche : la web app ne parle jamais à Kodi. Le serveur publie
+> une demande `play_request` qui porte le numéro de la TV visée ; toutes les
+> TV relèvent les événements toutes les 5 s et seule la bonne la prend.
+> Analogie : un message sur un bus avec l'adresse du destinataire, plutôt
+> qu'une connexion entrante vers la TV (aucun port à ouvrir, rien à exposer).
+> Routes : `GET /api/kodi/watch-summary` (web app seulement, pas les TV) et
+> `POST /api/kodi/play-on-device` (admin seulement).
+
+> Pièges :
+> - une TV **éteinte ou en veille** ne reçoit rien : le menu la marque
+>   « absente », et la demande **expire au bout de 2 min** — jamais de film
+>   qui démarre tout seul au rallumage (ni après un redémarrage du serveur,
+>   qui rejoue son historique d'événements) ;
+> - le titre doit être dans la médiathèque Kodi de **cette** TV (scannée) :
+>   sinon une bulle « n'est pas dans la médiathèque de cette TV » ;
+> - la TV doit être en 1.19.0 ou plus : une plus ancienne ignore la demande.
+
 ## 🚀 Installation dans Kodi
 
 > ⚠️ **NVIDIA Shield (Kodi 21, Android)** : l'installation **par le dépôt** ferme

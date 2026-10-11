@@ -10,7 +10,9 @@ Variables d'environnement (posées par run.sh) : SHOT_DIR, MOCK_URL, PACE, DEMO_
 
 import json
 import os
+import urllib.parse
 import urllib.request
+from datetime import datetime, timezone
 
 import xbmc
 import xbmcaddon
@@ -1019,6 +1021,65 @@ if movies:
     wait(2.0)
 else:
     log("médiathèque vide : section « Ce soir » sautée")
+
+
+# ── 6m. 1.19 : « Lire sur la TV » depuis la web app (événement play_request) ─
+def device_id():
+    path = xbmcvfs.translatePath("special://profile/addon_data/script.arrmada/device.json")
+    try:
+        with open(path, encoding="utf-8") as handle:
+            return int(json.load(handle).get("id") or 0)
+    except (OSError, ValueError, TypeError):
+        return 0
+
+
+def emit_play(**fields):
+    """Ce que publie le serveur quand on clique « Sur la TV » dans la web app."""
+    fields.setdefault("at", datetime.now(timezone.utc).isoformat())
+    query = urllib.parse.urlencode(dict(fields, type="play_request"))
+    urllib.request.urlopen(f"{MOCK}/__emit?{query}").read()
+
+
+def wait_video(seconds=15.0):
+    for _ in range(int(seconds * 2)):
+        wait(0.5)
+        if xbmc.Player().isPlayingVideo():
+            return True
+    return False
+
+
+MY_ID = device_id()
+if shows and movies and MY_ID:
+    xbmc.executebuiltin("ActivateWindow(Home)")
+    wait(2.0)
+    # 1. Demande pour une AUTRE TV : rien ne se passe ici
+    emit_play(device_id=MY_ID + 100, media_type="movie", id_type="tmdb", id="1084736",
+              title="Le Comte de Monte-Cristo")  # fmt: skip
+    log(f"demande pour une autre TV : {'LECTURE' if wait_video(8.0) else 'ignorée'}")
+    # 2. Pour cette TV : S01E05 depuis le début, la suite en file
+    emit_play(device_id=MY_ID, media_type="episode", id_type="tvdb", id="371980", season=1,
+              episode=5, title="Severance", resume="0")  # fmt: skip
+    started = wait_video(15.0)
+    wait(3.0)
+    log(f"« Lire sur la TV » : {playing() if started else 'RIEN'} ; position et file {player_state()}")
+    shot("23a-lire-sur-la-tv")
+    xbmc.executebuiltin("PlayerControl(Stop)")
+    wait(3.0)
+    # 3. Demande trop vieille (TV rallumée, serveur redémarré) : ignorée
+    emit_play(device_id=MY_ID, media_type="movie", id_type="tmdb", id="1084736",
+              title="Le Comte de Monte-Cristo", at="2026-01-01T00:00:00+00:00")  # fmt: skip
+    log(f"demande expirée : {'LECTURE' if wait_video(8.0) else 'ignorée'}")
+    # 4. Titre absent de la médiathèque de cette TV : une bulle le dit
+    emit_play(device_id=MY_ID, media_type="movie", id_type="tmdb", id="1", title="Film inconnu")
+    for _ in range(20):
+        wait(0.5)
+        if xbmc.getCondVisibility("Window.IsVisible(notification)"):
+            break
+    log(f"titre absent : bulle {'affichée' if xbmc.getCondVisibility('Window.IsVisible(notification)') else 'ABSENTE'}")
+    shot("23b-titre-absent")
+    wait(4.0)
+else:
+    log("TV non appairée ou médiathèque vide : section « Lire sur la TV » sautée")
 
 
 # ── 7. Réouverture (cache), panne serveur ──────────────────────────────────

@@ -174,6 +174,39 @@ def tonight_candidates() -> list:
     return candidates
 
 
+def remote_play(params: dict) -> bool:
+    """« Lire sur la TV » (1.19.0) : retrouve le titre demandé par la web app et le lance.
+
+    Le titre est désigné par ses identifiants publics (TMDB d'un film, TVDB
+    de la série + saison + épisode) : les numéros internes de Kodi diffèrent
+    d'une TV à l'autre. `resume` : « 1 » reprendre, « 0 » depuis le début.
+    """
+    import remote_data
+
+    resume = params.get("resume") != "0"
+    id_type, value = params.get("id_type") or "", params.get("id") or ""
+    label = remote_data.describe(params)
+    if params.get("media_type") == "movie":
+        movies = ui.jsonrpc("VideoLibrary.GetMovies", {"properties": ["uniqueid"]}).get("movies")
+        movieid = remote_data.find_by_id(movies or [], id_type, value, "movieid")
+        if movieid:
+            ui.notify("Lecture demandée", label)
+            return play_movie(movieid, resume=resume)
+    elif params.get("media_type") == "episode":
+        shows = ui.jsonrpc("VideoLibrary.GetTVShows", {"properties": ["uniqueid"]}).get("tvshows")
+        tvshowid = remote_data.find_by_id(shows or [], id_type, value, "tvshowid")
+        episodes = show_episodes(tvshowid) if tvshowid else []
+        episodeid = remote_data.find_episode(episodes, params.get("season"), params.get("episode"))
+        if episodeid:
+            ui.notify("Lecture demandée", label)
+            # wait=True : invocation du plugin à courte durée de vie, on attend
+            # que la suite soit empilée avant de rendre la main
+            return play_episode(episodeid, episodes, resume=resume, wait=True)
+    _log(f"« Lire sur la TV » : {label} absent de la médiathèque de cette TV", xbmc.LOGWARNING)
+    ui.notify("Lecture impossible", f"{label} n'est pas dans la médiathèque de cette TV")
+    return False
+
+
 def library_indexes() -> tuple:
     """({TMDB → film Kodi}, {TVDB → série Kodi}) pour annoter les listes ArrMada."""
     movies = ui.jsonrpc(

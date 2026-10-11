@@ -478,6 +478,10 @@ def main():
         # Accueil média (ADR-004, phase 4.2) : aussi ouvert par le service au démarrage
         import shell_window
         shell_window.open_shell()
+    elif action == "remote_play":
+        # « Lire sur la TV » depuis la web app (1.19.0) : lancé par le service
+        import kodi_library
+        kodi_library.remote_play(params)
     elif action == "camera":
         # Pop-up d'une caméra Eufy par-dessus le film (ouverte par le service)
         import camera_window

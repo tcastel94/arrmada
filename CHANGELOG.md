@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Shared watched state in the web app, "Play on TV" (Kodi add-on 1.19.0)
+
+#### Added
+- **Web app — library badges from the TVs**: "Vu", "⏵ 27 %" (started film) and "8 ép." (episodes watched in a series) come from the watched / resume states the paired TVs already share (`watch_states`), for films (TMDB) and now series (TVDB); the *Watched / Not watched / In progress* filters use them (a partly watched series counts as in progress). Falls back to the direct Kodi reading (films only) when no TV has shared anything. Refreshed live on the `watch_state` event
+- **Web app — "Reprendre" page** (`/media/continue`, *Library* menu, `g e`): films and episodes started on the TVs, most recent first, with the stop time, time left, the TV and when; each poster has a TV button
+- **Web app — "Sur la TV"**: on a film with a file, on a series ("S02E05 sur la TV": the episode in progress, else the one after the last watched) and on each "Reprendre" poster: pick a paired TV, *Reprendre à 42:10* or *Depuis le début*; TVs not seen for 2 min 30 are marked "absente"
+- **Backend**: `GET /api/kodi/watch-summary` (films by TMDB, series by TVDB with watched / in-progress counts and last episode, "Reprendre" rows with poster and sheet link from the cached library; not open to TVs) and `POST /api/kodi/play-on-device` (admin only: TV id + title as in the shared state; publishes `play_request` with the target device id, the time and a request id; `online` tells whether the TV was seen recently). `services/watch_summary.py` (pure, tested)
+- **Add-on 1.19.0**: the service takes a `play_request` only when it targets this TV **and** is less than 2 minutes old (no surprise playback when a TV wakes up or the server replays its history), then runs the playback in a separate plugin call (the service loop never waits): the title is found in this TV's Kodi library by its public ids and played the ArrMada way (resume or from the start, next episodes queued, room amplifier preset); a bubble says when the title is not in this TV's library. `lib/remote_data.py` (pure, tested: target, age and clock skew, URL flags, library lookup)
+- Tests: backend (summary from TV states, series counts, "Reprendre" rows with posters, play request validation, online flag, TV scope, admin only); add-on (remote play). Bench: request for another TV ignored, episode started from the beginning with the next ones queued, expired request ignored, title missing → bubble. Web app checked with Playwright (desktop and phone)
+
 ### Kodi add-on 1.18.0 — "Tonight": what ends before the chosen time
 
 #### Added

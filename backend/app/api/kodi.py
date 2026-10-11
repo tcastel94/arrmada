@@ -1,16 +1,18 @@
 """Kodi API — settings and synchronization."""
 
 import asyncio
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db, require_admin
+from app.models.device import Device
 from app.models.service import Service
 from app.services import kodi as kodi_service
-from app.services import watch_sync
+from app.services import watch_summary, watch_sync
 from app.services.encryption import decrypt_api_key, encrypt_api_key
 from app.services.fully_kiosk import kiosk
 from app.services.kodi import discover_kodi, sync_kodi
@@ -341,6 +343,68 @@ async def post_watch_states(
             data={"changed": len(changed), "device": device, "cursor": cursor},
         )
     return {"status": "ok", "changed": len(changed), "rejected": rejected, "cursor": cursor}
+
+
+# ── Vu / reprise dans la web app, « Lire sur la TV » (add-on 1.19.0) ──
+@router.get("/watch-summary")
+async def get_watch_summary(db: AsyncSession = Depends(get_db)):
+    """Badges vu / en cours et page Reprendre de la web app.
+
+    Tiré des états partagés par les TV (`watch_states`), rien n'est demandé
+    à Kodi : fonctionne même TV éteintes. Pas ouvert aux TV (hors périmètre).
+    """
+    return await watch_summary.load_summary(db)
+
+
+@router.post("/play-on-device")
+async def play_on_device(
+    data: dict, db: AsyncSession = Depends(get_db), user: dict = Depends(require_admin)
+):
+    """Demande à UNE TV appairée de lancer un film ou un épisode de SA médiathèque.
+
+    Corps : {device_id, media_type, id (TMDB d'un film / TVDB d'une série),
+    season, episode, title, resume}. Publie l'événement `play_request` ; la
+    TV visée le reçoit dans les 5 s. `online` faux : la TV ne s'est pas
+    manifestée récemment (éteinte ?), la demande expirera au bout de 2 min.
+    """
+    payload = data or {}
+    try:
+        device_id = int(payload.get("device_id"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail="« device_id » manquant") from None
+    device = await db.get(Device, device_id)
+    if device is None or device.kind != "tv":
+        raise HTTPException(status_code=404, detail="TV inconnue (appairée ?)")
+    now = datetime.now(UTC)
+    request = watch_summary.play_request(
+        {"id": device.id, "name": device.name, "room": device.room}, payload, now
+    )
+    if request is None:
+        raise HTTPException(status_code=422, detail="Titre à lire invalide")
+    await event_bus.publish(event_type="play_request", data=request)
+
+    from app.services.activity_log import log_event
+
+    code = (
+        f" S{request['season']:02d}E{request['episode']:02d}"
+        if request["media_type"] == "episode"
+        else ""
+    )
+    await log_event(
+        category="playback",
+        action="play_on_device",
+        source="arrmada",
+        media_type=request["media_type"],
+        tmdb_id=int(request["id"]) if request["id_type"] == "tmdb" else None,
+        title=f"{request['title']}{code}" or None,
+        device=device.name,
+    )
+    return {
+        "status": "sent",
+        "device": device.name,
+        "online": watch_summary.is_online(device.last_seen_at, now),
+        "request_id": request["request_id"],
+    }
 
 
 # ── Épisodes d'une série vus par Sonarr (manquants, à venir) ──

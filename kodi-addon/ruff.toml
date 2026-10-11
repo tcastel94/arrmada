@@ -18,5 +18,5 @@ known-first-party = [
     "make_shell_xml", "apps_data", "kodi_sources", "apps_window", "camera_data",
     "camera_window", "sync_data", "watch_sync", "upnext_data", "upnext_window",
     "player_data", "player_window", "chapter_data", "skip_window", "mkv_chapters",
-    "tonight_data",
+    "tonight_data", "remote_data",
 ]

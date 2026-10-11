@@ -39,12 +39,15 @@ import base64
 import os
 import time
 import urllib.parse
+from datetime import datetime, timezone
 
 import xbmc
 import xbmcgui
 
 import camera_data
+import device
 import feeds
+import remote_data
 import sync_data
 import ui_common as ui
 import watch_sync
@@ -145,11 +148,31 @@ class BackgroundTasks:
         if event_type == sync_data.EVENT:
             self.sync.wake()  # une autre TV a vu / repris un titre : on relit
             return None
+        if event_type == remote_data.EVENT:
+            self._remote_play(data)  # « Lire sur la TV » depuis la web app (1.19)
+            return None
         self._forced |= feeds.feeds_for_event(event_type, data)
         # Un titre seulement ajouté à Radarr/Sonarr n'a pas encore de fichier
         if event_type == "new_import" and data.get("event", "Download") == "Download":
             self._scan_library()
         return feeds.osd_notification(event_type, data)
+
+    # ── « Lire sur la TV » depuis la web app (1.19.0) ───────────────────
+
+    def _remote_play(self, data: dict) -> None:
+        """Demande adressée à CETTE TV et récente : lecture dans une invocation à part.
+
+        La recherche dans la médiathèque et l'empilement des épisodes suivants
+        prennent quelques secondes : hors de la boucle du service, qui ne doit
+        jamais attendre (règle de la 1.7.1).
+        """
+        now = datetime.now(timezone.utc)
+        if not remote_data.for_me(data, device.load().get("id"), now):
+            return  # pour une autre TV, ou trop vieille (TV rallumée, serveur redémarré)
+        params = remote_data.plugin_params(data)
+        _log(f"lecture demandée depuis la web app : {remote_data.describe(params)}")
+        query = urllib.parse.urlencode(params)
+        xbmc.executebuiltin(f"RunPlugin(plugin://script.arrmada/?{query})")
 
     # ── Caméras Eufy : pop-up pendant un film, bulle sinon ──────────────
 
