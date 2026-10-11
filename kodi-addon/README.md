@@ -312,11 +312,19 @@ avec le port 3420.
 Une tablette posée sous la TV (Pixel Tablet, ou n'importe quelle tablette
 Android) affiche, sans éblouir pendant le film :
 
-- l'**heure**, et pendant une lecture : titre, épisode, affiche, **heure de
-  début**, **heure de fin prévue**, temps restant, barre de progression ;
-- en pause : « Fin, si reprise » (l'heure de fin recule tant que dure la pause) ;
-- l'**ampli** de la pièce (volume, entrée, programme sonore) ;
-- les **téléchargements** en cours et les **sorties** de ce soir et demain.
+- **pendant une lecture**, en grand pour être lu depuis le canapé :
+  l'affiche sur presque toute la hauteur, l'**heure de fin prévue** en très
+  gros, l'**heure de début**, le temps restant, la barre de progression, le
+  titre (et l'épisode), l'heure et le volume de l'ampli ;
+- en pause : « Fin si reprise maintenant » en jaune (l'heure de fin recule
+  tant que dure la pause) ;
+- **au repos** : une grande horloge, les **sorties** de ce soir et demain, les
+  **téléchargements** en cours et l'**ampli** de la pièce (volume, entrée,
+  programme sonore).
+
+Les tailles suivent l'écran (unité CSS `--u`, une fraction de la hauteur ou
+de la largeur) : la page remplit la Pixel Tablet en paysage comme en portrait,
+un écran de PC (aperçu admin) ou un téléphone, sans défilement.
 
 **Rien à régler dans Kodi** : l'écran se sert du suivi de lecture que
 l'add-on envoie déjà au serveur (case *Scrobbling* active dans les paramètres

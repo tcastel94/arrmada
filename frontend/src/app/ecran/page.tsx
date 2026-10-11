@@ -3,11 +3,12 @@
 /**
  * Écran d'appoint du salon — la tablette posée sous la TV.
  * ----------------------------------------------------------------
- * Affiche, sans gêner le film :
- *  - l'heure, et pendant une lecture : titre, épisode, affiche, heure de
- *    DÉBUT, heure de FIN prévue, temps restant, barre de progression ;
- *  - l'ampli de la pièce (volume, entrée, programme sonore) ;
- *  - les téléchargements en cours et les sorties de ce soir / demain.
+ * Affiche, sans gêner le film, en grand (lu depuis le canapé, à 3-4 m) :
+ *  - pendant une lecture : l'affiche sur toute la hauteur, l'heure de FIN
+ *    prévue en très grand, l'heure de DÉBUT, le temps restant, la barre de
+ *    progression, le titre, l'heure et le volume de l'ampli ;
+ *  - au repos : une grande horloge, les sorties de ce soir / demain, les
+ *    téléchargements en cours et l'ampli de la pièce.
  *
  * Trois états, comme une petite machine à états :
  *  1. « appairage » : pas encore de jeton → code + QR code à valider depuis
@@ -27,7 +28,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
-import { Download, Loader2, Pause, Speaker, CalendarClock, VolumeX, WifiOff } from "lucide-react";
+import { CalendarClock, Download, Loader2, Pause, Speaker, Volume2, VolumeX, WifiOff } from "lucide-react";
 import { BrandIcon } from "@/components/brand/brand-mark";
 import { API_URL } from "@/lib/constants";
 import { getToken } from "@/lib/api-client";
@@ -278,8 +279,26 @@ function PairingView({ onPaired, onPreview }: { onPaired: (token: string) => voi
 }
 
 /* ══════════════════════════════════════════════════════════════
-   2. Affichage
+   2. Affichage — lisible depuis le canapé
+   ══════════════════════════════════════════════════════════════
+   La tablette est lue à 3-4 m. Les tailles ne sont donc pas en pixels mais
+   en « unités d'écran » (u), une variable CSS (--u) :
+     - paysage : 1 u = le plus petit de 1 % de la hauteur et 0,625 % de la
+       largeur → 8 px sur la Pixel Tablet (1280 × 800), 10,8 px sur un PC
+       en 1920 × 1080 ;
+     - portrait : 1 u = le plus petit de 0,625 % de la hauteur et 1 % de la
+       largeur → 8 px sur la tablette tournée, ~3,9 px sur un téléphone.
+   La même page remplit n'importe quel écran sans déborder, un peu comme
+   un volume LVM en 100%FREE qui prend toute la place disponible.
+
+   Pendant une lecture : l'affiche sur toute la hauteur, l'heure de FIN en
+   très grand, puis le début, le reste et la barre de progression. Rien
+   d'autre (les téléchargements et sorties attendent la fin du film).
+   Au repos : grande horloge, sorties à venir, téléchargements, ampli.
    ══════════════════════════════════════════════════════════════ */
+
+/** Taille en unités d'écran : u(26) → « calc(var(--u) * 26) ». */
+const u = (n: number) => `calc(var(--u) * ${n})`;
 
 function AmbientView({
     auth,
@@ -321,6 +340,10 @@ function AmbientView({
     const awake = now.getTime() < awakeUntil;
     const dimmed = inSession && !awake;
 
+    // Avec Fully, c'est le rétroéclairage qui baisse : le texte reste net.
+    // Sans Fully (Chrome, aperçu sur PC), seule la page peut s'assombrir.
+    const [fully] = useState(() => hasFully());
+
     // Rien tant que la 1re réponse n'est pas là : recharger la page pendant
     // un film ne doit pas faire flasher l'écran à la luminosité de repos.
     useBrightness(data ? (dimmed ? options.dim : options.rest) : null);
@@ -329,7 +352,8 @@ function AmbientView({
 
     return (
         <div
-            className="relative min-h-full w-full"
+            // --u : l'unité d'écran (voir plus haut), selon l'orientation
+            className="relative min-h-full w-full landscape:[--u:min(1vh,0.625vw)] portrait:[--u:min(0.625vh,1vw)]"
             onPointerDown={() => setAwakeUntil(Date.now() + WAKE_MS)}
             style={{ transform: `translate(${shift.x}px, ${shift.y}px)`, transition: "transform 4s ease-in-out" }}
         >
@@ -339,7 +363,7 @@ function AmbientView({
                     <motion.div
                         key={playing.fanart}
                         initial={{ opacity: 0 }}
-                        animate={{ opacity: dimmed ? 0.1 : 0.22 }}
+                        animate={{ opacity: dimmed ? 0.08 : 0.18 }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: 1.5 }}
                         className="pointer-events-none fixed inset-0 bg-cover bg-center blur-md"
@@ -347,35 +371,24 @@ function AmbientView({
                     />
                 )}
             </AnimatePresence>
-            <div className="pointer-events-none fixed inset-0 bg-gradient-to-t from-black via-black/70 to-black/40" />
+            <div className="pointer-events-none fixed inset-0 bg-gradient-to-t from-black via-black/75 to-black/50" />
 
             {/* Contenu : assombri en mode séance (en plus du rétroéclairage) */}
             <div
                 className={cn(
-                    "relative flex min-h-[100dvh] flex-col gap-6 p-6 transition-[opacity,filter] duration-1000 sm:p-10",
-                    dimmed ? "opacity-60 [filter:saturate(0.6)]" : "opacity-100",
+                    "relative transition-[opacity,filter] duration-1000",
+                    !dimmed ? "opacity-100" : fully ? "opacity-90" : "opacity-60 [filter:saturate(0.6)]",
                 )}
             >
-                <Header now={now} data={data} compact={inSession} />
-
-                <div className="grid min-h-0 flex-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,22rem)]">
-                    <div className="flex min-h-0 flex-col justify-end">
-                        {playing ? (
-                            <NowPlaying playing={playing} now={now} offset={offset} />
-                        ) : (
-                            <IdleHint room={data?.room_label} />
-                        )}
-                    </div>
-                    <aside className="flex min-h-0 flex-col justify-end gap-5">
-                        {data?.amp && <AmpCard amp={data.amp} />}
-                        {data && data.downloads.length > 0 && <DownloadsCard downloads={data.downloads} />}
-                        {data && data.upcoming.length > 0 && <UpcomingCard upcoming={data.upcoming} now={now} />}
-                    </aside>
-                </div>
+                {playing ? (
+                    <SessionView playing={playing} now={now} offset={offset} amp={data?.amp ?? null} />
+                ) : (
+                    <RestView now={now} data={data} />
+                )}
             </div>
 
-            {/* Bandeaux discrets : hors ligne, aperçu */}
-            <div className="absolute right-4 top-4 flex items-center gap-2 text-xs">
+            {/* Bandeaux discrets (en bas, loin de l'heure) : hors ligne, aperçu */}
+            <div className="absolute bottom-3 right-3 flex items-center gap-2 text-xs">
                 {error && !(error instanceof HttpError && error.status === 401) && (
                     <span className="flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-1 text-amber-300/80">
                         <WifiOff className="h-3.5 w-3.5" />
@@ -405,78 +418,113 @@ function AmbientView({
     );
 }
 
-/* ── En-tête : heure et date ─────────────────────────────────── */
+/* ── Pendant une lecture ─────────────────────────────────────── */
 
-function Header({ now, data, compact }: { now: Date; data?: Ambient; compact: boolean }) {
-    return (
-        <header className="flex items-start justify-between gap-4">
-            <div>
-                <p
-                    className={cn(
-                        "font-extralight leading-none tracking-tight text-slate-100 tabular-nums transition-all duration-700",
-                        compact ? "text-6xl sm:text-7xl" : "text-8xl sm:text-[10rem]",
-                    )}
-                >
-                    {hhmm(now)}
-                </p>
-                {/* « Samedi 10 octobre » : majuscule au premier mot seulement */}
-                <p className="mt-2 text-lg text-slate-400 first-letter:uppercase sm:text-xl">{longDay(now)}</p>
-            </div>
-            {data && <p className="pt-2 text-sm uppercase tracking-[0.25em] text-slate-500">{data.room_label}</p>}
-        </header>
-    );
-}
-
-/* ── Lecture en cours ────────────────────────────────────────── */
-
-function NowPlaying({ playing, now, offset }: { playing: AmbientPlaying; now: Date; offset: number }) {
+function SessionView({
+    playing,
+    now,
+    offset,
+    amp,
+}: {
+    playing: AmbientPlaying;
+    now: Date;
+    offset: number;
+    amp: Ambient["amp"];
+}) {
     const session = sessionAt(playing, now.getTime(), offset);
+    const status = session.paused ? "En pause" : playing.kind === "episode" ? "Épisode en cours" : "Film en cours";
     return (
         <motion.section
             key={`${playing.title}-${playing.subtitle}`}
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
             transition={{ duration: 0.8 }}
-            className="flex items-end gap-6"
+            // Paysage (tablette sous la TV) : affiche à gauche, heures à droite.
+            // Portrait ou téléphone : l'un sous l'autre.
+            className="flex min-h-[100dvh] portrait:flex-col landscape:flex-row"
+            style={{ padding: u(4), gap: u(5) }}
         >
             {playing.poster && (
+                // Paysage : affiche sur presque toute la hauteur (88 u = 704 px sur
+                // la tablette). Portrait : moins haute, les heures passent dessous.
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                     src={playing.poster}
                     alt=""
-                    className="hidden aspect-[2/3] w-36 shrink-0 rounded-xl object-cover shadow-2xl shadow-black sm:block lg:w-44"
+                    className="aspect-[2/3] shrink-0 self-center object-cover shadow-2xl shadow-black landscape:h-[calc(var(--u)*88)] portrait:h-[calc(var(--u)*60)]"
+                    style={{ borderRadius: u(1.6) }}
                 />
             )}
-            <div className="min-w-0 flex-1 space-y-4">
-                <div>
-                    <p className="flex items-center gap-2 text-sm uppercase tracking-[0.2em] text-slate-500">
+
+            <div className="flex min-w-0 flex-1 flex-col justify-between" style={{ gap: u(2.5) }}>
+                {/* Bandeau : état de la lecture, volume de l'ampli, heure */}
+                <div className="flex items-center justify-between" style={{ gap: u(3) }}>
+                    <p
+                        className={cn("flex items-center font-medium uppercase", session.paused ? "text-amber-300" : "text-slate-400")}
+                        style={{ fontSize: u(3.4), gap: u(1.2), letterSpacing: "0.14em" }}
+                    >
                         {session.paused ? (
-                            <span className="flex items-center gap-1.5 text-amber-300/80">
-                                <Pause className="h-3.5 w-3.5" /> En pause
-                            </span>
+                            <Pause style={{ width: u(3.4), height: u(3.4) }} />
                         ) : (
-                            <span>{playing.kind === "episode" ? "Épisode en cours" : "Film en cours"}</span>
+                            <span className="rounded-full bg-[#4A9EFF]" style={{ width: u(1.6), height: u(1.6) }} />
                         )}
-                        {playing.device && <span className="normal-case tracking-normal text-slate-600">· {playing.device}</span>}
+                        {status}
                     </p>
-                    <h2 className="mt-1 truncate text-3xl font-semibold text-slate-100 sm:text-4xl">{playing.title}</h2>
-                    {playing.subtitle && <p className="mt-1 truncate text-lg text-slate-400 sm:text-xl">{playing.subtitle}</p>}
+                    <div className="flex items-center tabular-nums" style={{ gap: u(3.5) }}>
+                        {amp?.power === "on" && (
+                            <span className="flex items-center text-slate-400" style={{ fontSize: u(3.8), gap: u(1) }}>
+                                {amp.mute ? (
+                                    <VolumeX className="text-amber-300" style={{ width: u(4), height: u(4) }} />
+                                ) : (
+                                    <Volume2 style={{ width: u(4), height: u(4) }} />
+                                )}
+                                {amp.volume_pct ?? "—"} %
+                            </span>
+                        )}
+                        <span className="leading-none text-slate-200" style={{ fontSize: u(6.5) }}>
+                            {hhmm(now)}
+                        </span>
+                    </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-3">
-                    <TimeBlock label="Début" value={hhmm(session.startedAt)} />
-                    <TimeBlock
-                        label={session.paused ? "Fin, si reprise" : "Fin prévue"}
-                        value={hhmm(session.endsAt)}
-                        highlight
-                    />
-                    <TimeBlock label="Reste" value={session.endsAt ? remainingLabel(session.remaining) : "—"} />
+                {/* Titre (2 lignes au plus) et épisode ou année */}
+                <div>
+                    <h1 className="line-clamp-2 font-semibold leading-[1.05] text-white" style={{ fontSize: u(8) }}>
+                        {playing.title}
+                    </h1>
+                    {playing.subtitle && (
+                        <p className="truncate text-slate-400" style={{ fontSize: u(4.6), marginTop: u(1) }}>
+                            {playing.subtitle}
+                        </p>
+                    )}
+                </div>
+
+                {/* L'heure de fin : l'info principale, donc la plus grosse */}
+                <div>
+                    <p className="font-medium uppercase text-slate-400" style={{ fontSize: u(3.6), letterSpacing: "0.14em" }}>
+                        {session.paused ? "Fin si reprise maintenant" : "Fin prévue"}
+                    </p>
+                    <p
+                        className={cn("font-medium leading-[0.9] tracking-tight tabular-nums", session.paused ? "text-amber-200" : "text-[#8CC4FF]")}
+                        style={{ fontSize: u(26) }}
+                    >
+                        {hhmm(session.endsAt)}
+                    </p>
+                </div>
+
+                {/* Début et temps restant */}
+                <div className="flex flex-wrap" style={{ columnGap: u(9), rowGap: u(2) }}>
+                    <BigFigure label="Début" value={hhmm(session.startedAt)} />
+                    <BigFigure label="Reste" value={session.endsAt ? remainingLabel(session.remaining) : "—"} />
                 </div>
 
                 {session.endsAt && (
-                    <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                    <div className="overflow-hidden rounded-full bg-white/15" style={{ height: u(1.8) }}>
                         <div
-                            className={cn("h-full rounded-full transition-[width] duration-1000 ease-linear", session.paused ? "bg-amber-300/60" : "bg-[#4A9EFF]/80")}
+                            className={cn(
+                                "h-full rounded-full transition-[width] duration-1000 ease-linear",
+                                session.paused ? "bg-amber-300/70" : "bg-[#4A9EFF]",
+                            )}
                             style={{ width: `${(session.progress * 100).toFixed(2)}%` }}
                         />
                     </div>
@@ -486,98 +534,155 @@ function NowPlaying({ playing, now, offset }: { playing: AmbientPlaying; now: Da
     );
 }
 
-function TimeBlock({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+function BigFigure({ label, value }: { label: string; value: string }) {
     return (
-        <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-3 sm:px-4">
-            <p className="truncate text-[11px] uppercase tracking-[0.08em] text-slate-500 sm:text-xs sm:tracking-[0.18em]">{label}</p>
-            <p className={cn("mt-1 text-2xl font-light tabular-nums sm:text-3xl", highlight ? "text-[#8CC4FF]" : "text-slate-200")}>{value}</p>
+        <div className="min-w-0">
+            <p className="font-medium uppercase text-slate-400" style={{ fontSize: u(3.2), letterSpacing: "0.14em" }}>
+                {label}
+            </p>
+            <p className="leading-none tabular-nums text-slate-100" style={{ fontSize: u(11), marginTop: u(0.8) }}>
+                {value}
+            </p>
         </div>
     );
 }
 
-function IdleHint({ room }: { room?: string }) {
+/* ── Au repos ────────────────────────────────────────────────── */
+
+function RestView({ now, data }: { now: Date; data?: Ambient }) {
+    const room = data?.room_label;
+    const amp = data?.amp ?? null;
+    const hasPanels = !!data && (data.upcoming.length > 0 || data.downloads.length > 0 || !!amp);
     return (
-        <p className="text-base text-slate-600">
-            Rien en lecture{room ? ` dans ${room === "Salon" ? "le salon" : `la ${room.toLowerCase()}`}` : ""}. Lance un film sur
-            Kodi : l&apos;heure de fin s&apos;affichera ici.
-        </p>
+        <div className="flex min-h-[100dvh] flex-col justify-between" style={{ padding: u(5), gap: u(4) }}>
+            <header className="flex items-start justify-between" style={{ gap: u(3) }}>
+                <div>
+                    <p className="font-light leading-[0.85] tracking-tight tabular-nums text-slate-100" style={{ fontSize: u(30) }}>
+                        {hhmm(now)}
+                    </p>
+                    {/* « Samedi 10 octobre » : majuscule au premier mot seulement */}
+                    <p className="text-slate-400 first-letter:uppercase" style={{ fontSize: u(5), marginTop: u(2.5) }}>
+                        {longDay(now)}
+                    </p>
+                </div>
+                {room && (
+                    <p className="uppercase text-slate-500" style={{ fontSize: u(3), letterSpacing: "0.2em", paddingTop: u(2) }}>
+                        {room}
+                    </p>
+                )}
+            </header>
+
+            <div className="flex flex-col" style={{ gap: u(3) }}>
+                <p className="text-slate-500" style={{ fontSize: u(3) }}>
+                    Rien en lecture{room ? ` dans ${room === "Salon" ? "le salon" : `la ${room.toLowerCase()}`}` : ""}. Lance un film sur
+                    Kodi : l&apos;heure de fin s&apos;affichera ici en grand.
+                </p>
+                {hasPanels && (
+                    <div className="flex portrait:flex-col" style={{ gap: u(3) }}>
+                        {data.upcoming.length > 0 && <UpcomingPanel upcoming={data.upcoming} now={now} />}
+                        {data.downloads.length > 0 && <DownloadsPanel downloads={data.downloads} />}
+                        {amp && <AmpPanel amp={amp} />}
+                    </div>
+                )}
+            </div>
+        </div>
     );
 }
 
-/* ── Colonne de droite ───────────────────────────────────────── */
-
-function Card({ icon: Icon, title, children }: { icon: typeof Speaker; title: string; children: React.ReactNode }) {
+function Panel({
+    icon: Icon,
+    title,
+    className,
+    children,
+}: {
+    icon: typeof Speaker;
+    title: string;
+    className?: string;
+    children: React.ReactNode;
+}) {
     return (
-        <section className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-4">
-            <p className="mb-3 flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-slate-500">
-                <Icon className="h-3.5 w-3.5" /> {title}
+        <section
+            className={cn("min-w-0 border border-white/[0.07] bg-white/[0.03]", className)}
+            style={{ padding: u(2.8), borderRadius: u(2) }}
+        >
+            <p
+                className="flex items-center uppercase text-slate-500"
+                style={{ fontSize: u(2.6), gap: u(1.2), letterSpacing: "0.18em", marginBottom: u(2) }}
+            >
+                <Icon style={{ width: u(2.8), height: u(2.8) }} /> {title}
             </p>
             {children}
         </section>
     );
 }
 
-function AmpCard({ amp }: { amp: NonNullable<Ambient["amp"]> }) {
+function UpcomingPanel({ upcoming, now }: { upcoming: Ambient["upcoming"]; now: Date }) {
+    return (
+        <Panel icon={CalendarClock} title="À venir" className="flex-[1.7]">
+            <ul className="flex flex-col" style={{ gap: u(1.8), fontSize: u(3.4) }}>
+                {upcoming.map((item, i) => (
+                    <li key={`${item.title}-${item.label}-${i}`} className="flex items-baseline justify-between" style={{ gap: u(2) }}>
+                        <span className="min-w-0 truncate">
+                            <span className="text-slate-100">{item.title}</span>
+                            <span className="text-slate-500">
+                                {" "}
+                                {item.kind === "episode" ? item.label : releaseTypeLabel(item.release_type) || item.label}
+                            </span>
+                        </span>
+                        <span className="shrink-0 text-[#8CC4FF]">{releaseWhen(item.air_date, now, item.kind)}</span>
+                    </li>
+                ))}
+            </ul>
+        </Panel>
+    );
+}
+
+function DownloadsPanel({ downloads }: { downloads: Ambient["downloads"] }) {
+    return (
+        <Panel icon={Download} title="Téléchargements" className="flex-[1.3]">
+            <ul className="flex flex-col" style={{ gap: u(2), fontSize: u(3.2) }}>
+                {downloads.map((d, i) => (
+                    <li key={`${d.title}-${i}`} className="flex flex-col" style={{ gap: u(0.9) }}>
+                        <div className="flex items-baseline justify-between" style={{ gap: u(2) }}>
+                            <span className="truncate text-slate-100">{d.title}</span>
+                            <span className="shrink-0 tabular-nums text-slate-400">{d.paused ? "en pause" : d.time_left || `${d.progress} %`}</span>
+                        </div>
+                        <div className="overflow-hidden rounded-full bg-white/10" style={{ height: u(0.9) }}>
+                            <div className={cn("h-full rounded-full", d.paused ? "bg-slate-500" : "bg-[#4A9EFF]")} style={{ width: `${d.progress}%` }} />
+                        </div>
+                    </li>
+                ))}
+            </ul>
+        </Panel>
+    );
+}
+
+function AmpPanel({ amp }: { amp: NonNullable<Ambient["amp"]> }) {
     const on = amp.power === "on";
     return (
-        <Card icon={Speaker} title={amp.name || "Ampli"}>
+        <Panel icon={Speaker} title={amp.name || "Ampli"} className="flex-[0.9]">
             {on ? (
-                <div className="flex items-end justify-between gap-3">
-                    <div className="min-w-0">
-                        <p className="truncate text-base text-slate-200">{prettyName(amp.input) || "—"}</p>
-                        <p className="truncate text-sm text-slate-500">{prettyName(amp.sound_program)}</p>
-                    </div>
-                    <p className="flex items-center gap-1.5 text-3xl font-light tabular-nums text-slate-200">
-                        {amp.mute ? <VolumeX className="h-6 w-6 text-amber-300/80" /> : null}
+                <div className="flex flex-col" style={{ gap: u(1) }}>
+                    <p className="flex items-center leading-none tabular-nums text-slate-100" style={{ fontSize: u(9), gap: u(1.2) }}>
+                        {amp.mute ? <VolumeX className="text-amber-300" style={{ width: u(6), height: u(6) }} /> : null}
                         {amp.volume_pct ?? "—"}
-                        <span className="text-base text-slate-500">%</span>
+                        <span className="text-slate-500" style={{ fontSize: u(4) }}>
+                            %
+                        </span>
+                    </p>
+                    <p className="truncate text-slate-300" style={{ fontSize: u(3.2) }}>
+                        {prettyName(amp.input) || "—"}
+                    </p>
+                    <p className="truncate text-slate-500" style={{ fontSize: u(2.8) }}>
+                        {prettyName(amp.sound_program)}
                     </p>
                 </div>
             ) : (
-                <p className="text-sm text-slate-500">En veille</p>
+                <p className="text-slate-500" style={{ fontSize: u(3.2) }}>
+                    En veille
+                </p>
             )}
-        </Card>
-    );
-}
-
-function DownloadsCard({ downloads }: { downloads: Ambient["downloads"] }) {
-    return (
-        <Card icon={Download} title="Téléchargements">
-            <ul className="space-y-3">
-                {downloads.map((d, i) => (
-                    <li key={`${d.title}-${i}`} className="space-y-1">
-                        <div className="flex items-baseline justify-between gap-3 text-sm">
-                            <span className="truncate text-slate-300">{d.title}</span>
-                            <span className="shrink-0 tabular-nums text-slate-500">{d.paused ? "en pause" : d.time_left || `${d.progress} %`}</span>
-                        </div>
-                        <div className="h-1 overflow-hidden rounded-full bg-white/10">
-                            <div className={cn("h-full rounded-full", d.paused ? "bg-slate-500" : "bg-[#4A9EFF]/70")} style={{ width: `${d.progress}%` }} />
-                        </div>
-                    </li>
-                ))}
-            </ul>
-        </Card>
-    );
-}
-
-function UpcomingCard({ upcoming, now }: { upcoming: Ambient["upcoming"]; now: Date }) {
-    return (
-        <Card icon={CalendarClock} title="À venir">
-            <ul className="space-y-2.5">
-                {upcoming.map((u, i) => (
-                    <li key={`${u.title}-${u.label}-${i}`} className="flex items-baseline justify-between gap-3 text-sm">
-                        <span className="min-w-0 truncate">
-                            <span className="text-slate-300">{u.title}</span>
-                            <span className="text-slate-500">
-                                {" "}
-                                {u.kind === "episode" ? u.label : releaseTypeLabel(u.release_type) || u.label}
-                            </span>
-                        </span>
-                        <span className="shrink-0 text-slate-500">{releaseWhen(u.air_date, now, u.kind)}</span>
-                    </li>
-                ))}
-            </ul>
-        </Card>
+        </Panel>
     );
 }
 
