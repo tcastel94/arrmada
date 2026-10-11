@@ -39,10 +39,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     start_scheduler()
 
+    from app.services import eufy
+
+    eufy.start(settings.EUFY_WS_URL, settings.EUFY_DETECTIONS)  # rien si non réglé
+
     yield
 
     # Shutdown
     stop_scheduler()
+    from app.services.fully_kiosk import kiosk
+
+    await kiosk.shutdown()  # temporisations de la tablette en cours
+    await eufy.stop()
     await close_db()
     logger.info("ArrMada backend stopped")
 

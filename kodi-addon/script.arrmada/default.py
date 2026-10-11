@@ -473,6 +473,10 @@ def main():
         # Accueil média (ADR-004, phase 4.2) : aussi ouvert par le service au démarrage
         import shell_window
         shell_window.open_shell()
+    elif action == "camera":
+        # Pop-up d'une caméra Eufy par-dessus le film (ouverte par le service)
+        import camera_window
+        camera_window.show(params)
     elif action == "apps":
         # Applis & sources (ADR-004, phase 4.3) : add-ons, TV en direct, NAS, favoris
         import apps_window

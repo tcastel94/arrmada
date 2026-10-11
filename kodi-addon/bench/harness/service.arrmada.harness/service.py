@@ -647,6 +647,30 @@ if DEMO_VIDEO and os.path.exists(DEMO_VIDEO):
     urllib.request.urlopen(IMPORT.replace("Gladiator%20II", "Wicked")).read()
     wait(7.0)
     log(f"bulle pendant le film : {xbmc.getCondVisibility('Window.IsVisible(notification)')}")
+    # Caméra Eufy : « Personne détectée » pendant le film → pop-up avec la photo
+    CAMERA = (
+        f"{MOCK}/__emit?type=camera&camera=Entr%C3%A9e&label=Personne%20d%C3%A9tect%C3%A9e"
+        "&detection=person&snapshot_id=1&at=2026-10-11T19:42:05%2B00:00"
+    )
+    urllib.request.urlopen(CAMERA).read()
+    for _ in range(30):
+        wait(0.5)
+        if xbmc.getInfoLabel("Window(Home).Property(arrmada.camera_popup)") == "1":
+            break
+    wait(1.5)
+    log(
+        "pop-up caméra : "
+        + ("ouverte" if xbmc.getInfoLabel("Window(Home).Property(arrmada.camera_popup)") else "ABSENTE")
+        + f", film {'en lecture' if xbmc.Player().isPlayingVideo() else 'ARRÊTÉ'}"
+    )
+    shot("09d-camera-popup")
+    press("Select")  # toute touche ferme la pop-up, le film continue
+    wait(1.0)
+    log(
+        "après une touche : pop-up "
+        + ("ENCORE LÀ" if xbmc.getInfoLabel("Window(Home).Property(arrmada.camera_popup)") else "fermée")
+        + f", film {'en lecture' if xbmc.Player().isPlayingVideo() else 'ARRÊTÉ'}"
+    )
     xbmc.executebuiltin("PlayerControl(Stop)")
     wait(1.0)
     sent = json.loads(urllib.request.urlopen(f"{MOCK}/__scrobbles").read())
@@ -662,6 +686,16 @@ if DEMO_VIDEO and os.path.exists(DEMO_VIDEO):
             break
     wait(0.8)
     shot("09c-resume-seance")
+    wait(6.0)  # la bulle du résumé s'efface
+    # Hors lecture : une simple bulle, avec la photo en vignette
+    urllib.request.urlopen(CAMERA.replace("snapshot_id=1", "snapshot_id=2")).read()
+    for _ in range(16):
+        wait(0.5)
+        if xbmc.getCondVisibility("Window.IsVisible(notification)"):
+            break
+    wait(0.8)
+    log(f"caméra hors lecture : bulle {xbmc.getCondVisibility('Window.IsVisible(notification)')}")
+    shot("09e-camera-bulle")
     wait(2.0)
     run_plugin("home")
     wait(1.5)

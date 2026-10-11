@@ -179,7 +179,7 @@ def test_missing_column_added_once() -> None:
     with engine.begin() as conn:
         conn.execute(text("CREATE TABLE devices (id INTEGER PRIMARY KEY, name VARCHAR(100))"))
         conn.execute(text("INSERT INTO devices (id, name) VALUES (1, 'Shield')"))
-        assert add_missing_columns(conn) == ["devices.kind"]
+        assert "devices.kind" in add_missing_columns(conn)
         assert add_missing_columns(conn) == []  # idempotent
         columns = {col["name"] for col in inspect(conn).get_columns("devices")}
         assert "kind" in columns

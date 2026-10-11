@@ -156,6 +156,10 @@ msgctxt "#30131"
 msgid "Room Profile"
 msgstr "Profil de la pièce (Cinéma Atmos / Salon DTS)"
 
+msgctxt "#30133"
+msgid "Camera alerts (pop-up with the picture during a film)"
+msgstr "Alertes des caméras (pop-up avec la photo pendant un film)"
+
 msgctxt "#30150"
 msgid "Interface"
 msgstr "Interface"

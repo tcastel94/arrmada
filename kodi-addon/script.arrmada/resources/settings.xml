@@ -12,6 +12,8 @@
         <setting id="enable_scrobble" type="bool" label="30124" default="true" />
         <setting id="enable_notifications" type="bool" label="30126" default="true" />
         <setting id="notify_during_playback" type="bool" label="30132" default="false" />
+        <!-- Caméras Eufy (via le serveur) : pop-up pendant un film, bulle sinon -->
+        <setting id="camera_alerts" type="bool" label="30133" default="true" />
         <setting id="check_interval" type="number" label="30128" default="30" />
         <setting id="auto_audio_switch" type="bool" label="30130" default="true" />
         <setting id="room_profile" type="labelenum" label="30131" values="cinema|salon" default="cinema" />

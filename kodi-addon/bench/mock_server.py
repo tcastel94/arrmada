@@ -748,6 +748,16 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
                     "boot_id": BOOT_ID,
                     "last_id": len(STATE["events"]),
                 })
+            elif path.startswith("/api/cameras/snapshot/"):
+                # Photo d'une détection Eufy (pop-up de la TV), en base64 comme le serveur
+                import base64
+
+                photo = images / "fanart-4.jpg"
+                if photo.is_file():
+                    self._json({"mime": "image/jpeg",
+                                "image": base64.b64encode(photo.read_bytes()).decode()})
+                else:
+                    self.send_error(404)
             elif path == "/api/qr":
                 # QR code vers la web app ou YouTube (phase 3), comme le vrai serveur
                 import base64

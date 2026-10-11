@@ -28,6 +28,9 @@ services:
       - UNRAID_API_KEY=${UNRAID_API_KEY:-}
       - OLLAMA_URL=${OLLAMA_URL:-}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-}
+      # Caméras Eufy (pop-up sur la TV) : adresse de eufy-security-ws
+      - EUFY_WS_URL=${EUFY_WS_URL:-}
+      - EUFY_DETECTIONS=${EUFY_DETECTIONS:-person}
     depends_on:
       arrmada-db:
         condition: service_healthy
@@ -94,6 +97,26 @@ services:
     # Uncomment to access from host tools (pgAdmin, DBeaver, etc.):
     # ports:
     #   - "5432:5432"
+
+  # ── Caméras Eufy (optionnel) ────────────────────────────────
+  # Pont vers le cloud Eufy : publie les détections sur le réseau local
+  # (ws://<IP>:3000). Démarré seulement à la demande :
+  #   docker compose --profile eufy up -d eufy-security-ws
+  # Compte Eufy SECONDAIRE (invité par le compte principal), sans 2FA.
+  eufy-security-ws:
+    image: bropat/eufy-security-ws:latest
+    container_name: eufy-security-ws
+    profiles: ["eufy"]
+    restart: unless-stopped
+    network_mode: host  # liaison directe avec la HomeBase (P2P)
+    environment:
+      - USERNAME=${EUFY_USERNAME:-}
+      - PASSWORD=${EUFY_PASSWORD:-}
+      - COUNTRY=${EUFY_COUNTRY:-FR}
+      - TRUSTED_DEVICE_NAME=arrmada
+      - PORT=3000
+    volumes:
+      - ./data/eufy:/data
 
 volumes:
   arrmada-pgdata:

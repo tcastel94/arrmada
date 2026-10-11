@@ -32,11 +32,15 @@ aucun téléchargement de flux, nouvel essai avec une attente croissante
 
 from __future__ import annotations
 
+import base64
+import os
 import time
+import urllib.parse
 
 import xbmc
 import xbmcgui
 
+import camera_data
 import feeds
 import ui_common as ui
 from api import ArrMadaAPI
@@ -127,11 +131,72 @@ class BackgroundTasks:
 
     def _handle(self, event_type: str, data: dict):
         """Rafraîchissements et scan pour un événement ; sa bulle (ou None)."""
+        if event_type == camera_data.EVENT:
+            self._camera(data)  # jamais retenue pour « Pendant ta séance »
+            return None
         self._forced |= feeds.feeds_for_event(event_type, data)
         # Un titre seulement ajouté à Radarr/Sonarr n'a pas encore de fichier
         if event_type == "new_import" and data.get("event", "Download") == "Download":
             self._scan_library()
         return feeds.osd_notification(event_type, data)
+
+    # ── Caméras Eufy : pop-up pendant un film, bulle sinon ──────────────
+
+    def _camera(self, data: dict) -> None:
+        popup_open = xbmcgui.Window(HOME).getProperty(camera_data.POPUP_PROP) == "1"
+        mode = camera_data.wants_popup(
+            _watching(), get_setting_bool("camera_alerts", default=True), popup_open
+        )
+        if not mode:
+            return
+        image = self._camera_snapshot(camera_data.snapshot_id(data))
+        now = xbmc.getInfoLabel("System.Time(HH:mm)")  # heure de la TV, 24 h
+        texts = camera_data.popup(data, local_time=now)
+        _log(f"caméra : {texts['title']} · {texts['subtitle']} ({mode})")
+        if mode == "popup":
+            # Fenêtre ouverte par une invocation à part : la boucle du service
+            # ne reste jamais bloquée pendant les 15 s de la pop-up.
+            query = urllib.parse.urlencode(
+                {"action": "camera", "title": texts["title"],
+                 "subtitle": texts["subtitle"], "image": image}
+            )  # fmt: skip
+            xbmc.executebuiltin(f"RunPlugin(plugin://script.arrmada/?{query})")
+            return
+        bubble = camera_data.bubble(data, image, local_time=now)
+        icon = bubble["icon"] or ui.ADDON.getAddonInfo("icon")
+        xbmcgui.Dialog().notification(
+            bubble["heading"], bubble["message"], icon, camera_data.NOTIFY_MS, True
+        )
+
+    @staticmethod
+    def _camera_snapshot(snapshot: int) -> str:
+        """Photo de la détection dans le cache de l'add-on ; "" sans photo."""
+        if not snapshot:
+            return ""
+        response = ArrMadaAPI.get_feed(f"/api/cameras/snapshot/{snapshot}", timeout=EVENTS_TIMEOUT)
+        if feeds.is_error(response) or not isinstance(response, dict):
+            return ""
+        try:
+            data = base64.b64decode(response.get("image") or "", validate=True)
+        except ValueError:
+            return ""
+        folder = ui.cache_dir()
+        try:
+            os.makedirs(folder, exist_ok=True)
+            path = os.path.join(folder, camera_data.file_name(snapshot, int(time.time())))
+            with open(path, "wb") as handle:
+                handle.write(data)
+            # Seules les dernières photos restent (pas d'accumulation sur la TV)
+            old = sorted(
+                (f for f in os.listdir(folder) if f.startswith("arrmada-camera-")),
+                key=lambda name: os.path.getmtime(os.path.join(folder, name)),
+            )
+            for name in old[: -camera_data.SNAPSHOT_KEEP]:
+                os.remove(os.path.join(folder, name))
+        except OSError as exc:
+            _log(f"photo de caméra non enregistrée : {exc}", xbmc.LOGWARNING)
+            return ""
+        return path
 
     @staticmethod
     def _show(bubbles: list) -> None:

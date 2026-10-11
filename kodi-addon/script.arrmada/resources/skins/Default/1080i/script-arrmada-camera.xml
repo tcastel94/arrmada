@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ArrMada — pop-up d'une caméra Eufy par-dessus le film (« Personne détectée »).
+
+  Repère 1920 × 1080. Données posées par lib/camera_window.py :
+    title (« Personne détectée »), subtitle (« Entrée · 21:42 »),
+    image (photo de l'événement, fichier du cache ; vide : pas de photo).
+  Carte en bas à droite, le film reste visible et continue dessous ; elle
+  se ferme seule après 15 s, ou à la première touche.
+-->
+<window>
+	<defaultcontrol always="true">100</defaultcontrol>
+	<animation effect="slide" start="760,0" end="0,0" time="450" tween="cubic" easing="out">WindowOpen</animation>
+	<animation effect="fade" start="100" end="0" time="250">WindowClose</animation>
+	<controls>
+		<control type="group" id="100">
+			<left>1136</left><top>544</top>
+			<!-- Ombre portée + carte -->
+			<control type="image">
+				<left>-40</left><top>-40</top><width>824</width><height>576</height>
+				<texture border="56" colordiffuse="99000000">arrmada/glow.png</texture>
+			</control>
+			<control type="image">
+				<left>0</left><top>0</top><width>744</width><height>496</height>
+				<texture border="26" colordiffuse="F20A0E16">arrmada/rounded-24.png</texture>
+			</control>
+			<!-- Bandeau : point rouge clignotant, titre, caméra et heure -->
+			<control type="image">
+				<left>28</left><top>34</top><width>22</width><height>22</height>
+				<texture border="10" colordiffuse="FFEF4444">arrmada/rounded-12.png</texture>
+				<animation effect="fade" start="100" end="25" time="700" tween="sine" pulse="true" condition="true">Conditional</animation>
+			</control>
+			<control type="label">
+				<left>64</left><top>18</top><width>656</width><height>52</height>
+				<font>font14_title</font>
+				<textcolor>FFF5F7FA</textcolor>
+				<aligny>center</aligny>
+				<label>$INFO[Window.Property(title)]</label>
+			</control>
+			<control type="label">
+				<left>64</left><top>62</top><width>656</width><height>34</height>
+				<font>font12</font>
+				<textcolor>FF9CCBFF</textcolor>
+				<aligny>center</aligny>
+				<label>$INFO[Window.Property(subtitle)]</label>
+			</control>
+			<!-- Photo de l'événement (16:9) -->
+			<control type="image">
+				<left>24</left><top>108</top><width>696</width><height>364</height>
+				<texture border="14" colordiffuse="FF1A2233">arrmada/rounded-12.png</texture>
+			</control>
+			<control type="image" id="110">
+				<left>24</left><top>108</top><width>696</width><height>364</height>
+				<aspectratio>keep</aspectratio>
+				<fadetime>200</fadetime>
+				<texture background="true">$INFO[Window.Property(image)]</texture>
+				<visible>!String.IsEmpty(Window.Property(image))</visible>
+			</control>
+			<control type="label">
+				<left>24</left><top>108</top><width>696</width><height>364</height>
+				<font>font13</font>
+				<textcolor>80C9D3E0</textcolor>
+				<align>center</align><aligny>center</aligny>
+				<label>Pas de photo pour cette détection</label>
+				<visible>String.IsEmpty(Window.Property(image))</visible>
+			</control>
+		</control>
+	</controls>
+</window>

@@ -11,6 +11,7 @@ from app.api.ambient import router as ambient_router
 from app.api.analytics import router as analytics_router
 from app.api.auth import router as auth_router
 from app.api.calendar import router as calendar_router
+from app.api.cameras import router as cameras_router
 from app.api.cast import router as cast_router
 from app.api.cleanup import router as cleanup_router
 from app.api.dashboard import router as dashboard_router
@@ -87,3 +88,4 @@ api_router.include_router(quality_router)
 api_router.include_router(cleanup_router)
 api_router.include_router(ai_search_router)
 api_router.include_router(subtitles_router)
+api_router.include_router(cameras_router)  # Caméras Eufy : pop-up sur la TV

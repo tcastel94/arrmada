@@ -12,6 +12,8 @@ Routes de la web app (administrateur) :
   PATCH  /api/devices/{id}          renomme, change de pièce ou d'ampli
   DELETE /api/devices/{id}          révoque (le jeton cesse de marcher)
 
+  POST   /api/devices/{id}/kiosk/{action}   tablette : test | lock | release
+
 Route de l'appareil lui-même :
   GET /api/devices/me               « qui suis-je ? » (nom, pièce, ampli)
 """
@@ -32,7 +34,9 @@ from app.main import limiter
 from app.models.device import ROOMS, Device
 from app.models.service import Service
 from app.services import devices as devices_service
+from app.services import fully_kiosk
 from app.services.devices import pairings
+from app.services.encryption import encrypt_api_key
 
 public_router = APIRouter(prefix="/api/devices", tags=["devices"])
 router = APIRouter(prefix="/api/devices", tags=["devices"])
@@ -63,6 +67,12 @@ class DeviceUpdate(BaseModel):
     room: str | None = None
     avr_service_id: int | None = None
     clear_avr: bool = False  # « aucun ampli choisi » (= le premier ampli actif)
+    # Écran d'appoint sous Fully Kiosk : mode kiosk pendant un média
+    kiosk_control: bool | None = None
+    kiosk_host: str | None = Field(default=None, max_length=255)  # "" : dernière IP vue
+    kiosk_port: int | None = Field(default=None, ge=1, le=65535)
+    # Écrit seulement : jamais renvoyé. "" efface le mot de passe enregistré.
+    kiosk_password: str | None = Field(default=None, max_length=200)
 
 
 # ── Outils ────────────────────────────────────────────────────
@@ -123,6 +133,13 @@ async def _serialize(db: AsyncSession, device: Device) -> dict:
         "avr_service_id": device.avr_service_id,
         "avr_name": avr.name if avr else None,
         "kind": device.kind or "tv",
+        "kiosk_control": bool(device.kiosk_control),
+        "kiosk_host": device.kiosk_host or "",
+        "kiosk_port": device.kiosk_port or fully_kiosk.DEFAULT_PORT,
+        "kiosk_password_set": bool(device.kiosk_password),  # le mot de passe ne sort jamais
+        "kiosk_locked": fully_kiosk.kiosk.is_locked(device.room)
+        if device.kind == "screen" and device.kiosk_control
+        else False,
         "platform": device.platform,
         "last_ip": device.last_ip,
         "created_at": device.created_at.isoformat() if device.created_at else None,
@@ -246,8 +263,76 @@ async def update_device(
     elif body.avr_service_id is not None:
         await _check_avr(db, body.avr_service_id)
         device.avr_service_id = body.avr_service_id
+    _apply_kiosk(device, body)
     await db.flush()
     return await _serialize(db, device)
+
+
+def _apply_kiosk(device: Device, body: DeviceUpdate) -> None:
+    """Réglages Fully Kiosk d'un écran d'appoint (sans effet sur une TV)."""
+    fields = (body.kiosk_control, body.kiosk_host, body.kiosk_port, body.kiosk_password)
+    if all(value is None for value in fields):
+        return
+    if device.kind != "screen":
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Le mode kiosk ne concerne que les écrans d'appoint",
+        )
+    if body.kiosk_host is not None:
+        host = body.kiosk_host.strip()
+        if host:
+            try:
+                host = fully_kiosk.check_host(host)
+            except ValueError as exc:
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        device.kiosk_host = host or None
+    if body.kiosk_port is not None:
+        device.kiosk_port = body.kiosk_port
+    if body.kiosk_password is not None:
+        device.kiosk_password = (
+            encrypt_api_key(body.kiosk_password) if body.kiosk_password else None
+        )
+    if body.kiosk_control is not None:
+        device.kiosk_control = body.kiosk_control
+
+
+@router.post("/{device_id}/kiosk/{action}", dependencies=[Depends(require_admin)])
+async def kiosk_action(device_id: int, action: str, db: AsyncSession = Depends(get_db)) -> dict:
+    """Tablette Fully Kiosk : « test » (connexion), « lock » / « release » (à la main).
+
+    `release` sert aussi d'issue de secours : une tablette restée verrouillée
+    se libère depuis la web app.
+    """
+    if action not in ("test", "lock", "release"):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Action inconnue")
+    device = await db.get(Device, device_id)
+    if device is None or device.kind != "screen":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Écran d'appoint inconnu")
+    target = fully_kiosk.target_of(device)
+    if target is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Adresse ou mot de passe Remote Admin manquant",
+        )
+    if action == "test":
+        import httpx
+
+        async with httpx.AsyncClient() as client:
+            ok, message, payload = await fully_kiosk.send(client, target, "deviceInfo")
+        return {
+            "ok": ok,
+            "message": message if not ok else "Fully Kiosk répond",
+            "device": {
+                key: payload.get(key)
+                for key in ("deviceName", "appVersionName", "kioskMode", "isScreenOn")
+                if key in payload
+            },
+        }
+    if action == "lock":
+        results = await fully_kiosk.kiosk.lock(device.room)
+    else:
+        results = await fully_kiosk.kiosk.release(device.room)
+    return {"ok": bool(results) and all(r["ok"] for r in results), "results": results}
 
 
 @router.delete("/{device_id}", dependencies=[Depends(require_admin)])

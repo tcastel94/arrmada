@@ -38,6 +38,7 @@ import { Shimmer, TableSkeleton } from "@/components/shared/loading-skeleton";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { RingGauge } from "@/components/fx/ring-gauge";
 import { DeviceRow } from "@/components/settings/device-row";
+import { CamerasPanel } from "@/components/settings/cameras-panel";
 import { DevicesPanel } from "@/components/settings/devices-panel";
 import { KodiRepoPanel } from "@/components/settings/kodi-repo-panel";
 import { useStickyValue } from "@/components/settings/use-sticky-value";
@@ -97,6 +98,9 @@ export default function KodiSettingsPage() {
         <>
             {/* ── TV appairées (accès propre à chaque appareil) ── */}
             <DevicesPanel />
+
+            {/* ── Caméras Eufy : pop-up sur la TV pendant un film ── */}
+            <CamerasPanel />
 
             {/* ── Dépôt Kodi : mises à jour automatiques de l'add-on ── */}
             <KodiRepoPanel />

@@ -362,6 +362,36 @@ marche aussi, mais Android garde sa luminosité et sa mise en veille : activer
 pas de pilotage de l'ampli, pas de recherche : une tablette volée ne peut rien
 faire d'autre qu'afficher l'heure de fin. Réseau local uniquement, comme les TV.
 
+**Mode kiosk pendant un média (optionnel)** : la tablette passe au premier
+plan sur `/ecran` et se **verrouille** quand la TV de sa pièce lance un film
+ou un épisode, puis se **libère** et repasse en arrière-plan à l'arrêt
+(20 s après, pour laisser l'épisode suivant démarrer sans va-et-vient). Le
+reste du temps, c'est une tablette normale.
+
+1. Dans Fully : *Settings → Remote Administration (PLUS)* → **Enable Remote
+   Administration**, **Remote Admin from Local Network**, et un mot de passe.
+   Configurer aussi *Kiosk Mode* (code PIN de sortie) : c'est ce mode que le
+   serveur active et désactive.
+2. Dans la web app : *Réglages → Kodi → Appareils* → modifier l'écran
+   d'appoint → **Mode kiosk pendant un média** : activer, saisir le mot de
+   passe Remote Admin (gardé chiffré sur le serveur, jamais réaffiché), puis
+   **Tester**. L'adresse est celle de la tablette vue par le serveur ; la
+   renseigner si elle change (bail DHCP fixe recommandé).
+3. **Libérer** (même écran) déverrouille la tablette à la main : issue de
+   secours si elle reste verrouillée.
+
+Commandes envoyées (API Remote Admin, réseau local) : au lancement
+`screenOn`, `toForeground`, `loadStartURL`, `lockKiosk` ; à l'arrêt
+`unlockKiosk`, `toBackground`. Si la TV s'éteint sans prévenir, la tablette
+est libérée quand la lecture n'est plus signalée (environ 2 min). Une
+tablette injoignable n'est pas relancée en boucle : nouvel essai 5 min plus
+tard.
+
+> Pièges : si Fully est l'**appli d'accueil** d'Android (*Kiosk Mode → Launcher*),
+> `toBackground` ramène… à Fully. Laisser le lanceur d'Android par défaut.
+> L'adresse publique d'une tablette n'est jamais acceptée : réseau local
+> uniquement (le serveur ne relaie pas un mot de passe vers Internet).
+
 > Pièges : la page est en `http` sur le réseau local, donc l'API « Wake Lock »
 > du navigateur (garder l'écran allumé) n'est pas disponible : c'est Fully
 > (*Keep Screen On*) qui s'en charge. L'heure de fin est calculée par la
@@ -528,6 +558,59 @@ titre déjà suivi ouvre sa Fiche (ou l'écran Série) ; un titre absent ouvre
 > - Le **guide TV complet** (grille des programmes) reste celui de Kodi :
 >   appui long sur une chaîne → *Guide TV de Kodi*.
 
+### 19. 📷 Caméras Eufy : « Personne détectée » sur la TV pendant un film
+Quand une caméra Eufy détecte une **personne** et qu'un film ou un épisode
+passe, une **pop-up** apparaît en bas à droite de la TV : la photo de la
+détection, le nom de la caméra et l'heure. Le film continue dessous ; elle
+se ferme seule après 15 s, ou à la première touche. Hors lecture : une
+simple bulle de notification, avec la photo en vignette. Ces alertes ne sont
+jamais retenues pour le résumé « Pendant ta séance ».
+
+```
+caméras ─► cloud Eufy ─► eufy-security-ws (Unraid) ─► ArrMada ─► TV
+```
+
+Eufy n'a pas d'API locale : le conteneur **eufy-security-ws**
+(`bropat/eufy-security-ws`) se connecte au cloud Eufy et publie les
+événements sur le réseau local ; ArrMada s'y abonne (WebSocket).
+
+1. Dans l'appli Eufy, **inviter un compte secondaire** (une autre adresse
+   mail) avec les droits d'administration, **sans 2FA**. Ne pas utiliser le
+   compte principal : Eufy déconnecte l'appli quand le même compte se
+   connecte ailleurs.
+2. Dans `.env` sur l'Unraid :
+   ```bash
+   EUFY_USERNAME=compte-secondaire@exemple.fr
+   EUFY_PASSWORD=…
+   EUFY_COUNTRY=FR
+   EUFY_WS_URL=ws://<IP-Unraid>:3000
+   EUFY_DETECTIONS=person          # ou : person,ring
+   ```
+3. Démarrer le pont puis redémarrer le backend :
+   ```bash
+   docker compose --profile eufy up -d eufy-security-ws
+   docker logs -f eufy-security-ws        # attendre la connexion au cloud
+   ./deploy.sh --backend
+   ```
+4. Vérifier : `curl -s http://<IP-Unraid>:8420/api/cameras/status` (avec un
+   jeton admin) liste les caméras, et `POST /api/cameras/test` envoie une
+   fausse détection : lance un film sur la TV pour voir la pop-up.
+
+Réglage côté TV : *Paramètres de l'add-on → Service → Alertes des caméras*
+(coché par défaut).
+
+> Pièges :
+> - **Code de vérification** au premier démarrage du pont (mail d'Eufy) :
+>   le compte secondaire sans 2FA l'évite le plus souvent ; sinon, suivre la
+>   documentation de eufy-security-ws (commande `driver.set_verify_code`).
+> - La **photo** vient du cloud Eufy quelques secondes après la détection :
+>   ArrMada l'attend au plus 6 s, puis affiche la pop-up sans photo.
+> - Une même caméra ne déclenche pas plus d'**une alerte par minute**.
+> - Les photos restent **en mémoire** sur le serveur (les 20 dernières,
+>   1 h) et dans le cache de la TV (les 5 dernières) : rien n'est archivé.
+> - La TV relève les événements toutes les 5 s : compter 5 à 10 s entre la
+>   détection et la pop-up.
+
 ## 🚀 Installation dans Kodi
 
 > ⚠️ **NVIDIA Shield (Kodi 21, Android)** : l'installation **par le dépôt** ferme
@@ -634,7 +717,9 @@ automatique ; puis la phase 4.3 avec un faux add-on vidéo
 (`bench/harness/plugin.video.arrmadabanc`), IPTV Simple (3 chaînes locales
 et leur guide, `bench/make_apps.py`), un dossier « vidéos perso » et des
 favoris : rangée Tes applis, écran Applis & sources, lecture depuis l'add-on,
-TV en direct, dossiers, favoris, recherche dans la grille) et dépose 71 captures dans
+TV en direct, dossiers, favoris, recherche dans la grille ; enfin une
+détection de caméra pendant le film (pop-up) puis hors lecture (bulle)) et
+dépose 80 captures dans
 `/tmp/arrmada-kodi-bench/shots/`. Le Kodi du système n'est pas modifié : tout
 se passe dans un profil jetable. Le rendu final reste à valider sur la Shield.
 

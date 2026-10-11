@@ -67,6 +67,11 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 # mise à jour de schéma idempotent : on ajoute la colonne si elle manque.
 _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("devices", "kind", "VARCHAR(20) NOT NULL DEFAULT 'tv'"),  # écran d'appoint
+    # Tablette en mode kiosk pendant un média (Fully Kiosk Remote Admin)
+    ("devices", "kiosk_control", "BOOLEAN NOT NULL DEFAULT FALSE"),
+    ("devices", "kiosk_host", "VARCHAR(255)"),
+    ("devices", "kiosk_port", "INTEGER NOT NULL DEFAULT 2323"),
+    ("devices", "kiosk_password", "VARCHAR(500)"),
 )
 
 

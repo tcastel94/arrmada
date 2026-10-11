@@ -1,5 +1,6 @@
 """Kodi API — settings and synchronization."""
 
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,6 +11,7 @@ from app.api.deps import get_current_user, get_db
 from app.models.service import Service
 from app.services import kodi as kodi_service
 from app.services.encryption import decrypt_api_key, encrypt_api_key
+from app.services.fully_kiosk import kiosk
 from app.services.kodi import discover_kodi, sync_kodi
 from app.utils.cache import cache
 
@@ -285,7 +287,19 @@ async def addon_scrobble(
     if user.get("device_name"):
         data = dict(data, device_name=user["device_name"])
     now_playing.record(room, data or {}, time.time())
+    # Tablette de la pièce en mode kiosk pendant le média (Fully Kiosk) :
+    # lancé à part, la réponse à la TV n'attend jamais la tablette.
+    _background(kiosk.on_playback(room, str((data or {}).get("event") or "progress")))
     return await kodi_service.handle_addon_scrobble(db, data)
+
+
+_BACKGROUND: set = set()  # tâches en cours (référence gardée jusqu'à leur fin)
+
+
+def _background(coro) -> None:
+    task = asyncio.create_task(coro)
+    _BACKGROUND.add(task)
+    task.add_done_callback(_BACKGROUND.discard)
 
 
 @router.get("/addon-status")

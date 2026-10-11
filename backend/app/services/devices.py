@@ -122,6 +122,7 @@ _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         ("GET", r"/api/events/(stream|recent)"),
         ("GET", r"/api/yamaha/(state|profiles)"),
         ("GET", r"/api/qr"),  # QR codes vers la web app (rien à modifier)
+        ("GET", r"/api/cameras/snapshot/\d+"),  # photo d'une détection Eufy (pop-up)
         ("POST", r"/api/yamaha/(control|preset/apply)"),
     )
 )

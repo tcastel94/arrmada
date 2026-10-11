@@ -26,6 +26,18 @@ export interface PairedDevice {
     kind: "tv" | "screen";
     /** Ex. « Kodi 21.1 · Android » (envoyé par l'add-on). */
     platform: string | null;
+    /**
+     * Écran d'appoint sous Fully Kiosk : premier plan + mode kiosk pendant un
+     * média de la TV de sa pièce (pilotage par le serveur, API Remote Admin).
+     */
+    kiosk_control: boolean;
+    /** Adresse réglée ; "" = la dernière IP vue (last_ip). */
+    kiosk_host: string;
+    kiosk_port: number;
+    /** Le mot de passe Remote Admin n'est jamais renvoyé : seulement « réglé ou pas ». */
+    kiosk_password_set: boolean;
+    /** Tablette verrouillée en ce moment (un média passe dans sa pièce). */
+    kiosk_locked: boolean;
     last_ip: string | null;
     created_at: string | null;
     last_seen_at: string | null;
@@ -69,6 +81,40 @@ export function useUpdateDevice() {
                     avr_service_id === null ? { ...rest, clear_avr: true } : { ...rest, avr_service_id }
                 ),
             }),
+        onSuccess: () => qc.invalidateQueries({ queryKey: DEVICES_KEY }),
+    });
+}
+
+export interface KioskSettings {
+    kiosk_control: boolean;
+    kiosk_host: string;
+    kiosk_port: number;
+    /** undefined : inchangé ; "" : effacé. */
+    kiosk_password?: string;
+}
+
+/** Réglages Fully Kiosk d'un écran d'appoint. */
+export function useUpdateKiosk() {
+    const qc = useQueryClient();
+    return useMutation<PairedDevice, Error, KioskSettings & { id: number }>({
+        mutationFn: ({ id, ...body }) =>
+            apiFetch(`/api/devices/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+        onSuccess: () => qc.invalidateQueries({ queryKey: DEVICES_KEY }),
+    });
+}
+
+export interface KioskActionResult {
+    ok: boolean;
+    message?: string;
+    device?: { deviceName?: string; appVersionName?: string; kioskMode?: boolean };
+    results?: { device: string; command: string; ok: boolean; message: string }[];
+}
+
+/** « test » (Fully répond-il ?), « lock » / « release » à la main (issue de secours). */
+export function useKioskAction() {
+    const qc = useQueryClient();
+    return useMutation<KioskActionResult, Error, { id: number; action: "test" | "lock" | "release" }>({
+        mutationFn: ({ id, action }) => apiFetch(`/api/devices/${id}/kiosk/${action}`, { method: "POST" }),
         onSuccess: () => qc.invalidateQueries({ queryKey: DEVICES_KEY }),
     });
 }

@@ -224,8 +224,8 @@ PY
 
 # ── 5. Passage instrumenté (le harnais quitte Kodi à la fin) ─────────────────
 if [[ "$RECORD" != "1" ]]; then
-  echo "== Kodi + harnais (≈ 3 min 30)"
-  timeout 480 xvfb-run -a -s "-screen 0 1920x1080x24" kodi --standalone -fs > kodi.log 2>&1 || true
+  echo "== Kodi + harnais (≈ 9 min)"
+  timeout 900 xvfb-run -a -s "-screen 0 1920x1080x24" kodi --standalone -fs > kodi.log 2>&1 || true
 else
   # Mode vidéo : on lance l'écran virtuel nous-mêmes pour pouvoir le filmer.
   echo "== Kodi + harnais, enregistrement vidéo ($RES)"
@@ -238,7 +238,7 @@ else
   ffmpeg -loglevel error -y -f x11grab -framerate 30 -video_size "$RES" -i "$DISP" \
     -c:v libx264 -preset ultrafast -crf 16 -pix_fmt yuv420p demo-raw.mp4 &
   FFMPEG_PID=$!
-  timeout 540 tail --pid="$KODI_PID" -f /dev/null || kill "$KODI_PID" 2>/dev/null || true
+  timeout 960 tail --pid="$KODI_PID" -f /dev/null || kill "$KODI_PID" 2>/dev/null || true
   kill -INT "$FFMPEG_PID" 2>/dev/null || true
   wait "$FFMPEG_PID" 2>/dev/null || true
   kill "$XVFB_PID" 2>/dev/null || true

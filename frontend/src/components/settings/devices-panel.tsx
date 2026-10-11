@@ -10,6 +10,8 @@
  *   il affiche ce qui passe sur la TV de SA pièce, sans rien pouvoir piloter.
  * - Liste des appareils : type, pièce, ampli, dernière activité.
  * - Modifier (nom, pièce, ampli) ou révoquer (le jeton cesse de marcher).
+ * - Écran d'appoint sous Fully Kiosk : mode kiosk pendant un média
+ *   (kiosk-section.tsx), piloté par le serveur.
  *
  * Pourquoi l'ampli est choisi ici : la TV pilote ensuite TOUJOURS l'ampli de
  * sa pièce (écran Salon, préréglage au lancement d'un film). Le backend
@@ -27,6 +29,7 @@ import { Panel } from "@/components/shared/panel";
 import { EmptyState, ErrorState } from "@/components/shared/empty-state";
 import { TableSkeleton } from "@/components/shared/loading-skeleton";
 import { DeviceRow } from "@/components/settings/device-row";
+import { KioskSection } from "@/components/settings/kiosk-section";
 import { FormField } from "@/components/settings/form-field";
 import { useStickyValue } from "@/components/settings/use-sticky-value";
 import { ROOMS, ROOM_META } from "@/components/remote/yamaha-audio";
@@ -128,6 +131,11 @@ export function DevicesPanel() {
                                                     Écran d&apos;appoint
                                                 </span>
                                             )}
+                                            {d.kind === "screen" && d.kiosk_control && (
+                                                <span className="inline-flex items-center rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                                                    {d.kiosk_locked ? "Kiosk : verrouillée" : "Kiosk pendant un média"}
+                                                </span>
+                                            )}
                                         </>
                                     }
                                     meta={
@@ -192,7 +200,7 @@ export function DevicesPanel() {
 
             {/* ── Modifier ─────────────────────────────────────── */}
             <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
-                <DialogContent className="sm:max-w-lg">
+                <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-lg">
                     <DialogHeader>
                         <DialogTitle>Modifier {shownEditing?.name}</DialogTitle>
                         <DialogDescription>Le changement de pièce ou d&apos;ampli s&apos;applique dès la prochaine action sur la TV.</DialogDescription>
@@ -215,6 +223,13 @@ export function DevicesPanel() {
                                     throw e;
                                 }
                             }}
+                        />
+                    )}
+                    {shownEditing?.kind === "screen" && (
+                        // État à jour (verrouillée, mot de passe réglé) : la liste, pas l'instantané du dialogue
+                        <KioskSection
+                            key={`kiosk-${shownEditing.id}`}
+                            device={devices?.find((d) => d.id === shownEditing.id) ?? shownEditing}
                         />
                     )}
                 </DialogContent>
