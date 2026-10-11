@@ -10,10 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, get_db
 from app.models.service import Service
 from app.services import kodi as kodi_service
+from app.services import watch_sync
 from app.services.encryption import decrypt_api_key, encrypt_api_key
 from app.services.fully_kiosk import kiosk
 from app.services.kodi import discover_kodi, sync_kodi
 from app.utils.cache import cache
+from app.utils.event_bus import event_bus
 
 router = APIRouter(
     prefix="/api/kodi",
@@ -300,6 +302,60 @@ def _background(coro) -> None:
     task = asyncio.create_task(coro)
     _BACKGROUND.add(task)
     task.add_done_callback(_BACKGROUND.discard)
+
+
+# ── Vu / reprise partagés entre les TV (ADR-004, phase 4.4) ───
+@router.get("/watch-state")
+async def get_watch_states(
+    since: str | None = None, limit: int = watch_sync.MAX_STATES, db: AsyncSession = Depends(get_db)
+):
+    """États vu / reprise modifiés après `since` (curseur rendu par l'appel précédent).
+
+    Sans `since` : tout, page par page (premier passage d'une TV). `more`
+    vrai : il en reste, rappeler avec le nouveau curseur.
+    """
+    states, more = await watch_sync.changes(db, watch_sync.parse_cursor(since), limit)
+    cursor = states[-1]["updated_at"] if states else (since or "")
+    return {"states": states, "cursor": cursor, "more": more}
+
+
+@router.post("/watch-state")
+async def post_watch_states(
+    data: dict, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)
+):
+    """Une TV dépose l'état de titres qui ont changé chez elle.
+
+    `merge` vrai : premier passage de la TV (« vu » l'emporte, rien n'est
+    défait). Les autres TV sont prévenues par l'événement `watch_state`.
+    """
+    payload = data or {}
+    raw = payload.get("states")
+    if not isinstance(raw, list):
+        raise HTTPException(status_code=422, detail="« states » doit être une liste")
+    device = str(user.get("device_name") or payload.get("device") or "ArrMada")
+    changed, rejected = await watch_sync.store(db, raw, bool(payload.get("merge")), device)
+    cursor = changed[-1]["updated_at"].isoformat() if changed else ""
+    if changed:
+        await event_bus.publish(
+            event_type="watch_state",
+            data={"changed": len(changed), "device": device, "cursor": cursor},
+        )
+    return {"status": "ok", "changed": len(changed), "rejected": rejected, "cursor": cursor}
+
+
+# ── Épisodes d'une série vus par Sonarr (manquants, à venir) ──
+@router.get("/series/{tvdb_id}/episodes")
+async def addon_series_episodes(tvdb_id: int, db: AsyncSession = Depends(get_db)):
+    """Épisodes connus de Sonarr pour une série (repérée par son n° TVDB).
+
+    L'écran Série de la TV les compare à sa médiathèque : ceux qui manquent
+    sont affichés grisés (« Manquant », « Diffusion le … »). Gardé 2 min.
+    """
+
+    async def _compute():
+        return await kodi_service.sonarr_episodes_for_addon(db, tvdb_id)
+
+    return await cache.get_or_set(f"kodi:episodes:{tvdb_id}", _compute, ttl_seconds=120)
 
 
 @router.get("/addon-status")

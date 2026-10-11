@@ -1046,6 +1046,45 @@ async def handle_addon_scrobble(db: AsyncSession, data: dict[str, Any]) -> dict[
     return {"status": "ok"}
 
 
+async def sonarr_episodes_for_addon(db: AsyncSession, tvdb_id: int) -> dict[str, Any]:
+    """Épisodes Sonarr d'une série, au format court de l'écran Série de la TV.
+
+    `status` : « ok », « unknown » (série absente de Sonarr) ou « error ».
+    Les spéciaux (saison 0) sont laissés de côté : trop d'épisodes bonus
+    qu'on ne cherche jamais.
+    """
+    sonarr = await _get_sonarr_client(db)
+    if not sonarr:
+        return {"status": "error", "message": "Sonarr n'est pas configuré", "episodes": []}
+    try:
+        series = next(
+            (s for s in await sonarr.get_series() if str(s.get("tvdbId")) == str(tvdb_id)),
+            None,
+        )
+        if series is None:
+            return {"status": "unknown", "episodes": []}
+        raw = await sonarr.get("/episode", params={"seriesId": series["id"]})
+    except Exception as exc:
+        logger.warning(f"Épisodes Sonarr de la série TVDB {tvdb_id} illisibles : {exc}")
+        return {"status": "error", "message": "Sonarr injoignable", "episodes": []}
+    items = raw if isinstance(raw, list) else []
+    episodes = [
+        {
+            "season": int(ep.get("seasonNumber") or 0),
+            "episode": int(ep.get("episodeNumber") or 0),
+            "title": ep.get("title") or "",
+            "air_date": ep.get("airDateUtc") or "",
+            "has_file": bool(ep.get("hasFile")),
+            "monitored": bool(ep.get("monitored")),
+            "overview": ep.get("overview") or "",
+        }
+        for ep in items
+        if int(ep.get("seasonNumber") or 0) > 0
+    ]
+    episodes.sort(key=lambda e: (e["season"], e["episode"]))
+    return {"status": "ok", "title": series.get("title") or "", "episodes": episodes}
+
+
 def _format_addon_queue(queue_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """File de téléchargement au format de l'add-on Kodi.
 

@@ -19,6 +19,10 @@
   an add-on), the ArrMada home opens instead (setting "shell_mode"; never in
   safe mode, never on top of a dialog or a video, suspended for the session
   when the user picks "Kodi interface"; lib/shell_data.should_open_shell)
+- ADR-004 phase 4.4: watched / resume shared between the TVs (the library
+  item that just changed is handed to lib/watch_sync.py, which posts it from
+  the background tasks), and the "Next episode" card a few seconds before
+  the end of a library episode (lib/upnext_window.py)
 """
 
 from __future__ import annotations
@@ -43,7 +47,10 @@ import migration
 import playback_data
 import shell_data
 import startup_guard
+import sync_data
 import threading
+import upnext_data
+import watch_sync
 
 ADDON = xbmcaddon.Addon("script.arrmada")
 MIGRATION_RETRY = 300  # s entre deux essais d'appairage automatique (serveur injoignable)
@@ -74,6 +81,30 @@ class ArrMadaPlayer(xbmc.Player):
         self._item = None  # vidéo suivie (None : rien, ou de la musique)
         self._position = 0.0
         self._total = 0.0
+        # Élément de la médiathèque Kodi en lecture : ("movie" | "episode", n°)
+        # ou None (fichier hors médiathèque). Sert au partage vu / reprise et
+        # à l'encart « Épisode suivant » (phase 4.4).
+        self._library_item = None
+        self._upnext_offered = False
+
+    def _track_library_item(self) -> None:
+        """Nouvelle vidéo : celle d'avant (épisode enchaîné) part au partage vu / reprise."""
+        try:
+            tag = self.getVideoInfoTag()
+            kind, dbid = tag.getMediaType(), tag.getDbId()
+        except Exception:  # lecture déjà arrêtée
+            kind, dbid = "", 0
+        current = (kind, dbid) if kind in sync_data.ID_ORDER and dbid > 0 else None
+        if self._library_item and self._library_item != current:
+            watch_sync.schedule(*self._library_item)
+        self._library_item = current
+        self._upnext_offered = False
+
+    def _release_library_item(self) -> None:
+        """Arrêt ou fin : Kodi enregistre vu / reprise, on le dépose dans 3 s."""
+        if self._library_item:
+            watch_sync.schedule(*self._library_item)
+        self._library_item = None
 
     def _times(self):
         """(position, durée) en secondes ; les dernières connues si Kodi ne répond plus."""
@@ -107,7 +138,10 @@ class ArrMadaPlayer(xbmc.Player):
 
     def onAVStarted(self):
         """Image et son démarrés : titre, épisode, durée et images sont connus."""
-        if not self.isPlayingVideo() or not get_setting_bool("enable_scrobble"):
+        if not self.isPlayingVideo():
+            return
+        self._track_library_item()
+        if not get_setting_bool("enable_scrobble"):
             return
         self._item = _read_playing_item(self)
         self._last_scrobble_time = time.time()
@@ -127,11 +161,29 @@ class ArrMadaPlayer(xbmc.Player):
         if get_setting_bool("enable_scrobble"):
             self._send("stop")
         self._item = None
+        self._release_library_item()
 
     def onPlayBackEnded(self):
         if get_setting_bool("enable_scrobble"):
             self._send("stop", ended=True)
         self._item = None
+        self._release_library_item()
+
+    def check_upnext(self) -> None:
+        """Encart « Épisode suivant » quand il reste N s (réglage) d'un épisode."""
+        if self._upnext_offered or not self._library_item or self._library_item[0] != "episode":
+            return
+        threshold = upnext_data.seconds_setting(kodi_helper.ADDON.getSetting("upnext_seconds"))
+        try:
+            position, total = self.getTime(), self.getTotalTime()
+        except Exception:
+            return
+        if not upnext_data.should_offer(total - position, total, threshold, False, True):
+            return
+        self._upnext_offered = True  # une seule fois par épisode, même sans suite
+        import upnext_window  # chargé seulement quand il sert
+
+        upnext_window.offer(self._library_item[1])
 
     def check_periodic_progress(self):
         """Position toutes les 30 s, pause comprise (Kodi reste « en lecture » en pause)."""
@@ -211,6 +263,12 @@ class ServiceMonitor(xbmc.Monitor):
 
     def onSettingsChanged(self) -> None:  # appelé par Kodi
         self.settings_changed = True
+
+    def onNotification(self, sender, method, data) -> None:  # appelé par Kodi
+        """« Marqué vu / non vu » (ici, dans Kodi ou un autre add-on) : à partager."""
+        item = sync_data.library_update(method, data)
+        if item:
+            watch_sync.schedule(*item, delay=1)
 
 
 def _reload_settings() -> None:
@@ -303,9 +361,14 @@ def main():
             if outcome == "done" and tasks is not None:
                 tasks = BackgroundTasks(monitor)  # relevés tout de suite, avec le jeton
 
-        # 1. Handle player tracking
+        # 1. Handle player tracking (+ encart « Épisode suivant », phase 4.4)
         if player.isPlayingVideo():
             player.check_periodic_progress()
+            if not safe_mode:
+                try:
+                    player.check_upnext()
+                except Exception as exc:  # jamais au point de faire tomber le service
+                    _log(f"épisode suivant : {exc}", xbmc.LOGWARNING)
 
         # 1b. Accueil de Kodi à l'écran → accueil ArrMada (ADR-004, phase 4.2)
         try:

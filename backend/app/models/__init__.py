@@ -21,6 +21,7 @@ from app.models.profile_override import ProfileOverride  # noqa: E402, F401
 from app.models.recommendation import Recommendation  # noqa: E402, F401
 from app.models.request import MediaRequest  # noqa: E402, F401
 from app.models.service import HealthEvent, Service  # noqa: E402, F401
+from app.models.watch_state import WatchState  # noqa: E402, F401
 
 __all__ = [
     "Base",
@@ -36,4 +37,5 @@ __all__ = [
     "ActivityEvent",
     "CastDevice",
     "Device",
+    "WatchState",
 ]

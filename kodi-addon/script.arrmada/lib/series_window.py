@@ -16,6 +16,10 @@ Ouverture sans jamais figer l'interface (règle d'or de l'ADR-003) :
   3. au retour d'une lecture, l'écran se remet à jour (vu, reprise) sans
      perdre la saison ni l'épisode sélectionnés.
 
+Phase 4.4 : les épisodes que Sonarr connaît et que Kodi n'a pas s'intercalent
+à leur place, grisés : « Manquant » (OK : recherche dans Sonarr), « Sur le
+NAS » (OK : scan de la médiathèque Kodi), « À venir » (date de diffusion).
+
 Télécommande :
   OK sur un épisode      le lire (« Reprendre à … » / « Depuis le début »)
   OK maintenu / Menu     Lire depuis le début, Marquer vu / non vu, toute la saison
@@ -28,11 +32,13 @@ from __future__ import annotations
 import threading
 import time
 
+import xbmc
 import xbmcgui
 
 import kodi_library
 import ui_common as ui
 import watch_data
+from api import ArrMadaAPI
 
 XML_FILE = "script-arrmada-series.xml"
 
@@ -58,8 +64,10 @@ class SeriesWindow(xbmcgui.WindowXML):
         self._busy = threading.Lock()
         self._raw: list = []  # épisodes tels que Kodi les donne (pour l'enchaînement)
         self._model: dict = {}
-        self._season_index = -1  # saison affichée
-        self._positions: dict = {}  # épisode sélectionné dans chaque saison déjà vue
+        self._season_index = -1  # saison affichée (rang dans la liste)
+        self._season_number = None  # son numéro (le rang change si une saison s'ajoute)
+        self._positions: dict = {}  # n° de saison → n° de l'épisode sélectionné
+        self._tvdb = str(self._entry.get("tvdb_id") or "")  # pour Sonarr (manquants)
 
     # ── Cycle de vie ────────────────────────────────────────────────────────
 
@@ -110,8 +118,42 @@ class SeriesWindow(xbmcgui.WindowXML):
                 f"{len(raw)} épisode(s) chargé(s) en {ui.ms_since(started)} ms "
                 f"(à suivre : {model['play_label'] or 'rien'})",
             )
+            self._tvdb = str((show.get("uniqueid") or {}).get("tvdb") or self._tvdb or "")
+            if self._tvdb and not self._stop.is_set():
+                self._add_missing(model)
         finally:
             self._busy.release()
+
+    def _add_missing(self, model: dict) -> None:
+        """Épisodes connus de Sonarr et absents de Kodi : ajoutés, grisés (phase 4.4).
+
+        Après le premier affichage : l'écran ne dépend jamais du serveur pour
+        s'ouvrir, les manquants arrivent une fraction de seconde plus tard.
+        """
+        started = time.perf_counter()
+        response = ArrMadaAPI.get_feed(f"/api/kodi/series/{self._tvdb}/episodes", timeout=6)
+        if not isinstance(response, dict) or response.get("status") != "ok":
+            return  # serveur injoignable, Sonarr absent, série inconnue : rien à ajouter
+        full = watch_data.add_missing(model, response.get("episodes") or [])
+        if not full.get("missing") or self._stop.is_set():
+            return
+        self._model = full
+        try:
+            focus = self.getFocusId()
+        except RuntimeError:
+            focus = 0
+        try:
+            self._render(full, keep_selection=True)
+            if focus in (SEASONS, EPISODES):
+                # Une liste vidée puis remplie perd le focus de Kodi (vu en 4.3)
+                ui.focus_when_visible(self, focus)
+        except RuntimeError:
+            return
+        ui.log(
+            "Série",
+            f"{full['missing']} épisode(s) absent(s) de Kodi ajouté(s) d'après Sonarr "
+            f"en {ui.ms_since(started)} ms",
+        )
 
     def _render(self, model: dict, keep_selection: bool) -> None:
         for key in ("poster", "fanart", "clearlogo"):
@@ -125,8 +167,11 @@ class SeriesWindow(xbmcgui.WindowXML):
         self.setProperty("empty", "" if model["seasons"] else "1")
 
         seasons = self.getControl(SEASONS)
-        keep_season = self._season_index if keep_selection else -1
-        keep_episode = self.getControl(EPISODES).getSelectedPosition() if keep_selection else -1
+        # Sélection gardée par NUMÉRO (saison, épisode), pas par rang : un
+        # épisode manquant intercalé décale les rangs.
+        keep_number = self._season_number if keep_selection else None
+        keep_episode = self._selected_number() if keep_selection else None
+        numbers = [season["season"] for season in model["seasons"]]
         items = []
         for season in model["seasons"]:
             item = xbmcgui.ListItem(
@@ -137,8 +182,10 @@ class SeriesWindow(xbmcgui.WindowXML):
         seasons.reset()
         seasons.addItems(items)
 
-        if 0 <= keep_season < len(items):
-            index, episode = keep_season, keep_episode
+        if keep_number in numbers:
+            index = numbers.index(keep_number)
+            episodes = [e["episode"] for e in model["episodes"][keep_number]]
+            episode = episodes.index(keep_episode) if keep_episode in episodes else 0
         else:
             index, episode = self._start_position(model)
             self._positions = {}
@@ -146,6 +193,13 @@ class SeriesWindow(xbmcgui.WindowXML):
         self._season_index = -1  # force le remplissage des épisodes
         self._show_season(index, episode)
         self.setProperty("loaded", "1")
+
+    def _selected_number(self):
+        """N° de l'épisode sélectionné dans la saison affichée (None : aucun)."""
+        item = self.getControl(EPISODES).getSelectedItem()
+        if not item or not item.getProperty("number"):
+            return None
+        return int(item.getProperty("number"))
 
     def _start_position(self, model: dict) -> tuple:
         """Saison demandée par la Fiche, sinon celle de l'épisode à suivre."""
@@ -167,23 +221,35 @@ class SeriesWindow(xbmcgui.WindowXML):
         if not 0 <= index < len(seasons) or index == self._season_index:
             return
         container = self.getControl(EPISODES)
-        if self._season_index >= 0:
-            self._positions[self._season_index] = container.getSelectedPosition()
+        if self._season_number is not None:
+            self._positions[self._season_number] = self._selected_number()
+        number = seasons[index]["season"]
+        episodes = self._model["episodes"][number]
         if select is None:
             start = self._model.get("start_episode", 0)
-            fallback = start if index == self._model.get("start_season") else 0
-            select = self._positions.get(index, fallback)
-        self._season_index = index
-        episodes = self._model["episodes"][seasons[index]["season"]]
+            select = start if index == self._model.get("start_season") else 0
+            remembered = [e["episode"] for e in episodes]
+            if self._positions.get(number) in remembered:
+                select = remembered.index(self._positions[number])
+        self._season_index, self._season_number = index, number
         items = []
         for ep in episodes:
-            item = xbmcgui.ListItem(label=ep["label"], label2=ep["duration"], offscreen=True)
+            missing = ep.get("missing", "")
+            item = xbmcgui.ListItem(
+                label=ep["label"],
+                label2=ep["status"] if missing else ep["duration"],
+                offscreen=True,
+            )
             item.setArt({"thumb": ep["thumb"]})
             tag = item.getVideoInfoTag()
             tag.setTitle(ep["title"])
             tag.setPlot(ep["plot"] or "Pas de résumé pour cet épisode.")
             tag.setMediaType("episode")
             item.setProperty("episodeid", str(ep["episodeid"]))
+            item.setProperty("number", str(ep["episode"]))
+            item.setProperty("detail", watch_data.detail_line(ep))
+            item.setProperty("missing", missing)  # vide : épisode présent dans Kodi
+            item.setProperty("badge", ep.get("badge", ""))
             item.setProperty("code", ep["code"])
             item.setProperty("title", ep["title"])
             item.setProperty("status", ep["status"])
@@ -239,17 +305,62 @@ class SeriesWindow(xbmcgui.WindowXML):
             return None
         return {
             "episodeid": int(item.getProperty("episodeid")),
+            "season": self._season_number,
+            "episode": int(item.getProperty("number") or 0),
             "resume": int(item.getProperty("resume") or 0),
             "watched": bool(item.getProperty("watched")),
             "code": item.getProperty("code"),
+            "title": item.getProperty("title"),
+            "status": item.getProperty("status"),
+            "missing": item.getProperty("missing"),
         }
 
     def _play_selected(self, resume=None) -> None:
         episode = self._selected()
-        if episode:
+        if episode and episode["missing"]:
+            self._missing_action(episode)
+        elif episode:
             kodi_library.play_episode(
                 episode["episodeid"], self._raw, resume=resume, entry=self._entry
             )
+
+    # ── Épisodes absents de Kodi (Sonarr, phase 4.4) ────────────────────────
+
+    def _missing_action(self, episode: dict) -> None:
+        """OK sur un épisode grisé : chercher, scanner ou dire quand il sort."""
+        heading = f"{episode['code']} · {episode['title']}"
+        if episode["missing"] == "aired":
+            if xbmcgui.Dialog().yesno(
+                heading,
+                "Cet épisode n'est pas sur le NAS.[CR]Lancer une recherche dans Sonarr ?",
+                nolabel="Annuler",
+                yeslabel="Chercher",
+            ):
+                threading.Thread(
+                    target=self._search, args=(episode,), name="arrmada-search", daemon=True
+                ).start()
+        elif episode["missing"] == "nas":
+            # Fichier déjà téléchargé, Kodi ne l'a pas encore vu : on scanne
+            xbmc.executebuiltin("UpdateLibrary(video)")
+            ui.notify(heading, "Sur le NAS : mise à jour de la médiathèque Kodi lancée")
+        else:
+            ui.notify(heading, episode["status"] or "À venir")
+
+    def _search(self, episode: dict) -> None:
+        result = ArrMadaAPI.trigger_search(
+            {
+                "media_type": "episode",
+                "tvdb_id": self._tvdb,
+                "title": self._model.get("title") or self._entry.get("title") or "",
+                "season": episode["season"],
+                "episode": episode["episode"],
+            }
+        )
+        ok = result.get("status") == "ok"
+        ui.notify(
+            "Recherche lancée" if ok else "Recherche impossible",
+            result.get("message") or episode["code"],
+        )
 
     def _play_next(self) -> None:
         """« Lire la suite » : l'épisode à suivre, ou le tout premier si tout est vu."""
@@ -271,8 +382,13 @@ class SeriesWindow(xbmcgui.WindowXML):
         seasons = self._model.get("seasons") or []
         if not episode or not 0 <= self._season_index < len(seasons):
             return
+        if episode["missing"]:
+            self._missing_action(episode)  # rien d'autre à faire sur un épisode absent
+            return
         season = seasons[self._season_index]
-        season_ids = [e["episodeid"] for e in self._model["episodes"][season["season"]]]
+        season_ids = [
+            e["episodeid"] for e in self._model["episodes"][season["season"]] if e["episodeid"]
+        ]
         season_done = season["watched"] == season["total"]
         choices = [("play", "Lire")]
         if episode["resume"]:

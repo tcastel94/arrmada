@@ -619,6 +619,71 @@ Réglage côté TV : *Paramètres de l'add-on → Service → Alertes des camér
 > - La TV relève les événements toutes les 5 s : compter 5 à 10 s entre la
 >   détection et la pop-up.
 
+### 20. 🔁 Vu partagé entre les TV, épisode suivant, épisodes manquants (1.15.0, ADR-004)
+
+**Vu et reprise partagés entre les TV.** Tu t'arrêtes à 42:10 sur la Shield
+du salon : la Shield du cinéma propose « Reprendre à 42:10 ». Tu finis un
+épisode, ou tu coches « vu » : l'autre TV le sait quelques secondes après.
+
+```
+Shield salon ──(dépose l'état)──► ArrMada (table watch_states) ──(événement)──► Shield cinéma
+```
+
+- Chaque Kodi garde sa médiathèque (vu, reprise) ; le serveur sert de point
+  de rendez-vous. Un titre est repéré par ses identifiants publics (TMDB pour
+  les films, TVDB de la série + saison + épisode) : les numéros internes de
+  Kodi diffèrent d'une TV à l'autre.
+- Ce qui part : la fin ou l'arrêt d'une lecture (3 s après, ce que Kodi a
+  vraiment enregistré), et tout « marqué vu / non vu » (dans ArrMada, dans
+  Kodi ou dans un autre add-on).
+- Ce qui arrive : les changements faits ailleurs depuis le dernier passage
+  de la TV (un curseur, comme `tail -f`), au démarrage, à chaque événement et
+  après une coupure du serveur.
+- **Premier passage** d'une TV : prudence. Elle n'ajoute que des « vu » et
+  des reprises là où elle n'en a pas, puis dépose ce qu'elle a déjà vu (sans
+  rien défaire chez les autres). Ensuite, **le geste le plus récent gagne**
+  (« non vu » sur une TV → non vu partout).
+- Réglage : *Paramètres de l'add-on → Lecture → Partager vu et reprise entre
+  les TV* (coché par défaut).
+
+**Épisode suivant.** 20 s avant la fin d'un épisode de la médiathèque, un
+encart s'affiche en bas à droite : vignette, « S01E05 · Titre », compte à
+rebours.
+
+| Touche | Effet |
+|---|---|
+| OK sur **Lancer maintenant** | marque l'épisode en cours comme vu et passe tout de suite au suivant |
+| OK sur **Annuler** | la lecture s'arrête à la fin de cet épisode |
+| Retour, ou rien | l'encart disparaît, la suite démarre à la fin comme d'habitude |
+
+Si rien n'était en file (épisode lancé depuis l'interface de Kodi), ArrMada
+y ajoute l'épisode suivant de la série. Réglage : *Lecture → Encart
+« Épisode suivant »* (0, 10, 20, 30, 45 ou 60 s avant la fin ; 0 : jamais).
+
+**Épisodes manquants dans l'écran Série.** Les épisodes que Sonarr connaît et
+que Kodi n'a pas s'intercalent à leur place, vignette vide et badge :
+
+| Badge | Signification | OK |
+|---|---|---|
+| **Manquant** | diffusé, pas de fichier | « Lancer une recherche dans Sonarr ? » |
+| **Sur le NAS** | téléchargé, Kodi ne l'a pas encore scanné | scan de la médiathèque Kodi |
+| **À venir** | pas encore diffusé | date de diffusion |
+
+Une saison entièrement absente apparaît aussi (« À venir », « Manquante »).
+Les épisodes non suivis dans Sonarr (vieilles saisons qu'on ne veut pas) et
+les épisodes spéciaux ne sont pas affichés.
+
+> Pièges :
+> - Les deux TV doivent avoir la **même série identifiée de la même façon**
+>   (scraper TMDB / TVDB de Kodi) : une série sans identifiant TVDB ni TMDB
+>   n'est pas partagée.
+> - Un titre absent d'une TV (pas encore scanné) y sera rattrapé au
+>   prochain changement le concernant, pas rétroactivement.
+> - L'encart n'apparaît que pour une lecture **en file** (liste de lecture
+>   vidéo de Kodi) : un lien direct d'un autre add-on n'enchaîne rien.
+> - Serveur plus ancien que l'add-on : la synchro attend 1 min entre deux
+>   essais, sans gêner le reste.
+
 ## 🚀 Installation dans Kodi
 
 > ⚠️ **NVIDIA Shield (Kodi 21, Android)** : l'installation **par le dépôt** ferme
@@ -702,6 +767,8 @@ Copiez le dossier `script.arrmada/` dans le dossier des extensions de Kodi :
 | Passage automatique du mot de passe à l'appairage | `script.arrmada/lib/migration.py` |
 | Outils communs (lecture, préréglage ampli, notifications) | `script.arrmada/lib/ui_common.py` |
 | Logique pure (mise en forme, cache) — sans Kodi | `script.arrmada/lib/home_data.py`, `script.arrmada/lib/screens_data.py` |
+| Vu / reprise partagés entre les TV : règles pures / travail du service | `script.arrmada/lib/sync_data.py` / `script.arrmada/lib/watch_sync.py` (serveur : `backend/app/services/watch_sync.py`) |
+| Encart « Épisode suivant » : logique pure / fenêtre | `script.arrmada/lib/upnext_data.py` / `script.arrmada/lib/upnext_window.py` |
 | Dépôt Kodi servi par le backend | `backend/app/services/kodi_repo.py`, `backend/app/api/kodi_repo.py` |
 | Textures (coins arrondis, halo, dégradés, barres de progression) | générées par `python3 kodi-addon/tools/make_textures.py` |
 | Tests (sans Kodi, lancés en CI) | `pytest kodi-addon/tests` |
@@ -726,8 +793,11 @@ automatique ; puis la phase 4.3 avec un faux add-on vidéo
 et leur guide, `bench/make_apps.py`), un dossier « vidéos perso » et des
 favoris : rangée Tes applis, écran Applis & sources, lecture depuis l'add-on,
 TV en direct, dossiers, favoris, recherche dans la grille ; enfin une
-détection de caméra pendant le film (pop-up) puis hors lecture (bulle)) et
-dépose 80 captures dans
+détection de caméra pendant le film (pop-up) puis hors lecture (bulle) ;
+et la phase 4.4 : état vu / reprise déposé par la TV, épisode vu et reprise
+de film venus d'une « autre TV » appliqués à la médiathèque, épisodes
+manquants et à venir dans l'écran Série, encart « Épisode suivant » (Lancer
+maintenant, puis Annuler)) et dépose les captures dans
 `/tmp/arrmada-kodi-bench/shots/`. Le Kodi du système n'est pas modifié : tout
 se passe dans un profil jetable. Le rendu final reste à valider sur la Shield.
 

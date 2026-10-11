@@ -109,6 +109,10 @@ _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         ("GET", r"/api/kodi/media/(lookup|recommendations|options)"),
         ("GET", r"/api/kodi/media/(movie|series|tv)/\d+/releases"),
         ("POST", r"/api/kodi/(scrobble|sync)"),
+        # Vu / reprise partagés entre les TV (phase 4.4) : lecture et dépôt d'états
+        ("GET", r"/api/kodi/watch-state"),
+        ("POST", r"/api/kodi/watch-state"),
+        ("GET", r"/api/kodi/series/\d+/episodes"),  # épisodes Sonarr (manquants)
         ("POST", r"/api/kodi/actions/(search|subtitles|subtitles/sync)"),
         ("POST", r"/api/kodi/media/add"),
         ("POST", r"/api/kodi/media/(movie|series|tv)/\d+/grab"),

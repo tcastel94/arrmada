@@ -16,5 +16,5 @@ known-first-party = [
     "startup_guard", "links_data", "qr_window", "migration", "library_data", "playback_data",
     "watch_data", "kodi_library", "series_window", "shell_data", "shell_window", "grid_window",
     "make_shell_xml", "apps_data", "kodi_sources", "apps_window", "camera_data",
-    "camera_window",
+    "camera_window", "sync_data", "watch_sync", "upnext_data", "upnext_window",
 ]

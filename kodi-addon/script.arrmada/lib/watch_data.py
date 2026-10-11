@@ -18,7 +18,7 @@ de reprise et le compteur de lectures de CET appareil (ADR-004 § 1).
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone, tzinfo
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 SPECIALS = 0  # saison 0 de Kodi : épisodes spéciaux
@@ -276,6 +276,153 @@ def build_show(show: Mapping[str, Any], episodes: Iterable[Mapping[str, Any]]) -
         "start_season": start_season,
         "start_episode": start_episode,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Épisodes manquants ou à venir (Sonarr), dans l'écran Série (phase 4.4)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Sorte d'épisode absent de la médiathèque Kodi → (badge sur la vignette, état)
+MISSING_KINDS = {
+    "nas": ("Sur le NAS", "Sur le NAS · scan de Kodi en attente"),
+    "aired": ("Manquant", "Manquant · OK pour le chercher"),
+    "upcoming": ("À venir", ""),  # l'état dit la date de diffusion
+    "tba": ("À venir", "Date de diffusion inconnue"),
+}
+
+
+def _air_moment(value: Any) -> Optional[datetime]:
+    try:
+        moment = datetime.fromisoformat(str(value or "").strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
+
+
+def detail_line(episode: Mapping[str, Any]) -> str:
+    """Ligne sous le titre de l'épisode sélectionné : « état · diffusion · durée ».
+
+    Sans morceau vide ni séparateur en trop, et sans répéter la date quand
+    l'état la dit déjà (« Diffusion le 18 octobre 2026 »).
+    """
+    status, aired = str(episode.get("status") or ""), str(episode.get("aired") or "")
+    parts = [status, "" if aired and aired in status else aired, episode.get("duration") or ""]
+    return " · ".join(str(part) for part in parts if part)
+
+
+def missing_kind(item: Mapping[str, Any], now: datetime) -> str:
+    """« nas », « aired », « upcoming », « tba » ; "" si on ne le montre pas.
+
+    Un épisode diffusé mais non suivi dans Sonarr (vieille saison qu'on ne
+    veut pas) n'est pas affiché : seuls comptent ceux qu'on attend.
+    """
+    if item.get("has_file"):
+        return "nas"
+    if not item.get("monitored"):
+        return ""
+    moment = _air_moment(item.get("air_date"))
+    if moment is None:
+        return "tba"
+    return "aired" if moment <= now else "upcoming"
+
+
+def missing_model(
+    item: Mapping[str, Any], kind: str, tz: Optional[tzinfo] = None
+) -> Dict[str, Any]:
+    """Épisode connu de Sonarr seulement → même forme que `episode_model`."""
+    season, number = _int(item.get("season")), _int(item.get("episode"))
+    title = str(item.get("title") or "").strip()
+    if title.upper() == "TBA":
+        title = ""
+    moment = _air_moment(item.get("air_date"))
+    local = (moment.astimezone(tz) if tz else moment.astimezone()) if moment else None
+    aired = aired_label(local.date().isoformat()) if local else ""
+    badge, status = MISSING_KINDS[kind]
+    if kind == "upcoming":
+        status = f"Diffusion le {aired}" if aired else "À venir"
+    return {
+        "episodeid": 0,
+        "season": season,
+        "episode": number,
+        "code": episode_code(season, number),
+        "title": title or f"Épisode {number}",
+        "label": f"{number}. {title}" if title else f"Épisode {number}",
+        "duration": "",
+        "aired": aired,
+        "plot": str(item.get("overview") or "").strip(),
+        "thumb": "",
+        "watched": False,
+        "resume": 0,
+        "total": 0,
+        "bar": "",
+        "status": status,
+        "lastplayed": "",
+        "missing": kind,
+        "badge": badge,
+    }
+
+
+def add_missing(
+    model: Mapping[str, Any],
+    sonarr_episodes: Iterable[Mapping[str, Any]],
+    now: Optional[datetime] = None,
+    tz: Optional[tzinfo] = None,
+) -> Dict[str, Any]:
+    """Écran Série complété par les épisodes que Sonarr connaît et Kodi pas.
+
+    Les épisodes absents s'intercalent à leur place (grisés à l'écran), une
+    saison entièrement absente est ajoutée (« À venir » / « Manquante »).
+    Le point de départ (épisode à suivre) reste le même épisode.
+    """
+    now = now or datetime.now(timezone.utc)
+    episodes = {season: list(items) for season, items in model["episodes"].items()}
+    present = {(e["season"], e["episode"]) for items in episodes.values() for e in items}
+    added = 0
+    for item in sonarr_episodes or []:
+        season, number = _int(item.get("season")), _int(item.get("episode"))
+        if season == SPECIALS or number <= 0 or (season, number) in present:
+            continue
+        kind = missing_kind(item, now)
+        if not kind:
+            continue
+        episodes.setdefault(season, []).append(missing_model(item, kind, tz))
+        present.add((season, number))
+        added += 1
+    if not added:
+        return dict(model)
+
+    known = {s["season"]: s for s in model["seasons"]}
+    seasons = []
+    for number in sorted(episodes, key=lambda n: (n == SPECIALS, n)):
+        episodes[number].sort(key=lambda e: e["episode"])
+        if number in known:
+            seasons.append(known[number])
+            continue
+        waiting = any(e.get("missing") in ("upcoming", "tba") for e in episodes[number])
+        seasons.append(
+            {
+                "season": number,
+                "label": season_label(number),
+                "progress": "À venir" if waiting else "Manquante",
+                "bar": "bar-000",
+                "watched": 0,
+                "total": 0,
+            }
+        )
+
+    result = dict(model, seasons=seasons, episodes=episodes)
+    next_id = model.get("next_id") or 0
+    for index, season in enumerate(seasons):
+        for position, episode in enumerate(episodes[season["season"]]):
+            if next_id and episode["episodeid"] == next_id:
+                result["start_season"], result["start_episode"] = index, position
+    if not next_id and model["seasons"]:
+        # Rien à suivre : on garde la saison de départ d'origine
+        first = model["seasons"][model.get("start_season", 0)]["season"]
+        result["start_season"] = [s["season"] for s in seasons].index(first)
+        result["start_episode"] = 0
+    result["missing"] = added
+    return result
 
 
 # ─────────────────────────────────────────────────────────────────────────────

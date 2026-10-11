@@ -611,6 +611,139 @@ wait(1.5)
 log(f"Retour depuis la tuile : accueil ArrMada {'ouvert' if shell_open() else 'fermé'}, focus {focus()}")
 leave_shell()
 
+# ── 6i. ADR-004 phase 4.4 : vu partagé, épisodes manquants, épisode suivant ─
+def watch_posts():
+    return json.loads(urllib.request.urlopen(f"{MOCK}/__watch").read())
+
+
+def describe(state):
+    code = (
+        f" S{int(state.get('season') or 0):02d}E{int(state.get('episode') or 0):02d}"
+        if state.get("media_type") == "episode"
+        else ""
+    )
+    what = "vu" if state.get("watched") else f"reprise {state.get('position')} s"
+    return f"{state.get('title') or state.get('id')}{code} ({what})"
+
+
+def episode_state(season, episode):
+    details = rpc(
+        "VideoLibrary.GetEpisodeDetails",
+        {"episodeid": BYK[(season, episode)], "properties": ["playcount", "resume", "lastplayed"]},
+    ).get("episodedetails") or {}
+    return details.get("playcount"), int((details.get("resume") or {}).get("position") or 0)
+
+
+if shows and movies:
+    # 1. Ce que cette TV a déposé depuis le début du banc (premier passage + gestes)
+    posts = watch_posts()["posts"]
+    merged = sum(len(p["states"]) for p in posts if p["merge"])
+    direct = [describe(s) for p in posts if not p["merge"] for s in p["states"]]
+    log(f"vu partagé : premier passage {merged} état(s) en fusion ; en direct : {direct}")
+
+    # 2. Une « autre TV » finit S01E07 et s'arrête à 0:50 du film
+    urllib.request.urlopen(
+        f"{MOCK}/__watch_push?season=1&episode=7&watched=1"
+        "&last_played=2026-10-11%2020:00:00&title=Severance"
+    ).read()
+    urllib.request.urlopen(
+        f"{MOCK}/__watch_push?media_type=movie&id_type=tmdb&id=1084736&position=50&total=90"
+        "&title=Le%20Comte%20de%20Monte-Cristo"
+    ).read()
+    for _ in range(30):
+        wait(0.5)
+        if episode_state(1, 7)[0] == 1:
+            break
+    wait(1.0)
+    movie = rpc(
+        "VideoLibrary.GetMovieDetails", {"movieid": MID, "properties": ["resume"]}
+    ).get("moviedetails") or {}
+    log(
+        f"vu partagé : S01E07 vu sur l'autre TV → ici playcount {episode_state(1, 7)[0]} ; "
+        f"film repris à {int((movie.get('resume') or {}).get('position') or 0)} s ici"
+    )
+
+    # 3. Épisodes manquants (Sonarr) dans l'écran Série
+    run_plugin(f"series&tvshowid={SID}")
+    wait(5.0)
+    press("Down")  # saisons
+    press("Right")  # saison 2
+    wait(1.0)
+    press("Down")  # épisodes
+    log(
+        f"écran Série : {xbmc.getInfoLabel('Container(200).NumItems')} saison(s), "
+        f"saison 2 : {xbmc.getInfoLabel('Container(300).NumItems')} épisode(s)"
+    )
+    press("Right", 5)  # S02E06 : diffusé, pas sur le NAS
+    wait(1.0)
+    log(
+        f"S02E06 : « {xbmc.getInfoLabel('Container(300).ListItem.Property(badge)')} » "
+        f"{xbmc.getInfoLabel('Container(300).ListItem.Property(status)')}"
+    )
+    shot("19a-serie-manquant")
+    press("Select")  # « Lancer une recherche dans Sonarr ? »
+    wait(1.2)
+    shot("19b-chercher-sonarr")
+    press("Back")
+    wait(0.8)
+    press("Right", 2)  # S02E08 : à venir
+    wait(1.0)
+    log(f"S02E08 : {xbmc.getInfoLabel('Container(300).ListItem.Property(status)')}")
+    shot("19c-serie-a-venir")
+    press("Up")
+    press("Right")  # saison 3 (annoncée, sans date)
+    wait(1.0)
+    log(f"saison 3 : {xbmc.getInfoLabel('Container(200).ListItem.Label2')}")
+    press("Back")
+    wait(1.5)
+
+    # 4. Épisode suivant : S01E05 lancé seul, encart à 20 s de la fin
+    def seek(seconds):
+        rpc("Player.Seek", {"playerid": 1, "value": {"time": {
+            "hours": 0, "minutes": seconds // 60, "seconds": seconds % 60, "milliseconds": 0}}})
+
+    def wait_upnext(seconds=25.0):
+        for _ in range(int(seconds * 2)):
+            wait(0.5)
+            if xbmc.getInfoLabel("Window(Home).Property(arrmada.upnext_open)") == "1":
+                return True
+        return False
+
+    rpc("Player.Open", {"item": {"episodeid": BYK[(1, 5)]}, "options": {"resume": False}})
+    wait(4.0)
+    seek(64)
+    opened = wait_upnext()
+    wait(1.5)
+    position, queue = player_state()
+    log(f"épisode suivant : encart {'ouvert' if opened else 'ABSENT'} à {position}, file {queue}")
+    shot("19d-episode-suivant")
+    press("Select")  # Lancer maintenant
+    wait(4.0)
+    log(
+        f"lancer maintenant : lecture de S{xbmc.getInfoLabel('VideoPlayer.Season')}"
+        f"E{xbmc.getInfoLabel('VideoPlayer.Episode')}, S01E05 playcount {episode_state(1, 5)[0]}"
+    )
+    seek(64)
+    opened = wait_upnext()
+    wait(1.0)
+    press("Right")
+    press("Select")  # Annuler
+    wait(1.5)
+    position, queue = player_state()
+    log(f"annuler : encart {'vu' if opened else 'ABSENT'}, file restante {queue}")
+    shot("19e-annuler")
+    for _ in range(60):
+        wait(0.5)
+        if not xbmc.Player().isPlayingVideo():
+            break
+    wait(5.0)  # dépôt de l'état 3 s après la fin
+    log(f"fin de l'épisode : lecture {'arrêtée' if not xbmc.Player().isPlayingVideo() else 'CONTINUE'}")
+    last = [describe(s) for p in watch_posts()["posts"] if not p["merge"] for s in p["states"]]
+    log(f"vu partagé : derniers dépôts {last[-3:]}")
+    xbmc.executebuiltin("ActivateWindow(Home)")
+    wait(2.0)
+
+
 # ── 7. Réouverture (cache), panne serveur ──────────────────────────────────
 run_plugin("home")
 wait(1.2)

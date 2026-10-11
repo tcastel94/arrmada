@@ -206,6 +206,16 @@ class ArrMadaAPI:
 
 
     @classmethod
+    def post_watch_states(cls, states: list, merge: bool = False, timeout: int = 5) -> dict:
+        """Dépose des états vu / reprise (phase 4.4) ; `merge` : premier passage de la TV."""
+        return cls._request(
+            "/api/kodi/watch-state",
+            method="POST",
+            data={"states": states, "merge": bool(merge)},
+            timeout=timeout,
+        )
+
+    @classmethod
     def send_scrobble(cls, payload: dict) -> dict:
         """Send live playback scrobble."""
         config = cls.get_config()

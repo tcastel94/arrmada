@@ -224,7 +224,7 @@ PY
 
 # ── 5. Passage instrumenté (le harnais quitte Kodi à la fin) ─────────────────
 if [[ "$RECORD" != "1" ]]; then
-  echo "== Kodi + harnais (≈ 9 min)"
+  echo "== Kodi + harnais (≈ 11 min)"
   timeout 900 xvfb-run -a -s "-screen 0 1920x1080x24" kodi --standalone -fs > kodi.log 2>&1 || true
 else
   # Mode vidéo : on lance l'écran virtuel nous-mêmes pour pouvoir le filmer.

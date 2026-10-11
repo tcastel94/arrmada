@@ -11,7 +11,10 @@ dans la 1.4.2. À chaque tour, `BackgroundTasks.tick()` fait au plus :
      flux concernés. Pendant un film, rien ne s'affiche : un résumé
      « Pendant ta séance » apparaît à l'arrêt (réglage « Notifications
      pendant la lecture ») ;
-  2. le téléchargement d'UN flux (le plus urgent) vers le cache local.
+  2. une étape de la synchronisation vu / reprise entre les TV
+     (lib/watch_sync.py, phase 4.4) : relire ce qui a changé ailleurs,
+     déposer ce qui a changé ici ;
+  3. le téléchargement d'UN flux (le plus urgent) vers le cache local.
      Quand un flux change, `arrmada.reload` est publié dans la mémoire
      commune de Kodi (Window(10000)) : un widget de skin qui ajoute
      `&reload=$INFO[Window(Home).Property(arrmada.reload)]` à son chemin se
@@ -42,7 +45,9 @@ import xbmcgui
 
 import camera_data
 import feeds
+import sync_data
 import ui_common as ui
+import watch_sync
 from api import ArrMadaAPI
 from kodi_helper import get_setting_bool
 
@@ -79,10 +84,11 @@ class BackgroundTasks:
         self._changed: set = set()  # flux modifiés, pas encore annoncés au skin
         self._last_scan = 0.0
         self._held: list = []  # bulles retenues pendant un film (résumé à l'arrêt)
+        self.sync = watch_sync.WatchSync(monitor)  # vu / reprise partagés (phase 4.4)
         self.connected = False  # le dernier relevé a réussi (lu par service.py)
 
     def tick(self) -> None:
-        """Un tour de boucle : au plus un relevé et un flux."""
+        """Un tour de boucle : au plus un relevé, une étape de synchro et un flux."""
         now = time.time()
         if now >= self._next_poll:
             self._poll_events(now)
@@ -91,6 +97,7 @@ class BackgroundTasks:
             self._show(feeds.merge_notifications(self._held, heading="Pendant ta séance"))
             self._held = []
         if self.connected and not self._monitor.abortRequested():
+            self.sync.tick(now)
             self._refresh_one_feed(now)
 
     # ── Événements ──────────────────────────────────────────────────────
@@ -108,6 +115,7 @@ class BackgroundTasks:
             return
         if not self.connected:
             _log("relevé des événements actif (toutes les 5 s)")
+            self.sync.wake()  # changements faits ailleurs pendant la coupure
         self.connected = True
         self._backoff = feeds.EVENTS_EVERY
         self._next_poll = now + feeds.EVENTS_EVERY
@@ -133,6 +141,9 @@ class BackgroundTasks:
         """Rafraîchissements et scan pour un événement ; sa bulle (ou None)."""
         if event_type == camera_data.EVENT:
             self._camera(data)  # jamais retenue pour « Pendant ta séance »
+            return None
+        if event_type == sync_data.EVENT:
+            self.sync.wake()  # une autre TV a vu / repris un titre : on relit
             return None
         self._forced |= feeds.feeds_for_event(event_type, data)
         # Un titre seulement ajouté à Radarr/Sonarr n'a pas encore de fichier

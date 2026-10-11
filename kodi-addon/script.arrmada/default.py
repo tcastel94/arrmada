@@ -477,6 +477,10 @@ def main():
         # Pop-up d'une caméra Eufy par-dessus le film (ouverte par le service)
         import camera_window
         camera_window.show(params)
+    elif action == "upnext":
+        # Encart « Épisode suivant » à la fin d'un épisode (ouvert par le service, 4.4)
+        import upnext_window
+        upnext_window.show(params)
     elif action == "apps":
         # Applis & sources (ADR-004, phase 4.3) : add-ons, TV en direct, NAS, favoris
         import apps_window

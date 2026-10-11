@@ -7,6 +7,9 @@
     - puis la série lue dans la médiathèque Kodi : saisons (200), épisodes
       (300) avec vu / progression, et l'épisode à suivre déjà sélectionné.
   Navigation : boutons (400) ↓ saisons (200) ↓ épisodes (300) ; Retour ferme.
+  Phase 4.4 : les épisodes absents de Kodi (d'après Sonarr) portent la
+  propriété `missing` (aired / nas / upcoming / tba) et un badge au centre
+  de leur vignette vide (« Manquant », « Sur le NAS », « À venir »).
   Le panneau du bas décrit l'épisode sélectionné (Container(300).ListItem…).
 -->
 <window>
@@ -259,6 +262,62 @@
 						<label>Vu</label>
 					</control>
 				</control>
+				<!-- Épisode absent de Kodi (Sonarr, phase 4.4) : badge au centre de la vignette vide -->
+				<control type="group">
+					<visible>!String.IsEmpty(ListItem.Property(missing))</visible>
+					<control type="image">
+						<left>16</left><top>10</top><width>388</width><height>218</height>
+						<texture border="26" colordiffuse="26FBBF24">arrmada/rounded-24.png</texture>
+						<visible>String.IsEqual(ListItem.Property(missing),aired)</visible>
+					</control>
+					<control type="label">
+						<left>16</left><top>10</top><width>388</width><height>218</height>
+						<font>font13</font>
+						<textcolor>B3FBBF24</textcolor>
+						<align>center</align><aligny>center</aligny>
+						<label>$INFO[ListItem.Property(badge)]</label>
+						<visible>String.IsEqual(ListItem.Property(missing),aired)</visible>
+					</control>
+					<control type="image">
+						<left>16</left><top>10</top><width>388</width><height>218</height>
+						<texture border="26" colordiffuse="2634D399">arrmada/rounded-24.png</texture>
+						<visible>String.IsEqual(ListItem.Property(missing),nas)</visible>
+					</control>
+					<control type="label">
+						<left>16</left><top>10</top><width>388</width><height>218</height>
+						<font>font13</font>
+						<textcolor>B334D399</textcolor>
+						<align>center</align><aligny>center</aligny>
+						<label>$INFO[ListItem.Property(badge)]</label>
+						<visible>String.IsEqual(ListItem.Property(missing),nas)</visible>
+					</control>
+					<control type="image">
+						<left>16</left><top>10</top><width>388</width><height>218</height>
+						<texture border="26" colordiffuse="268CC4FF">arrmada/rounded-24.png</texture>
+						<visible>String.IsEqual(ListItem.Property(missing),upcoming)</visible>
+					</control>
+					<control type="label">
+						<left>16</left><top>10</top><width>388</width><height>218</height>
+						<font>font13</font>
+						<textcolor>B38CC4FF</textcolor>
+						<align>center</align><aligny>center</aligny>
+						<label>$INFO[ListItem.Property(badge)]</label>
+						<visible>String.IsEqual(ListItem.Property(missing),upcoming)</visible>
+					</control>
+					<control type="image">
+						<left>16</left><top>10</top><width>388</width><height>218</height>
+						<texture border="26" colordiffuse="268CC4FF">arrmada/rounded-24.png</texture>
+						<visible>String.IsEqual(ListItem.Property(missing),tba)</visible>
+					</control>
+					<control type="label">
+						<left>16</left><top>10</top><width>388</width><height>218</height>
+						<font>font13</font>
+						<textcolor>B38CC4FF</textcolor>
+						<align>center</align><aligny>center</aligny>
+						<label>$INFO[ListItem.Property(badge)]</label>
+						<visible>String.IsEqual(ListItem.Property(missing),tba)</visible>
+					</control>
+				</control>
 				<control type="image">
 					<left>32</left><top>208</top><width>356</width><height>8</height>
 					<texture>arrmada/progress/$INFO[ListItem.Property(bar)].png</texture>
@@ -320,6 +379,62 @@
 							<label>Vu</label>
 						</control>
 					</control>
+					<!-- Épisode absent de Kodi (Sonarr, phase 4.4) : badge au centre de la vignette vide -->
+					<control type="group">
+						<visible>!String.IsEmpty(ListItem.Property(missing))</visible>
+						<control type="image">
+							<left>16</left><top>10</top><width>388</width><height>218</height>
+							<texture border="26" colordiffuse="26FBBF24">arrmada/rounded-24.png</texture>
+							<visible>String.IsEqual(ListItem.Property(missing),aired)</visible>
+						</control>
+						<control type="label">
+							<left>16</left><top>10</top><width>388</width><height>218</height>
+							<font>font13</font>
+							<textcolor>FFFBBF24</textcolor>
+							<align>center</align><aligny>center</aligny>
+							<label>$INFO[ListItem.Property(badge)]</label>
+							<visible>String.IsEqual(ListItem.Property(missing),aired)</visible>
+						</control>
+						<control type="image">
+							<left>16</left><top>10</top><width>388</width><height>218</height>
+							<texture border="26" colordiffuse="2634D399">arrmada/rounded-24.png</texture>
+							<visible>String.IsEqual(ListItem.Property(missing),nas)</visible>
+						</control>
+						<control type="label">
+							<left>16</left><top>10</top><width>388</width><height>218</height>
+							<font>font13</font>
+							<textcolor>FF34D399</textcolor>
+							<align>center</align><aligny>center</aligny>
+							<label>$INFO[ListItem.Property(badge)]</label>
+							<visible>String.IsEqual(ListItem.Property(missing),nas)</visible>
+						</control>
+						<control type="image">
+							<left>16</left><top>10</top><width>388</width><height>218</height>
+							<texture border="26" colordiffuse="268CC4FF">arrmada/rounded-24.png</texture>
+							<visible>String.IsEqual(ListItem.Property(missing),upcoming)</visible>
+						</control>
+						<control type="label">
+							<left>16</left><top>10</top><width>388</width><height>218</height>
+							<font>font13</font>
+							<textcolor>FF8CC4FF</textcolor>
+							<align>center</align><aligny>center</aligny>
+							<label>$INFO[ListItem.Property(badge)]</label>
+							<visible>String.IsEqual(ListItem.Property(missing),upcoming)</visible>
+						</control>
+						<control type="image">
+							<left>16</left><top>10</top><width>388</width><height>218</height>
+							<texture border="26" colordiffuse="268CC4FF">arrmada/rounded-24.png</texture>
+							<visible>String.IsEqual(ListItem.Property(missing),tba)</visible>
+						</control>
+						<control type="label">
+							<left>16</left><top>10</top><width>388</width><height>218</height>
+							<font>font13</font>
+							<textcolor>FF8CC4FF</textcolor>
+							<align>center</align><aligny>center</aligny>
+							<label>$INFO[ListItem.Property(badge)]</label>
+							<visible>String.IsEqual(ListItem.Property(missing),tba)</visible>
+						</control>
+					</control>
 					<control type="image">
 						<left>32</left><top>208</top><width>356</width><height>8</height>
 						<texture>arrmada/progress/$INFO[ListItem.Property(bar)].png</texture>
@@ -363,7 +478,7 @@
 				<font>font12</font>
 				<textcolor>FF9CCBFF</textcolor>
 				<aligny>center</aligny>
-				<label>$INFO[Container(300).ListItem.Property(status),, · ]$INFO[Container(300).ListItem.Property(aired),, · ]$INFO[Container(300).ListItem.Label2]</label>
+				<label>$INFO[Container(300).ListItem.Property(detail)]</label>
 			</control>
 			<control type="textbox">
 				<left>96</left><top>924</top><width>1500</width><height>120</height>
@@ -378,6 +493,15 @@
 				<textcolor>80C9D3E0</textcolor>
 				<align>right</align><aligny>center</aligny>
 				<label>Appui long : vu / non vu</label>
+				<visible>String.IsEmpty(Container(300).ListItem.Property(missing))</visible>
+			</control>
+			<control type="label">
+				<left>1420</left><top>1004</top><width>440</width><height>40</height>
+				<font>font10</font>
+				<textcolor>80C9D3E0</textcolor>
+				<align>right</align><aligny>center</aligny>
+				<label>OK : chercher dans Sonarr</label>
+				<visible>String.IsEqual(Container(300).ListItem.Property(missing),aired)</visible>
 			</control>
 		</control>
 	</controls>

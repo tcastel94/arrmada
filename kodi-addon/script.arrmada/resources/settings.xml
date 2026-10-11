@@ -23,6 +23,12 @@
     <category label="30150">
         <setting id="shell_mode" type="bool" label="30151" default="true" />
     </category>
+    <!-- ADR-004 (1.15) : vu / reprise partagés entre les TV, encart « Épisode
+         suivant » (secondes avant la fin d'un épisode ; 0 : jamais). -->
+    <category label="30160">
+        <setting id="watch_sync" type="bool" label="30161" default="true" />
+        <setting id="upnext_seconds" type="labelenum" label="30162" values="0|10|20|30|45|60" default="20" />
+    </category>
     <!-- Coché automatiquement si Kodi se ferme 2 fois de suite au démarrage
          (lib/startup_guard.py) ; à décocher pour revenir au fonctionnement normal. -->
     <category label="30140">

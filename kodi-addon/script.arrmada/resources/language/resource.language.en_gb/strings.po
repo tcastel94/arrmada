@@ -159,3 +159,15 @@ msgstr "Interface"
 msgctxt "#30151"
 msgid "Start on ArrMada and come back to it (replaces Kodi's home screen)"
 msgstr "Start on ArrMada and come back to it (replaces Kodi's home screen)"
+
+msgctxt "#30160"
+msgid "Playback"
+msgstr "Playback"
+
+msgctxt "#30161"
+msgid "Share watched and resume points between TVs (through the server)"
+msgstr "Share watched and resume points between TVs (through the server)"
+
+msgctxt "#30162"
+msgid "\"Next episode\" card (seconds before the end, 0: never)"
+msgstr "\"Next episode\" card (seconds before the end, 0: never)"

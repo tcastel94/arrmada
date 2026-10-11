@@ -17,6 +17,10 @@ Répond comme le vrai backend aux routes lues par l'écran « Accueil » :
   POST /api/devices/pair/confirm  appairage validé par mot de passe (migration)
   POST /api/kodi/scrobble       suivi de lecture de la TV (écran d'appoint, 1.10)
   GET /__scrobbles              ce que la TV a envoyé (vérifié par le harnais)
+  GET|POST /api/kodi/watch-state  vu / reprise partagés entre les TV (phase 4.4)
+  GET /__watch                  ce que la TV a déposé (vérifié par le harnais)
+  GET /__watch_push?…           une « autre TV » change un état (+ événement)
+  GET /api/kodi/series/371980/episodes  épisodes « Sonarr » de Severance
 
 La progression des téléchargements avance à chaque appel, pour vérifier le
 rafraîchissement en direct. Une latence est simulée (--delay) pour voir les
@@ -68,6 +72,9 @@ STATE = {
     "events": [],  # événements relevés par l'add-on (déposés par /__emit)  # l'appairage est « validé dans la web app » au 3e poll
     "auth": "",  # dernier mode d'authentification vu (journal du banc)
     "scrobbles": [],  # suivi de lecture reçu de la TV (POST /api/kodi/scrobble)
+    "watch": {},  # vu / reprise partagés : clé → état (avec « seq », le curseur)
+    "watch_seq": 0,
+    "watch_posts": [],  # dépôts reçus de la TV : {"merge", "states"}
     "amp": {"power": "on", "volume": 84, "mute": False, "input": "hdmi1", "sound_program": "surr_decoder"},
 }
 CAST = [
@@ -350,6 +357,72 @@ def recommendations(base: str) -> dict:
         "wanted": [],
         "tmdb_available": True,
     }
+
+
+def watch_key(state: dict) -> str:
+    key = f"{state.get('media_type')}:{state.get('id_type')}:{state.get('id')}"
+    if state.get("media_type") == "episode":
+        key += f":{int(state.get('season') or 0)}:{int(state.get('episode') or 0)}"
+    return key
+
+
+def watch_store(states: list, device: str) -> int:
+    """Range des états (le plus récent gagne) ; publie `watch_state` si l'un change."""
+    changed = 0
+    for raw in states:
+        key = watch_key(raw)
+        old = STATE["watch"].get(key)
+        if old and bool(old["watched"]) == bool(raw.get("watched")) and abs(
+            int(old["position"] or 0) - int(raw.get("position") or 0)
+        ) < 10:
+            continue
+        # Curseur en microsecondes, toujours croissant comme les dates du vrai
+        # serveur : une TV qui garde le curseur d'un banc précédent (profil
+        # conservé) voit quand même les états de ce banc-ci.
+        STATE["watch_seq"] = max(STATE["watch_seq"] + 1, int(time.time() * 1_000_000))
+        STATE["watch"][key] = dict(raw, device=device, seq=STATE["watch_seq"])
+        changed += 1
+    if changed:
+        STATE["events"].append(
+            (len(STATE["events"]) + 1, "watch_state", {"changed": changed, "device": device})
+        )
+    return changed
+
+
+def sonarr_episodes() -> list:
+    """Severance vue par « Sonarr » : la médiathèque du banc a S01 (9) et S02E01-05.
+
+    S02E06 diffusé sans fichier (manquant), S02E07 téléchargé mais pas encore
+    dans Kodi, S02E08-10 à venir (dates autour du jour du banc), S03E01 sans date.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc)
+    episodes = [
+        {"season": 1, "episode": n, "title": f"S1 {n}", "air_date": "2022-02-18T02:00:00Z",
+         "has_file": True, "monitored": True, "overview": ""}
+        for n in range(1, 10)
+    ]  # fmt: skip
+    episodes += [
+        {"season": 2, "episode": n, "title": f"S2 {n}", "air_date": "2025-01-17T02:00:00Z",
+         "has_file": True, "monitored": True, "overview": ""}
+        for n in range(1, 6)
+    ]  # fmt: skip
+    titles = {6: "Attila", 7: "Chikhai Bardo", 8: "Sweet Vitriol", 9: "The After Hours",
+              10: "Cold Harbor"}  # fmt: skip
+    for n in range(6, 11):
+        if n <= 7:
+            air = (now - timedelta(days=30 - n)).isoformat()
+        else:
+            air = (now + timedelta(days=7 * (n - 7))).isoformat()
+        episodes.append({
+            "season": 2, "episode": n, "title": titles[n], "air_date": air,
+            "has_file": n == 7, "monitored": True,
+            "overview": "Épisode connu de Sonarr, absent de la médiathèque Kodi du banc.",
+        })  # fmt: skip
+    episodes.append({"season": 3, "episode": 1, "title": "TBA", "air_date": "",
+                     "has_file": False, "monitored": True, "overview": ""})  # fmt: skip
+    return episodes
 
 
 def notifications() -> dict:
@@ -676,6 +749,27 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
             if path == "/__scrobbles":  # le harnais relit le suivi de lecture reçu
                 self._json(STATE["scrobbles"])
                 return
+            if path == "/__watch":  # le harnais relit les états vu / reprise déposés
+                self._json({"posts": STATE["watch_posts"], "states": list(STATE["watch"].values())})
+                return
+            if path == "/__watch_push":  # une « autre TV » change un état
+                from urllib.parse import parse_qs, urlsplit
+
+                query = {k: v[0] for k, v in parse_qs(urlsplit(self.path).query).items()}
+                state = {
+                    "media_type": query.get("media_type", "episode"),
+                    "id_type": query.get("id_type", "tvdb"),
+                    "id": query.get("id", "371980"),
+                    "season": int(query.get("season", 0)),
+                    "episode": int(query.get("episode", 0)),
+                    "title": query.get("title", ""),
+                    "watched": query.get("watched") == "1",
+                    "position": int(query.get("position", 0)),
+                    "total": int(query.get("total", 90)),
+                    "last_played": query.get("last_played", ""),
+                }
+                self._json({"changed": watch_store([state], "Shield Cinéma")})
+                return
             if path == "/__emit":  # le harnais publie un événement temps réel
                 from urllib.parse import parse_qs, urlsplit
 
@@ -748,6 +842,25 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
                     "boot_id": BOOT_ID,
                     "last_id": len(STATE["events"]),
                 })
+            elif path == "/api/kodi/watch-state":
+                from urllib.parse import parse_qs, urlsplit
+
+                query = {k: v[0] for k, v in parse_qs(urlsplit(self.path).query).items()}
+                since = int(query.get("since") or 0)
+                limit = int(query.get("limit") or 500)
+                rows = sorted(
+                    (s for s in STATE["watch"].values() if s["seq"] > since), key=lambda s: s["seq"]
+                )
+                page = rows[:limit]
+                self._json({
+                    "states": [dict(s, updated_at=str(s["seq"])) for s in page],
+                    "cursor": str(page[-1]["seq"]) if page else (query.get("since") or ""),
+                    "more": len(rows) > limit,
+                })
+            elif path == "/api/kodi/series/371980/episodes":
+                self._json({"status": "ok", "title": "Severance", "episodes": sonarr_episodes()})
+            elif path.startswith("/api/kodi/series/") and path.endswith("/episodes"):
+                self._json({"status": "unknown", "episodes": []})
             elif path.startswith("/api/cameras/snapshot/"):
                 # Photo d'une détection Eufy (pop-up de la TV), en base64 comme le serveur
                 import base64
@@ -837,6 +950,20 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
                 self._json({"status": "ok", "message": "ok"})
             elif path.startswith("/api/kodi/actions/"):
                 self._json({"status": "ok", "message": "Demande envoyée (banc de test)"})
+            elif path == "/api/kodi/watch-state":
+                states = data.get("states") or []
+                STATE["watch_posts"].append({"merge": bool(data.get("merge")), "states": states})
+                sys.stderr.write(
+                    f"[mock] vu / reprise : {len(states)} état(s) "
+                    f"({'fusion' if data.get('merge') else 'direct'})\n"
+                )
+                if data.get("merge"):
+                    # Premier passage : « vu » l'emporte, rien n'est défait
+                    fresh = [s for s in states if watch_key(s) not in STATE["watch"]]
+                    changed = watch_store(fresh, "Kodi du banc")
+                else:
+                    changed = watch_store(states, "Kodi du banc")
+                self._json({"status": "ok", "changed": changed, "rejected": 0, "cursor": ""})
             elif path == "/api/kodi/scrobble":
                 STATE["scrobbles"].append(data)
                 sys.stderr.write(f"[mock] lecture : {json.dumps(data, ensure_ascii=False)}\n")

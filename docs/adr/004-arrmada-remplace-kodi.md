@@ -147,6 +147,23 @@ s'affiche tout de suite et se remplit ensuite (règle d'or de l'ADR-003).
 > add-on mis en favori (`RunAddon`) ; « Ouvrir dans Kodi » reste toujours
 > proposé en appui long, pour un add-on qui a besoin de sa propre interface.
 
+> **Avancement (11/10/2026, suite)** — Phase 4.4 livrée dans l'add-on 1.15.0 :
+> **vu / reprise partagés** entre les TV par le serveur (table
+> `watch_states`, `GET|POST /api/kodi/watch-state`, événement `watch_state`) ;
+> l'add-on dépose ce que Kodi a vraiment enregistré (3 s après l'arrêt, et à
+> chaque « marqué vu / non vu » vu par `VideoLibrary.OnUpdate`) et relit les
+> changements des autres TV avec un curseur (`watch_sync.py`, règles pures
+> dans `sync_data.py`). Premier passage prudent (on ajoute, on ne défait
+> rien), puis le geste le plus récent gagne. **Encart « Épisode suivant »**
+> (`upnext_window.py`, 20 s avant la fin, réglable) : Lancer maintenant,
+> Annuler, ou rien. **Épisodes manquants** dans l'écran Série d'après Sonarr
+> (`GET /api/kodi/series/{tvdb}/episodes`) : Manquant (OK : recherche
+> Sonarr), Sur le NAS (OK : scan Kodi), À venir (date). Validé sur le banc.
+> **Choix** : un titre est repéré par ses identifiants publics (TMDB, TVDB +
+> saison + épisode), jamais par les numéros internes de Kodi, différents
+> d'une TV à l'autre ; tout le travail du service reste dans sa boucle
+> unique (une étape par seconde, pas de fil de fond : règle de la 1.7.1).
+
 ## Conséquences
 
 ### Positives
@@ -166,4 +183,5 @@ s'affiche tout de suite et se remplit ensuite (règle d'or de l'ADR-003).
   scanné n'est pas lisible depuis ArrMada. Atténuation : le scan
   automatique après chaque import (déjà en place) ; message clair sinon.
 - **Vu / reprise propres à chaque Shield** jusqu'à la phase 4.4 (synchro par
-  le serveur).
+  le serveur, livrée en 1.15.0). Reste : un titre absent d'une TV au moment
+  où l'état arrive n'y est rattrapé qu'au changement suivant le concernant.
