@@ -122,6 +122,48 @@ cat > "$KODI_DIR/userdata/sources.xml" <<EOF
 </sources>
 EOF
 
+# ── 1c. Vidéo du panneau pendant la lecture (ADR-004, phase 4.5) ────────────
+# 2 pistes audio (anglais 5.1 AC3, français stéréo « VFF »), 2 pistes de
+# sous-titres (anglais, français forcés) et 3 chapitres. Le harnais y dépose
+# ensuite « Panneau.fr.srt » comme le ferait Bazarr : on l'efface à chaque
+# passage pour que le panneau le voie apparaître.
+PANEL_DIR="$BENCH_DIR/panel"
+mkdir -p "$PANEL_DIR"
+rm -f "$PANEL_DIR"/*.srt
+if command -v ffmpeg >/dev/null && [[ ! -s "$PANEL_DIR/Panneau.mkv" ]]; then
+  printf '1\n00:00:00,000 --> 00:03:00,000\nEnglish subtitles (bench)\n' > assets/panel-en.srt
+  printf '1\n00:00:00,000 --> 00:03:00,000\nSous-titres forcés (banc)\n' > assets/panel-fr.srt
+  cat > assets/panel-chapters.txt <<'EOF'
+;FFMETADATA1
+[CHAPTER]
+TIMEBASE=1/1000
+START=0
+END=40000
+title=Ouverture
+[CHAPTER]
+TIMEBASE=1/1000
+START=40000
+END=80000
+title=Milieu
+[CHAPTER]
+TIMEBASE=1/1000
+START=80000
+END=120000
+title=Fin
+EOF
+  ffmpeg -loglevel error -y -f lavfi -i testsrc2=size=640x360:rate=25 \
+    -f lavfi -i "sine=frequency=440:sample_rate=48000" \
+    -f lavfi -i "sine=frequency=660:sample_rate=48000" \
+    -i assets/panel-en.srt -i assets/panel-fr.srt -i assets/panel-chapters.txt \
+    -map 0:v -map 1:a -map 2:a -map 3:s -map 4:s -map_metadata 5 -map_chapters 5 -t 120 \
+    -c:v libx264 -preset ultrafast -crf 35 -pix_fmt yuv420p \
+    -c:a:0 ac3 -ac:a:0 6 -c:a:1 aac -ac:a:1 2 -c:s srt \
+    -metadata:s:a:0 language=eng -metadata:s:a:1 language=fre -metadata:s:a:1 title=VFF \
+    -metadata:s:s:0 language=eng -metadata:s:s:1 language=fre -disposition:s:1 forced \
+    "$PANEL_DIR/Panneau.mkv" || true
+fi
+export BENCH_PANEL="$PANEL_DIR/Panneau.mkv"
+
 # ── 2. Add-ons : version de travail du dépôt + harnais ───────────────────────
 rm -rf "$KODI_DIR/addons/script.arrmada" "$KODI_DIR/addons/service.arrmada.harness" \
        "$KODI_DIR/addons/plugin.video.arrmadabanc"

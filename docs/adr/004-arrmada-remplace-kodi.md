@@ -164,6 +164,16 @@ s'affiche tout de suite et se remplit ensuite (règle d'or de l'ADR-003).
 > d'une TV à l'autre ; tout le travail du service reste dans sa boucle
 > unique (une étape par seconde, pas de fil de fond : règle de la 1.7.1).
 
+> **Avancement (11/10/2026, suite)** — Phase 4.5 (hors plan initial, à la
+> demande du propriétaire) livrée dans l'add-on 1.16.0 : **panneau pendant
+> le film** (`player_window.py`, logique pure dans `player_data.py`), ouvert
+> par un appui long sur OK grâce à un fichier de touches posé par le service
+> (`userdata/keymaps/arrmada.xml`, retiré si on décoche le réglage). Pistes
+> audio et sous-titres, sous-titres Bazarr chargés sans relancer le film,
+> ampli de la pièce, épisode suivant et chapitres. La barre de lecture de
+> Kodi (appui court) reste celle du skin : c'est désormais tout ce que
+> SiLVO affiche au quotidien.
+
 ## Conséquences
 
 ### Positives
@@ -178,7 +188,8 @@ s'affiche tout de suite et se remplit ensuite (règle d'or de l'ADR-003).
   maintenir entre versions de Kodi. Atténuation : logique dans des modules
   purs testés en CI, rendu vérifié sur le banc Kodi (vrai Kodi, médiathèque
   de test).
-- **SiLVO reste installé** pour la barre de lecture et les réglages.
+- **SiLVO reste installé** pour la barre de lecture et les réglages (depuis la
+  1.16.0, pistes, sous-titres et ampli passent par le panneau ArrMada).
 - **Dépend de la médiathèque Kodi** : un fichier que Kodi n'a pas encore
   scanné n'est pas lisible depuis ArrMada. Atténuation : le scan
   automatique après chaque import (déjà en place) ; message clair sinon.

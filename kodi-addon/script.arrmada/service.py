@@ -19,6 +19,9 @@
   an add-on), the ArrMada home opens instead (setting "shell_mode"; never in
   safe mode, never on top of a dialog or a video, suspended for the session
   when the user picks "Kodi interface"; lib/shell_data.should_open_shell)
+- ADR-004 phase 4.5: a long press on OK during playback opens the ArrMada
+  panel (keymap file userdata/keymaps/arrmada.xml written / removed by this
+  service, setting "player_panel"; removed in safe mode)
 - ADR-004 phase 4.4: watched / resume shared between the TVs (the library
   item that just changed is handed to lib/watch_sync.py, which posts it from
   the background tasks), and the "Next episode" card a few seconds before
@@ -284,6 +287,18 @@ def _save_guard(path: str, state: dict) -> None:
         _log(f"état de démarrage non enregistré : {exc}", xbmc.LOGWARNING)
 
 
+def _sync_keymap(safe_mode: bool) -> None:
+    """Raccourci du panneau pendant la lecture : posé ou retiré selon le réglage."""
+    try:
+        import player_window  # chargé seulement ici : le service reste léger
+
+        player_window.install_keymap(
+            get_setting_bool("player_panel", default=True) and not safe_mode
+        )
+    except Exception as exc:  # jamais au point de faire tomber le service
+        _log(f"raccourci du panneau : {exc}", xbmc.LOGWARNING)
+
+
 def _start_tasks(monitor: xbmc.Monitor, guard_file: str):
     """Travail de fond (cache + événements), ou None en mode minimal."""
     if get_setting_bool("safe_mode", default=False):
@@ -331,6 +346,7 @@ def main():
     migrate_at = time.time() if migration.needed() else 0.0
 
     shell = ShellWatch()
+    _sync_keymap(safe_mode)
     last_notification_check = 0
     seen_downloads: set[str] = set()
     seen_event_ids: set[int] = set()
@@ -342,6 +358,7 @@ def main():
         if monitor.settings_changed:
             monitor.settings_changed = False
             _reload_settings()
+            _sync_keymap(get_setting_bool("safe_mode", default=False))
         wanted = get_setting_bool("safe_mode", default=False)
         if wanted != safe_mode:
             safe_mode = wanted

@@ -684,6 +684,45 @@ les épisodes spéciaux ne sont pas affichés.
 > - Serveur plus ancien que l'add-on : la synchro attend 1 min entre deux
 >   essais, sans gêner le reste.
 
+### 21. 🎛️ Panneau pendant le film : pistes, sous-titres Bazarr, ampli (1.16.0, ADR-004)
+
+Pendant la lecture, **appui long sur OK** : un panneau ArrMada s'ouvre en bas
+de l'écran, le film continue au-dessus. Un appui court garde son rôle (barre
+de lecture de Kodi pour avancer / reculer).
+
+| Section | Ce qu'on y fait |
+|---|---|
+| **Audio** | Choisir la piste : « Français · Dolby Digital Plus 5.1 · VFF », « Anglais · Dolby TrueHD 7.1 · VO »… (point bleu : piste en cours) |
+| **Sous-titres** | Désactivés, pistes du fichier (forcés, malentendants), **Chercher en français avec Bazarr**, **Synchroniser avec l'audio** |
+| **Ampli** | Volume − / +, couper le son, préréglages des pièces (l'ampli de la pièce de la TV) |
+| **Lecture** | Épisode suivant, s'arrêter après celui-ci, chapitre suivant / précédent, reprendre depuis le début |
+
+En haut : titre, épisode, position, **heure de fin** et temps restant (ceux
+du lecteur de Kodi, à jour en direct). Retour referme le panneau.
+
+**Sous-titres Bazarr sans relancer le film** : le panneau se ferme tout de
+suite, Bazarr cherche (ou recale) les sous-titres. Dès que le fichier apparaît
+à côté de la vidéo (« Dune.fr.srt »), Kodi le charge et l'affiche ; une bulle
+le dit. Rien au bout d'1 min 30 : « Rien de nouveau pour l'instant ».
+
+Le raccourci est un **fichier de touches** de Kodi posé par l'add-on :
+`userdata/keymaps/arrmada.xml` (comme un fichier d'override dans
+`/etc/*.d/` : il ajoute une règle sans toucher aux fichiers de Kodi). Réglage
+*Lecture → Panneau ArrMada : appui long sur OK pendant la lecture* (coché par
+défaut) ; décoché, ou en mode minimal, le fichier est retiré et Kodi relit
+ses touches aussitôt. Ouvrable aussi par `plugin://script.arrmada/?action=player`.
+
+> Pièges :
+> - **Désinstaller l'add-on** : décocher d'abord le réglage, sinon le fichier
+>   de touches reste et l'appui long affiche une erreur. Rattrapage :
+>   supprimer `userdata/keymaps/arrmada.xml` (Shield :
+>   `Android/data/org.xbmc.kodi/files/.kodi/userdata/keymaps/`).
+> - Les sous-titres de Bazarr se chargent si Kodi **voit le dossier** de la
+>   vidéo (partage SMB/NFS déclaré comme source) : c'est déjà le cas pour la
+>   médiathèque.
+> - Une télécommande qui n'envoie pas d'appui long (certaines télécommandes
+>   CEC) : ajouter un favori vers `?action=player`, ou passer par l'écran Salon.
+
 ## 🚀 Installation dans Kodi
 
 > ⚠️ **NVIDIA Shield (Kodi 21, Android)** : l'installation **par le dépôt** ferme
@@ -769,6 +808,7 @@ Copiez le dossier `script.arrmada/` dans le dossier des extensions de Kodi :
 | Logique pure (mise en forme, cache) — sans Kodi | `script.arrmada/lib/home_data.py`, `script.arrmada/lib/screens_data.py` |
 | Vu / reprise partagés entre les TV : règles pures / travail du service | `script.arrmada/lib/sync_data.py` / `script.arrmada/lib/watch_sync.py` (serveur : `backend/app/services/watch_sync.py`) |
 | Encart « Épisode suivant » : logique pure / fenêtre | `script.arrmada/lib/upnext_data.py` / `script.arrmada/lib/upnext_window.py` |
+| Panneau pendant le film (pistes, Bazarr, ampli, fichier de touches) : logique pure / fenêtre | `script.arrmada/lib/player_data.py` / `script.arrmada/lib/player_window.py` |
 | Dépôt Kodi servi par le backend | `backend/app/services/kodi_repo.py`, `backend/app/api/kodi_repo.py` |
 | Textures (coins arrondis, halo, dégradés, barres de progression) | générées par `python3 kodi-addon/tools/make_textures.py` |
 | Tests (sans Kodi, lancés en CI) | `pytest kodi-addon/tests` |
@@ -797,7 +837,10 @@ détection de caméra pendant le film (pop-up) puis hors lecture (bulle) ;
 et la phase 4.4 : état vu / reprise déposé par la TV, épisode vu et reprise
 de film venus d'une « autre TV » appliqués à la médiathèque, épisodes
 manquants et à venir dans l'écran Série, encart « Épisode suivant » (Lancer
-maintenant, puis Annuler)) et dépose les captures dans
+maintenant, puis Annuler) ; enfin la phase 4.5 sur une vidéo à 2 pistes
+audio, 2 pistes de sous-titres et 3 chapitres : appui long sur OK, panneau,
+changement de piste audio et de sous-titres, sous-titres « Bazarr » chargés
+sans relancer, ampli, chapitre suivant) et dépose les captures dans
 `/tmp/arrmada-kodi-bench/shots/`. Le Kodi du système n'est pas modifié : tout
 se passe dans un profil jetable. Le rendu final reste à valider sur la Shield.
 

@@ -179,3 +179,7 @@ msgstr "Partager vu et reprise entre les TV (via le serveur)"
 msgctxt "#30162"
 msgid "\"Next episode\" card (seconds before the end, 0: never)"
 msgstr "Encart « Épisode suivant » (secondes avant la fin, 0 : jamais)"
+
+msgctxt "#30163"
+msgid "ArrMada panel: long press OK during playback"
+msgstr "Panneau ArrMada : appui long sur OK pendant la lecture"

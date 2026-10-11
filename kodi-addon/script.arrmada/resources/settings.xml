@@ -28,6 +28,9 @@
     <category label="30160">
         <setting id="watch_sync" type="bool" label="30161" default="true" />
         <setting id="upnext_seconds" type="labelenum" label="30162" values="0|10|20|30|45|60" default="20" />
+        <!-- 1.16 : appui long sur OK pendant la lecture → panneau ArrMada
+             (fichier de touches userdata/keymaps/arrmada.xml, retiré si décoché) -->
+        <setting id="player_panel" type="bool" label="30163" default="true" />
     </category>
     <!-- Coché automatiquement si Kodi se ferme 2 fois de suite au démarrage
          (lib/startup_guard.py) ; à décocher pour revenir au fonctionnement normal. -->

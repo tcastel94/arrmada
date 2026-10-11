@@ -744,6 +744,140 @@ if shows and movies:
     wait(2.0)
 
 
+# ── 6j. ADR-004 phase 4.5 : panneau pendant le film (appui long sur OK) ─────
+PANEL = os.environ.get("BENCH_PANEL", "")
+
+
+def panel_open():
+    return xbmc.getInfoLabel("Window(Home).Property(arrmada.player_open)") == "1"
+
+
+def panel_state():
+    props = rpc(
+        "Player.GetProperties",
+        {"playerid": 1, "properties": ["currentaudiostream", "currentsubtitle",
+                                       "subtitleenabled", "subtitles", "time"]},
+    )  # fmt: skip
+    audio = (props.get("currentaudiostream") or {}).get("language", "?")
+    sub = (props.get("currentsubtitle") or {}).get("language", "?")
+    t = props.get("time") or {}
+    return (
+        f"audio {audio}, sous-titres {sub if props.get('subtitleenabled') else 'off'} "
+        f"({len(props.get('subtitles') or [])} pistes), à {t.get('minutes', 0)}:{t.get('seconds', 0):02d}"
+    )
+
+
+keymap = xbmcvfs.translatePath("special://profile/keymaps/arrmada.xml")
+log(f"raccourci du panneau : fichier de touches {'posé' if xbmcvfs.exists(keymap) else 'ABSENT'}")
+if PANEL and os.path.exists(PANEL):
+    rpc("Player.Open", {"item": {"file": PANEL}})
+    for _ in range(30):  # Kodi cherche une sortie son quelques secondes (pas de carte)
+        wait(0.5)
+        if xbmc.Player().isPlayingVideo() and not xbmc.getCondVisibility("Window.IsActive(busydialog)"):
+            break
+    wait(3.0)
+    log(f"film du panneau : {panel_state()}")
+    # Appui long sur OK pendant la lecture (fichier de touches posé par le service)
+    rpc("Input.ButtonEvent", {"button": "return", "keymap": "KB", "holdtime": 1200})
+    for _ in range(12):
+        wait(0.5)
+        if panel_open():
+            break
+    via = "appui long"
+    if not panel_open():
+        via = "RunPlugin (appui long non simulable ici)"
+        run_plugin("player")
+        for _ in range(12):
+            wait(0.5)
+            if panel_open():
+                break
+    wait(1.0)
+    sections = [
+        f"{xbmc.getInfoLabel(f'Container(200).ListItemAbsolute({i}).Label')}"
+        f" ({xbmc.getInfoLabel(f'Container(200).ListItemAbsolute({i}).Label2')})"
+        for i in range(int(xbmc.getInfoLabel("Container(200).NumItems") or 0))
+    ]
+    log(f"panneau {'ouvert' if panel_open() else 'ABSENT'} par {via} : {sections}")
+    shot("20a-panneau-audio")
+    press("Right")  # choix de la section Audio
+    press("Down")  # 2e piste : français
+    press("Select")
+    wait(1.5)
+    log(f"audio changé : {panel_state()}")
+    press("Left")
+    press("Down")  # Sous-titres
+    wait(0.8)
+    shot("20b-panneau-sous-titres")
+    press("Right")
+    press("Down")  # 1re piste (anglais)
+    press("Select")
+    wait(1.5)
+    log(f"sous-titres choisis : {panel_state()}")
+    press("Down", 2)  # → « Chercher en français avec Bazarr »
+    log(f"choix : {xbmc.getInfoLabel('Container(300).ListItem.Label')}")
+    press("Select")  # le panneau se ferme, Bazarr (faux) cherche
+    wait(2.0)
+    log(f"après « Chercher » : panneau {'ENCORE OUVERT' if panel_open() else 'fermé'}")
+    # Le faux Bazarr dépose le fichier à côté de la vidéo, comme le vrai
+    with open(os.path.join(os.path.dirname(PANEL), "Panneau.fr.srt"), "w", encoding="utf-8") as srt:
+        srt.write("1\n00:00:00,000 --> 00:03:00,000\nSous-titres Bazarr (banc)\n")
+    for _ in range(20):
+        wait(0.5)
+        if "Panneau.fr.srt" in json.dumps(rpc(
+            "Player.GetProperties", {"playerid": 1, "properties": ["currentsubtitle"]}
+        )):  # fmt: skip
+            break
+    wait(1.0)
+    current = rpc("Player.GetProperties", {"playerid": 1, "properties": ["currentsubtitle"]})
+    log(f"Bazarr : sous-titres chargés → {(current.get('currentsubtitle') or {}).get('name', '?')} ; {panel_state()}")
+    shot("20c-sous-titres-bazarr")
+    # Ampli et chapitres
+    run_plugin("player")
+    for _ in range(12):
+        wait(0.5)
+        if panel_open():
+            break
+    wait(1.5)  # l'ampli arrive par le réseau
+    press("Down", 2)  # Ampli
+    wait(0.8)
+    shot("20d-panneau-ampli")
+    before = json.loads(urllib.request.urlopen(f"{MOCK}/api/yamaha/state").read())
+    press("Right")
+    press("Down")  # Volume +
+    press("Select")
+    wait(2.0)
+    after = json.loads(urllib.request.urlopen(f"{MOCK}/api/yamaha/state").read())
+    vol = [((d.get("devices") or [{}])[0]).get("volume_pct") for d in (before, after)]
+    log(f"ampli : volume {vol[0]} % → {vol[1]} %")
+    press("Left")
+    press("Down")  # Lecture
+    wait(0.8)
+    press("Right")
+    log(f"lecture : {xbmc.getInfoLabel('Container(300).ListItem.Label')} ({xbmc.getInfoLabel('Container(300).ListItem.Label2')})")
+    shot("20e-panneau-lecture")
+    position = panel_state()
+    press("Select")  # Chapitre suivant
+    wait(2.0)
+    log(f"chapitre suivant : {position} → {panel_state()}")
+    run_plugin("player")
+    for _ in range(12):
+        wait(0.5)
+        if panel_open():
+            break
+    press("Back")
+    wait(1.0)
+    log(
+        f"Retour : panneau {'ENCORE OUVERT' if panel_open() else 'fermé'}, "
+        f"film {'en lecture' if xbmc.Player().isPlayingVideo() else 'ARRÊTÉ'}"
+    )
+    xbmc.executebuiltin("PlayerControl(Stop)")
+    wait(2.0)
+    xbmc.executebuiltin("ActivateWindow(Home)")
+    wait(2.0)
+else:
+    log("vidéo du panneau absente (ffmpeg manquant ?) : section 4.5 sautée")
+
+
 # ── 7. Réouverture (cache), panne serveur ──────────────────────────────────
 run_plugin("home")
 wait(1.2)

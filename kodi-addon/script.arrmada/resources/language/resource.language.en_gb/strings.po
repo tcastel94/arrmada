@@ -171,3 +171,7 @@ msgstr "Share watched and resume points between TVs (through the server)"
 msgctxt "#30162"
 msgid "\"Next episode\" card (seconds before the end, 0: never)"
 msgstr "\"Next episode\" card (seconds before the end, 0: never)"
+
+msgctxt "#30163"
+msgid "ArrMada panel: long press OK during playback"
+msgstr "ArrMada panel: long press OK during playback"

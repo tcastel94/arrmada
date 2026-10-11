@@ -481,6 +481,10 @@ def main():
         # Encart « Épisode suivant » à la fin d'un épisode (ouvert par le service, 4.4)
         import upnext_window
         upnext_window.show(params)
+    elif action == "player":
+        # Panneau pendant le film (4.5) : appui long sur OK, ou favori / raccourci
+        import player_window
+        player_window.show(params)
     elif action == "apps":
         # Applis & sources (ADR-004, phase 4.3) : add-ons, TV en direct, NAS, favoris
         import apps_window
