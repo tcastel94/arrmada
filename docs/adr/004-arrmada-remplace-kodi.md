@@ -123,6 +123,17 @@ s'affiche tout de suite et se remplit ensuite (règle d'or de l'ADR-003).
 > la fin de l'appairage, présent depuis la 1.6, a été corrigé (fils
 > d'arrière-plan attendus en fin de script).
 
+> **Avancement (11/10/2026, suite)** — Phase 4.2 livrée dans l'add-on 1.12.0 :
+> accueil média (`shell_window.py`, mise en page générée par
+> `tools/make_shell_xml.py`), grille Films / Séries / Découvrir
+> (`grid_window.py`), retour automatique par le service (réglage
+> `shell_mode`, règles pures dans `shell_data.py`), menu « Quitter ? ».
+> Validé sur le banc : Kodi démarre sur ArrMada, grille paginée, Séries →
+> écran Série, retour automatique. **Écart avec le plan** : pas de fichier de
+> touches pour la touche Accueil. Sur la Shield, elle ramène au lanceur
+> Android, pas à Kodi ; et c'est le retour automatique qui couvre tous les
+> chemins vers l'accueil de Kodi (démarrage, retour d'un add-on).
+
 ## Conséquences
 
 ### Positives

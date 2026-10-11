@@ -3,7 +3,8 @@
 
 Racine calquée sur la web app :
 
-  Accueil · Reprendre · Films · Séries · Découvrir · Manquants · Rechercher · Calendrier ·
+  Accueil (média) · Tableau de bord · Reprendre · Films · Séries · Découvrir ·
+  Manquants · Rechercher · Calendrier ·
   Téléchargements · Notifications · Salon · Appairage ·
   Widgets pour SiLVO · Sur ton téléphone · Outils (ancien menu) · Paramètres
 
@@ -126,7 +127,18 @@ def show_root(handle: int, base: str) -> None:
         else "Appairer cette TV"
     )
     entries = [
-        listing.action_entry("Accueil", {"action": "home"}, icon, "L'écran d'accueil ArrMada"),
+        listing.action_entry(
+            "Accueil",
+            {"action": "shell"},
+            icon,
+            "L'accueil média ArrMada : Reprendre, ajouts récents, films, séries (ADR-004)",
+        ),
+        listing.action_entry(
+            "Tableau de bord",
+            {"action": "home"},
+            icon,
+            "Serveur, stockage, téléchargements, services (l'ancien Accueil)",
+        ),
         listing.folder(
             "Reprendre",
             {"action": "continue"},
@@ -346,8 +358,12 @@ def show_continue(handle: int, base: str, widget: bool = False) -> None:
     )
 
 
-def resume_play(params: dict, resume=None) -> None:
-    """OK sur un élément de « Reprendre » : lecture par la logique d'ArrMada."""
+def resume_play(params: dict, resume=None, wait: bool = True) -> None:
+    """OK sur un élément de « Reprendre » : lecture par la logique d'ArrMada.
+
+    `wait` : True depuis le plugin (programme court : on attend que la suite
+    soit empilée), False depuis un écran ArrMada (un fil s'en charge).
+    """
     import kodi_library
 
     dbid = int(params["id"]) if str(params.get("id") or "").isdigit() else 0
@@ -356,8 +372,7 @@ def resume_play(params: dict, resume=None) -> None:
     if params.get("type") == "movie":
         kodi_library.play_movie(dbid, resume=resume)
     else:
-        # Programme court (plugin) : on attend que la suite soit empilée
-        kodi_library.play_episode(dbid, resume=resume, wait=True)
+        kodi_library.play_episode(dbid, resume=resume, wait=wait)
 
 
 def open_series(params: dict) -> None:
@@ -383,13 +398,13 @@ def open_series(params: dict) -> None:
     series_window.open_series(entry, tvshowid)
 
 
-def _kodi_item_action(params: dict, op: str) -> None:
+def _kodi_item_action(params: dict, op: str, wait: bool = True) -> None:
     """Appui long sur un élément de « Reprendre » (identifiants Kodi)."""
     import kodi_library
 
     kind, dbid = params.get("type"), int(params["id"])
     if op == "restart":
-        resume_play(params, resume=False)
+        resume_play(params, resume=False, wait=wait)
     elif op in ("seen", "unseen"):
         kodi_library.set_watched(kind, dbid, op == "seen")
         xbmc.executebuiltin("Container.Refresh")
@@ -426,11 +441,11 @@ def open_detail(params: dict) -> None:
     detail_window.open_detail(entry)
 
 
-def context_action(params: dict) -> None:
+def context_action(params: dict, wait: bool = True) -> None:
     """Menu de l'appui long : Lire, Fiche, Meilleure version, Marquer vu / non vu…"""
     op = params.get("op") or ""
     if params.get("type") in ("movie", "episode") and str(params.get("id") or "").isdigit():
-        _kodi_item_action(params, op)
+        _kodi_item_action(params, op, wait=wait)
         return
     entry = _entry_from(params)
     if op == "play":
@@ -449,6 +464,53 @@ def context_action(params: dict) -> None:
             return
         kodi_library.set_watched("movie", found, op == "seen")
         xbmc.executebuiltin("Container.Refresh")
+
+
+# ── Écrans ArrMada (accueil média, grille) : OK et appui long ──────────────
+
+PLUGIN_BASE = "plugin://script.arrmada/"
+
+
+def open_entry(entry: dict) -> None:
+    """OK sur un élément d'un écran ArrMada (accueil média, grille, ADR-004).
+
+    Une série présente dans la médiathèque Kodi ouvre l'écran Série ; un film
+    ou une série absente, la Fiche ; « Reprendre », la lecture ; le reste
+    (titres à demander…) passe par l'action du plugin, comme dans les listes.
+    """
+    action = dict(entry.get("action") or {})
+    name = action.get("action") or ""
+    if name == "detail":
+        target = _entry_from(action)
+        if target["kind"] == "tvshow":
+            found = ui.find_in_library(target)
+            if found is not None:
+                import series_window
+
+                series_window.open_series(target, found)
+                return
+        if not target["arr_id"]:
+            ui.notify(target["title"] or "ArrMada", "Fiche indisponible pour ce titre")
+            return
+        import detail_window
+
+        detail_window.open_detail(target)
+    elif name == "resume_play":
+        resume_play(action, wait=False)
+    elif name and name != "noop":
+        xbmc.executebuiltin(f"RunPlugin({listing.plugin_url(PLUGIN_BASE, action)})")
+
+
+def entry_menu(entry: dict) -> str:
+    """Appui long sur un élément d'un écran ArrMada ; renvoie l'opération faite."""
+    ops = [op for op in entry.get("context") or [] if op in listing.CONTEXT_LABELS]
+    if not ops:
+        return ""
+    index = xbmcgui.Dialog().contextmenu([listing.CONTEXT_LABELS[op] for op in ops])
+    if index < 0:
+        return ""
+    context_action(dict(entry.get("action") or {}, op=ops[index]), wait=False)
+    return ops[index]
 
 
 def add_favourites() -> None:

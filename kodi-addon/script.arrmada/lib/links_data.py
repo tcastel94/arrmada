@@ -76,7 +76,8 @@ PLUGIN = "plugin://script.arrmada/"
 
 # (titre du favori, action de l'add-on)
 SHORTCUTS = (
-    ("ArrMada · Accueil", "home"),
+    ("ArrMada · Accueil", "shell"),  # accueil média (ADR-004, 1.12)
+    ("ArrMada · Tableau de bord", "home"),  # l'ancien Accueil
     ("ArrMada · Téléchargements", "queue"),
     ("ArrMada · Salon", "salon"),
     ("ArrMada · Rechercher", "search_input"),
@@ -86,7 +87,18 @@ SHORTCUTS = (
 # depuis un favori, Kodi les appelle comme une lecture (PlayMedia). Idem pour
 # « resume_play » (Reprendre, ADR-004) cliqué dans un widget de SiLVO.
 WINDOW_ACTIONS = frozenset(
-    {"home", "queue", "salon", "pair", "search_input", "qr", "settings", "resume_play", "series"}
+    {
+        "home",
+        "shell",
+        "queue",
+        "salon",
+        "pair",
+        "search_input",
+        "qr",
+        "settings",
+        "resume_play",
+        "series",
+    }
 )
 
 

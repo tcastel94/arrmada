@@ -442,6 +442,9 @@ def annotate(
             if state["resume"]:
                 info["resume"] = (state["resume"], state["total"])
             props["kodi_status"] = state["status"]
+            # Pour les écrans ArrMada (grille) : pastille « Vu », barre de reprise
+            props["watched"] = "1" if state["watched"] else ""
+            props["bar"] = bar_name(state["resume"], state["total"])
             _add_watch_ops(entry, state["watched"])
         elif ids.get("tvdb") and ids["tvdb"] in shows:
             state = show_state(shows[ids["tvdb"]])
@@ -450,14 +453,16 @@ def annotate(
             props["WatchedEpisodes"] = state["watched"]
             props["UnWatchedEpisodes"] = max(0, state["total"] - state["watched"])
             props["kodi_status"] = state["status"]
+            done = bool(state["total"]) and state["watched"] >= state["total"]
+            props["watched"] = "1" if done else ""
+            props["bar"] = "" if done else bar_name(state["watched"], state["total"])
     return entries
 
 
 def _add_watch_ops(entry: Dict[str, Any], watched: bool) -> None:
-    ops = list(entry.get("context") or [])
-    op = "unseen" if watched else "seen"
-    if op not in ops:
-        ops.append(op)
+    """« Marquer comme vu » OU « non vu » (jamais les deux, même après un changement)."""
+    ops = [op for op in entry.get("context") or [] if op not in ("seen", "unseen")]
+    ops.append("unseen" if watched else "seen")
     entry["context"] = ops
 
 

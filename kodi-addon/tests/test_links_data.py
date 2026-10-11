@@ -51,7 +51,7 @@ def test_shortcuts_skip_existing_favourites() -> None:
         {"title": "Films", "type": "window", "window": "videos", "windowparameter": "videodb://"},
     ]
     missing = links_data.missing_shortcuts(favourites)
-    assert [action for _, action in missing] == ["queue", "salon", "search_input"]
+    assert [action for _, action in missing] == ["shell", "queue", "salon", "search_input"]
     assert len(links_data.missing_shortcuts(None)) == len(links_data.SHORTCUTS)
     assert (
         links_data.missing_shortcuts(

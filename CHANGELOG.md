@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Kodi add-on 1.12.0 — Kodi starts on ArrMada (ADR-004, phase 4.2)
+
+#### Added
+- **Media home** (the "shell" that replaces Kodi's home screen): main menu (Home, Movies, Series, Discover, Search, Downloads, Living room, **Dashboard** — the former Home — and Settings), a header describing the selected item (fanart, title or logo, state such as "Resume at 12:34" / "Next episode", plot) and rows: *Resume* (Kodi library of the TV), *Recently added*, *For you*, *Coming soon*. Empty rows disappear; rows show instantly from the service cache and refresh after playback
+- **Starts on ArrMada**: whenever Kodi's own home screen is shown (startup, back from an add-on), the service opens the ArrMada home. Never during a video, on top of a dialog, or in safe mode; stops after 3 openings in a minute; setting *Interface → Start on ArrMada and come back to it* (on by default)
+- **Back** on the ArrMada home asks "Quit?": stay, switch to the Kodi interface (no automatic return until Kodi restarts), Kodi settings, quit Kodi — never locked in
+- **Movies / Series / Discover grid** replacing SiLVO's views: tabs (A to Z, recently added, by genre, 4K, not yet available; for you, trending movies, trending series), 7 posters per row with *Watched* badge and resume bar, unavailable titles dimmed, the next 100-title page loaded two rows before the end. OK opens the detail screen, the **series screen** (series present on the TV) or the request window; long press: play, detail, better release, mark as watched / unwatched
+- Plugin root: *Home* now opens the media home, *Dashboard* the former home; shortcut "ArrMada · Dashboard" added (`?action=shell` / `?action=home`)
+- `kodi-addon/tools/make_shell_xml.py` generates the media home layout (4 rows and 9 menu buttons from one template); a test checks the committed XML is up to date
+- Tests: menu / rows order, header (state shown once), page preloading, grid counter, automatic return rules (setting, safe mode, "Kodi interface", Kodi home only, no dialog, no video, retry delay, loop protection). Bench: Kodi starts on ArrMada, media home rows and header, row navigation, Movies grid (138 titles, page 2 preloaded, tabs), Series grid → series screen, "Quit?" menu, automatic return
+
+#### Fixed (found on the bench)
+- Rows inside the media home's vertical list did not receive Up / Down (Kodi does not pass them to nested lists): navigation is declared row by row, and Kodi skips an empty (hidden) row by following its navigation
+- "Mark as watched" offered both "watched" and "unwatched" after a change in the same list
+- Grid: Kodi re-binds the whole list when items are appended from Python (`ControlList.addItems` → `GUI_MSG_LABEL_BIND`), which put the selection back at the top when the next page arrived; the selection is restored
+
 ### Kodi add-on 1.11.0 — Series and resume without SiLVO (ADR-004, phase 4.1)
 
 ADR-004: in the long run, ArrMada replaces Kodi's interface; Kodi stays hidden underneath as the player (passthrough, HDR, subtitles unchanged) and the local library (watched, resume points, third-party add-ons).

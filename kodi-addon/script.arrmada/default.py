@@ -469,6 +469,10 @@ def main():
     elif action == "resume_play":
         import navigation
         navigation.resume_play(params)
+    elif action == "shell":
+        # Accueil média (ADR-004, phase 4.2) : aussi ouvert par le service au démarrage
+        import shell_window
+        shell_window.open_shell()
     elif action == "series":
         # Écran Série : plugin://script.arrmada/?action=series&tvshowid=12
         import navigation

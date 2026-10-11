@@ -130,6 +130,7 @@ cat > "$KODI_DIR/userdata/addon_data/script.arrmada/settings.xml" <<EOF
     <setting id="api_key">banc-de-test</setting>
     <setting id="enable_notifications">true</setting>
     <setting id="enable_scrobble">true</setting>
+    <setting id="shell_mode">true</setting>
 </settings>
 EOF
 

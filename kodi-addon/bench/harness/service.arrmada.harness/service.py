@@ -55,6 +55,33 @@ def run_plugin(action):
 
 wait(8)  # accueil de Kodi chargé
 
+
+def shell_open():
+    return xbmc.getInfoLabel("Window(Home).Property(arrmada.shell)") == "1"
+
+
+def leave_shell(name=None):
+    """Retour sur l'accueil ArrMada → « Quitter ? » → Interface Kodi (retour auto suspendu)."""
+    press("Back")
+    wait(1.2)
+    if name:
+        shot(name)
+    press("Down")  # « Rester dans ArrMada » → « Interface Kodi »
+    press("Select")
+    wait(2.0)
+
+
+# ── 0a. ADR-004 phase 4.2 : Kodi démarre sur l'accueil ArrMada ─────────────
+log(f"démarrage : accueil ArrMada {'ouvert' if shell_open() else 'NON OUVERT'}")
+shot("00a-demarrage-sur-arrmada")
+if shell_open():
+    leave_shell("00b-quitter")  # la suite du parcours se fait dans l'interface Kodi
+    log(
+        "après « Interface Kodi » : retour automatique "
+        + ("suspendu" if xbmc.getInfoLabel("Window(Home).Property(arrmada.shell_off)") else "ACTIF")
+        + f", accueil ArrMada {'ouvert' if shell_open() else 'fermé'}"
+    )
+
 # ── 0. Phase 3 : la TV s'est appairée toute seule avec l'ancien mot de passe ─
 _device = xbmcvfs.translatePath("special://profile/addon_data/script.arrmada/device.json")
 log(
@@ -68,8 +95,8 @@ log(
 xbmc.executebuiltin("ActivateWindow(Videos,plugin://script.arrmada/,return)")
 wait(4.0)
 shot("00-menu-addon")
-for _ in range(3):  # 1er élément = « .. » si Kodi affiche le dossier parent
-    if xbmc.getInfoLabel("ListItem.Label") == "Accueil":
+for _ in range(4):  # 1er élément = « .. » si Kodi affiche le dossier parent
+    if xbmc.getInfoLabel("ListItem.Label") == "Tableau de bord":  # l'ancien Accueil
         break
     press("Down", 1, 0.5)
 press("Select", 1, 0.1)
@@ -365,6 +392,77 @@ if shows and movies:
     log("reprendre : " + " | ".join(label for label in labels if label and label != ".."))
     press("Back")
     wait(1.0)
+
+
+# ── 6g. ADR-004 phase 4.2 : accueil média, grille, retour automatique ──────
+def counts():
+    return ", ".join(
+        f"{name} {xbmc.getInfoLabel(f'Container({cid}).NumItems') or 0}"
+        for name, cid in (("reprendre", 610), ("ajouts", 620), ("pour toi", 630), ("bientôt", 640))
+    )
+
+
+xbmc.executebuiltin("ActivateWindow(Home)")
+wait(2.0)
+run_plugin("shell")
+wait(5.0)
+log(f"accueil média : {counts()} ; en-tête « {xbmc.getInfoLabel('Window.Property(hero_title)')} »")
+shot("17a-accueil-media")
+press("Down")  # rangée suivante
+wait(1.5)
+log(f"rangée 2 : focus {focus()}, en-tête « {xbmc.getInfoLabel('Window.Property(hero_title)')} »")
+shot("17b-accueil-rangee-2")
+press("Up", 3, 0.6)  # jusqu'au menu
+log(f"menu : focus {focus()}")
+press("Right")  # Accueil → Films
+press("Select")
+wait(4.0)
+log(f"grille Films : {xbmc.getInfoLabel('Window.Property(status)')}, focus {focus()}")
+shot("17c-grille-films")
+press("Down", 13, 0.35)  # 13e ligne (n° 91 sur 100) : la page 2 se charge d'avance
+wait(3.0)
+log(
+    f"grille Films après défilement : {xbmc.getInfoLabel('Window.Property(status)')}, "
+    f"sur « {xbmc.getInfoLabel('Container(300).ListItem.Label')} » "
+    f"(n° {xbmc.getInfoLabel('Container(300).CurrentItem')})"
+)
+shot("17d-grille-page-2")
+press("Up", 16, 0.25)
+press("Up")  # → onglets
+press("Right")  # Ajoutés récemment
+press("Select")
+wait(3.0)
+log(f"onglet : {xbmc.getInfoLabel('Window.Property(subtitle)')}")
+shot("17e-grille-recents")
+press("Back")
+wait(1.5)
+press("Right")  # Films → Séries
+press("Select")
+wait(4.0)
+press("Right")  # Arcane → Severance (A à Z)
+wait(0.8)
+shot("17f-grille-series")
+press("Select")  # Severance est dans la médiathèque Kodi : écran Série
+wait(4.0)
+log(f"OK sur « Severance » : « {xbmc.getInfoLabel('Window.Property(play_label)')} »")
+shot("17g-grille-vers-serie")
+press("Back")
+wait(1.0)
+press("Back")
+wait(1.5)
+leave_shell("17h-quitter")
+log(f"après « Interface Kodi » : accueil ArrMada {'ouvert' if shell_open() else 'fermé'}")
+# Retour automatique : l'accueil de Kodi s'affiche → le service rouvre ArrMada
+xbmcgui.Window(10000).clearProperty("arrmada.shell_off")
+xbmc.executebuiltin("ActivateWindow(Home)")
+for _ in range(16):
+    wait(0.5)
+    if shell_open():
+        break
+wait(2.0)
+log(f"retour automatique : accueil ArrMada {'rouvert' if shell_open() else 'NON ROUVERT'}")
+shot("17i-retour-automatique")
+leave_shell()  # la suite du parcours se fait dans l'interface Kodi
 
 # ── 7. Réouverture (cache), panne serveur ──────────────────────────────────
 run_plugin("home")

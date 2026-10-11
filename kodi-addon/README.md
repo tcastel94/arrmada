@@ -418,6 +418,69 @@ vers l'ampli, le HDR et les sous-titres ne changent pas.
 > reprise), attend qu'il démarre, puis ajoute les suivants à la liste de lecture
 > de Kodi. Comportement vérifié sur le banc (vrai Kodi, médiathèque de test).
 
+### 17. 🏠 ArrMada à la place de l'accueil de Kodi (1.12.0, ADR-004)
+Deuxième étape de l'[ADR-004](../docs/adr/004-arrmada-remplace-kodi.md) : la Shield
+**démarre sur ArrMada**, et SiLVO ne s'affiche plus au quotidien.
+
+**Accueil média** (ce qu'on voit en allumant) :
+- en haut, le **menu** : Accueil, Films, Séries, Découvrir, Rechercher,
+  Téléchargements, Salon, **Tableau de bord** (l'ancien Accueil : serveur,
+  stockage, services) et Réglages ;
+- l'**en-tête** décrit l'élément sélectionné : fond, titre ou logo, état
+  (« Reprendre à 12:34 », « Épisode suivant »), résumé ;
+- les **rangées** : *Reprendre* (médiathèque Kodi de la TV), *Ajouts
+  récents*, *Pour toi*, *Bientôt*. Une rangée vide disparaît. Elles
+  s'affichent tout de suite (cache du service) et se mettent à jour au
+  retour d'une lecture.
+
+**Films, Séries, Découvrir** : une **grille maison** remplace les vues de SiLVO.
+- Onglets en haut (*Tous, de A à Z*, *Ajoutés récemment*, *Par genre*, *En 4K*,
+  *Pas encore disponibles* ; pour Découvrir : *Pour toi*, *Films tendance*,
+  *Séries tendance*). OK sur un onglet le choisit.
+- 7 affiches par ligne, avec la pastille **Vu** et la barre de reprise. Les
+  titres pas encore téléchargés sont atténués.
+- Les pages de 100 titres se chargent **toutes seules**, deux lignes avant
+  d'arriver au bout.
+- OK : la Fiche (film), l'**écran Série** (série présente sur la TV), ou
+  « Demander » (titre de Découvrir). Appui long : *Lire*, *Fiche*,
+  *Meilleure version*, *Marquer comme vu / non vu*.
+
+**Démarrage et retour automatique** : quand l'accueil **de Kodi** s'affiche
+(au démarrage, en revenant de YouTube…), le service rouvre l'accueil ArrMada.
+Jamais pendant une vidéo, ni par-dessus une fenêtre, ni en mode minimal.
+
+**Retour** sur l'accueil ArrMada ouvre **« Quitter ? »** :
+
+| Choix | Effet |
+|---|---|
+| Rester dans ArrMada | Rien (Retour par erreur) |
+| Passer à l'interface Kodi | L'accueil de Kodi (SiLVO), sans retour automatique **jusqu'au prochain démarrage de Kodi** |
+| Réglages de Kodi | Les réglages de Kodi, puis retour à ArrMada |
+| Quitter Kodi | Ferme Kodi |
+
+Pour garder l'accueil de Kodi au démarrage, décocher *Paramètres de l'add-on
+→ Interface → Démarrer sur ArrMada et y revenir* (coché par défaut).
+
+> **Jamais enfermé** : le menu « Quitter ? » mène toujours à l'interface
+> Kodi. Le retour automatique s'arrête de lui-même dans trois cas :
+> - si Kodi s'est fermé deux fois de suite au démarrage (mode minimal, § 12) ;
+> - si l'accueil ArrMada se ferme 3 fois en une minute ;
+> - si on a choisi « Interface Kodi » (jusqu'au prochain démarrage).
+
+> Ce qui reste à Kodi pour l'instant :
+> - la barre de lecture, les réglages et le clavier ;
+> - les add-ons tiers (YouTube, IPTV), qui arrivent dans ArrMada en
+>   phase 4.3 ;
+> - les **résultats de Rechercher**, qui s'affichent encore dans une liste
+>   de SiLVO.
+>
+> Le bouton Accueil de la télécommande Shield ramène au **lanceur Android**,
+> pas à Kodi. En revenant dans Kodi, on retrouve ArrMada.
+
+> La mise en page de l'accueil est **générée** par
+> `kodi-addon/tools/make_shell_xml.py` : les 4 rangées et les 9 boutons du menu
+> partagent le même modèle. Un test vérifie que le fichier versionné est à jour.
+
 ## 🚀 Installation dans Kodi
 
 > ⚠️ **NVIDIA Shield (Kodi 21, Android)** : l'installation **par le dépôt** ferme
@@ -516,7 +579,10 @@ série, téléchargements, salon avec et sans lecture, diagnostic, appairage,
 listes natives, widgets, événement serveur, cache, panne serveur, TV refusée,
 QR codes, favoris, bulle pendant un film, Films et Séries, puis la phase 4.1 :
 « Reprendre à … » sur la Fiche, écran Série, saison 2, appui long, reprise de
-lecture avec épisodes enchaînés, rangée Reprendre) et dépose 54 captures dans
+lecture avec épisodes enchaînés, rangée Reprendre ; enfin la phase 4.2 :
+démarrage sur ArrMada, accueil média, grille Films (page 2 chargée d'avance,
+onglets), grille Séries vers l'écran Série, menu « Quitter ? », retour
+automatique) et dépose 65 captures dans
 `/tmp/arrmada-kodi-bench/shots/`. Le Kodi du système n'est pas modifié : tout
 se passe dans un profil jetable. Le rendu final reste à valider sur la Shield.
 

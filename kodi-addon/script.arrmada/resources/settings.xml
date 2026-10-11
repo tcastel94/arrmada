@@ -16,6 +16,11 @@
         <setting id="auto_audio_switch" type="bool" label="30130" default="true" />
         <setting id="room_profile" type="labelenum" label="30131" values="cinema|salon" default="cinema" />
     </category>
+    <!-- ADR-004 (1.12) : ArrMada remplace l'accueil de Kodi. Décoché : Kodi
+         démarre sur son accueil habituel (SiLVO). -->
+    <category label="30150">
+        <setting id="shell_mode" type="bool" label="30151" default="true" />
+    </category>
     <!-- Coché automatiquement si Kodi se ferme 2 fois de suite au démarrage
          (lib/startup_guard.py) ; à décocher pour revenir au fonctionnement normal. -->
     <category label="30140">

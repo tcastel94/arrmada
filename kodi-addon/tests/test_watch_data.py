@@ -215,6 +215,9 @@ def test_annotate_marks_watched_movies_and_shows():
     assert entries[1]["props"]["kodi_status"] == "Reprendre à 12:34"
     assert entries[1]["context"] == ["play", "seen"]
     assert entries[2]["props"]["UnWatchedEpisodes"] == 10
+    assert entries[2]["props"]["bar"] == "bar-028"  # 4 épisodes vus sur 14
+    assert (entries[0]["props"]["watched"], entries[0]["props"]["bar"]) == ("1", "")
+    assert entries[1]["props"]["bar"] == "bar-008"
     assert entries[2]["props"]["kodi_status"] == "4 / 14 épisodes vus"
     assert "playcount" not in entries[3]["info"]  # absent de la médiathèque Kodi
 
@@ -271,3 +274,11 @@ def test_continue_entries_next_episode_has_no_restart():
     assert entry["context"] == ["seen", "series"]
     assert "resume" not in entry["info"]
     assert entry["label2"].endswith("Épisode suivant")
+
+
+def test_annotate_again_after_a_change_offers_only_the_other_choice():
+    entry = {"ids": {"tmdb": "1"}, "info": {}, "props": {}, "context": ["play", "seen"]}
+    wd.annotate(
+        [entry], wd.library_index([{"playcount": 1, "uniqueid": {"tmdb": "1"}}], "tmdb"), {}
+    )
+    assert entry["context"] == ["play", "unseen"]

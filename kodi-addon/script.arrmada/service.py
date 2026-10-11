@@ -15,6 +15,10 @@
   events are unreachable (or in safe mode)
 - Phase 3: the TV never sends the admin password any more. A TV that still
   has it in its settings pairs itself once, then erases it (lib/migration.py)
+- ADR-004 phase 4.2: when Kodi's own home screen is shown (startup, back from
+  an add-on), the ArrMada home opens instead (setting "shell_mode"; never in
+  safe mode, never on top of a dialog or a video, suspended for the session
+  when the user picks "Kodi interface"; lib/shell_data.should_open_shell)
 """
 
 from __future__ import annotations
@@ -24,6 +28,7 @@ import os
 import time
 import xbmc
 import xbmcaddon
+import xbmcgui
 import xbmcvfs
 
 # Add lib directory to Python path
@@ -36,6 +41,7 @@ from audio_switcher import run_audio_switch
 from background import BackgroundTasks
 import migration
 import playback_data
+import shell_data
 import startup_guard
 import threading
 
@@ -146,6 +152,49 @@ def _log(message: str, level: int = xbmc.LOGINFO) -> None:
     xbmc.log(f"[ArrMada] Service : {message}", level=level)
 
 
+class ShellWatch:
+    """Rouvre l'accueil ArrMada quand l'accueil de Kodi s'affiche (ADR-004, 4.2).
+
+    Comme un `Restart=always` de systemd, mais avec une limite : au-delà de
+    3 ouvertures en une minute (écran qui se fermerait tout seul), on
+    s'arrête jusqu'au prochain démarrage de Kodi.
+    """
+
+    def __init__(self) -> None:
+        self.history: list = []
+        self.last_open = 0.0
+
+    def tick(self, safe_mode: bool) -> None:
+        home = xbmcgui.Window(10000)
+        now = time.time()
+        state = {
+            "enabled": get_setting_bool("shell_mode", default=True),
+            "safe_mode": safe_mode,
+            "suspended": bool(home.getProperty(shell_data.SHELL_OFF)),
+            "home_active": xbmc.getCondVisibility("Window.IsActive(home)"),
+            "modal": xbmc.getCondVisibility(
+                "System.HasActiveModalDialog | System.ScreenSaverActive"
+            ),
+            "playing": xbmc.getCondVisibility("Player.HasVideo"),
+            "shell_open": bool(home.getProperty(shell_data.SHELL_PROP)),
+            "opening_age": (now - self.last_open) if self.last_open else None,
+        }
+        if not shell_data.should_open_shell(state):
+            return
+        if shell_data.opens_too_often(self.history, now):
+            home.setProperty(shell_data.SHELL_OFF, "1")
+            _log(
+                "l'accueil ArrMada se referme tout seul : retour automatique arrêté "
+                "jusqu'au prochain démarrage de Kodi",
+                xbmc.LOGWARNING,
+            )
+            return
+        self.history = [t for t in self.history if now - t <= shell_data.OPEN_WINDOW] + [now]
+        self.last_open = now
+        _log("accueil de Kodi à l'écran : ouverture de l'accueil ArrMada")
+        xbmc.executebuiltin("RunPlugin(plugin://script.arrmada/?action=shell)")
+
+
 class ServiceMonitor(xbmc.Monitor):
     """Le Monitor du service, prévenu par Kodi quand un réglage de l'add-on change.
 
@@ -223,6 +272,7 @@ def main():
     # puis toutes les 5 min tant que le serveur ne répond pas).
     migrate_at = time.time() if migration.needed() else 0.0
 
+    shell = ShellWatch()
     last_notification_check = 0
     seen_downloads: set[str] = set()
     seen_event_ids: set[int] = set()
@@ -256,6 +306,12 @@ def main():
         # 1. Handle player tracking
         if player.isPlayingVideo():
             player.check_periodic_progress()
+
+        # 1b. Accueil de Kodi à l'écran → accueil ArrMada (ADR-004, phase 4.2)
+        try:
+            shell.tick(safe_mode)
+        except Exception as exc:  # jamais au point de faire tomber le service
+            _log(f"retour automatique : {exc}", xbmc.LOGWARNING)
 
         # 2. Cache des flux et événements du serveur (au plus 2 petites requêtes)
         if tasks is not None:

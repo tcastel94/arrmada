@@ -147,3 +147,11 @@ msgstr "Subtitles requested"
 msgctxt "#30208"
 msgid "Release search triggered"
 msgstr "Release search triggered"
+
+msgctxt "#30150"
+msgid "Interface"
+msgstr "Interface"
+
+msgctxt "#30151"
+msgid "Start on ArrMada and come back to it (replaces Kodi's home screen)"
+msgstr "Start on ArrMada and come back to it (replaces Kodi's home screen)"

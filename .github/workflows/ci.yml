@@ -113,6 +113,7 @@ jobs:
           FILES="$FILES $LIB/navigation.py $LIB/startup_guard.py $LIB/links_data.py $LIB/qr_window.py"
           FILES="$FILES $LIB/migration.py $LIB/library_data.py $LIB/playback_data.py"
           FILES="$FILES $LIB/watch_data.py $LIB/kodi_library.py $LIB/series_window.py"
+          FILES="$FILES $LIB/shell_data.py $LIB/shell_window.py $LIB/grid_window.py"
           FILES="$FILES kodi-addon/tests kodi-addon/tools"
           ruff check $FILES
           ruff format --check $FILES

@@ -16,6 +16,7 @@ from pathlib import Path
 
 import pytest
 
+import make_shell_xml
 import make_textures
 
 ADDON = Path(__file__).resolve().parent.parent / "script.arrmada"
@@ -31,6 +32,8 @@ WINDOWS = {
     "pair": ("script-arrmada-pair.xml", "pair_window.py"),
     "qr": ("script-arrmada-qr.xml", "qr_window.py"),
     "series": ("script-arrmada-series.xml", "series_window.py"),
+    "grid": ("script-arrmada-grid.xml", "grid_window.py"),
+    "shell": ("script-arrmada-shell.xml", "shell_window.py"),
 }
 
 # Noms de police présents dans TOUS les jeux de polices (« fontsets ») d'Aeon
@@ -207,3 +210,29 @@ def test_committed_textures_match_generator(tmp_path: Path) -> None:
         assert committed.read_bytes() == generated.read_bytes(), (
             f"{generated.name} n'est pas à jour : relance python3 kodi-addon/tools/make_textures.py"
         )
+
+
+def test_shell_xml_matches_generator() -> None:
+    """L'accueil média est généré (tools/make_shell_xml.py) : le fichier versionné est à jour."""
+    assert _xml_path("shell").read_text(encoding="utf-8") == make_shell_xml.render(), (
+        "script-arrmada-shell.xml pas à jour : python3 kodi-addon/tools/make_shell_xml.py"
+    )
+
+
+def test_shell_menu_and_rows_follow_shell_data() -> None:
+    """Boutons et rangées dans le même ordre que shell_data (le Python s'y fie)."""
+    import shell_data
+
+    # shell_window importe xbmc : ses constantes sont lues sans l'exécuter
+    source = (ADDON / "lib" / "shell_window.py").read_text(encoding="utf-8")
+    constants = {
+        node.targets[0].id: ast.literal_eval(node.value)
+        for node in ast.parse(source).body
+        if isinstance(node, ast.Assign)
+        and len(node.targets) == 1
+        and getattr(node.targets[0], "id", "") in ("MENU_BUTTONS", "ROW_LISTS")
+    }
+    assert len(constants["MENU_BUTTONS"]) == len(shell_data.MENU) == len(make_shell_xml.MENU)
+    assert [label for _, label in shell_data.MENU] == list(make_shell_xml.MENU)
+    assert [title for _, _, title, _ in make_shell_xml.ROWS] == [t for _, t in shell_data.ROWS]
+    assert [list_id for _, list_id, _, _ in make_shell_xml.ROWS] == list(constants["ROW_LISTS"])
