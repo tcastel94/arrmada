@@ -664,6 +664,22 @@ if DEMO_VIDEO and os.path.exists(DEMO_VIDEO):
         + f", film {'en lecture' if xbmc.Player().isPlayingVideo() else 'ARRÊTÉ'}"
     )
     shot("09d-camera-popup")
+    # 1.14.1 : la pop-up se ferme seule après 5 s
+    for _ in range(14):
+        wait(0.5)
+        if not xbmc.getInfoLabel("Window(Home).Property(arrmada.camera_popup)"):
+            break
+    log(
+        "pop-up caméra après 5 s : "
+        + ("ENCORE LÀ" if xbmc.getInfoLabel("Window(Home).Property(arrmada.camera_popup)") else "fermée seule")
+    )
+    # Nouvelle détection : cette fois une touche la ferme tout de suite
+    urllib.request.urlopen(CAMERA).read()
+    for _ in range(30):
+        wait(0.5)
+        if xbmc.getInfoLabel("Window(Home).Property(arrmada.camera_popup)") == "1":
+            break
+    wait(1.0)
     press("Select")  # toute touche ferme la pop-up, le film continue
     wait(1.0)
     log(

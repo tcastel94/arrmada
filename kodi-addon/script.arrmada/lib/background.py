@@ -155,7 +155,7 @@ class BackgroundTasks:
         _log(f"caméra : {texts['title']} · {texts['subtitle']} ({mode})")
         if mode == "popup":
             # Fenêtre ouverte par une invocation à part : la boucle du service
-            # ne reste jamais bloquée pendant les 15 s de la pop-up.
+            # ne reste jamais bloquée pendant les 5 s de la pop-up.
             query = urllib.parse.urlencode(
                 {"action": "camera", "title": texts["title"],
                  "subtitle": texts["subtitle"], "image": image}

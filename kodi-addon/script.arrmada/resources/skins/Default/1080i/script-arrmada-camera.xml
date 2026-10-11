@@ -5,60 +5,62 @@
   Repère 1920 × 1080. Données posées par lib/camera_window.py :
     title (« Personne détectée »), subtitle (« Entrée · 21:42 »),
     image (photo de l'événement, fichier du cache ; vide : pas de photo).
-  Carte en bas à droite, le film reste visible et continue dessous ; elle
-  se ferme seule après 15 s, ou à la première touche.
+  1.14.1 : carte compacte (480 × 352, un quart de la largeur de l'écran)
+  en HAUT À GAUCHE, là où le film a rarement des sous-titres ou un logo de
+  chaîne. Le film reste visible et continue dessous ; la carte se ferme
+  seule après 5 s (camera_data.DISPLAY_SECONDS), ou à la première touche.
 -->
 <window>
 	<defaultcontrol always="true">100</defaultcontrol>
-	<animation effect="slide" start="760,0" end="0,0" time="450" tween="cubic" easing="out">WindowOpen</animation>
+	<animation effect="slide" start="-560,0" end="0,0" time="400" tween="cubic" easing="out">WindowOpen</animation>
 	<animation effect="fade" start="100" end="0" time="250">WindowClose</animation>
 	<controls>
 		<control type="group" id="100">
-			<left>1136</left><top>544</top>
+			<left>48</left><top>48</top>
 			<!-- Ombre portée + carte -->
 			<control type="image">
-				<left>-40</left><top>-40</top><width>824</width><height>576</height>
+				<left>-32</left><top>-32</top><width>544</width><height>416</height>
 				<texture border="56" colordiffuse="99000000">arrmada/glow.png</texture>
 			</control>
 			<control type="image">
-				<left>0</left><top>0</top><width>744</width><height>496</height>
+				<left>0</left><top>0</top><width>480</width><height>352</height>
 				<texture border="26" colordiffuse="F20A0E16">arrmada/rounded-24.png</texture>
 			</control>
 			<!-- Bandeau : point rouge clignotant, titre, caméra et heure -->
 			<control type="image">
-				<left>28</left><top>34</top><width>22</width><height>22</height>
-				<texture border="10" colordiffuse="FFEF4444">arrmada/rounded-12.png</texture>
+				<left>22</left><top>24</top><width>16</width><height>16</height>
+				<texture border="7" colordiffuse="FFEF4444">arrmada/rounded-12.png</texture>
 				<animation effect="fade" start="100" end="25" time="700" tween="sine" pulse="true" condition="true">Conditional</animation>
 			</control>
 			<control type="label">
-				<left>64</left><top>18</top><width>656</width><height>52</height>
-				<font>font14_title</font>
+				<left>50</left><top>12</top><width>410</width><height>40</height>
+				<font>font13</font>
 				<textcolor>FFF5F7FA</textcolor>
 				<aligny>center</aligny>
 				<label>$INFO[Window.Property(title)]</label>
 			</control>
 			<control type="label">
-				<left>64</left><top>62</top><width>656</width><height>34</height>
-				<font>font12</font>
+				<left>50</left><top>48</top><width>410</width><height>28</height>
+				<font>font10</font>
 				<textcolor>FF9CCBFF</textcolor>
 				<aligny>center</aligny>
 				<label>$INFO[Window.Property(subtitle)]</label>
 			</control>
 			<!-- Photo de l'événement (16:9) -->
 			<control type="image">
-				<left>24</left><top>108</top><width>696</width><height>364</height>
+				<left>20</left><top>84</top><width>440</width><height>248</height>
 				<texture border="14" colordiffuse="FF1A2233">arrmada/rounded-12.png</texture>
 			</control>
 			<control type="image" id="110">
-				<left>24</left><top>108</top><width>696</width><height>364</height>
+				<left>20</left><top>84</top><width>440</width><height>248</height>
 				<aspectratio>keep</aspectratio>
 				<fadetime>200</fadetime>
 				<texture background="true">$INFO[Window.Property(image)]</texture>
 				<visible>!String.IsEmpty(Window.Property(image))</visible>
 			</control>
 			<control type="label">
-				<left>24</left><top>108</top><width>696</width><height>364</height>
-				<font>font13</font>
+				<left>20</left><top>84</top><width>440</width><height>248</height>
+				<font>font10</font>
 				<textcolor>80C9D3E0</textcolor>
 				<align>center</align><aligny>center</aligny>
 				<label>Pas de photo pour cette détection</label>

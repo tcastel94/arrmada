@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Kodi add-on 1.14.1 — smaller camera pop-up, top left, 5 s
+
+#### Changed
+- Eufy camera pop-up during a film: compact card (480 × 352 instead of 744 × 496, about a quarter of the screen width) in the **top left** corner instead of the bottom right, where films seldom have subtitles; it closes after **5 s** instead of 15 s (any key still closes it at once). Bubble outside playback unchanged
+
 ### Living-room tablet in kiosk mode during a film + Eufy camera pop-ups (Kodi add-on 1.14.0)
 
 #### Added

@@ -560,9 +560,9 @@ titre déjà suivi ouvre sa Fiche (ou l'écran Série) ; un titre absent ouvre
 
 ### 19. 📷 Caméras Eufy : « Personne détectée » sur la TV pendant un film
 Quand une caméra Eufy détecte une **personne** et qu'un film ou un épisode
-passe, une **pop-up** apparaît en bas à droite de la TV : la photo de la
-détection, le nom de la caméra et l'heure. Le film continue dessous ; elle
-se ferme seule après 15 s, ou à la première touche. Hors lecture : une
+passe, une **pop-up** compacte apparaît en haut à gauche de la TV : la
+photo de la détection, le nom de la caméra et l'heure. Le film continue
+dessous ; elle se ferme seule après 5 s, ou à la première touche. Hors lecture : une
 simple bulle de notification, avec la photo en vignette. Ces alertes ne sont
 jamais retenues pour le résumé « Pendant ta séance ».
 

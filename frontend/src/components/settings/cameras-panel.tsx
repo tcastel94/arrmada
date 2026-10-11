@@ -76,7 +76,7 @@ export function CamerasPanel() {
             bodyClassName="space-y-3"
         >
             <p className="text-xs leading-relaxed text-muted-foreground">
-                Une caméra détecte une personne pendant un film : pop-up avec la photo en bas de la TV (15 s, toute touche la
+                Une caméra détecte une personne pendant un film : pop-up avec la photo en haut à gauche de la TV (5 s, toute touche la
                 ferme). Hors lecture : une simple notification. Passe par le conteneur{" "}
                 <span className="font-mono text-foreground">eufy-security-ws</span> (variable{" "}
                 <span className="font-mono text-foreground">EUFY_WS_URL</span> du fichier .env).

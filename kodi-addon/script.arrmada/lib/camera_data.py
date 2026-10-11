@@ -5,8 +5,8 @@ Le serveur publie un événement « camera » quand une caméra détecte une
 personne (eufy-security-ws → ArrMada) :
   {camera, serial, detection, label, snapshot_id, at}
 Le service de l'add-on le relève (toutes les 5 s) et :
-  - pendant un film ou un épisode : pop-up en bas à droite, avec la photo,
-    15 s, sans mettre la lecture en pause (lib/camera_window.py) ;
+  - pendant un film ou un épisode : pop-up compacte en haut à gauche, avec
+    la photo, 5 s, sans mettre la lecture en pause (lib/camera_window.py) ;
   - sinon : une bulle de notification, avec la photo en vignette.
 Contrairement aux autres notifications, une alerte caméra n'est jamais
 retenue pour le résumé « Pendant ta séance » : c'est maintenant qu'elle compte.
@@ -18,7 +18,7 @@ from datetime import datetime, timezone, tzinfo
 from typing import Any, Dict, Mapping, Optional
 
 EVENT = "camera"
-DISPLAY_SECONDS = 15  # durée de la pop-up (toute touche la ferme avant)
+DISPLAY_SECONDS = 5  # durée de la pop-up (toute touche la ferme avant) ; 15 s avant la 1.14.1
 NOTIFY_MS = 10000  # durée de la bulle hors lecture
 SNAPSHOT_KEEP = 5  # photos gardées dans le cache de l'add-on
 POPUP_PROP = "arrmada.camera_popup"  # « 1 » tant qu'une pop-up est ouverte

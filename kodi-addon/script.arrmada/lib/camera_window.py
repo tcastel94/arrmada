@@ -3,7 +3,7 @@
 
 Mise en page : resources/skins/Default/1080i/script-arrmada-camera.xml.
 Ouverte par le service (RunPlugin …?action=camera) quand une alerte arrive
-pendant une lecture vidéo : la photo de la caméra en bas à droite, 15 s.
+pendant une lecture vidéo : la photo de la caméra en haut à gauche, 5 s.
 La lecture continue dessous ; toute touche de la télécommande ferme la
 pop-up (la première pression sert à la fermer, pas à piloter le film).
 """
