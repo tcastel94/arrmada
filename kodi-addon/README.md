@@ -583,8 +583,16 @@ Eufy n'a pas d'API locale : le conteneur **eufy-security-ws**
    EUFY_USERNAME=compte-secondaire@exemple.fr
    EUFY_PASSWORD=…
    EUFY_COUNTRY=FR
-   EUFY_WS_URL=ws://<IP-Unraid>:3000
+   EUFY_WS_PORT=8424                # port d'écoute du pont SUR LE NAS
+   EUFY_WS_URL=ws://<IP-Unraid>:8424
    EUFY_DETECTIONS=person          # ou : person,ring
+   ```
+   Le pont tourne en réseau « host » : il prend directement un port du NAS.
+   Le défaut du conteneur (3000) est souvent déjà pris (Grafana, AdGuard…),
+   d'où 8424. Vérifier qu'il est libre **avant** de démarrer (aucune ligne =
+   libre) :
+   ```bash
+   ss -ltn | grep -w 8424
    ```
 3. Démarrer le pont puis redémarrer le backend :
    ```bash

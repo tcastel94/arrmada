@@ -76,7 +76,7 @@ class Settings(BaseSettings):
     ARR_DOWNLOADS_PATH: str = "/media/downloads/complete"
 
     # ── Caméras Eufy (via le conteneur eufy-security-ws) ──────
-    # Ex. ws://192.168.2.3:3000 ; vide = pas de caméras. Détections relayées
+    # Ex. ws://192.168.2.3:8424 (EUFY_WS_PORT du pont) ; vide = pas de caméras. Détections relayées
     # vers la TV : person, ring, motion, pet, vehicle, package (virgules).
     EUFY_WS_URL: str = ""
     EUFY_DETECTIONS: str = "person"

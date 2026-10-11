@@ -100,9 +100,13 @@ services:
 
   # ── Caméras Eufy (optionnel) ────────────────────────────────
   # Pont vers le cloud Eufy : publie les détections sur le réseau local
-  # (ws://<IP>:3000). Démarré seulement à la demande :
+  # (ws://<IP>:${EUFY_WS_PORT}). Démarré seulement à la demande :
   #   docker compose --profile eufy up -d eufy-security-ws
   # Compte Eufy SECONDAIRE (invité par le compte principal), sans 2FA.
+  # Réseau « host » : le conteneur écoute DIRECTEMENT sur un port du NAS (pas
+  # de correspondance de ports possible). Défaut 8424, à côté des 8420 d'ArrMada
+  # (3000, le défaut du pont, est souvent déjà pris). Vérifier qu'il est libre :
+  #   ss -ltn | grep -w 8424
   eufy-security-ws:
     image: bropat/eufy-security-ws:latest
     container_name: eufy-security-ws
@@ -114,7 +118,7 @@ services:
       - PASSWORD=${EUFY_PASSWORD:-}
       - COUNTRY=${EUFY_COUNTRY:-FR}
       - TRUSTED_DEVICE_NAME=arrmada
-      - PORT=3000
+      - PORT=${EUFY_WS_PORT:-8424}
     volumes:
       - ./data/eufy:/data
 
