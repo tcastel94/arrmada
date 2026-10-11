@@ -30,6 +30,7 @@ WINDOWS = {
     "salon": ("script-arrmada-salon.xml", "salon_window.py"),
     "pair": ("script-arrmada-pair.xml", "pair_window.py"),
     "qr": ("script-arrmada-qr.xml", "qr_window.py"),
+    "series": ("script-arrmada-series.xml", "series_window.py"),
 }
 
 # Noms de police présents dans TOUS les jeux de polices (« fontsets ») d'Aeon

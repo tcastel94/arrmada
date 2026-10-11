@@ -312,6 +312,7 @@ def build_detail(detail: dict, kind: str) -> dict[str, Any]:
         have = int(season.get("episodes_have") or 0)
         seasons.append(
             {
+                "number": number,
                 "label": "Épisodes spéciaux" if number == 0 else f"Saison {number}",
                 "progress": f"{have}/{count} épisodes",
                 "pct": round(have * 100 / count) if count else 0,

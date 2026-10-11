@@ -174,8 +174,13 @@ def apply_room_preset(entry: dict) -> None:
     threading.Thread(target=_apply, name="arrmada-preset", daemon=True).start()
 
 
-def play_entry(entry: dict) -> bool:
-    """Lit le film (reprise incluse) ou ouvre les saisons de la série.
+def play_entry(entry: dict, resume=None) -> bool:
+    """Lit le film ou ouvre l'écran Série d'ArrMada (ADR-004, phase 4.1).
+
+    Film : « Reprendre à … » / « Depuis le début » s'il a été commencé
+    (`resume` : True / False pour ne pas demander). Série : l'écran Série
+    (saisons → épisodes) remplace l'écran Vidéos de SiLVO ; `entry["season"]`
+    y sélectionne une saison.
 
     Renvoie False (et prévient) si le titre n'est pas dans la médiathèque
     Kodi de cet appareil : mieux vaut ne rien lancer que le mauvais film.
@@ -185,10 +190,12 @@ def play_entry(entry: dict) -> bool:
         notify(entry["title"], "Pas (encore) dans la médiathèque Kodi de cet appareil")
         return False
     if entry.get("kind", "movie") == "movie":
-        apply_room_preset(entry)
-        jsonrpc("Player.Open", {"item": {"movieid": found}, "options": {"resume": True}})
-    else:
-        xbmc.executebuiltin(f"ActivateWindow(Videos,videodb://tvshows/titles/{found}/,return)")
+        import kodi_library  # import local : évite un import circulaire
+
+        return kodi_library.play_movie(found, entry, resume=resume)
+    import series_window
+
+    series_window.open_series(entry, found, season=entry.get("season"))
     return True
 
 
@@ -258,3 +265,34 @@ def open_search() -> None:
 
 def run_in_background(target, *args) -> None:
     threading.Thread(target=target, args=args, daemon=True).start()
+
+
+# Levé à la fin du script : les fils qui attendent quelque chose (début de
+# lecture…) s'arrêtent au lieu d'attendre leur délai.
+SHUTDOWN = threading.Event()
+
+
+def join_threads(timeout: float = 8.0) -> None:
+    """Attend la fin des fils d'arrière-plan avant de rendre la main à Kodi.
+
+    Kodi peut se fermer brutalement (erreur de segmentation) quand un script
+    se termine alors qu'un de ses fils tourne encore : incident 1.7.0, et
+    reproduit sur le banc le 11/10/2026 à la fin de l'appairage (le fil qui
+    ferme la fenêtre vivait encore ; journal : « waiting on thread », puis
+    plantage, deux passages sur trois). Analogie : un `wait` en fin de script
+    shell pour ne pas laisser de processus orphelins.
+    """
+    SHUTDOWN.set()
+    deadline = time.time() + timeout
+    current = threading.current_thread()
+    for thread in threading.enumerate():
+        if thread is current or thread is threading.main_thread() or not thread.is_alive():
+            continue
+        thread.join(max(0.0, deadline - time.time()))
+    left = [
+        t.name
+        for t in threading.enumerate()
+        if t is not current and t is not threading.main_thread() and t.is_alive()
+    ]
+    if left:
+        log("Fils", f"encore actifs à la fin du script : {left}", xbmc.LOGWARNING)

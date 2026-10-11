@@ -27,7 +27,15 @@ CONTEXT_LABELS = {
     "play": "Lire",
     "detail": "Fiche détaillée",
     "upgrade": "Chercher une meilleure version",
+    # ADR-004 (phase 4.1) : état dans la médiathèque Kodi de cet appareil
+    "restart": "Lire depuis le début",
+    "seen": "Marquer comme vu",
+    "unseen": "Marquer comme non vu",
+    "series": "Ouvrir la série",
 }
+
+
+LABEL_MASK = "%L"  # garder le libellé posé par l'appli (voir add_entries)
 
 
 def plugin_url(base: str, params: dict) -> str:
@@ -68,7 +76,9 @@ def _set_video_info(item: xbmcgui.ListItem, info: dict, ids: dict) -> None:
     """Fiche vidéo : API InfoTagVideo de Kodi 20+, `setInfo` sur Kodi 19."""
     tag = item.getVideoInfoTag() if hasattr(item, "getVideoInfoTag") else None
     if tag is None:  # Kodi 19
-        legacy = {k: v for k, v in info.items() if v not in ("", 0, 0.0, None, [])}
+        legacy = {
+            k: v for k, v in info.items() if k != "resume" and v not in ("", 0, 0.0, None, [])
+        }
         item.setInfo("video", legacy)
         return
     setters = (
@@ -94,6 +104,12 @@ def _set_video_info(item: xbmcgui.ListItem, info: dict, ids: dict) -> None:
         tag.setRating(float(info["rating"]))
     if ids:
         tag.setUniqueIDs(dict(ids), next(iter(ids)))
+    # État Kodi (ADR-004) : le skin dessine sa coche « vu » et sa barre de reprise
+    if "playcount" in info:
+        tag.setPlaycount(int(info["playcount"]))
+    if info.get("resume"):
+        position, total = info["resume"]
+        tag.setResumePoint(float(position), float(total))
 
 
 def make_listitem(entry: dict, base: str) -> xbmcgui.ListItem:
@@ -134,14 +150,17 @@ def add_entries(
     xbmcplugin.setContent(handle, content)
     # 1er tri = celui affiché d'office : l'ordre préparé par le serveur ou
     # l'appli (sinon Kodi choisit lui-même, par date par exemple).
-    xbmcplugin.addSortMethod(handle, xbmcplugin.SORT_METHOD_UNSORTED)
+    # LABEL_MASK : sans lui, Kodi remplace le libellé par le titre (masque
+    # « %T » par défaut, lu dans ModuleXbmcplugin.cpp) : « Severance · S01E04 »
+    # devenait « The You You Are » dans Reprendre.
+    xbmcplugin.addSortMethod(handle, xbmcplugin.SORT_METHOD_UNSORTED, labelMask=LABEL_MASK)
     if sortable:
         for method in (
             xbmcplugin.SORT_METHOD_LABEL_IGNORE_THE,
             xbmcplugin.SORT_METHOD_VIDEO_YEAR,
             xbmcplugin.SORT_METHOD_VIDEO_RATING,
         ):
-            xbmcplugin.addSortMethod(handle, method)
+            xbmcplugin.addSortMethod(handle, method, labelMask=LABEL_MASK)
     items = [
         (plugin_url(base, entry["action"]), make_listitem(entry, base), bool(entry.get("folder")))
         for entry in entries

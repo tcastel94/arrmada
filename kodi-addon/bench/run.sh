@@ -101,6 +101,25 @@ for fontset in estuary.getroot().findall("fontset"):
 estuary.write(dst, encoding="utf-8", xml_declaration=True)
 PY
 
+# ── 1b. Médiathèque Kodi de test (ADR-004, phase 4.1) ────────────────────────
+# Une série et un film avec fiches .nfo (make_media.py), déclarés comme sources
+# vidéo ; leur contenu est réglé dans la base de Kodi à l'étape 4.
+MEDIA="$BENCH_DIR/media"
+if command -v ffmpeg >/dev/null && [[ ! -s assets/clip-90s.mp4 ]]; then
+  ffmpeg -loglevel error -y -f lavfi -i testsrc2=size=640x360:rate=25 -t 90 -an \
+    -c:v libx264 -preset ultrafast -pix_fmt yuv420p assets/clip-90s.mp4 || true
+fi
+python3 "$BENCH_SRC/make_media.py" "$MEDIA" assets/clip-90s.mp4
+cat > "$KODI_DIR/userdata/sources.xml" <<EOF
+<sources>
+  <video>
+    <default pathversion="1"></default>
+    <source><name>Séries (banc)</name><path pathversion="1">$MEDIA/tv/</path><allowsharing>true</allowsharing></source>
+    <source><name>Films (banc)</name><path pathversion="1">$MEDIA/movies/</path><allowsharing>true</allowsharing></source>
+  </video>
+</sources>
+EOF
+
 # ── 2. Add-ons : version de travail du dépôt + harnais ───────────────────────
 rm -rf "$KODI_DIR/addons/script.arrmada" "$KODI_DIR/addons/service.arrmada.harness"
 cp -r "$REPO/kodi-addon/script.arrmada" "$KODI_DIR/addons/"
@@ -136,6 +155,29 @@ with sqlite3.connect(sys.argv[1]) as db:
         "UPDATE installed SET enabled=1 "
         "WHERE addonID IN ('script.arrmada', 'service.arrmada.harness')"
     )
+PY
+# Contenu des sources (Séries / Films, scraper « Informations locales ») : ce
+# que fait « Définir le contenu » dans Kodi. La médiathèque est vidée à chaque
+# passage ; le harnais la rescanne : résultats reproductibles.
+python3 - "$KODI_DIR/userdata/Database" "$MEDIA" <<'PY'
+import glob
+import sqlite3
+import sys
+
+folder, media = sys.argv[1:]
+for path in glob.glob(f"{folder}/MyVideos*.db"):
+    with sqlite3.connect(path) as db:
+        for table in ("episode", "seasons", "tvshow", "movie", "files", "bookmark", "path",
+                      "tvshowlinkpath", "art", "uniqueid", "streamdetails"):
+            db.execute(f"DELETE FROM {table}")
+        for sub, content, recursive, folder_names in (("tv", "tvshows", 0, 0),
+                                                      ("movies", "movies", 2147483647, 1)):
+            db.execute(
+                "INSERT INTO path (strPath, strContent, strScraper, scanRecursive, "
+                "useFolderNames, strSettings, noUpdate, exclude, allAudio) "
+                "VALUES (?, ?, 'metadata.local', ?, ?, '', 0, 0, 0)",
+                (f"{media}/{sub}/", content, recursive, folder_names),
+            )
 PY
 
 # ── 5. Passage instrumenté (le harnais quitte Kodi à la fin) ─────────────────

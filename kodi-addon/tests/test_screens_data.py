@@ -129,6 +129,7 @@ class TestDetail:
         assert d["tvdb_id"] == "371980" and d["tmdb_id"] == ""
         assert [s["label"] for s in d["seasons"]] == ["Épisodes spéciaux", "Saison 1", "Saison 2"]
         assert d["seasons"][2] == {
+            "number": 2,  # l'écran Série s'ouvre sur cette saison (ADR-004)
             "label": "Saison 2",
             "progress": "6/10 épisodes",
             "pct": 60,

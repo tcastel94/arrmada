@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Kodi add-on 1.11.0 — Series and resume without SiLVO (ADR-004, phase 4.1)
+
+ADR-004: in the long run, ArrMada replaces Kodi's interface; Kodi stays hidden underneath as the player (passthrough, HDR, subtitles unchanged) and the local library (watched, resume points, third-party add-ons).
+
+#### Added
+- **Series screen** (replaces SiLVO's Videos window for series): seasons ("3 / 9 watched"), then episodes with thumbnail, *Watched* badge, resume progress bar, air date, runtime and plot. The season and episode to watch next are pre-selected; the top button says "Resume S01E04" / "Play S01E05" (or "Watch again from the start"). Long press: *Play from the start*, *Mark as watched / unwatched*, *Mark the whole season as watched*. Opened by *Play* / *Open the series* everywhere (home, detail, lists, Resume), and from a season of the detail screen directly on that season; `plugin://script.arrmada/?action=series&tvshowid=N`
+- **Episodes chain**: the following episodes (up to 30, across seasons, specials excluded) play one after another
+- **Movies**: *Play* asks "Resume at 42:10 / From the start" (Kodi does not ask when an app starts a video); the detail button shows "Resume at 42:10" or "Watch again"; long press: *Play from the start*, *Mark as watched / unwatched*
+- **Resume** row (app root and SiLVO widget `?action=widget_continue`): movies and episodes in progress plus the **next episode** of every series being watched, most recent first, one entry per series. OK plays through ArrMada (resume, chaining, amp preset); long press: *Play from the start*, *Mark as watched*, *Open the series*
+- Movies / Series / Recently added lists show the skin's **watched tick** and **resume bar** (Kodi library of this device, matched by TMDB / TVDB id), with *Mark as watched / unwatched* in the long press menu
+- Tests: next episode (started first, never back before the last watched, specials ignored), chaining, seasons, Resume row (merge, order, one entry per series), list annotation. Bench: a real Kodi library (series + movie with `.nfo` files, local scraper) scanned at each run; detail "Resume at 0:40", series screen, season 2, long press menu, resume prompt, playback resumed at 0:30 with the following episodes queued, Resume row
+
+#### Fixed (found on the bench, real Kodi)
+- Starting a **playlist** through Kodi's API ignores the resume point: the episode is started alone (resume honoured), then the following ones are appended to Kodi's video playlist once playback has started
+- **Kodi could crash at the end of pairing** (2 bench runs out of 3, present since 1.6): the background thread closing the pairing screen was still alive when the script ended ("waiting on thread", then a segmentation fault). Every add-on script now waits for its background threads before returning to Kodi (`ui_common.join_threads`, with a shutdown signal for threads waiting on playback)
+- Plugin lists: Kodi replaced every label with the item's title (default `%T` label mask of `addSortMethod`, read in Kodi's source): "Severance · S01E04" showed as the episode title. Lists now keep their own labels (`%L`)
+
 ### Living-room ambient screen (tablet under the TV) + Kodi add-on 1.10.0
 
 #### Added

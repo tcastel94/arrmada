@@ -475,7 +475,7 @@ class HomeWindow(xbmcgui.WindowXML):
             return
         is_movie = entry["kind"] == "movie"
         choices = [
-            ("play", "Lire" if is_movie else "Ouvrir dans la médiathèque Kodi"),
+            ("play", "Lire" if is_movie else "Ouvrir la série"),
             ("details", "Fiche détaillée"),
             ("search", "Chercher une meilleure version"),
         ]

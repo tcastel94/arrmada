@@ -14,4 +14,5 @@ known-first-party = [
     "device", "pairing_data", "pair_window",
     "feeds", "catalog_data", "listing", "background", "navigation", "kodi_helper",
     "startup_guard", "links_data", "qr_window", "migration", "library_data", "playback_data",
+    "watch_data", "kodi_library", "series_window",
 ]

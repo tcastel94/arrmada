@@ -3,7 +3,7 @@
 
 Racine calquée sur la web app :
 
-  Accueil · Films · Séries · Découvrir · Manquants · Rechercher · Calendrier ·
+  Accueil · Reprendre · Films · Séries · Découvrir · Manquants · Rechercher · Calendrier ·
   Téléchargements · Notifications · Salon · Appairage ·
   Widgets pour SiLVO · Sur ton téléphone · Outils (ancien menu) · Paramètres
 
@@ -14,10 +14,17 @@ détaillée, Chercher une meilleure version.
 
 Widgets (Paramètres du skin → Personnaliser le menu principal → Widgets) :
   plugin://script.arrmada/?action=widget&feed=recent|upcoming|downloads|foryou|missing
+  plugin://script.arrmada/?action=widget_continue   (Reprendre, ADR-004)
+
+« Reprendre » (ADR-004, phase 4.1) lit la médiathèque Kodi de CET appareil :
+films et épisodes commencés, et l'épisode suivant de chaque série en cours.
+Les listes Films / Séries / Ajouts récents y prennent aussi l'état « vu » et
+la barre de reprise (coche et progression dessinées par le skin).
 """
 
 from __future__ import annotations
 
+import xbmc
 import xbmcaddon
 import xbmcgui
 
@@ -85,6 +92,9 @@ def show_feed(handle: int, base: str, feed: str, widget: bool = False, sub: str 
         return
     data = listing.read_feed(feed)
     label = dict((key, title) for key, title, _ in DISCOVER).get(sub) or feeds.FEEDS[feed].label
+    entries = _entries(feed, data, sub)
+    if feed == "recent":
+        entries = _with_kodi_state(entries)
     if data is None and not widget:
         listing.add_entries(
             handle,
@@ -97,7 +107,7 @@ def show_feed(handle: int, base: str, feed: str, widget: bool = False, sub: str 
     listing.add_entries(
         handle,
         base,
-        _entries(feed, data, sub),
+        entries,
         content=CONTENT.get(feed, "videos"),
         category=label,
         empty=None if widget else "Rien pour l'instant",
@@ -117,6 +127,13 @@ def show_root(handle: int, base: str) -> None:
     )
     entries = [
         listing.action_entry("Accueil", {"action": "home"}, icon, "L'écran d'accueil ArrMada"),
+        listing.folder(
+            "Reprendre",
+            {"action": "continue"},
+            "DefaultInProgressShows.png",
+            "Films et épisodes commencés, et l'épisode suivant de tes séries "
+            "(médiathèque Kodi de cette TV)",
+        ),
         listing.folder(
             "Films",
             {"action": "library", "kind": "movie"},
@@ -245,6 +262,8 @@ def show_browse(handle: int, base: str, params: dict, widget: bool = False) -> N
         listing.add_entries(handle, base, [], empty=None if widget else _empty_after_error())
         return
     entries = catalog_data.entries_media(payload.get("items") or [], missing=view == "missing")
+    if view != "missing":
+        entries = _with_kodi_state(entries)
     current, pages, total = library_data.page_info(payload)
     if current < pages and not widget:
         following = dict(params, action="browse", page=str(current + 1))
@@ -271,6 +290,14 @@ def show_widgets(handle: int, base: str) -> None:
     """Dossiers que Skin Shortcuts (SiLVO) propose comme widgets."""
     entries = [
         listing.folder(
+            "Reprendre",
+            {"action": "widget_continue"},
+            "",
+            "Chemin : plugin://script.arrmada/?action=widget_continue",
+        )
+    ]
+    entries += [
+        listing.folder(
             feeds.FEEDS[name].label,
             {"action": "widget", "feed": name},
             "",
@@ -285,6 +312,89 @@ def show_widgets(handle: int, base: str) -> None:
             listing.folder(label, dict(params, action="widget_browse"), "", f"Chemin : {path}")
         )
     listing.add_entries(handle, base, entries, content="files", category="Widgets", empty=None)
+
+
+# ── Reprendre et état « vu » (médiathèque Kodi, ADR-004 phase 4.1) ────────
+
+
+def _with_kodi_state(entries: list) -> list:
+    """Ajoute aux titres du serveur leur état dans la médiathèque Kodi de cette TV."""
+    import kodi_library
+    import watch_data
+
+    try:
+        movies, shows = kodi_library.library_indexes()
+    except Exception as exc:  # médiathèque illisible : la liste s'affiche quand même
+        ui.log("Listes", f"état Kodi indisponible : {exc}", xbmc.LOGWARNING)
+        return entries
+    return watch_data.annotate(entries, movies, shows)
+
+
+def show_continue(handle: int, base: str, widget: bool = False) -> None:
+    """« Reprendre » : films / épisodes commencés + épisode suivant de chaque série."""
+    import kodi_library
+    import watch_data
+
+    entries = watch_data.continue_entries(kodi_library.continue_watching())
+    listing.add_entries(
+        handle,
+        base,
+        entries,
+        content="episodes",
+        category="Reprendre",
+        empty=None if widget else "Rien en cours : lance un film ou une série",
+    )
+
+
+def resume_play(params: dict, resume=None) -> None:
+    """OK sur un élément de « Reprendre » : lecture par la logique d'ArrMada."""
+    import kodi_library
+
+    dbid = int(params["id"]) if str(params.get("id") or "").isdigit() else 0
+    if not dbid:
+        return
+    if params.get("type") == "movie":
+        kodi_library.play_movie(dbid, resume=resume)
+    else:
+        # Programme court (plugin) : on attend que la suite soit empilée
+        kodi_library.play_episode(dbid, resume=resume, wait=True)
+
+
+def open_series(params: dict) -> None:
+    """Écran Série d'une série de la médiathèque Kodi (`tvshowid`)."""
+    import kodi_library
+    import series_window
+
+    if not str(params.get("tvshowid") or "").isdigit():
+        return
+    tvshowid = int(params["tvshowid"])
+    details = kodi_library.show_details(tvshowid)
+    if not details:
+        ui.notify("ArrMada", "Série introuvable dans la médiathèque Kodi")
+        return
+    art = details.get("art") or {}
+    entry = {
+        "kind": "tvshow",
+        "title": details.get("title") or "",
+        "poster": art.get("poster") or "",
+        "fanart": art.get("fanart") or "",
+        "clearlogo": art.get("clearlogo") or "",
+    }
+    series_window.open_series(entry, tvshowid)
+
+
+def _kodi_item_action(params: dict, op: str) -> None:
+    """Appui long sur un élément de « Reprendre » (identifiants Kodi)."""
+    import kodi_library
+
+    kind, dbid = params.get("type"), int(params["id"])
+    if op == "restart":
+        resume_play(params, resume=False)
+    elif op in ("seen", "unseen"):
+        kodi_library.set_watched(kind, dbid, op == "seen")
+        xbmc.executebuiltin("Container.Refresh")
+    elif op == "series":
+        open_series(params)
 
 
 # ── Actions au clic ─────────────────────────────────────────────────────────
@@ -317,15 +427,28 @@ def open_detail(params: dict) -> None:
 
 
 def context_action(params: dict) -> None:
-    """Menu de l'appui long : Lire, Fiche détaillée, Chercher une meilleure version."""
+    """Menu de l'appui long : Lire, Fiche, Meilleure version, Marquer vu / non vu…"""
+    op = params.get("op") or ""
+    if params.get("type") in ("movie", "episode") and str(params.get("id") or "").isdigit():
+        _kodi_item_action(params, op)
+        return
     entry = _entry_from(params)
-    op = params.get("op")
     if op == "play":
         ui.play_entry(entry)
     elif op == "detail":
         open_detail(params)
     elif op == "upgrade":
         ui.search_release(entry)
+    elif op in ("seen", "unseen"):
+        # Film d'une liste ArrMada : on le retrouve dans la médiathèque Kodi
+        import kodi_library
+
+        found = ui.find_in_library(entry)
+        if found is None:
+            ui.notify(entry["title"] or "ArrMada", "Pas dans la médiathèque Kodi de cet appareil")
+            return
+        kodi_library.set_watched("movie", found, op == "seen")
+        xbmc.executebuiltin("Container.Refresh")
 
 
 def add_favourites() -> None:

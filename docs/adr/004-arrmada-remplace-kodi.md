@@ -108,10 +108,20 @@ s'affiche tout de suite et se remplit ensuite (règle d'or de l'ADR-003).
 
 | Phase | Livrables | Critère de fin |
 |---|---|---|
-| **4.1 Séries et reprise** | Écran **Série** (saisons → épisodes, vu / pas vu, progression, résumé), lecture avec *Reprendre / Depuis le début* et **enchaînement** des épisodes, *Marquer vu / non vu*, rangée **Reprendre** (en cours + épisode suivant de chaque série) dans l'appli et en widget SiLVO. Toutes les séries s'ouvrent dans l'écran Série | Regarder une série du début à la fin sans voir SiLVO |
+| **4.1 Séries, films et reprise** | Écran **Série** (saisons → épisodes, vu / pas vu, progression, résumé), lecture avec *Reprendre / Depuis le début* et **enchaînement** des épisodes, *Marquer vu / non vu*. **Films** : *Reprendre / Depuis le début*, bouton « Reprendre à 42:10 » sur la Fiche, coche « vu » et barre de reprise dans les listes. Rangée **Reprendre** (films et épisodes en cours + épisode suivant de chaque série) dans l'appli et en widget SiLVO. Toutes les séries s'ouvrent dans l'écran Série | Regarder une série ou un film, et le reprendre, sans voir SiLVO |
 | **4.2 Coquille ArrMada** | Accueil média et menu principal, grille Films / Séries maison, démarrage sur ArrMada, Retour → menu *Quitter*, touche Accueil → ArrMada | Kodi démarre sur ArrMada ; SiLVO n'apparaît plus au quotidien |
 | **4.3 Applis & sources** | Navigateur ArrMada pour les add-ons (YouTube, IPTV, musique), les sources du NAS (vidéos perso) et les favoris Kodi | YouTube, IPTV et vidéos perso sans passer par SiLVO |
 | **4.4 Finitions** | « Épisode suivant dans 10 s » en fin d'épisode, vu / reprise partagés entre les Shield (salon ↔ cinéma) via le serveur, épisodes manquants (Sonarr) dans l'écran Série avec *Chercher* | — |
+
+> **Avancement (11/10/2026)** — Phase 4.1 livrée dans l'add-on 1.11.0 :
+> écran Série (`series_window.py`), lecture avec reprise et enchaînement
+> (`kodi_library.py`), logique pure et testée (`watch_data.py`), films
+> (« Reprendre à … » sur la Fiche, coche « vu » dans les listes), rangée
+> Reprendre (racine + widget SiLVO). Validé sur le banc dans un vrai Kodi avec
+> une médiathèque de test. Au passage : la reprise est ignorée quand on lance
+> une liste de lecture par l'API de Kodi (contourné), et un plantage de Kodi à
+> la fin de l'appairage, présent depuis la 1.6, a été corrigé (fils
+> d'arrière-plan attendus en fin de script).
 
 ## Conséquences
 

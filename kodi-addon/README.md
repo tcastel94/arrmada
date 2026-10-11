@@ -237,7 +237,7 @@ Sonarr, pas seulement les ajouts récents.
 - OK ouvre la **fiche ArrMada** ; appui long : *Lire*, *Fiche*, *Meilleure version*. Un titre sans fichier est marqué « pas encore disponible » (pas de *Lire*).
 - Le **serveur** trie et filtre toute la bibliothèque, et la TV reçoit **100 titres à la fois**, avec une entrée **Page suivante** en bas. Les tris de Kodi (titre, année, note) restent disponibles, mais ne s'appliquent qu'à la page affichée.
 - Widgets SiLVO en plus : *Films en 4K*, *Films ajoutés récemment*, *Séries ajoutées récemment* (Widgets pour l'accueil de SiLVO).
-- Différence avec la médiathèque Kodi : ici, on voit aussi les titres suivis mais pas encore téléchargés, avec leur qualité. Pour reprendre un film là où on l'a arrêté, *Lire* passe par la médiathèque Kodi, comme ailleurs dans l'appli.
+- Différence avec la médiathèque Kodi : ici, on voit aussi les titres suivis mais pas encore téléchargés, avec leur qualité. *Lire* passe par la médiathèque Kodi, comme ailleurs dans l'appli. Depuis la 1.11.0, les titres déjà vus portent la coche du skin et une série s'ouvre dans l'écran Série d'ArrMada (§ 16).
 
 ### 11. ⚡ Cache local et événements (service)
 Le service de l'add-on (toujours actif) :
@@ -368,6 +368,56 @@ faire d'autre qu'afficher l'heure de fin. Réseau local uniquement, comme les TV
 > tablette chaque seconde à partir du dernier relevé de la TV (toutes les
 > 30 s) ; un saut dans le film est pris en compte au relevé suivant.
 
+### 16. 📺 Séries, reprise et films vus : sans passer par SiLVO (1.11.0, ADR-004)
+Première étape de l'[ADR-004](../docs/adr/004-arrmada-remplace-kodi.md) : à terme,
+ArrMada remplace l'interface de Kodi, et Kodi ne sert plus que de **lecteur**,
+caché dessous. Les vidéos passent toujours par le lecteur de Kodi : le son HD
+vers l'ampli, le HDR et les sous-titres ne changent pas.
+
+**Écran Série** (remplace l'écran Vidéos de SiLVO) : ouvert par *Lire* /
+*Ouvrir la série* partout dans l'appli (Accueil, Fiche, listes, Reprendre).
+- En haut : **« Reprendre S01E04 »** ou **« Lire S01E05 »**, c'est-à-dire
+  l'épisode à suivre : celui qui est commencé, sinon le premier non vu après le
+  dernier vu. Si tout est vu : « Revoir depuis le début ».
+- Les **saisons** (« 3 / 9 vus »), puis les **épisodes** : vignette, pastille
+  **Vu**, barre de progression si l'épisode est commencé. Le résumé, la date de
+  diffusion et la durée s'affichent en bas.
+- OK sur un épisode → le lire. Appui long → *Lire depuis le début*,
+  *Marquer comme vu / non vu*, *Marquer toute la saison comme vue*.
+- **Enchaînement** : les épisodes suivants (jusqu'à 30, d'une saison à
+  l'autre) s'enchaînent tout seuls.
+- Depuis la **Fiche** d'une série, OK sur une saison ouvre l'écran Série
+  directement sur cette saison.
+
+**Films** :
+- Le bouton *Lire* de la Fiche affiche **« Reprendre à 42:10 »** si le film est
+  commencé, et **« Revoir »** s'il est déjà vu.
+- *Lire* demande **« Reprendre à … / Depuis le début »**. Kodi ne le demande pas
+  quand une appli lance une vidéo : ArrMada le fait à sa place.
+- Appui long sur *Lire* : *Lire depuis le début*, *Marquer comme vu / non vu*.
+- Listes Films, Séries et Ajouts récents : la **coche « vu »** et la **barre de
+  reprise** du skin apparaissent, avec *Marquer comme vu / non vu* dans
+  l'appui long.
+
+**Reprendre** (racine de l'appli, et widget SiLVO
+`plugin://script.arrmada/?action=widget_continue`) :
+- les films et épisodes commencés, plus **l'épisode suivant** de chaque série
+  en cours, du plus récent au plus ancien (une seule entrée par série) ;
+- OK lance la lecture avec la logique d'ArrMada (reprise, enchaînement,
+  préréglage de l'ampli) ;
+- appui long : *Lire depuis le début*, *Marquer comme vu*, *Ouvrir la série*.
+
+> D'où viennent « vu » et « reprise » : de la **médiathèque Kodi de CET
+> appareil** (c'est elle qui a le fichier et la position). Chaque Shield a
+> donc les siens jusqu'à la phase 4.4 (partage par le serveur). Un épisode que
+> Kodi n'a pas encore scanné n'apparaît pas : le scan automatique après
+> chaque import (déjà en place) s'en charge.
+
+> Piège Kodi, contourné : lancer une **liste de lecture** par l'API de Kodi
+> ignore la position de reprise. ArrMada lance donc l'épisode **seul** (avec
+> reprise), attend qu'il démarre, puis ajoute les suivants à la liste de lecture
+> de Kodi. Comportement vérifié sur le banc (vrai Kodi, médiathèque de test).
+
 ## 🚀 Installation dans Kodi
 
 > ⚠️ **NVIDIA Shield (Kodi 21, Android)** : l'installation **par le dépôt** ferme
@@ -457,12 +507,16 @@ Copiez le dossier `script.arrmada/` dans le dossier des extensions de Kodi :
 | Banc de test visuel (vrai Kodi sous écran virtuel) | `kodi-addon/bench/run.sh` |
 
 **Banc de test visuel** : sur une machine Linux (VM ou conteneur Ubuntu),
-`sudo apt install kodi xvfb python3-pil curl`, puis `kodi-addon/bench/run.sh`.
+`sudo apt install kodi xvfb python3-pil curl ffmpeg`, puis `kodi-addon/bench/run.sh`.
 Le script lance un faux backend et un Kodi sans écran (Xvfb) avec les polices
-de SiLVO. Il rejoue un parcours à la télécommande (menu, intro, accueil,
-fiche film et série, téléchargements, salon avec et sans lecture,
-diagnostic, appairage, listes natives, widgets, événement serveur, cache, panne
-serveur, TV refusée, QR codes, favoris, bulle pendant un film, Films et Séries) et dépose 45 captures dans
+de SiLVO, et une **médiathèque Kodi de test** (`bench/make_media.py` : une série
+en 2 saisons et un film, fiches `.nfo`, scraper « Informations locales »). Il
+rejoue un parcours à la télécommande (menu, intro, accueil, fiche film et
+série, téléchargements, salon avec et sans lecture, diagnostic, appairage,
+listes natives, widgets, événement serveur, cache, panne serveur, TV refusée,
+QR codes, favoris, bulle pendant un film, Films et Séries, puis la phase 4.1 :
+« Reprendre à … » sur la Fiche, écran Série, saison 2, appui long, reprise de
+lecture avec épisodes enchaînés, rangée Reprendre) et dépose 54 captures dans
 `/tmp/arrmada-kodi-bench/shots/`. Le Kodi du système n'est pas modifié : tout
 se passe dans un profil jetable. Le rendu final reste à valider sur la Shield.
 
@@ -470,6 +524,13 @@ Pour voir les animations : `RECORD=1 PACE=1.3 kodi-addon/bench/run.sh` filme
 l'écran virtuel (`sudo apt install ffmpeg`) et produit
 `/tmp/arrmada-kodi-bench/demo.mp4`. Rendu logiciel sans carte graphique : la
 vidéo est moins fluide que sur la Shield.
+
+> Le banc a révélé un plantage de Kodi **à la fin de l'appairage** (2 passages
+> sur 3) : le fil qui ferme l'écran vivait encore quand le script se
+> terminait (« waiting on thread » dans le journal, puis erreur de
+> segmentation). Depuis la 1.11.0, le script attend la fin de ses fils avant
+> de rendre la main (`ui_common.join_threads`). Le plantage restant quand
+> le harnais quitte Kodi est propre au Kodi 20 du banc (déjà présent avant).
 
 Pièges connus, chacun couvert par un test :
 - **Polices** : utiliser uniquement les noms présents dans **tous** les jeux de polices de SiLVO (liste dans `tests/test_windows_xml.py`). Une police inconnue retombe sans prévenir sur `font13`.

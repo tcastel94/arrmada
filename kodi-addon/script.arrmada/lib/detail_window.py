@@ -10,7 +10,10 @@ Ouverture en deux temps, sans jamais figer l'interface :
      casting, fichier, notes, sous-titres, saisons) et complète l'écran.
 
 Actions (aucune n'est destructrice, ADR-003 décision 1) :
-  Lire               médiathèque Kodi de cet appareil + préréglage Yamaha de la pièce
+  Lire               film : médiathèque Kodi de cet appareil + préréglage Yamaha de
+                     la pièce, « Reprendre à … » s'il a été commencé (ADR-004) ;
+                     série : l'écran Série d'ArrMada (saisons → épisodes)
+  Appui long (Lire)  film : Lire depuis le début, Marquer comme vu / non vu
   Bande-annonce      add-on YouTube (films : Sonarr n'en connaît pas)
   Meilleure version  recherche Radarr/Sonarr
   Sous-titres        recherche Bazarr (films)
@@ -26,6 +29,7 @@ import xbmcgui
 
 import screens_data
 import ui_common as ui
+import watch_data
 from api import ArrMadaAPI
 
 XML_FILE = "script-arrmada-detail.xml"
@@ -56,16 +60,22 @@ class DetailWindow(xbmcgui.WindowXML):
         self._initialized = False
         self._stop = threading.Event()
         self._trailer = ""
+        self._seasons: list = []  # saisons connues du serveur (numéros)
+        self._movieid = 0  # film dans la médiathèque Kodi de cet appareil
+        self._movie_state: dict = {}
 
     # ── Cycle de vie ────────────────────────────────────────────────────────
 
     def onInit(self):
         if self._initialized:
-            return  # retour depuis la lecture ou la médiathèque : rien à refaire
+            # Retour d'une lecture : la reprise / le « vu » ont changé.
+            ui.run_in_background(self._load_kodi_state)
+            return
         self._initialized = True
         entry = self._entry
         kind = entry.get("kind", "movie")
         self.setProperty("kind", kind)
+        self.setProperty("play_label", "Lire" if kind == "movie" else "Ouvrir la série")
         self.setProperty("title", entry.get("title", ""))
         self.setProperty("meta", entry.get("meta", ""))
         self.setProperty("overview", entry.get("plot", ""))
@@ -83,6 +93,34 @@ class DetailWindow(xbmcgui.WindowXML):
     # ── Chargement de la fiche complète ─────────────────────────────────────
 
     def _load(self) -> None:
+        try:
+            self._load_detail()
+        finally:
+            # Identifiants complétés par la fiche : on cherche le titre dans Kodi
+            if not self._stop.is_set():
+                self._load_kodi_state()
+
+    def _load_kodi_state(self) -> None:
+        """Film : « Reprendre à 42:10 » / « Revoir » sur le bouton Lire (ADR-004)."""
+        if self._entry.get("kind", "movie") != "movie":
+            return
+        import kodi_library
+
+        found = ui.find_in_library(self._entry)
+        if found is None or self._stop.is_set():
+            return
+        state = watch_data.movie_state(kodi_library.movie_details(found))
+        self._movieid, self._movie_state = found, state
+        if state["resume"]:
+            label = f"Reprendre à {watch_data.clock(state['resume'])}"
+        else:
+            label = "Revoir" if state["watched"] else "Lire"
+        try:
+            self.setProperty("play_label", label)
+        except RuntimeError:
+            pass  # fenêtre fermée entre-temps
+
+    def _load_detail(self) -> None:
         started = time.perf_counter()
         entry = self._entry
         raw = ArrMadaAPI.get_media_detail(entry.get("kind", "movie"), entry.get("arr_id"))
@@ -146,6 +184,7 @@ class DetailWindow(xbmcgui.WindowXML):
             if not items:
                 self.setProperty("rail_title", "Casting non renseigné")
         else:
+            self._seasons = model["seasons"]
             items = []
             for season in model["seasons"]:
                 item = xbmcgui.ListItem(
@@ -166,6 +205,13 @@ class DetailWindow(xbmcgui.WindowXML):
             self.close_window()
         elif action_id in ui.PLAY_ACTIONS:
             ui.play_entry(self._entry)
+        elif action_id in ui.MENU_ACTIONS and self._entry.get("kind", "movie") == "movie":
+            try:
+                on_play = self.getFocusId() == BTN_PLAY
+            except RuntimeError:
+                on_play = False
+            if on_play:
+                self._movie_menu()
         elif action_id == xbmcgui.ACTION_MOVE_DOWN and self._entry.get("kind") == "tvshow":
             # Le XML envoie la flèche bas vers le casting (masqué pour une
             # série) ; Kodi ne permet pas de changer la navigation d'un groupe
@@ -184,8 +230,13 @@ class DetailWindow(xbmcgui.WindowXML):
 
     def onClick(self, controlId):
         entry = self._entry
-        if controlId in (BTN_PLAY, SEASONS):
+        if controlId == BTN_PLAY:
             ui.play_entry(entry)
+        elif controlId == SEASONS:
+            # Écran Série directement sur la saison choisie
+            index = self.getControl(SEASONS).getSelectedPosition()
+            season = self._seasons[index]["number"] if 0 <= index < len(self._seasons) else None
+            ui.play_entry(dict(entry, season=season))
         elif controlId == BTN_TRAILER:
             ui.play_trailer(self._trailer, entry.get("title", ""))
         elif controlId == BTN_UPGRADE:
@@ -198,6 +249,35 @@ class DetailWindow(xbmcgui.WindowXML):
             item = self.getControl(CAST).getSelectedItem()
             if item:
                 ui.notify(item.getLabel(), item.getLabel2() or "Casting")
+
+    def _movie_menu(self) -> None:
+        """Appui long : Lire depuis le début, Marquer comme vu / non vu (film dans Kodi)."""
+        if not self._movieid:
+            ui.notify(
+                self._entry.get("title") or "ArrMada",
+                "Pas dans la médiathèque Kodi de cet appareil",
+            )
+            return
+        import kodi_library
+
+        state = self._movie_state
+        choices = []
+        if state.get("resume"):
+            choices.append(("restart", "Lire depuis le début"))
+        choices.append(
+            ("unseen", "Marquer comme non vu")
+            if state.get("watched")
+            else ("seen", "Marquer comme vu")
+        )
+        index = xbmcgui.Dialog().contextmenu([label for _, label in choices])
+        if index < 0:
+            return
+        op = choices[index][0]
+        if op == "restart":
+            ui.play_entry(self._entry, resume=False)
+        else:
+            kodi_library.set_watched("movie", self._movieid, op == "seen")
+            ui.run_in_background(self._load_kodi_state)
 
     @staticmethod
     def _show_on_phone(entry: dict) -> None:

@@ -462,6 +462,17 @@ def main():
         navigation.show_feed(
             HANDLE, PLUGIN_URL, params.get("feed", ""), widget=action == "widget", sub=params.get("sub", "")
         )
+    elif action in ("continue", "widget_continue"):
+        # Reprendre : médiathèque Kodi de cette TV (ADR-004, phase 4.1)
+        import navigation
+        navigation.show_continue(HANDLE, PLUGIN_URL, widget=action == "widget_continue")
+    elif action == "resume_play":
+        import navigation
+        navigation.resume_play(params)
+    elif action == "series":
+        # Écran Série : plugin://script.arrmada/?action=series&tvshowid=12
+        import navigation
+        navigation.open_series(params)
     elif action == "detail":
         import navigation
         navigation.open_detail(params)
@@ -549,5 +560,13 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    finally:
+        # Les écrans lancent des fils d'arrière-plan : on attend qu'ils aient
+        # fini avant de rendre la main, sinon Kodi peut planter (voir
+        # ui_common.join_threads).
+        import ui_common
+
+        ui_common.join_threads()
 

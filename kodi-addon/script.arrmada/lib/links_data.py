@@ -83,8 +83,11 @@ SHORTCUTS = (
 )
 
 # Écrans ouverts par l'add-on (fenêtres, clavier…), pas des listes : lancés
-# depuis un favori, Kodi les appelle comme une lecture (PlayMedia).
-WINDOW_ACTIONS = frozenset({"home", "queue", "salon", "pair", "search_input", "qr", "settings"})
+# depuis un favori, Kodi les appelle comme une lecture (PlayMedia). Idem pour
+# « resume_play » (Reprendre, ADR-004) cliqué dans un widget de SiLVO.
+WINDOW_ACTIONS = frozenset(
+    {"home", "queue", "salon", "pair", "search_input", "qr", "settings", "resume_play", "series"}
+)
 
 
 def shortcut_path(action: str) -> str:

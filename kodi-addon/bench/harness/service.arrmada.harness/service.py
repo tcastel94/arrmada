@@ -258,6 +258,114 @@ open_list("?action=browse&kind=series&view=all", "15e-series")
 press("Back")
 wait(1.0)
 
+
+# ── 6f. ADR-004 phase 4.1 : médiathèque Kodi, écran Série, reprise ─────────
+def rpc(method, params=None):
+    request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params or {}}
+    return json.loads(xbmc.executeJSONRPC(json.dumps(request))).get("result") or {}
+
+
+def player_state():
+    props = rpc("Player.GetProperties", {"playerid": 1, "properties": ["time", "position"]})
+    t = props.get("time") or {}
+    queue = rpc("Playlist.GetItems", {"playlistid": 1, "properties": ["season", "episode"]})
+    codes = [f"S{i.get('season'):02d}E{i.get('episode'):02d}" for i in queue.get("items") or []]
+    return f"{t.get('minutes', 0)}:{t.get('seconds', 0):02d}", codes
+
+
+rpc("VideoLibrary.Scan")
+wait(2.0)
+for _ in range(60):
+    if not xbmc.getCondVisibility("Library.IsScanningVideo"):
+        break
+    wait(1.0)
+shows = rpc("VideoLibrary.GetTVShows", {"properties": ["title"]}).get("tvshows") or []
+movies = rpc("VideoLibrary.GetMovies", {"properties": ["title"]}).get("movies") or []
+log(f"médiathèque : {len(shows)} série(s), {len(movies)} film(s)")
+if shows and movies:
+    SID, MID = shows[0]["tvshowid"], movies[0]["movieid"]
+    eps = rpc("VideoLibrary.GetEpisodes", {"tvshowid": SID, "properties": ["season", "episode"]})
+    BYK = {(e["season"], e["episode"]): e["episodeid"] for e in eps.get("episodes") or []}
+    # Situation de départ : S01E01 à E03 vus, S01E04 commencé (0:30), film commencé (0:40)
+    for key, eid in BYK.items():
+        state = {"episodeid": eid, "playcount": 1 if key in ((1, 1), (1, 2), (1, 3)) else 0}
+        state["resume"] = {"position": 30.0 if key == (1, 4) else 0.0, "total": 90.0}
+        state["lastplayed"] = "2026-10-10 21:00:00" if key <= (1, 4) else ""
+        rpc("VideoLibrary.SetEpisodeDetails", state)
+    rpc(
+        "VideoLibrary.SetMovieDetails",
+        {
+            "movieid": MID,
+            "playcount": 0,
+            "resume": {"position": 40.0, "total": 90.0},
+            "lastplayed": "2026-10-09 20:00:00",
+        },
+    )
+
+    # Kodi rafraîchit la liste affichée après ces changements, et refuse
+    # d'ouvrir une fenêtre pendant ce temps : on attend sur l'accueil.
+    xbmc.executebuiltin("ActivateWindow(Home)")
+    wait(3.0)
+
+    # Fiche du film : le bouton « Lire » devient « Reprendre à 0:40 »
+    run_plugin("detail&kind=movie&arr_id=103&title=Le%20Comte%20de%20Monte-Cristo&year=2024")
+    wait(4.0)
+    log(f"fiche film : bouton « {xbmc.getInfoLabel('Window.Property(play_label)')} »")
+    shot("16a-fiche-film-reprendre")
+    press("Back")
+    wait(1.5)
+
+    # Écran Série : saison et épisode « à suivre » déjà sélectionnés
+    run_plugin(f"series&tvshowid={SID}")
+    wait(4.0)
+    log(
+        f"écran Série : « {xbmc.getInfoLabel('Window.Property(play_label)')} », "
+        f"{xbmc.getInfoLabel('Window.Property(meta)')}"
+    )
+    shot("16b-serie")
+    press("Down")  # saisons
+    press("Down")  # épisodes
+    wait(1.0)
+    log(f"épisode sélectionné : {xbmc.getInfoLabel('Container(300).ListItem.Property(code)')}")
+    shot("16c-serie-episodes")
+    press("Up")  # saisons
+    press("Right")  # saison 2
+    wait(1.5)
+    log(f"saison 2 : {xbmc.getInfoLabel('Container(300).NumItems')} épisodes")
+    shot("16d-serie-saison-2")
+    press("Left")
+    press("Down")
+    press("ContextMenu")  # appui long : depuis le début, vu / non vu, toute la saison
+    wait(1.2)
+    shot("16e-serie-appui-long")
+    press("Back")
+    wait(0.8)
+    press("Up", 2)  # → « Reprendre S01E04 »
+    press("Select")
+    wait(1.2)
+    shot("16f-reprendre-ou-debut")
+    press("Select")  # Reprendre à 0:30
+    wait(6.0)
+    position, queue = player_state()
+    log(f"lecture : position {position}, liste de lecture {queue}")
+    shot("16g-lecture-reprise")
+    xbmc.executebuiltin("PlayerControl(Stop)")
+    wait(3.0)
+    shot("16h-serie-apres-lecture")
+    log(f"après lecture : « {xbmc.getInfoLabel('Window.Property(play_label)')} »")
+    press("Back")
+    wait(1.5)
+
+    # Rangée « Reprendre » (dossier et widget SiLVO)
+    open_list("?action=continue", "16i-reprendre")
+    labels = [
+        xbmc.getInfoLabel(f"Container.ListItemAbsolute({i}).Label")
+        for i in range(int(xbmc.getInfoLabel("Container.NumItems") or 0) + 1)
+    ]
+    log("reprendre : " + " | ".join(label for label in labels if label and label != ".."))
+    press("Back")
+    wait(1.0)
+
 # ── 7. Réouverture (cache), panne serveur ──────────────────────────────────
 run_plugin("home")
 wait(1.2)
