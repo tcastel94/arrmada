@@ -41,7 +41,8 @@ XML_FILE = "script-arrmada-shell.xml"
 
 # Identifiants des contrôles : DOIVENT correspondre au XML (vérifié par les tests).
 MENU = 400  # groupe des boutons du menu principal
-MENU_BUTTONS = (401, 402, 403, 404, 405, 406, 407, 408, 409, 410)  # ordre de shell_data.MENU
+# Ordre de shell_data.MENU
+MENU_BUTTONS = (401, 402, 403, 404, 405, 406, 407, 408, 409, 410, 411)
 ROW_GROUPS = 500  # rangées (liste verticale qui défile)
 ROW_LISTS = (610, 650, 620, 630, 640)  # ordre de shell_data.ROWS
 
@@ -246,7 +247,7 @@ class ShellWindow(xbmcgui.WindowXML):
         if key == "home":
             first = shell_data.first_row(self._rows)
             ui.focus_when_visible(self, LIST_BY_ROW[first] if first else MENU_BUTTONS[0])
-        elif key in ("movies", "series", "discover"):
+        elif key in ("movies", "series", "discover", "tonight"):
             import grid_window
 
             grid_window.open_grid({"movies": "movie", "series": "series"}.get(key, key))

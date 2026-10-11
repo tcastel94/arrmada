@@ -3,7 +3,7 @@
 
 Pourquoi un script plutôt qu'un XML écrit à la main ?
   Les 5 rangées de l'accueil (Reprendre, Tes applis, Ajouts récents, Pour
-  toi, Bientôt) et les 10 boutons du menu partagent la même mise en page, à
+  toi, Bientôt) et les 11 boutons du menu partagent la même mise en page, à
   quelques valeurs près. Les écrire 5 fois, c'est 5 endroits à corriger à chaque
   retouche. Le script les écrit à partir d'un seul modèle, comme un gabarit
   Jinja ou Ansible produit des fichiers de configuration.
@@ -36,11 +36,12 @@ ROWS = (
     (603, 630, "Pour toi", "poster"),
     (604, 640, "Bientôt", "poster"),
 )
-# Libellés du menu : ordre de shell_data.MENU (boutons 401 à 410)
+# Libellés du menu : ordre de shell_data.MENU (boutons 401 à 411)
 MENU = (
     "Accueil",
     "Films",
     "Séries",
+    "Ce soir",
     "Applis",
     "Découvrir",
     "Rechercher",
@@ -56,7 +57,7 @@ def menu_button(index: int, label: str) -> str:
 				<width>auto</width><height>56</height>
 				<label>{label}</label>
 				<font>font13</font>
-				<textoffsetx>16</textoffsetx>
+				<textoffsetx>12</textoffsetx>  <!-- 11 boutons dans 1 590 px -->
 				<textcolor>CCF5F7FA</textcolor>
 				<focusedcolor>FF0A0E16</focusedcolor>
 				<aligny>center</aligny>
@@ -326,7 +327,7 @@ HEADER = """<?xml version="1.0" encoding="UTF-8"?>
   pas ce fichier (un test vérifie qu'ils correspondent).
 
   Repère 1920 × 1080. Données posées par lib/shell_window.py :
-    - menu principal (400, boutons 401 à 410, ordre de shell_data.MENU) ;
+    - menu principal (400, boutons 401 à 411, ordre de shell_data.MENU) ;
     - en-tête de l'élément sélectionné (propriétés hero_*) ;
     - rangées (500) : Reprendre (610), Tes applis (650), Ajouts récents
       (620), Pour toi (630), Bientôt (640). Une rangée vide disparaît.

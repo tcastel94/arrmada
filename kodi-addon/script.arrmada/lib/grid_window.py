@@ -19,6 +19,10 @@ Ajoutés récemment, Par genre, En 4K, Pas encore disponibles) ou de Découvrir
 - Recherche (4.3) : les résultats de Radarr / Sonarr s'affichent ici et non
   plus dans une liste de SiLVO ; onglets Tout / Films / Séries, et
   « Nouvelle recherche » qui rouvre le clavier.
+- Ce soir (1.18) : onglets « Avant 22:00 »… « Sans limite » ; seulement ce
+  qui sera fini avant l'heure choisie (lib/tonight_data.py), lu dans la
+  médiathèque Kodi de cette TV. OK lance la lecture (reprise, épisodes
+  enchaînés), comme la rangée « Reprendre ».
 
 Règle d'or de l'ADR-003 : les appels réseau passent par un fil
 d'arrière-plan, l'écran ne fige jamais.
@@ -28,7 +32,9 @@ from __future__ import annotations
 
 import threading
 import time
+from datetime import datetime
 
+import xbmc
 import xbmcgui
 
 import catalog_data
@@ -38,6 +44,7 @@ import library_data
 import listing
 import navigation
 import shell_data
+import tonight_data
 import ui_common as ui
 import watch_data
 from api import ArrMadaAPI
@@ -56,7 +63,21 @@ NAV_ACTIONS = (
     xbmcgui.ACTION_PAGE_UP,
     xbmcgui.ACTION_PAGE_DOWN,
 )
-TITLES = {"movie": "Films", "series": "Séries", "discover": "Découvrir", "search": "Recherche"}
+TITLES = {
+    "movie": "Films",
+    "series": "Séries",
+    "discover": "Découvrir",
+    "search": "Recherche",
+    "tonight": "Ce soir",
+}
+
+
+def _tv_now() -> datetime:
+    """Heure de la TV (horloge de Kodi) : celle que l'écran affiche.
+
+    « xx » : AM / PM quand la région est en 12 h (voir tonight_data.tv_now).
+    """
+    return tonight_data.tv_now(xbmc.getInfoLabel("System.Time(hh:mm:ss xx)"), datetime.now())
 
 
 def _tabs_for(source: str) -> list:
@@ -85,6 +106,13 @@ class GridWindow(xbmcgui.WindowXML):
         self._indexes = None  # (films, séries) de la médiathèque Kodi, lus une fois
         self._query: str = kwargs.get("query") or ""  # recherche (4.3)
         self._results = None  # réponse du serveur à la recherche, filtrée par onglet
+        self._tonight = None  # « Ce soir » : candidats lus une fois dans Kodi
+        self._deadlines: list = []  # « Ce soir » : (clé, libellé, heure limite)
+        if self._source == "tonight":
+            now = _tv_now()
+            self._deadlines = tonight_data.deadlines(now)
+            self._tabs = [(key, label) for key, label, _ in self._deadlines]
+            self._tab = tonight_data.default_tab(self._deadlines, now)
 
     # ── Cycle de vie ────────────────────────────────────────────────────────
 
@@ -178,6 +206,8 @@ class GridWindow(xbmcgui.WindowXML):
     def _fetch(self, page: int) -> tuple:
         """(entrées, page, nombre de pages, total, message d'erreur)."""
         key = self._tabs[self._tab][0]
+        if self._source == "tonight":
+            return self._fetch_tonight()
         if self._source == "search":
             if self._results is None:
                 self._results = ArrMadaAPI.lookup_media(self._query)
@@ -206,6 +236,19 @@ class GridWindow(xbmcgui.WindowXML):
             entries = watch_data.annotate(entries, *self._kodi_indexes())
         current, pages, total = library_data.page_info(payload)
         return entries, current, pages, total, ""
+
+    def _fetch_tonight(self) -> tuple:
+        """Ce qui sera fini avant l'heure de l'onglet, en partant de maintenant."""
+        if self._tonight is None:
+            import kodi_library
+
+            self._tonight = kodi_library.tonight_candidates()
+        _, label, deadline = self._deadlines[self._tab]
+        rows = tonight_data.tonight_rows(self._tonight, _tv_now(), deadline)
+        entries = tonight_data.tonight_entries(rows)
+        if not entries:
+            return [], 1, 1, 0, tonight_data.empty_message(label)
+        return entries, 1, 1, len(entries), ""
 
     def _kodi_indexes(self, refresh: bool = False) -> tuple:
         if self._indexes is None or refresh:
@@ -323,7 +366,10 @@ class GridWindow(xbmcgui.WindowXML):
 
 
 def open_grid(source: str, query: str = "") -> None:
-    """Ouvre la grille (« movie », « series », « discover », « search ») ; bloque jusqu'à Retour."""
+    """Ouvre la grille (« movie », « series », « discover », « search », « tonight »).
+
+    Bloque jusqu'à Retour.
+    """
     window = GridWindow(
         XML_FILE, ui.ADDON.getAddonInfo("path"), "Default", "1080i", source=source, query=query
     )

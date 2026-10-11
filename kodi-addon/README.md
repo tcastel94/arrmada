@@ -769,6 +769,42 @@ et *Sous-titres automatiques*, cochés par défaut.
 > - Bazarr cherche selon **ses** profils de langues : une langue absente du
 >   profil de la série ne sera pas trouvée.
 
+### 23. 🌙 « Ce soir » : ce qui sera fini avant l'heure choisie (1.18.0)
+
+Menu de l'accueil → **Ce soir** (ou `plugin://script.arrmada/?action=tonight`,
+à mettre en favori). La grille ArrMada s'ouvre avec, en onglets, des heures
+de fin : **Avant 22:00**, **Avant 22:30**… cinq horaires toutes les 30 min,
+le premier au moins 45 min après maintenant, puis **Sans limite**. L'onglet
+ouvert d'office est le premier qui laisse 2 h (la durée d'un film).
+
+Chaque onglet ne montre que ce qui sera **fini** avant l'heure dite, en
+partant de maintenant, dans cet ordre :
+
+1. ce qui est commencé (film ou épisode) : il reste durée − reprise ;
+2. l'épisode suivant de chaque série en cours ;
+3. les films jamais vus de la médiathèque, du plus récent au plus ancien.
+
+Chaque affiche dit « Reprise à 42:10 · reste 1 h 53 · fini vers 22:40 » ou
+« 1 h 25 · fini vers 22:12 ». **OK** lance la lecture comme la rangée
+Reprendre (reprise proposée, épisodes enchaînés, préréglage de l'ampli) ;
+l'appui long propose Depuis le début, Marquer comme vu, Ouvrir la série.
+
+> Pourquoi c'est la TV qui calcule : la médiathèque Kodi de la TV sait ce
+> qui est commencé et vu **ici** ; l'heure vient de l'horloge de la TV
+> (celle de l'écran), pas de Python (sur Android, son fuseau n'est pas
+> toujours le bon). Kodi la donne en 12 h ou 24 h selon la région, quel que
+> soit le format demandé : « 05:43 PM » est converti en 17:43. Analogie : un `at` à l'envers, on ne demande pas
+> « lance à 22 h » mais « qu'est-ce qui tient avant 22 h ».
+
+> Pièges :
+> - un titre sans durée connue (fiche sans *runtime*, jamais lu) n'apparaît
+>   que dans **Sans limite** (« durée inconnue ») : on ne promet pas une
+>   heure de fin qu'on ne connaît pas ;
+> - l'heure de fin ne compte ni les pauses ni les publicités d'une chaîne :
+>   c'est la durée du fichier ;
+> - les onglets bouclent (Gauche sur « Avant 22:00 » mène à « Sans
+>   limite »), comme toutes les listes de Kodi.
+
 ## 🚀 Installation dans Kodi
 
 > ⚠️ **NVIDIA Shield (Kodi 21, Android)** : l'installation **par le dépôt** ferme

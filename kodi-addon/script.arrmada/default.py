@@ -469,6 +469,11 @@ def main():
     elif action == "resume_play":
         import navigation
         navigation.resume_play(params)
+    elif action == "tonight":
+        # Ce soir (1.18.0) : ce qui sera fini avant l'heure choisie (aussi dans
+        # le menu de l'accueil ; favori Kodi possible)
+        import grid_window
+        grid_window.open_grid("tonight")
     elif action == "shell":
         # Accueil média (ADR-004, phase 4.2) : aussi ouvert par le service au démarrage
         import shell_window

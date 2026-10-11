@@ -144,6 +144,36 @@ def continue_watching(limit: int = watch_data.CONTINUE_LIMIT) -> list:
     return rows
 
 
+def unwatched_movies(limit: int) -> list:
+    """Films jamais vus, du plus récemment ajouté au plus ancien (« Ce soir », 1.18)."""
+    result = ui.jsonrpc(
+        "VideoLibrary.GetMovies",
+        {
+            "filter": {"field": "playcount", "operator": "is", "value": "0"},
+            "properties": MOVIE_PROPS,
+            "sort": {"method": "dateadded", "order": "descending"},
+            "limits": {"start": 0, "end": limit},
+        },
+    )
+    return result.get("movies") or []
+
+
+def tonight_candidates() -> list:
+    """« Ce soir » : commencés, épisodes suivants, puis films jamais vus.
+
+    Lu une fois à l'ouverture de l'écran ; chaque onglet (heure limite) ne
+    fait ensuite que filtrer cette liste, sans nouvel appel à Kodi.
+    """
+    import tonight_data
+
+    started = time.perf_counter()
+    rows = continue_watching(tonight_data.CONTINUE_LIMIT)
+    movies = unwatched_movies(tonight_data.FRESH_LIMIT)
+    candidates = tonight_data.candidates(rows, movies)
+    _log(f"« Ce soir » : {len(candidates)} candidat(s) en {ui.ms_since(started)} ms")
+    return candidates
+
+
 def library_indexes() -> tuple:
     """({TMDB → film Kodi}, {TVDB → série Kodi}) pour annoter les listes ArrMada."""
     movies = ui.jsonrpc(

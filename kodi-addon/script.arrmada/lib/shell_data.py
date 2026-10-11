@@ -21,6 +21,7 @@ MENU: Tuple[Tuple[str, str], ...] = (
     ("home", "Accueil"),
     ("movies", "Films"),
     ("series", "Séries"),
+    ("tonight", "Ce soir"),  # ce qui sera fini avant l'heure choisie (1.18)
     ("apps", "Applis"),  # add-ons, TV en direct, dossiers du NAS, favoris (4.3)
     ("discover", "Découvrir"),
     ("search", "Rechercher"),

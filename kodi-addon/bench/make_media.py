@@ -84,7 +84,8 @@ def main(media: str, clip: str) -> None:
             write(
                 base + ".nfo",
                 f"<episodedetails><title>{title}</title><season>{season}</season>"
-                f"<episode>{number}</episode><aired>202{season + 1}-0{min(number, 9)}-1{number % 9}"
+                # Durée annoncée (minutes) : « Ce soir » calcule l'heure de fin (1.18)
+                f"<episode>{number}</episode><runtime>2</runtime><aired>202{season + 1}-0{min(number, 9)}-1{number % 9}"
                 f"</aired><plot>Saison {season}, épisode {number} : Mark et ses collègues "
                 "découvrent un nouveau secret de Lumon.</plot></episodedetails>",
             )
@@ -101,7 +102,7 @@ def main(media: str, clip: str) -> None:
     video(clip, os.path.join(movie, "Le Comte de Monte-Cristo (2024).mp4"))
     write(
         os.path.join(movie, "Le Comte de Monte-Cristo (2024).nfo"),
-        "<movie><title>Le Comte de Monte-Cristo</title><year>2024</year>"
+        "<movie><title>Le Comte de Monte-Cristo</title><year>2024</year><runtime>178</runtime>"
         "<plot>Edmond Dantès, accusé à tort, prépare sa vengeance.</plot>"
         '<uniqueid type="tmdb" default="true">1084736</uniqueid></movie>',
     )

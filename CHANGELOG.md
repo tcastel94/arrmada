@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Kodi add-on 1.18.0 — "Tonight": what ends before the chosen time
+
+#### Added
+- **"Ce soir" (Tonight)** in the home menu (also `plugin://script.arrmada/?action=tonight`): the ArrMada grid with end-time tabs — five times every 30 minutes, the first at least 45 minutes from now ("Avant 22:00", "Avant 22:30"…), then "Sans limite"; the tab opened by default is the first one leaving 2 hours. Each tab only shows what will be **finished** before that time, starting now: started films and episodes (time left = duration − resume point), the next episode of each series in progress, then never-watched films of the library, most recently added first. Each poster says "Reprise à 42:10 · reste 1 h 53 · fini vers 22:40" or "1 h 25 · fini vers 22:12". OK plays like the Continue row (resume prompt, chained episodes, amplifier preset); long press offers From the beginning, Mark as watched, Open the series. Titles without a known duration only appear in "Sans limite" ("durée inconnue")
+- The time comes from the TV clock (`System.Time`), not from Python's local time (not always right on Android). Found on the bench: Kodi lowercases the format and follows the regional 12 h / 24 h setting whatever is asked (`HH:mm:ss` gave 05:43 at 17:43), so the add-on asks for `hh:mm:ss xx` and converts "05:43:58 PM" to 17:43:58
+- `lib/tonight_data.py` (pure, tested: TV clock reading, tabs across midnight, default tab, candidate order without duplicates, end times rounded to the minute, unknown durations, entries) and `kodi_library.unwatched_movies` / `tonight_candidates`; home menu has 11 buttons (text padding 16 → 12 px so that they still fit)
+- Bench: library durations in the `.nfo` files; "Ce soir" from the menu, first time slot (a 2 h 58 film left out) and "Sans limite" (the film is there)
+
 ### Kodi add-on 1.17.0 — Skip intro, end credits, automatic subtitles
 
 #### Added

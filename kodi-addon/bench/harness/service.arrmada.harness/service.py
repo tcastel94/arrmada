@@ -520,7 +520,7 @@ xbmc.executebuiltin("SetFocus(650)")
 wait(1.5)
 log(f"rangée Tes applis : focus {focus()}, en-tête « {xbmc.getInfoLabel('Window.Property(hero_title)')} »")
 shot("18a-accueil-tes-applis")
-xbmc.executebuiltin("SetFocus(404)")  # menu → Applis
+xbmc.executebuiltin("SetFocus(405)")  # menu → Applis (« Ce soir » en 404 depuis la 1.18)
 wait(0.8)
 log(f"menu : focus {focus()}")
 press("Select")
@@ -587,7 +587,7 @@ log(f"Favoris : {apps_state()} ; {labels_of(300)}")
 shot("18k-favoris")
 press("Back")  # ferme l'écran : retour à l'accueil
 wait(1.5)
-xbmc.executebuiltin("SetFocus(406)")  # menu → Rechercher
+xbmc.executebuiltin("SetFocus(407)")  # menu → Rechercher
 wait(0.8)
 press("Select")
 wait(2.0)
@@ -950,6 +950,75 @@ if shows and movies and INTRO_EPISODE and os.path.exists(INTRO_EPISODE):
     wait(2.0)
 else:
     log("épisode aux chapitres nommés absent : section 1.17 sautée")
+
+
+# ── 6l. 1.18 : « Ce soir » (ce qui sera fini avant l'heure choisie) ────────
+def tonight_state():
+    count = int(xbmc.getInfoLabel("Container(300).NumItems") or 0)
+    items = " | ".join(
+        f"{xbmc.getInfoLabel(f'Container(300).ListItemAbsolute({i}).Label')} "
+        f"({xbmc.getInfoLabel(f'Container(300).ListItemAbsolute({i}).Property(kodi_status)')})"
+        for i in range(count)
+    )
+    error = xbmc.getInfoLabel("Window.Property(error)")
+    return (
+        f"« {xbmc.getInfoLabel('Window.Property(subtitle)')} », "
+        f"{xbmc.getInfoLabel('Window.Property(status)')} : {items or '—'}"
+        + (f" ; message « {error} »" if error else "")
+    )
+
+
+if movies:
+    # Monte-Cristo redevient « jamais commencé », 2 h 58 (Kodi a remplacé la
+    # durée de la fiche par celle du clip lu plus tôt) : trop long pour le 1er
+    # horaire, présent dans « Sans limite ». Remis comme avant à la fin.
+    before = rpc(
+        "VideoLibrary.GetMovieDetails", {"movieid": MID, "properties": ["resume", "runtime"]}
+    ).get("moviedetails") or {}
+    rpc(
+        "VideoLibrary.SetMovieDetails",
+        {"movieid": MID, "runtime": 178 * 60, "resume": {"position": 0, "total": 0}},
+    )
+    log(f"Monte-Cristo : durée {before.get('runtime')} s → 2 h 58, reprise remise à zéro")
+    xbmc.executebuiltin("ActivateWindow(Home)")
+    wait(2.0)
+    run_plugin("shell")
+    wait(5.0)
+    xbmc.executebuiltin("SetFocus(404)")  # menu → Ce soir
+    wait(0.8)
+    log(f"menu : focus {focus()} « {xbmc.getInfoLabel('Control.GetLabel(404)')} »")
+    shot("22a-menu-ce-soir")
+    press("Select")
+    wait(4.0)
+    log(f"Ce soir : onglets {labels_of(200)} ; ouvert sur {tonight_state()}")
+    shot("22b-ce-soir")
+    press("Up")  # → onglets
+    # La liste des onglets boucle (Gauche sur le 1er → le dernier) : on compte
+    first = int(xbmc.getInfoLabel("Container(200).CurrentItem") or 1) - 1
+    press("Left", first, 0.3)  # 1er horaire
+    press("Select")
+    wait(2.5)
+    log(f"Ce soir, 1er horaire : {tonight_state()}")
+    shot("22c-ce-soir-court")
+    press("Up")
+    press("Right", len(labels_of(200)) - 1, 0.3)  # Sans limite (dernier onglet)
+    press("Select")
+    wait(2.5)
+    log(f"Ce soir, sans limite : {tonight_state()}")
+    shot("22d-ce-soir-sans-limite")
+    press("Back")
+    wait(1.5)
+    leave_shell()
+    resume = before.get("resume") or {}
+    rpc(
+        "VideoLibrary.SetMovieDetails",
+        {"movieid": MID, "runtime": before.get("runtime") or 0,
+         "resume": {"position": resume.get("position") or 0, "total": resume.get("total") or 0}},
+    )  # fmt: skip
+    xbmc.executebuiltin("ActivateWindow(Home)")
+    wait(2.0)
+else:
+    log("médiathèque vide : section « Ce soir » sautée")
 
 
 # ── 7. Réouverture (cache), panne serveur ──────────────────────────────────
