@@ -481,6 +481,14 @@ def main():
         # Encart « Épisode suivant » à la fin d'un épisode (ouvert par le service, 4.4)
         import upnext_window
         upnext_window.show(params)
+    elif action == "skip":
+        # Bouton « Passer l'intro » (ouvert par le service, 1.17)
+        import skip_window
+        skip_window.show(params)
+    elif action == "autosubs":
+        # VO sans sous-titres dans ta langue : Bazarr cherche (ouvert par le service, 1.17)
+        import player_window
+        player_window.auto_subtitles()
     elif action == "player":
         # Panneau pendant le film (4.5) : appui long sur OK, ou favori / raccourci
         import player_window

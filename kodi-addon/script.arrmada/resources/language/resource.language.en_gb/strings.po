@@ -175,3 +175,11 @@ msgstr "\"Next episode\" card (seconds before the end, 0: never)"
 msgctxt "#30163"
 msgid "ArrMada panel: long press OK during playback"
 msgstr "ArrMada panel: long press OK during playback"
+
+msgctxt "#30164"
+msgid "\"Skip intro\" button (files with named chapters)"
+msgstr "\"Skip intro\" button (files with named chapters)"
+
+msgctxt "#30165"
+msgid "Automatic subtitles: foreign audio without subtitles in your language → Bazarr"
+msgstr "Automatic subtitles: foreign audio without subtitles in your language → Bazarr"

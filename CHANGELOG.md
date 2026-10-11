@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Kodi add-on 1.17.0 — Skip intro, end credits, automatic subtitles
+
+#### Added
+- **"Skip intro" / "Skip recap" button**: when the current chapter of the file is named *Intro*, *Opening*, *Générique*, *Title sequence*, *Previously on*, *Recap*…, a button appears bottom right for 10 s, already focused: OK jumps to the start of the next chapter, Back or nothing hides it. Once per chapter; nothing for files without named chapters (no guessing). Setting *Playback → "Skip intro" button* (on by default)
+- **Chapters read from MKV files**: Kodi 20 does not update its "current chapter" during normal playback (only after a seek) and its API has no chapter list, so for MKV files (local, `smb://`, `nfs://`) the add-on reads the chapter table from the file header itself (64 KB blocks, once per playback, Chapters element found before the clusters or through the SeekHead, default edition, hidden chapters skipped) and compares it with the playback position. Other formats keep Kodi's chapter information
+- **End credits**: in an episode, as soon as the *End Credits* / *Ending* / *Générique de fin* chapter starts, the "Next episode" card opens without waiting for the last 20 seconds
+- **Automatic subtitles**: 8 s after a library film or episode starts, when the audio is in another language than yours (*Subtitle language* setting) and no full subtitle track in your language exists (forced ones do not count), Bazarr searches on its own; the file found is loaded and shown without restarting the film. Silent when Bazarr is missing or the title is unknown (log line only). Setting *Playback → Automatic subtitles* (on by default)
+- `lib/chapter_data.py` (pure, tested: chapter names in French and English, once per chapter, last chapter, chapter at a position, skip target), `lib/mkv_chapters.py` (pure EBML reader, tested with synthetic files: chapters before the clusters, via the SeekHead, no chapters, MP4, truncated file) and `lib/skip_window.py`; `player_data.needs_subtitles` (tested: original version, forced only, already there, French audio, unknown audio)
+- Bench: a library MKV episode with English audio, no subtitles and named chapters (*Previously on*, *Opening*, *Episode*, *End Credits*): skip recap, skip intro, French subtitles found and shown automatically, next-episode card at the start of the end credits
+
 ### Kodi add-on 1.16.0 — Panel during playback (ADR-004, phase 4.5)
 
 #### Added

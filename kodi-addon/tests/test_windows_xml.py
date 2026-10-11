@@ -38,6 +38,7 @@ WINDOWS = {
     "camera": ("script-arrmada-camera.xml", "camera_window.py"),
     "upnext": ("script-arrmada-upnext.xml", "upnext_window.py"),
     "player": ("script-arrmada-player.xml", "player_window.py"),
+    "skip": ("script-arrmada-skip.xml", "skip_window.py"),
 }
 
 # Noms de police présents dans TOUS les jeux de polices (« fontsets ») d'Aeon

@@ -19,6 +19,10 @@
   an add-on), the ArrMada home opens instead (setting "shell_mode"; never in
   safe mode, never on top of a dialog or a video, suspended for the session
   when the user picks "Kodi interface"; lib/shell_data.should_open_shell)
+- 1.17.0: "Skip intro" button when the current chapter is named Intro /
+  Opening / Previously on (lib/chapter_data.py), next-episode card as soon as
+  the end-credits chapter starts, and French subtitles fetched by Bazarr when
+  a library video plays in another language without them (lib/player_data.py)
 - ADR-004 phase 4.5: a long press on OK during playback opens the ArrMada
   panel (keymap file userdata/keymaps/arrmada.xml written / removed by this
   service, setting "player_panel"; removed in safe mode)
@@ -47,11 +51,16 @@ from kodi_helper import show_notification, get_setting_bool, get_setting_int
 from audio_switcher import run_audio_switch
 from background import BackgroundTasks
 import migration
+import chapter_data
+import mkv_chapters
+import player_data
 import playback_data
 import shell_data
 import startup_guard
 import sync_data
 import threading
+import ui_common
+import urllib.parse
 import upnext_data
 import watch_sync
 
@@ -89,6 +98,10 @@ class ArrMadaPlayer(xbmc.Player):
         # à l'encart « Épisode suivant » (phase 4.4).
         self._library_item = None
         self._upnext_offered = False
+        self._file = ""  # vidéo en cours (chapitres déjà proposés, sous-titres)
+        self._skip_offered: set = set()  # (fichier, n° de chapitre) déjà proposés
+        self._chapters = None  # chapitres lus dans le fichier MKV (None : pas encore lus)
+        self._autosubs_at = 0.0  # vérification des sous-titres prévue (1.17)
 
     def _track_library_item(self) -> None:
         """Nouvelle vidéo : celle d'avant (épisode enchaîné) part au partage vu / reprise."""
@@ -102,6 +115,15 @@ class ArrMadaPlayer(xbmc.Player):
             watch_sync.schedule(*self._library_item)
         self._library_item = current
         self._upnext_offered = False
+        try:
+            self._file = self.getPlayingFile()
+        except Exception:
+            self._file = ""
+        self._skip_offered = set()
+        self._chapters = None
+        # Sous-titres automatiques : seulement pour la médiathèque (Bazarr ne
+        # connaît que ce que Radarr / Sonarr connaissent)
+        self._autosubs_at = time.time() + player_data.AUTO_SUBTITLES_DELAY if current else 0.0
 
     def _release_library_item(self) -> None:
         """Arrêt ou fin : Kodi enregistre vu / reprise, on le dépose dans 3 s."""
@@ -177,16 +199,112 @@ class ArrMadaPlayer(xbmc.Player):
         if self._upnext_offered or not self._library_item or self._library_item[0] != "episode":
             return
         threshold = upnext_data.seconds_setting(kodi_helper.ADDON.getSetting("upnext_seconds"))
+        if threshold <= 0:
+            return
         try:
             position, total = self.getTime(), self.getTotalTime()
         except Exception:
             return
-        if not upnext_data.should_offer(total - position, total, threshold, False, True):
+        # Chapitre « générique de fin » (1.17) : l'encart vient tout de suite
+        chapters = self._file_chapters()
+        if chapters:
+            credits = chapter_data.credits_at(chapters, position, True)
+        else:
+            credits = chapter_data.credits_started(xbmc.getInfoLabel("Player.ChapterName"), True)
+        early = credits and total - position > threshold
+        if not early and not upnext_data.should_offer(total - position, total, threshold, False, True):
             return
         self._upnext_offered = True  # une seule fois par épisode, même sans suite
         import upnext_window  # chargé seulement quand il sert
 
         upnext_window.offer(self._library_item[1])
+
+    def _file_chapters(self) -> list:
+        """Chapitres lus dans le fichier MKV, une fois par lecture ([] sinon).
+
+        Sous Kodi 20, Player.Chapter ne bouge pas pendant la lecture (vu sur
+        le banc) : on lit la table du fichier (64 Ko, une ou deux lectures
+        sur le partage) et on la compare à la position.
+        """
+        if self._chapters is not None:
+            return self._chapters
+        self._chapters = []
+        if not mkv_chapters.readable(self._file):
+            return self._chapters  # pas un MKV, ou flux (plugin://, http://…)
+        try:
+            handle = xbmcvfs.File(self._file)
+            try:
+
+                def read_block(offset: int, size: int) -> bytes:
+                    handle.seek(offset, 0)
+                    return bytes(handle.readBytes(size))
+
+                self._chapters = mkv_chapters.read_chapters(mkv_chapters.BlockReader(read_block))
+            finally:
+                handle.close()
+        except Exception as exc:  # fichier illisible : on se rabat sur Kodi
+            _log(f"chapitres illisibles : {exc}", xbmc.LOGDEBUG)
+        if self._chapters:
+            _log(f"{len(self._chapters)} chapitre(s) lus dans le fichier")
+        return self._chapters
+
+    def check_chapters(self) -> None:
+        """Bouton « Passer l'intro » quand le chapitre en cours en est une (1.17)."""
+        if not get_setting_bool("skip_intro", default=True):
+            return
+        chapters = self._file_chapters()
+        count = len(chapters) or _number("Player.ChapterCount")
+        if count < 2:
+            return  # fichier sans chapitres : rien à faire (cas le plus courant)
+        if xbmc.getCondVisibility(
+            "Window.IsVisible(busydialog) | Window.IsVisible(busydialognocancel)"
+        ):
+            return  # Kodi occupé (démarrage du son) : le bouton ne s'ouvrirait pas
+        home = xbmcgui.Window(10000)
+        if home.getProperty(player_data.POPUP_PROP) or home.getProperty(upnext_data.POPUP_PROP):
+            return  # panneau ou encart déjà à l'écran
+        if chapters:
+            try:
+                position = self.getTime()
+            except Exception:
+                return
+            offer = chapter_data.skip_offer_at(chapters, position, self._skip_offered, self._file)
+        else:
+            offer = chapter_data.skip_offer(
+                xbmc.getInfoLabel("Player.ChapterName"),
+                _number("Player.Chapter"),
+                count,
+                self._skip_offered,
+                self._file,
+            )
+        if offer is None:
+            return
+        self._skip_offered.add((self._file, int(offer["chapter"])))
+        _log(f"chapitre {offer['chapter']} : {offer['label']}")
+        xbmc.executebuiltin(
+            f"RunPlugin(plugin://script.arrmada/?{urllib.parse.urlencode(offer)})"
+        )
+
+    def check_autosubs(self) -> None:
+        """VO sans sous-titres dans ta langue : Bazarr cherche tout seul (1.17)."""
+        if not self._autosubs_at or time.time() < self._autosubs_at:
+            return
+        self._autosubs_at = 0.0
+        if not get_setting_bool("auto_subtitles", default=True):
+            return
+        props = ui_common.jsonrpc(
+            "Player.GetProperties",
+            {"playerid": 1, "properties": ["currentaudiostream", "subtitles"]},
+        )
+        language = (kodi_helper.ADDON.getSetting("sub_language") or "fr").strip()
+        audio = props.get("currentaudiostream") or {}
+        if not player_data.needs_subtitles(audio, props.get("subtitles") or [], language):
+            return
+        _log(
+            f"audio en {player_data.language_name(audio.get('language'))} sans sous-titres "
+            f"en {player_data.language_name(language).lower()} : recherche avec Bazarr"
+        )
+        xbmc.executebuiltin("RunPlugin(plugin://script.arrmada/?action=autosubs)")
 
     def check_periodic_progress(self):
         """Position toutes les 30 s, pause comprise (Kodi reste « en lecture » en pause)."""
@@ -205,6 +323,13 @@ class ArrMadaPlayer(xbmc.Player):
 
 def _log(message: str, level: int = xbmc.LOGINFO) -> None:
     xbmc.log(f"[ArrMada] Service : {message}", level=level)
+
+
+def _number(label: str) -> int:
+    try:
+        return int(xbmc.getInfoLabel(label) or 0)
+    except ValueError:
+        return 0
 
 
 class ShellWatch:
@@ -384,8 +509,10 @@ def main():
             if not safe_mode:
                 try:
                     player.check_upnext()
+                    player.check_chapters()
+                    player.check_autosubs()
                 except Exception as exc:  # jamais au point de faire tomber le service
-                    _log(f"épisode suivant : {exc}", xbmc.LOGWARNING)
+                    _log(f"lecture (épisode suivant, intro, sous-titres) : {exc}", xbmc.LOGWARNING)
 
         # 1b. Accueil de Kodi à l'écran → accueil ArrMada (ADR-004, phase 4.2)
         try:

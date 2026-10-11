@@ -111,6 +111,49 @@ if command -v ffmpeg >/dev/null && [[ ! -s assets/clip-90s.mp4 ]]; then
     -c:v libx264 -preset ultrafast -pix_fmt yuv420p assets/clip-90s.mp4 || true
 fi
 python3 "$BENCH_SRC/make_media.py" "$MEDIA" assets/clip-90s.mp4
+# 1.17 : S02E04 devient un épisode « réel » en MKV : piste audio anglaise,
+# aucun sous-titre, chapitres nommés (Previously on, Opening, Episode, End
+# Credits) → bouton « Passer l'intro », encart dès le générique, sous-titres
+# FR auto. MKV car l'add-on lit les chapitres dans le fichier (Kodi 20 ne met
+# pas à jour le chapitre en cours pendant la lecture).
+INTRO="$BENCH_DIR/assets/intro-120s.mkv"
+if command -v ffmpeg >/dev/null && [[ ! -s "$INTRO" ]]; then
+  cat > assets/intro-chapters.txt <<'EOF'
+;FFMETADATA1
+[CHAPTER]
+TIMEBASE=1/1000
+START=0
+END=10000
+title=Previously on
+[CHAPTER]
+TIMEBASE=1/1000
+START=10000
+END=30000
+title=Opening
+[CHAPTER]
+TIMEBASE=1/1000
+START=30000
+END=70000
+title=Episode
+[CHAPTER]
+TIMEBASE=1/1000
+START=70000
+END=120000
+title=End Credits
+EOF
+  ffmpeg -loglevel error -y -f lavfi -i testsrc2=size=640x360:rate=25 \
+    -f lavfi -i "sine=frequency=330:sample_rate=48000" -i assets/intro-chapters.txt \
+    -map 0:v -map 1:a -map_metadata 2 -map_chapters 2 -t 120 \
+    -c:v libx264 -preset ultrafast -crf 35 -pix_fmt yuv420p \
+    -c:a aac -ac 2 -metadata:s:a:0 language=eng "$INTRO" || true
+fi
+EPISODE_24="$MEDIA/tv/Severance (2022)/Season 02/Severance - S02E04.mkv"
+if [[ -s "$INTRO" ]]; then
+  # Remplace le .mp4 posé par make_media.py (même nom : la fiche .nfo suit)
+  rm -f "${EPISODE_24%.mkv}.mp4" "$EPISODE_24" && ln "$INTRO" "$EPISODE_24"
+fi
+export BENCH_INTRO_EPISODE="$EPISODE_24"
+
 cat > "$KODI_DIR/userdata/sources.xml" <<EOF
 <sources>
   <video>

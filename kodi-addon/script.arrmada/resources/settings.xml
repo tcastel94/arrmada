@@ -31,6 +31,10 @@
         <!-- 1.16 : appui long sur OK pendant la lecture → panneau ArrMada
              (fichier de touches userdata/keymaps/arrmada.xml, retiré si décoché) -->
         <setting id="player_panel" type="bool" label="30163" default="true" />
+        <!-- 1.17 : bouton « Passer l'intro » (chapitres nommés) et sous-titres
+             cherchés tout seuls quand le film est en VO sans sous-titres -->
+        <setting id="skip_intro" type="bool" label="30164" default="true" />
+        <setting id="auto_subtitles" type="bool" label="30165" default="true" />
     </category>
     <!-- Coché automatiquement si Kodi se ferme 2 fois de suite au démarrage
          (lib/startup_guard.py) ; à décocher pour revenir au fonctionnement normal. -->

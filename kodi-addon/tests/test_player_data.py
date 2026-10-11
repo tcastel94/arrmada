@@ -135,3 +135,22 @@ def test_clean_title():
 def test_external_subtitle_name():
     external = {"index": 3, "language": "fre", "name": "(External)"}
     assert pd.subtitle_label(external) == {"label": "Français", "label2": "Fichier externe"}
+
+
+def test_auto_subtitles_decision():
+    assert pd.language_code("fre") == pd.language_code("fra") == pd.language_code("fr") == "fr"
+    assert pd.language_code("French") == "" and pd.language_code("Français") == "fr"
+    assert pd.language_code("und") == "" and pd.language_code("") == ""
+    english = {"language": "eng"}
+    french = {"language": "fre"}
+    # VO sans sous-titres français : on cherche
+    assert pd.needs_subtitles(english, [], "fr")
+    assert pd.needs_subtitles(english, [{"language": "eng"}], "fr")
+    # Seulement des forcés : ça ne suffit pas pour un film en VO
+    assert pd.needs_subtitles(english, [{"language": "fre", "isforced": True}], "fr")
+    # Déjà des sous-titres complets en français, ou film en VF : rien à faire
+    assert not pd.needs_subtitles(english, [{"language": "fra"}], "fr")
+    assert not pd.needs_subtitles(french, [], "fr")
+    # Langue de l'audio inconnue : on ne devine pas
+    assert not pd.needs_subtitles({"language": "und"}, [], "fr")
+    assert not pd.needs_subtitles(None, [], "fr")

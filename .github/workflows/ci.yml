@@ -117,7 +117,7 @@ jobs:
           FILES="$FILES $LIB/apps_data.py $LIB/kodi_sources.py $LIB/apps_window.py"
           FILES="$FILES $LIB/camera_data.py $LIB/camera_window.py"
           FILES="$FILES $LIB/sync_data.py $LIB/watch_sync.py $LIB/upnext_data.py $LIB/upnext_window.py"
-          FILES="$FILES $LIB/player_data.py $LIB/player_window.py"
+          FILES="$FILES $LIB/player_data.py $LIB/player_window.py $LIB/chapter_data.py $LIB/skip_window.py $LIB/mkv_chapters.py"
           FILES="$FILES kodi-addon/tests kodi-addon/tools"
           ruff check $FILES
           ruff format --check $FILES

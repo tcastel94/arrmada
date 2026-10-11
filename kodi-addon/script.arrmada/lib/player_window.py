@@ -120,7 +120,7 @@ def _subtitle_listing(folder: str, base: str) -> list:
     return player_data.subtitle_files(files, base)
 
 
-def run_subtitle_job(kind: str, media: dict, language: str) -> None:
+def run_subtitle_job(kind: str, media: dict, language: str, auto: bool = False) -> None:
     """Bazarr cherche (ou recale) les sous-titres, puis Kodi les charge sans relancer.
 
     Bazarr écrit le fichier à côté de la vidéo (« Dune.fr.srt ») : on compare
@@ -134,13 +134,22 @@ def run_subtitle_job(kind: str, media: dict, language: str) -> None:
     before = _subtitle_listing(folder, base)
     name = player_data.language_name(language)
     if kind == "bazarr_search":
-        ui.notify("Bazarr", f"Recherche de sous-titres en {name.lower()}…")
+        ui.notify(
+            "Bazarr",
+            f"Pas de sous-titres en {name.lower()} : recherche…"
+            if auto
+            else f"Recherche de sous-titres en {name.lower()}…",
+        )
         result = ArrMadaAPI.trigger_subtitles(dict(media, language=language))
     else:
         ui.notify("Bazarr", "Synchronisation des sous-titres avec l'audio…")
         result = ArrMadaAPI.trigger_subtitles_sync(dict(media, language=language))
     if result.get("status") != "ok":
-        ui.notify("Bazarr", result.get("message") or "Échec de la demande")
+        if auto:
+            # Bazarr absent, titre inconnu… : pas de bulle à chaque lecture
+            _log(f"sous-titres automatiques : {result.get('message')}", xbmc.LOGWARNING)
+        else:
+            ui.notify("Bazarr", result.get("message") or "Échec de la demande")
         return
 
     deadline = time.time() + player_data.SUBTITLE_WAIT
@@ -167,7 +176,20 @@ def run_subtitle_job(kind: str, media: dict, language: str) -> None:
             return
         if monitor.waitForAbort(3):
             return
-    ui.notify("Bazarr", "Rien de nouveau pour l'instant : réessaie plus tard")
+    ui.notify(
+        "Bazarr",
+        f"Pas encore de sous-titres en {name.lower()} pour ce titre"
+        if auto
+        else "Rien de nouveau pour l'instant : réessaie plus tard",
+    )
+
+
+def auto_subtitles() -> None:
+    """Appelé par le service : film en VO sans sous-titres dans ta langue."""
+    if not xbmc.Player().isPlayingVideo():
+        return
+    language = (ui.ADDON.getSetting("sub_language") or "fr").strip()
+    run_subtitle_job("bazarr_search", playing_media(), language, auto=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

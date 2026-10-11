@@ -306,6 +306,47 @@ def sections(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Sous-titres automatiques (1.17) : film en VO sans sous-titres dans ta langue
+# ─────────────────────────────────────────────────────────────────────────────
+
+AUTO_SUBTITLES_DELAY = 8  # s après le début : pistes connues, sortie son prête
+
+
+def language_code(code: Any) -> str:
+    """« fre », « fra », « fr », « French » → « fr » ; "" si inconnu."""
+    text = str(code or "").strip().lower()
+    if not text:
+        return ""
+    name = LANGUAGES.get(text)
+    if name is None:
+        name = next((n for n in LANGUAGES.values() if n.lower() == text), None)
+    if name is None:
+        return ""
+    # Code à 2 lettres de ce nom (le premier de la table l'est toujours)
+    return next(c for c, n in LANGUAGES.items() if n == name and len(c) == 2)
+
+
+def needs_subtitles(
+    audio: Optional[Mapping[str, Any]], subtitles: Iterable[Mapping[str, Any]], preferred: str
+) -> bool:
+    """Vrai s'il faut demander des sous-titres à Bazarr pour cette lecture.
+
+    Oui quand l'audio est dans une autre langue que la tienne (VO) et
+    qu'aucune piste COMPLÈTE dans ta langue n'existe (des sous-titres
+    « forcés » ne traduisent que les passages en langue étrangère). Non si
+    la langue de l'audio est inconnue : on ne devine pas.
+    """
+    wanted = language_code(preferred)
+    spoken = language_code((audio or {}).get("language"))
+    if not wanted or not spoken or spoken == wanted:
+        return False
+    return not any(
+        language_code(s.get("language")) == wanted and not s.get("isforced")
+        for s in subtitles or []
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Sous-titres téléchargés par Bazarr : retrouver le nouveau fichier
 # ─────────────────────────────────────────────────────────────────────────────
 

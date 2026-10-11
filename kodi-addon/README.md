@@ -723,6 +723,52 @@ ses touches aussitôt. Ouvrable aussi par `plugin://script.arrmada/?action=playe
 > - Une télécommande qui n'envoie pas d'appui long (certaines télécommandes
 >   CEC) : ajouter un favori vers `?action=player`, ou passer par l'écran Salon.
 
+### 22. ⏭️ Passer l'intro, générique de fin, sous-titres automatiques (1.17.0)
+
+**« Passer l'intro » / « Passer le récap »** : quand le chapitre en cours du
+fichier s'appelle *Intro*, *Opening*, *Générique*, *Previously on*,
+*Récap*…, un bouton s'affiche en bas à droite pendant 10 s, déjà
+sélectionné : **OK** saute au début du chapitre suivant ; Retour ou rien,
+il disparaît. Une fois par chapitre.
+
+**Générique de fin** : dans un épisode, dès que le chapitre *End Credits*,
+*Ending*, *Générique de fin*… commence, l'encart « Épisode suivant » s'ouvre
+sans attendre les 20 dernières secondes.
+
+> Ça dépend de tes fichiers : beaucoup de WEB-DL et d'animés nomment leurs
+> chapitres, la plupart des Blu-ray non (« Chapitre 01 ») ; sans chapitres
+> nommés, rien ne s'affiche (aucune devinette sur la position de l'intro).
+> Pour voir les chapitres d'un fichier sur le NAS :
+> `ffprobe -v error -show_chapters -of compact "Episode.mkv"`.
+
+> Pourquoi l'add-on lit lui-même le fichier : sous Kodi 20, l'information
+> « chapitre en cours » du lecteur ne bouge pas pendant une lecture normale
+> (elle n'est mise à jour qu'après un saut), et l'API de Kodi ne donne pas la
+> liste des chapitres. Pour un **MKV** (local, `smb://` ou `nfs://`),
+> l'add-on lit donc la table des chapitres dans l'en-tête du fichier (64 Ko,
+> une fois au début de la lecture) et la compare à la position : comme un
+> `grep` sur l'index du fichier plutôt que d'attendre que Kodi le dise. Les
+> autres formats (MP4…) gardent l'information de Kodi : le bouton n'y
+> apparaît qu'après un saut dans le fichier.
+
+**Sous-titres automatiques** : 8 s après le début d'un film ou d'un épisode
+de la médiathèque, si l'audio est dans une autre langue que la tienne
+(réglage *Langue des sous-titres*, `fr` par défaut) **et** qu'aucune piste
+complète de sous-titres dans ta langue n'existe (des « forcés » ne suffisent
+pas), Bazarr cherche tout seul. Le fichier trouvé est chargé et affiché sans
+relancer le film ; une bulle le dit. Rien du tout pour un film en VF, ou si
+la langue de l'audio est inconnue.
+
+Réglages (*Paramètres de l'add-on → Lecture*) : *Bouton « Passer l'intro »*
+et *Sous-titres automatiques*, cochés par défaut.
+
+> Pièges :
+> - Bazarr absent ou titre inconnu de Radarr/Sonarr : la recherche
+>   automatique échoue **en silence** (une ligne dans `kodi.log`), pour ne
+>   pas afficher une erreur à chaque lecture.
+> - Bazarr cherche selon **ses** profils de langues : une langue absente du
+>   profil de la série ne sera pas trouvée.
+
 ## 🚀 Installation dans Kodi
 
 > ⚠️ **NVIDIA Shield (Kodi 21, Android)** : l'installation **par le dépôt** ferme
@@ -809,6 +855,7 @@ Copiez le dossier `script.arrmada/` dans le dossier des extensions de Kodi :
 | Vu / reprise partagés entre les TV : règles pures / travail du service | `script.arrmada/lib/sync_data.py` / `script.arrmada/lib/watch_sync.py` (serveur : `backend/app/services/watch_sync.py`) |
 | Encart « Épisode suivant » : logique pure / fenêtre | `script.arrmada/lib/upnext_data.py` / `script.arrmada/lib/upnext_window.py` |
 | Panneau pendant le film (pistes, Bazarr, ampli, fichier de touches) : logique pure / fenêtre | `script.arrmada/lib/player_data.py` / `script.arrmada/lib/player_window.py` |
+| « Passer l'intro » (chapitres nommés) : logique pure / bouton | `script.arrmada/lib/chapter_data.py` / `script.arrmada/lib/skip_window.py` |
 | Dépôt Kodi servi par le backend | `backend/app/services/kodi_repo.py`, `backend/app/api/kodi_repo.py` |
 | Textures (coins arrondis, halo, dégradés, barres de progression) | générées par `python3 kodi-addon/tools/make_textures.py` |
 | Tests (sans Kodi, lancés en CI) | `pytest kodi-addon/tests` |
@@ -840,7 +887,10 @@ manquants et à venir dans l'écran Série, encart « Épisode suivant » (Lance
 maintenant, puis Annuler) ; enfin la phase 4.5 sur une vidéo à 2 pistes
 audio, 2 pistes de sous-titres et 3 chapitres : appui long sur OK, panneau,
 changement de piste audio et de sous-titres, sous-titres « Bazarr » chargés
-sans relancer, ampli, chapitre suivant) et dépose les captures dans
+sans relancer, ampli, chapitre suivant ; puis la 1.17 sur un épisode à
+piste anglaise et chapitres nommés : « Passer le récap », « Passer
+l'intro », sous-titres français trouvés tout seuls, encart dès le générique
+de fin) et dépose les captures dans
 `/tmp/arrmada-kodi-bench/shots/`. Le Kodi du système n'est pas modifié : tout
 se passe dans un profil jetable. Le rendu final reste à valider sur la Shield.
 

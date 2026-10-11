@@ -878,6 +878,80 @@ else:
     log("vidéo du panneau absente (ffmpeg manquant ?) : section 4.5 sautée")
 
 
+# ── 6k. 1.17 : « Passer l'intro » (chapitres nommés), sous-titres FR automatiques
+INTRO_EPISODE = os.environ.get("BENCH_INTRO_EPISODE", "")
+
+
+def skip_open():
+    return xbmc.getInfoLabel("Window(Home).Property(arrmada.skip_open)") == "1"
+
+
+def wait_skip(seconds=12.0):
+    for _ in range(int(seconds * 2)):
+        wait(0.5)
+        if skip_open():
+            return True
+    return False
+
+
+def chapter_now():
+    t = rpc("Player.GetProperties", {"playerid": 1, "properties": ["time"]}).get("time") or {}
+    return (
+        f"« {xbmc.getInfoLabel('Player.ChapterName')} » "
+        f"({xbmc.getInfoLabel('Player.Chapter')}/{xbmc.getInfoLabel('Player.ChapterCount')}) "
+        f"à {t.get('minutes', 0)}:{t.get('seconds', 0):02d}"
+    )
+
+
+if shows and movies and INTRO_EPISODE and os.path.exists(INTRO_EPISODE):
+    # S02E04 (S02E05 suit : l'encart du générique a un épisode à proposer)
+    rpc("Player.Open", {"item": {"episodeid": BYK[(2, 4)]}, "options": {"resume": False}})
+    opened = wait_skip(15.0)  # « Previously on » dès le début (après la sortie son)
+    wait(0.8)
+    log(f"passer : bouton {'« ' + xbmc.getInfoLabel('Control.GetLabel(301)') + ' »' if opened else 'ABSENT'} sur {chapter_now()}")
+    shot("21a-passer-recap")
+    press("Select")
+    wait(2.0)
+    log(f"après « Passer le récap » : {chapter_now()}")
+    opened = wait_skip(6.0)  # chapitre « Opening »
+    wait(0.8)
+    log(f"passer : bouton {'« ' + xbmc.getInfoLabel('Control.GetLabel(301)') + ' »' if opened else 'ABSENT'} sur {chapter_now()}")
+    shot("21b-passer-intro")
+    press("Select")
+    wait(2.0)
+    log(f"après « Passer l'intro » : {chapter_now()}")
+    # Sous-titres FR automatiques : audio anglais, aucun sous-titre → Bazarr (faux)
+    folder = os.path.dirname(INTRO_EPISODE)
+    with open(os.path.join(folder, "Severance - S02E04.fr.srt"), "w", encoding="utf-8") as srt:
+        srt.write("1\n00:00:00,000 --> 00:03:00,000\nSous-titres français automatiques (banc)\n")
+    for _ in range(30):
+        wait(0.5)
+        if "S02E04.fr.srt" in json.dumps(rpc(
+            "Player.GetProperties", {"playerid": 1, "properties": ["currentsubtitle", "subtitles"]}
+        )):  # fmt: skip
+            break
+    current = rpc("Player.GetProperties", {"playerid": 1, "properties": ["currentsubtitle", "subtitleenabled"]})
+    log(
+        "sous-titres automatiques : "
+        f"{(current.get('currentsubtitle') or {}).get('language', '?')} "
+        f"({'affichés' if current.get('subtitleenabled') else 'masqués'})"
+    )
+    shot("21c-sous-titres-auto")
+    # Générique de fin : l'encart « Épisode suivant » sans attendre les 20 dernières secondes
+    seek(72)
+    opened = wait_upnext(8.0)
+    wait(1.0)
+    log(f"générique de fin : encart {'ouvert' if opened else 'ABSENT'} sur {chapter_now()}")
+    shot("21d-generique-encart")
+    press("Back")
+    xbmc.executebuiltin("PlayerControl(Stop)")
+    wait(2.0)
+    xbmc.executebuiltin("ActivateWindow(Home)")
+    wait(2.0)
+else:
+    log("épisode aux chapitres nommés absent : section 1.17 sautée")
+
+
 # ── 7. Réouverture (cache), panne serveur ──────────────────────────────────
 run_plugin("home")
 wait(1.2)

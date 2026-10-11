@@ -183,3 +183,11 @@ msgstr "Encart « Épisode suivant » (secondes avant la fin, 0 : jamais)"
 msgctxt "#30163"
 msgid "ArrMada panel: long press OK during playback"
 msgstr "Panneau ArrMada : appui long sur OK pendant la lecture"
+
+msgctxt "#30164"
+msgid "\"Skip intro\" button (files with named chapters)"
+msgstr "Bouton « Passer l'intro » (fichiers aux chapitres nommés)"
+
+msgctxt "#30165"
+msgid "Automatic subtitles: foreign audio without subtitles in your language → Bazarr"
+msgstr "Sous-titres automatiques : VO sans sous-titres dans ta langue → Bazarr"
