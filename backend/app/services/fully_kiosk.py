@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
-import logging
 import time
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
@@ -37,8 +36,11 @@ from typing import Any
 import httpx
 
 from app.services.now_playing import now_playing
+from app.utils.logger import get_logger
 
-logger = logging.getLogger(__name__)
+# Journal du projet (comme les autres services) : un logger Python nu
+# n'affiche rien sous WARNING, les messages d'information étaient perdus.
+logger = get_logger(__name__)
 
 DEFAULT_PORT = 2323
 TIMEOUT_SECONDS = 5.0

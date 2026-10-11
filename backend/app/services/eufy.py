@@ -29,14 +29,17 @@ import asyncio
 import base64
 import itertools
 import json
-import logging
 import time
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any
 
-logger = logging.getLogger(__name__)
+from app.utils.logger import get_logger
+
+# Journal du projet (comme les autres services) : un logger Python nu
+# n'affiche rien sous WARNING, les messages d'information étaient perdus.
+logger = get_logger(__name__)
 
 MAX_SCHEMA = 21  # schéma de l'API eufy-security-ws visé (le serveur peut en offrir moins)
 PICTURE_WAIT = 6.0  # s d'attente de la photo d'un événement

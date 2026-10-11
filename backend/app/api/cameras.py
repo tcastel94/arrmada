@@ -47,5 +47,6 @@ async def camera_snapshot(snapshot_id: int, _user: dict = Depends(get_current_us
 async def camera_test() -> dict:
     """Publie une fausse détection : la TV en lecture affiche la pop-up."""
     bridge = eufy.bridge or eufy.EufyBridge("", {"person"}, eufy._publish_on_bus)
+    bridge.names.setdefault("TEST", "Test ArrMada")  # nom affiché sur la TV
     await bridge.publish("TEST", ("person", "Personne détectée (test)"), None, time.time())
     return {"status": "ok"}
