@@ -1380,15 +1380,82 @@ async def get_media_options_for_addon(
     return {"profiles": profiles, "root_folders": root_folders}
 
 
+def _int_or_none(value: Any) -> int | None:
+    """« 95396 », 95396 → 95396 ; vide ou illisible → None."""
+    try:
+        return int(value) if value not in (None, "", 0, "0") else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _arr_error(service: str, exc: Exception, what: str = "l'ajout") -> str:
+    """Message lisible d'un refus de Radarr / Sonarr, affiché tel quel sur la TV.
+
+    Un refus de validation (HTTP 400) arrive sous forme de liste
+    ``[{"propertyName": "TvdbId", "errorMessage": "…"}]`` : on renvoie les
+    messages, pas « Client error '400 Bad Request' for url … ».
+    """
+    if isinstance(exc, httpx.HTTPStatusError):
+        try:
+            body = exc.response.json()
+        except ValueError:
+            body = None
+        messages: list[str] = []
+        if isinstance(body, list):
+            messages = [
+                str(item["errorMessage"])
+                for item in body
+                if isinstance(item, dict) and item.get("errorMessage")
+            ]
+        elif isinstance(body, dict) and body.get("message"):
+            messages = [str(body["message"])]
+        if messages:
+            return f"{service} refuse {what} : {' ; '.join(messages)}"[:240]
+        return f"{service} a répondu HTTP {exc.response.status_code}"
+    if isinstance(exc, httpx.HTTPError):
+        return f"{service} injoignable ({type(exc).__name__})"
+    return f"Erreur {service} : {exc}"[:240]
+
+
+async def _find_series_for_addon(
+    sonarr: Any, title: str, tmdb_id: int | None, tvdb_id: int | None
+) -> dict[str, Any] | None:
+    """Fiche Sonarr (lookup) de la série demandée depuis la TV.
+
+    Pourquoi : les suggestions « Pour toi » viennent de TMDB et n'ont qu'un
+    ID **TMDB**, alors que Sonarr est indexé sur **TVDB**. Avant, l'add-on
+    envoyait ``tvdbId: null`` et Sonarr refusait l'ajout. Même chemin que
+    les demandes de la web app (``request_service``) :
+      1. ID TVDB fourni (recherche de l'add-on) → utilisé tel quel ;
+      2. sinon ID TMDB → TVDB par TMDB (``/tv/{id}/external_ids``) ;
+      3. sinon (pas de clé TMDB) → recherche par titre dans Sonarr, en
+         vérifiant la correspondance (ID TMDB renvoyé par Sonarr v4, titre).
+    """
+    from app.services.request_service import _pick_series, _tmdb_series_to_tvdb
+
+    tvdb = tvdb_id or (await _tmdb_series_to_tvdb(tmdb_id) if tmdb_id else None)
+    if tvdb:
+        results = await sonarr.lookup_series(f"tvdb:{tvdb}")
+        return results[0] if results else None
+    results = await sonarr.lookup_series(title)
+    return _pick_series(results or [], title, None, tmdb_id)
+
+
 async def add_media_for_addon(db: AsyncSession, data: dict[str, Any]) -> dict[str, Any]:
-    """Add a movie or series to Radarr/Sonarr with quality and destination choices."""
+    """Ajoute un film / une série à Radarr / Sonarr depuis la TV (profil et dossier choisis).
+
+    On part toujours de la fiche renvoyée par le lookup de Radarr / Sonarr
+    (titre exact, année, images), comme la web app, et un titre déjà suivi
+    n'est pas une erreur : on renvoie son numéro (et on relance sa
+    recherche si demandé), pour que la TV enchaîne normalement.
+    """
     from app.services.activity_log import log_event
 
     media_type = data.get("type", "movie")
-    title = data.get("title", "")
-    tmdb_id = data.get("tmdb_id")
-    tvdb_id = data.get("tvdb_id")
-    profile_id = data.get("quality_profile_id")
+    title = str(data.get("title") or "")
+    tmdb_id = _int_or_none(data.get("tmdb_id"))
+    tvdb_id = _int_or_none(data.get("tvdb_id"))
+    profile_id = _int_or_none(data.get("quality_profile_id")) or 1
     root_folder = data.get("root_folder_path")
     search_now = bool(data.get("search_now", False))
 
@@ -1398,13 +1465,30 @@ async def add_media_for_addon(db: AsyncSession, data: dict[str, Any]) -> dict[st
             return {"status": "error", "message": "Radarr n'est pas configuré"}
 
         try:
+            results = await radarr.lookup_movie(f"tmdb:{tmdb_id}" if tmdb_id else title)
+            movie = results[0] if results else None
+            if not movie or not movie.get("tmdbId"):
+                return {"status": "error", "message": f"« {title} » introuvable dans Radarr"}
+            if movie.get("id"):  # déjà dans Radarr : rien à ajouter
+                if search_now:
+                    await radarr.search_movie(movie["id"])
+                return {
+                    "status": "ok",
+                    "arr_id": movie["id"],
+                    "title": movie.get("title") or title,
+                    "type": "movie",
+                    "already": True,
+                    "message": f"« {movie.get('title') or title} » est déjà dans Radarr",
+                }
             payload = {
-                "title": title,
-                "tmdbId": int(tmdb_id) if tmdb_id else None,
-                "qualityProfileId": int(profile_id) if profile_id else 1,
+                "title": movie.get("title") or title,
+                "tmdbId": movie["tmdbId"],
+                "year": movie.get("year"),
+                "qualityProfileId": profile_id,
                 "rootFolderPath": root_folder,
                 "monitored": True,
                 "addOptions": {"searchForMovie": search_now},
+                "images": movie.get("images", []),
             }
             res = await radarr.add_movie(payload)
             arr_id = res.get("id")
@@ -1415,14 +1499,16 @@ async def add_media_for_addon(db: AsyncSession, data: dict[str, Any]) -> dict[st
                 status="ok",
                 source="kodi",
                 media_type="movie",
-                title=title,
-                tmdb_id=int(tmdb_id) if tmdb_id else None,
+                title=payload["title"],
+                tmdb_id=movie["tmdbId"],
                 detail=f"Ajouté via Kodi (Search={search_now})",
             )
-            return {"status": "ok", "arr_id": arr_id, "title": title, "type": "movie"}
+            return {"status": "ok", "arr_id": arr_id, "title": payload["title"], "type": "movie"}
         except Exception as exc:
             logger.error("Add movie from Kodi failed: %s", exc)
-            return {"status": "error", "message": f"Erreur Radarr : {str(exc)}"}
+            return {"status": "error", "message": _arr_error("Radarr", exc)}
+        finally:
+            await radarr.close()
 
     else:  # series
         sonarr = await _get_sonarr_client(db)
@@ -1430,13 +1516,33 @@ async def add_media_for_addon(db: AsyncSession, data: dict[str, Any]) -> dict[st
             return {"status": "error", "message": "Sonarr n'est pas configuré"}
 
         try:
+            series = await _find_series_for_addon(sonarr, title, tmdb_id, tvdb_id)
+            if not series or not series.get("tvdbId"):
+                return {
+                    "status": "error",
+                    "message": f"« {title} » introuvable dans Sonarr (pas d'ID TVDB)",
+                }
+            if series.get("id"):  # déjà suivie par Sonarr : rien à ajouter
+                if search_now:
+                    await sonarr.search_series(series["id"])
+                return {
+                    "status": "ok",
+                    "arr_id": series["id"],
+                    "title": series.get("title") or title,
+                    "type": "series",
+                    "already": True,
+                    "message": f"« {series.get('title') or title} » est déjà dans Sonarr",
+                }
             payload = {
-                "title": title,
-                "tvdbId": int(tvdb_id) if tvdb_id else None,
-                "qualityProfileId": int(profile_id) if profile_id else 1,
+                "title": series.get("title") or title,
+                "tvdbId": series["tvdbId"],
+                "year": series.get("year"),
+                "qualityProfileId": profile_id,
                 "rootFolderPath": root_folder,
                 "monitored": True,
+                "seasonFolder": True,
                 "addOptions": {"searchForMissingEpisodes": search_now},
+                "images": series.get("images", []),
             }
             res = await sonarr.add_series(payload)
             arr_id = res.get("id")
@@ -1447,13 +1553,15 @@ async def add_media_for_addon(db: AsyncSession, data: dict[str, Any]) -> dict[st
                 status="ok",
                 source="kodi",
                 media_type="series",
-                title=title,
-                detail=f"Ajouté via Kodi (Search={search_now})",
+                title=payload["title"],
+                detail=f"Ajouté via Kodi (TVDB {series['tvdbId']}, Search={search_now})",
             )
-            return {"status": "ok", "arr_id": arr_id, "title": title, "type": "series"}
+            return {"status": "ok", "arr_id": arr_id, "title": payload["title"], "type": "series"}
         except Exception as exc:
             logger.error("Add series from Kodi failed: %s", exc)
-            return {"status": "error", "message": f"Erreur Sonarr : {str(exc)}"}
+            return {"status": "error", "message": _arr_error("Sonarr", exc)}
+        finally:
+            await sonarr.close()
 
 
 def _format_size(size_bytes: int | None) -> str:
@@ -1467,8 +1575,39 @@ def _format_size(size_bytes: int | None) -> str:
     return f"{mb:.0f} Mo"
 
 
-async def list_releases_for_addon(db: AsyncSession, media_type: str, arr_id: int) -> dict[str, Any]:
-    """Fetch releases for a media item from Radarr/Sonarr indexers."""
+# La TV attend la liste des releases 60 s au plus (add-on) : on répond avant,
+# avec un message clair, plutôt que de laisser la TV couper la connexion.
+RELEASES_TIMEOUT = 55
+
+
+async def _first_season(sonarr: Any, series_id: int) -> int:
+    """Première saison « normale » (≥ 1) d'une série : celle qu'on cherche par défaut.
+
+    Sonarr ne liste les releases d'une série que pour une saison (ou un
+    épisode). Depuis la TV, on vient le plus souvent d'ajouter la série :
+    on commence par le début. Saisons pas encore connues (série tout juste
+    ajoutée, Sonarr la rafraîchit encore) : saison 1.
+    """
+    try:
+        series = await sonarr.get_series_by_id(series_id)
+    except Exception:
+        return 1
+    numbers = sorted(
+        int(season.get("seasonNumber") or 0)
+        for season in (series.get("seasons") or [])
+        if int(season.get("seasonNumber") or 0) >= 1
+    )
+    return numbers[0] if numbers else 1
+
+
+async def list_releases_for_addon(
+    db: AsyncSession, media_type: str, arr_id: int, season: int | None = None
+) -> dict[str, Any]:
+    """Releases proposées par les indexeurs (choix manuel depuis la TV).
+
+    Série : recherche par saison (``season``, sinon la première saison).
+    Avant, l'appel sans saison plantait pour toute série.
+    """
     client = await _get_radarr_client(db) if media_type == "movie" else await _get_sonarr_client(db)
     if not client:
         return {
@@ -1476,9 +1615,16 @@ async def list_releases_for_addon(db: AsyncSession, media_type: str, arr_id: int
             "message": f"{media_type.capitalize()} n'est pas configuré",
             "releases": [],
         }
+    # Une recherche interactive interroge tous les indexeurs : bien plus que
+    # les 10 s par défaut du client
+    client.timeout = RELEASES_TIMEOUT
 
     try:
-        raw_releases = await client.get_releases(arr_id)
+        if media_type == "movie":
+            raw_releases = await client.get_releases(arr_id)
+        else:
+            season_number = season if season is not None else await _first_season(client, arr_id)
+            raw_releases = await client.get_releases(arr_id, season_number)
         formatted: list[dict[str, Any]] = []
 
         for r in raw_releases or []:
@@ -1512,9 +1658,21 @@ async def list_releases_for_addon(db: AsyncSession, media_type: str, arr_id: int
         formatted.sort(key=lambda x: (x["rejected"], -(x["seeders"] or 0), -(x["size_bytes"] or 0)))
 
         return {"status": "ok", "releases": formatted, "count": len(formatted)}
+    except httpx.TimeoutException:
+        logger.warning("Kodi releases search timed out (%s %s)", media_type, arr_id)
+        return {
+            "status": "error",
+            "message": "Les indexeurs mettent trop de temps à répondre : réessaie, "
+            "ou lance la recherche automatique",
+            "releases": [],
+        }
     except Exception as exc:
         logger.error(f"Failed to fetch releases for Kodi: {exc}", exc_info=True)
-        return {"status": "error", "message": f"Erreur de recherche : {str(exc)}", "releases": []}
+        service = "Radarr" if media_type == "movie" else "Sonarr"
+        message = _arr_error(service, exc, "la recherche")
+        return {"status": "error", "message": message, "releases": []}
+    finally:
+        await client.close()
 
 
 async def grab_release_for_addon(db: AsyncSession, data: dict[str, Any]) -> dict[str, Any]:

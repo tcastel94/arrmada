@@ -460,9 +460,14 @@ async def addon_media_add(data: dict, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/media/{type}/{id}/releases")
-async def addon_media_releases(type: str, id: int, db: AsyncSession = Depends(get_db)):
-    """List available releases (Usenet & Torrent) for interactive picking."""
-    return await kodi_service.list_releases_for_addon(db, type, id)
+async def addon_media_releases(
+    type: str, id: int, season: int | None = None, db: AsyncSession = Depends(get_db)
+):
+    """List available releases (Usenet & Torrent) for interactive picking.
+
+    Série : ``season`` (facultatif) ; par défaut la première saison.
+    """
+    return await kodi_service.list_releases_for_addon(db, type, id, season)
 
 
 @router.post("/media/{type}/{id}/grab")

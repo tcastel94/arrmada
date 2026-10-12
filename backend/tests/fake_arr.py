@@ -293,7 +293,24 @@ RADARR_ROUTES: list[tuple[str, Handler]] = [
     (r"/api/v3/(calendar|tag|history|wanted/missing|blocklist|command|release)", _const([])),
 ]
 
+SEASON_RELEASE = {
+    "guid": "nzb-severance-s01",
+    "indexerId": 3,
+    "indexer": "NZBgeek",
+    "title": "Severance.S01.2160p.ATVP.WEB-DL.DDP5.1.H.265",
+    "protocol": "usenet",
+    "quality": {"quality": {"name": "WEBDL-2160p"}},
+    "size": 40 * GB,
+}
+
+
+def _sonarr_releases(params: dict[str, str], _m: re.Match[str]) -> Any:
+    """Comme Sonarr : une recherche de série n'a de sens que pour une saison."""
+    return [SEASON_RELEASE] if params.get("seasonNumber") else []
+
+
 SONARR_ROUTES: list[tuple[str, Handler]] = [
+    (r"/api/v3/release", _sonarr_releases),
     (r"/api/v3/series", _const(SERIES)),
     (r"/api/v3/series/lookup", _lookup(SERIES, "tvdbId", "tvdb:", NEW_SERIES)),
     (r"/api/v3/series/(\d+)", _by_id(SERIES)),
@@ -357,12 +374,16 @@ TMDB_DETAIL = {
     "videos": {"results": [{"key": "zSWdZVtXT7E", "site": "YouTube", "type": "Trailer"}]},
 }
 
+TVDB_OF_TMDB = {95396: 371980, 63639: 280619}  # Severance, The Expanse
+
 TMDB_ROUTES: list[tuple[str, Handler]] = [
     (r"/3/trending/movie/week", _const({"results": [_tmdb_movie(157336, "Interstellar")]})),
     (r"/3/trending/tv/week", _const({"results": [_tmdb_tv(95396, "Severance")]})),
     (r"/3/movie/\d+/recommendations", _const({"results": [_tmdb_movie(27205, "Inception")]})),
     (r"/3/tv/63639/recommendations", _const({"results": [_tmdb_tv(1399, "Game of Thrones")]})),
     (r"/3/find/280619", _const({"tv_results": [{"id": 63639, "name": "The Expanse"}]})),
+    # TMDB → TVDB d'une série (suggestions « Pour toi » ajoutées depuis la TV)
+    (r"/3/tv/(\d+)/external_ids", lambda _p, m: {"tvdb_id": TVDB_OF_TMDB.get(int(m.group(1)))}),
     (r"/3/find/\d+", _const({"tv_results": []})),
     (r"/3/movie/157336", _const(TMDB_DETAIL)),
     (r"/3/genre/(movie|tv)/list", _const({"genres": [{"id": 878, "name": "Science-Fiction"}]})),
@@ -380,6 +401,25 @@ ROUTES = {
 }
 
 
+# Corps reçus en POST (ajouts, commandes) : (hôte, chemin, corps), relus par les tests
+POSTS: list[tuple[str, str, dict[str, Any]]] = []
+
+
+def _validate_add(path: str, body: dict[str, Any]) -> httpx.Response | None:
+    """Comme le vrai Sonarr / Radarr : un ajout sans identifiant est refusé (400)."""
+    checks = {
+        "/api/v3/series": ("tvdbId", "TvdbId", "Tvdb Id"),
+        "/api/v3/movie": ("tmdbId", "TmdbId", "Tmdb Id"),
+    }
+    if path not in checks:
+        return None
+    field, prop, label = checks[path]
+    if (body.get(field) or 0) > 0:
+        return None
+    error = {"propertyName": prop, "errorMessage": f"'{label}' must be greater than '0'."}
+    return httpx.Response(400, json=[error])
+
+
 def handle(request: httpx.Request) -> httpx.Response:
     """Répond comme le ferait le service ciblé (ou 503 si hôte inconnu)."""
     routes = ROUTES.get(request.url.host)
@@ -389,6 +429,10 @@ def handle(request: httpx.Request) -> httpx.Response:
     if request.method != "GET":
         # Commandes / ajouts : on acquitte en renvoyant le corps reçu.
         body = json.loads(request.content or b"{}")
+        POSTS.append((request.url.host, request.url.path, body))
+        refused = _validate_add(request.url.path, body)
+        if refused is not None:
+            return refused
         return httpx.Response(201, json={"id": 999, "status": "queued", **body})
 
     params = dict(request.url.params)
@@ -409,6 +453,7 @@ def install(monkeypatch: Any) -> None:
     n'est pas touché.
     """
     original_init = httpx.AsyncClient.__init__
+    POSTS.clear()
 
     def patched_init(self: httpx.AsyncClient, *args: Any, **kwargs: Any) -> None:
         kwargs.setdefault("transport", httpx.MockTransport(handle))

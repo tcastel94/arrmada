@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Adding from "Pour toi" on the TV (server fix)
+
+#### Fixed
+- **Adding a series from the TV's "Pour toi" row failed with a Sonarr error**: TMDB suggestions only carry a TMDB id and the add-on sent `tvdbId: null`, which Sonarr refuses (HTTP 400). `/api/kodi/media/add` now follows the web app's path: TMDB → TVDB through TMDB (`/tv/{id}/external_ids`), or a title lookup in Sonarr with a match check when no TMDB key is set (never a random series); the add is built from the Sonarr / Radarr lookup (exact title, year, images)
+- A title already followed by Sonarr / Radarr is no longer an error: its id is returned and its search started when requested
+- Refusals from Sonarr / Radarr are shown in plain words on the TV ("Sonarr refuse l'ajout : …") instead of "Client error '400 Bad Request' for url …"
+- **Manual release choice for a series from the TV** always failed (Sonarr needs a season): it now searches the first season (`?season=N` to pick another), with a 55 s budget instead of 10 s and a clear message when the indexers are too slow
+- Tests: the fake Sonarr / Radarr now refuse an add without an id, like the real ones; TMDB suggestion → TVDB, title fallback, unknown series, already followed series and movie, readable refusal, series releases by season
+
 ### "Bureau" room without an amplifier, pairing from the ArrMada home (Kodi add-on 1.19.1)
 
 #### Added

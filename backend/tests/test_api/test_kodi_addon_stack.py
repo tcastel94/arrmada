@@ -111,3 +111,115 @@ class TestAddonHomeData:
         assert dl["size"] == 10 * 1024**3  # était toujours 0
         assert dl["size_left"] == 4 * 1024**3
         assert dl["progress"] == 60.0
+
+
+class TestAddonAddFromSuggestions:
+    """Ajout depuis la TV d'un titre de « Pour toi » (suggestions TMDB).
+
+    Retour terrain : une série suggérée n'a qu'un ID TMDB ; l'add-on envoyait
+    ``tvdbId: null`` et Sonarr refusait l'ajout (« erreur Sonarr »).
+    """
+
+    ADD = {"quality_profile_id": 8, "root_folder_path": "/tv", "search_now": True}
+
+    @staticmethod
+    def _posted(path: str) -> list[dict]:
+        from tests import fake_arr
+
+        return [body for _host, p, body in fake_arr.POSTS if p == path]
+
+    async def test_series_from_tmdb_is_resolved_to_tvdb(
+        self, client: AsyncClient, arr_stack: dict, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(settings, "TMDB_API_KEY", "cle-tmdb-de-test")
+        resp = await client.post(
+            "/api/kodi/media/add",
+            json={"type": "series", "title": "Severance", "tmdb_id": "95396", **self.ADD},
+            headers=arr_stack,
+        )
+        assert resp.json()["status"] == "ok", resp.text
+        (sent,) = self._posted("/api/v3/series")
+        assert sent["tvdbId"] == 371980  # TMDB 95396 → TVDB 371980
+        assert sent["title"] == "Severance"
+        assert sent["qualityProfileId"] == 8 and sent["rootFolderPath"] == "/tv"
+        assert sent["addOptions"] == {"searchForMissingEpisodes": True}
+
+    async def test_series_without_tmdb_key_found_by_title(
+        self, client: AsyncClient, arr_stack: dict, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(settings, "TMDB_API_KEY", "")
+        resp = await client.post(
+            "/api/kodi/media/add",
+            json={"type": "series", "title": "Severance", "tmdb_id": 95396, **self.ADD},
+            headers=arr_stack,
+        )
+        assert resp.json()["status"] == "ok", resp.text
+        assert self._posted("/api/v3/series")[0]["tvdbId"] == 371980
+
+    async def test_unknown_series_is_a_clear_error(
+        self, client: AsyncClient, arr_stack: dict, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(settings, "TMDB_API_KEY", "")
+        resp = await client.post(
+            "/api/kodi/media/add",
+            json={"type": "series", "title": "Série inconnue", "tmdb_id": 1, **self.ADD},
+            headers=arr_stack,
+        )
+        data = resp.json()
+        assert data["status"] == "error"
+        assert "introuvable dans Sonarr" in data["message"]
+        assert self._posted("/api/v3/series") == []  # jamais une autre série au hasard
+
+    async def test_series_already_followed_is_not_an_error(
+        self, client: AsyncClient, arr_stack: dict, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(settings, "TMDB_API_KEY", "cle-tmdb-de-test")
+        resp = await client.post(
+            "/api/kodi/media/add",
+            json={"type": "series", "title": "The Expanse", "tmdb_id": 63639, **self.ADD},
+            headers=arr_stack,
+        )
+        data = resp.json()
+        assert data["status"] == "ok" and data["already"] is True
+        assert data["arr_id"] == 10
+        assert self._posted("/api/v3/series") == []
+        (command,) = self._posted("/api/v3/command")
+        assert command == {"name": "SeriesSearch", "seriesId": 10}
+
+    async def test_movie_already_in_radarr(self, client: AsyncClient, arr_stack: dict) -> None:
+        resp = await client.post(
+            "/api/kodi/media/add",
+            json={"type": "movie", "title": "Dune", "tmdb_id": 438631, **self.ADD},
+            headers=arr_stack,
+        )
+        data = resp.json()
+        assert data["status"] == "ok" and data["already"] is True and data["arr_id"] == 1
+        assert self._posted("/api/v3/movie") == []
+
+    async def test_refusal_message_is_readable(self) -> None:
+        import httpx
+
+        from app.services.kodi import _arr_error
+
+        request = httpx.Request("POST", "http://sonarr.test/api/v3/series")
+        response = httpx.Response(
+            400,
+            json=[{"propertyName": "Path", "errorMessage": "Path is already configured"}],
+            request=request,
+        )
+        exc = httpx.HTTPStatusError("400", request=request, response=response)
+        assert _arr_error("Sonarr", exc) == "Sonarr refuse l'ajout : Path is already configured"
+        assert _arr_error("Sonarr", httpx.ConnectError("refused")) == (
+            "Sonarr injoignable (ConnectError)"
+        )
+
+    async def test_series_releases_need_a_season(
+        self, client: AsyncClient, arr_stack: dict
+    ) -> None:
+        # Avant : TypeError (saison manquante) pour toute série
+        data = (await client.get("/api/kodi/media/series/10/releases", headers=arr_stack)).json()
+        assert data["status"] == "ok", data
+        assert data["count"] == 1
+        assert data["releases"][0]["title"].startswith("Severance.S01")
+        other = await client.get("/api/kodi/media/series/10/releases?season=2", headers=arr_stack)
+        assert other.json()["status"] == "ok"
