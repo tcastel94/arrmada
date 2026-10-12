@@ -1,8 +1,9 @@
 "use client";
 
 /**
- * Bouton « Artworks » de la Médiathèque : récupère logos, disques, clearart…
- * pour toute la médiathèque (fanart.tv / TMDB, côté serveur).
+ * Bouton « Artworks » de la Médiathèque : récupère logos, disques, clearart,
+ * fonds… pour toute la médiathèque (dossiers des médias, fanart.tv, TMDB —
+ * côté serveur).
  * ----------------------------------------------------------------
  * - Clic → menu : « Récupérer les manquants » (titres jamais servis ou servis
  *   il y a longtemps : presque gratuit à relancer) ou « Tout redemander ».
@@ -30,7 +31,9 @@ export function ArtworkRefreshButton() {
     const refresh = useArtworkRefresh();
     const running = !!status?.running;
     const pct = status && status.total > 0 ? Math.round((status.done / status.total) * 100) : 0;
-    const noSource = status && !status.sources.fanart && !status.sources.tmdb;
+    const noSource = status && !status.sources.fanart && !status.sources.tmdb && !status.sources.local;
+    // Dossiers seulement : ça marche, mais fanart.tv apporte bien plus d'images
+    const noSite = status && !status.sources.fanart && !status.sources.tmdb;
 
     // Toast de fin (seulement si on a vu le travail tourner dans cet onglet)
     const sawRunning = useRef(false);
@@ -74,12 +77,12 @@ export function ArtworkRefreshButton() {
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-72">
-                <DropdownMenuLabel className="eyebrow">Logos, disques, clearart</DropdownMenuLabel>
+                <DropdownMenuLabel className="eyebrow">Logos, disques, clearart, fonds</DropdownMenuLabel>
                 {status && (
                     <p className="px-2 pb-2 text-xs text-muted-foreground">
                         {status.stored.titles > 0 ? (
                             <>
-                                {status.stored.logos} logos · {status.stored.discs} disques · {status.stored.clearart} clearart
+                                {status.stored.images} images · {status.stored.logos} logos · {status.stored.discs} disques
                                 <br />
                                 pour {status.stored.titles} titres déjà interrogés.
                             </>
@@ -88,9 +91,11 @@ export function ArtworkRefreshButton() {
                         )}
                     </p>
                 )}
-                {noSource && (
+                {(noSource || noSite) && (
                     <p className="mx-2 mb-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-200">
-                        Aucune source : ajoute FANART_API_KEY (ou TMDB_API_KEY) dans le .env du serveur.
+                        {noSource
+                            ? "Aucune source : ajoute FANART_CLIENT_KEY (compte fanart.tv gratuit) dans le .env du serveur."
+                            : "Dossiers des médias seulement : ajoute FANART_CLIENT_KEY (compte fanart.tv gratuit) pour les logos HD et les disques."}
                     </p>
                 )}
                 <DropdownMenuSeparator />

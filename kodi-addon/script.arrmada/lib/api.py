@@ -14,6 +14,7 @@ import xbmc
 import xbmcaddon
 
 import device
+import feeds
 
 ADDON = xbmcaddon.Addon("script.arrmada")
 
@@ -94,7 +95,10 @@ class ArrMadaAPI:
         try:
             with urllib.request.urlopen(req, timeout=timeout) as response:
                 body = response.read().decode("utf-8")
-                return json.loads(body) if body else {"status": "ok"}
+                if not body:
+                    return {"status": "ok"}
+                # Images des dossiers des médias : adresse relative → absolue
+                return feeds.absolute_urls(json.loads(body), config["url"])
         except urllib.error.HTTPError as err:
             err_body = ""
             try:

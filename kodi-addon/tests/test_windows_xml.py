@@ -10,6 +10,7 @@ Appairage).
 from __future__ import annotations
 
 import ast
+import math
 import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -274,6 +275,24 @@ def test_detail_disc_comes_out_and_goes_back_in() -> None:
     assert any("Window.Property(poster)" in t for t in textures), "disque dessiné avec l'affiche"
     shine = [c for c in images if "disc-shine" in (c.findtext("texture") or "")]
     assert shine and not shine[0].findall("animation"), "le reflet ne tourne pas"
+
+    # Il ROULE (1.20.1) : angle = distance / rayon, à l'aller comme au retour,
+    # au même rythme que le glissement (même durée, même courbe)
+    radius = int(disc.findtext("width") or 0) / 2
+    expected = math.degrees(abs(out_x) / radius)
+    for control in spinning:
+        rolls = {
+            a.text: a
+            for a in control.findall("animation")
+            if a.get("effect") == "rotate" and a.get("loop") != "true"
+        }
+        out, back = rolls["Conditional"], rolls["WindowClose"]
+        assert abs(float(out.get("end")) - expected) < 1.5, "roule sans glisser"
+        assert float(out.get("end")) > 0, "vers la gauche : sens inverse des aiguilles"
+        assert float(back.get("end")) == -float(out.get("end"))
+        for key in ("time", "delay", "tween", "easing"):
+            assert out.get(key) == slides["Conditional"].get(key), key
+        assert back.get("time") == slides["WindowClose"].get("time")
 
     # Le disque est déclaré avant les boîtiers → caché derrière eux
     xml = _xml_path("detail").read_text(encoding="utf-8")

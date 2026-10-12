@@ -11,6 +11,7 @@ Répond comme le vrai backend aux routes lues par l'écran « Accueil » :
                                 faux ampli qui réagit aux commandes
   POST /api/kodi/actions/*, /api/kodi/downloads/*/pause|resume
   GET /img/<fichier>            images générées au démarrage (Pillow)
+  GET /api/artwork/local/…      image « du dossier d'un média » (adresse relative signée)
   GET /__down                   simule une panne : toutes les routes API → 503
   GET /__deny                   simule une TV refusée : toutes les routes API → 401
   GET /api/qr                   QR code vers la web app ou YouTube (phase 3)
@@ -33,6 +34,7 @@ rafraîchissement en direct. Une latence est simulée (--delay) pour voir les
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import random
 import sys
@@ -548,6 +550,25 @@ def episodes(season: int, count: int, have: int) -> dict:
     }
 
 
+def local_image_url(name: str) -> str:
+    """Adresse façon ArrMada d'une image du dossier d'un média (relative, signée)."""
+    stem, ext = name.rsplit(".", 1)
+    token = base64.urlsafe_b64encode(stem.encode()).decode().rstrip("=")
+    return f"/api/artwork/local/0123456789abcdef/{token}.{ext}?v=1"
+
+
+def local_image_file(images: Path, path: str) -> Path | None:
+    """Fichier servi pour /api/artwork/local/<signature>/<jeton>.<ext> (banc seulement)."""
+    name = path.rsplit("/", 1)[-1]
+    token, _, ext = name.rpartition(".")
+    try:
+        stem = base64.urlsafe_b64decode(token + "=" * (-len(token) % 4)).decode()
+    except ValueError:
+        return None
+    file = images / Path(f"{stem}.{ext}").name  # pas de « ../ » possible
+    return file if file.is_file() else None
+
+
 def detail(base: str, kind: str, arr_id: int) -> dict | None:
     """Fiche façon /api/media/{movie|series}/{id} pour les titres de TITLES."""
     idx = arr_id - 100
@@ -561,6 +582,11 @@ def detail(base: str, kind: str, arr_id: int) -> dict | None:
         "discart": f"{base}/img/disc-{idx}.png" if idx in DISC_IDX else None,
         "disc_type": "bluray" if idx in DISC_IDX else None,
     }
+    if idx == 3:
+        # Disque rangé dans le dossier du film (disc.png) : le vrai serveur
+        # renvoie une adresse RELATIVE et signée (1.21.0), que l'add-on doit
+        # compléter avec l'adresse du serveur (feeds.absolute_urls).
+        images["discart"] = local_image_url("disc-3.png")
     common = {
         "id": arr_id,
         "title": title,
@@ -759,6 +785,8 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
 
         def do_HEAD(self):  # noqa: N802 — Kodi interroge les images en HEAD
             path = self.path.split("?")[0]
+            if path.startswith("/api/artwork/local/") and local_image_file(images, path):
+                path = "/img/" + local_image_file(images, path).name
             if path == f"/api/devices/pair/qr/{PAIR_CODE}.png":
                 self._qr(head=True)
             elif path.startswith("/img/") and (images / Path(path[5:]).name).is_file():
@@ -772,6 +800,13 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
 
         def do_GET(self):  # noqa: N802 (nom imposé par http.server)
             path = self.path.split("?")[0]
+            if path.startswith("/api/artwork/local/"):
+                # Image du dossier d'un média (adresse signée du vrai serveur)
+                file = local_image_file(images, path)
+                if file is None:
+                    self.send_error(404)
+                    return
+                path = "/img/" + file.name
             if path.startswith("/img/"):
                 file = images / Path(path[5:]).name  # pas de « ../ » possible
                 if not file.is_file():

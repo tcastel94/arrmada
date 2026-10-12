@@ -31,6 +31,21 @@ services:
       # Caméras Eufy (pop-up sur la TV) : adresse de eufy-security-ws
       - EUFY_WS_URL=${EUFY_WS_URL:-}
       - EUFY_DETECTIONS=${EUFY_DETECTIONS:-person}
+      # Artworks : fanart.tv (clé personnelle d'un compte gratuit et/ou clé de
+      # projet), images des dossiers des médias, tâche quotidienne.
+      # ⚠️ Une variable du .env n'arrive dans le conteneur QUE si elle est
+      # listée ici (docker compose ne s'en sert sinon que pour ce fichier).
+      - FANART_API_KEY=${FANART_API_KEY:-}
+      - FANART_CLIENT_KEY=${FANART_CLIENT_KEY:-}
+      - ARTWORK_LOCAL_ENABLED=${ARTWORK_LOCAL_ENABLED:-true}
+      - ARTWORK_AUTO_ENABLED=${ARTWORK_AUTO_ENABLED:-true}
+      - ARTWORK_AUTO_INTERVAL_HOURS=${ARTWORK_AUTO_INTERVAL_HOURS:-24}
+      # Auto-import (téléchargements terminés non importés, packs bloqués)
+      - AUTO_IMPORT_ENABLED=${AUTO_IMPORT_ENABLED:-true}
+      - AUTO_IMPORT_INTERVAL_MINUTES=${AUTO_IMPORT_INTERVAL_MINUTES:-5}
+      - AUTO_IMPORT_ALLOW_OVERWRITE=${AUTO_IMPORT_ALLOW_OVERWRITE:-false}
+      - AUTO_IMPORT_BLOCKED_PACKS=${AUTO_IMPORT_BLOCKED_PACKS:-true}
+      - ARR_DOWNLOADS_PATH=${ARR_DOWNLOADS_PATH:-/media/downloads/complete}
     depends_on:
       arrmada-db:
         condition: service_healthy

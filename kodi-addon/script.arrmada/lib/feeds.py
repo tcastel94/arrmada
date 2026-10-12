@@ -52,6 +52,29 @@ MAX_AGE = 3 * 24 * 3600
 RETRY_AFTER_ERROR = 120  # serveur injoignable : on réessaie dans 2 min
 
 
+# Images servies par ArrMada lui-même (fichiers des dossiers des médias :
+# disc.png, clearlogo.png…) : le serveur donne une adresse relative, signée.
+LOCAL_IMAGE_PREFIX = "/api/artwork/local/"
+
+
+def absolute_urls(data: Any, base_url: str) -> Any:
+    """Complète les adresses d'images relatives du serveur avec son adresse.
+
+    Le serveur ne sait pas sous quel nom la TV le joint (192.168.x.x,
+    arrmada.lan…) : il renvoie « /api/artwork/local/… », la TV y ajoute
+    l'adresse qu'elle utilise, comme un chemin relatif dans un lien web.
+    Parcourt tout le JSON (listes, objets imbriqués) ; le reste est inchangé.
+    """
+    base = base_url.rstrip("/")
+    if isinstance(data, str):
+        return base + data if data.startswith(LOCAL_IMAGE_PREFIX) else data
+    if isinstance(data, list):
+        return [absolute_urls(item, base) for item in data]
+    if isinstance(data, dict):
+        return {key: absolute_urls(value, base) for key, value in data.items()}
+    return data
+
+
 def cache_file(cache_dir: str, name: str) -> str:
     return os.path.join(cache_dir, f"feed-{name}.json")
 

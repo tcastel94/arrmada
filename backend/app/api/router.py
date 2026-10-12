@@ -9,6 +9,7 @@ from app.api.activity_timeline import router as activity_timeline_router
 from app.api.ai_search import router as ai_search_router
 from app.api.ambient import router as ambient_router
 from app.api.analytics import router as analytics_router
+from app.api.artwork import files_router as artwork_files_router
 from app.api.artwork import router as artwork_router
 from app.api.auth import router as auth_router
 from app.api.calendar import router as calendar_router
@@ -54,6 +55,7 @@ api_router.include_router(setup_router)
 api_router.include_router(webhooks_router)  # Webhooks are unauthenticated (from internal services)
 api_router.include_router(devices_public_router)  # Appairage des TV (réseau local seulement)
 api_router.include_router(kodi_repo_router)  # Dépôt Kodi /kodi/repo (réseau local seulement)
+api_router.include_router(artwork_files_router)  # Images des dossiers (adresse signée, LAN)
 
 # Protected routes
 api_router.include_router(services_router)

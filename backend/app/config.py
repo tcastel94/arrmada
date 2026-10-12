@@ -46,12 +46,22 @@ class Settings(BaseSettings):
     # ── TMDB ──────────────────────────────────────────────────
     TMDB_API_KEY: str = ""
 
-    # ── Artworks (logos, disques, clearart, bannières) ────────
-    # fanart.tv : logos HD, disques Blu-ray/DVD, clearart, bannières.
-    # Clé personnelle gratuite : https://fanart.tv/get-an-api-key/
-    # Sans elle : logos TMDB seulement (TMDB_API_KEY), et le disque de la
-    # fiche est dessiné à partir de l'affiche.
+    # ── Artworks (logos, disques, clearart, bannières, fonds…) ─
+    # Trois sources, combinables :
+    #  - fanart.tv : logos HD, disques Blu-ray/DVD, clearart, bannières,
+    #    vignettes, affiches, fonds (toutes les variantes). Deux clés possibles,
+    #    à créer sur https://fanart.tv/get-an-api-key/ :
+    #      FANART_CLIENT_KEY = clé PERSONNELLE (compte gratuit) — suffit seule,
+    #        et les nouvelles images arrivent après 2 jours au lieu de 7 ;
+    #      FANART_API_KEY    = clé de PROJET (facultative si la personnelle est là).
+    #  - TMDB (TMDB_API_KEY, déjà utilisée par « Pour toi ») : logos, affiches, fonds.
+    #  - les dossiers des médias (poster.jpg, fanart.jpg, clearlogo.png,
+    #    disc.png…) : prioritaires, ce sont tes images.
     FANART_API_KEY: str = ""
+    FANART_CLIENT_KEY: str = ""
+    # Lire les images rangées à côté des films / séries (chemins Radarr/Sonarr
+    # traduits comme pour les NFO : services/scraper_service.map_path).
+    ARTWORK_LOCAL_ENABLED: bool = True
     # Récupère tout seul les artworks des nouveaux titres (toutes les N heures).
     # Le bouton « Récupérer les artworks » de la web app reste disponible.
     ARTWORK_AUTO_ENABLED: bool = True

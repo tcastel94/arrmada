@@ -6,8 +6,9 @@
  * - `HeroBackdrop` : l'image de fond (fanart) plein cadre, placée DERRIÈRE
  *   la barre du haut, avec parallaxe au défilement (l'image descend moins vite
  *   que la page), vignettage vers la couleur de fond et grain argentique.
- * - `MediaHero` : affiche inclinable avec halo coloré, grand titre (ou
- *   ClearLogo, le logo-titre officiel, quand Radarr/Sonarr en ont un),
+ * - `MediaHero` : le vrai boîtier Blu-ray / 4K / DVD du titre (l'affiche en
+ *   jaquette) qui s'ouvre pour recevoir son disque, avec halo coloré ; grand
+ *   titre (ou ClearLogo, le logo-titre officiel, quand il est connu),
  *   studio / chaîne et badges techniques du fichier (4K, HDR, Atmos…),
  *   méta (année, durée, certification, statut traduit), genres, notes
  *   animées, synopsis repliable, barre d'actions et liens externes.
@@ -35,7 +36,7 @@ import {
 import type { FileInfo, MediaDetail, SeasonDetail } from "@/hooks/use-media";
 import { MediaTechBadges, parseTechSpecs } from "@/components/media/media-tech-badges";
 import { StudioNetworkLogo } from "@/components/media/studio-network-logo";
-import { TiltCard } from "@/components/fx/tilt-card";
+import { OpeningCase, caseFormat } from "@/components/media/disc-art";
 import { AnimatedNumber } from "@/components/fx/animated-number";
 import { RingGauge } from "@/components/fx/ring-gauge";
 import { StatusDot } from "@/components/fx/status-dot";
@@ -154,9 +155,18 @@ function PosterImage({
     );
 }
 
-/** Grande affiche desktop : inclinaison 3D + halo = copie floutée de l'affiche (couleurs du film). */
-function HeroPoster({ media }: { media: MediaDetail }) {
+/**
+ * Grand boîtier desktop : le vrai boîtier du titre (format d'après le fichier)
+ * qui s'ouvre et reçoit son disque, + halo = copie floutée de l'affiche
+ * (couleurs du film). Le disque : rond imprimé (dossier du film ou
+ * fanart.tv), sinon dessiné à partir de l'affiche.
+ */
+function HeroCase({ media, techFile }: { media: MediaDetail; techFile: FileInfo | null }) {
     const poster = media.images?.poster ?? null;
+    const format =
+        media.type === "movie"
+            ? caseFormat(media.file?.resolution, !!media.has_file)
+            : caseFormat(techFile?.resolution, !!techFile);
     return (
         <div className="relative isolate">
             {poster ? (
@@ -174,11 +184,12 @@ function HeroPoster({ media }: { media: MediaDetail }) {
             ) : (
                 <div aria-hidden className="absolute inset-0 -z-10 rounded-3xl bg-primary/30 blur-3xl" />
             )}
-            <TiltCard className="rounded-2xl" max={8}>
-                <div className="shine overflow-hidden rounded-2xl shadow-[0_30px_80px_-20px_rgb(0_0_0/0.9)] ring-1 ring-white/10">
-                    <PosterImage src={poster} title={media.title} isMovie={media.type === "movie"} />
-                </div>
-            </TiltCard>
+            <OpeningCase
+                poster={poster}
+                discart={media.images?.discart}
+                format={format}
+                title={media.title}
+            />
         </div>
     );
 }
@@ -392,7 +403,7 @@ export function MediaHero({ media, actions }: { media: MediaDetail; actions?: Re
         >
             {/* Affiche (desktop / tablette) */}
             <motion.div variants={scaleIn} className="hidden self-start md:block">
-                <HeroPoster media={media} />
+                <HeroCase media={media} techFile={techFile} />
             </motion.div>
 
             <div className="min-w-0 space-y-5">

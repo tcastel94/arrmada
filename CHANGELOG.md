@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Every artwork of a title, images from the media folders, a case that opens on the web sheet (Kodi add-on 1.21.0)
+
+#### Added
+- **Artworks tab = every image of the title**: logos, discs, clearart, characters, posters, key art, fanart, landscape thumbs, banners, season posters / thumbs / banners — every variant, grouped by kind, with its source (media folder, fanart.tv, TMDB, Radarr / Sonarr), language, likes and disc type; filter by source; click to see it full size. The case and its disc moved out of this tab (`GET /api/artwork/{type}/{id}`)
+- **Images from the media folders** (`ARTWORK_LOCAL_ENABLED`, on by default): `poster.jpg`, `fanart.jpg`, `clearlogo.png`, `disc.png` / `discart.png`, `clearart.png`, `banner.jpg`, `landscape.jpg`, `characterart.png`, `keyart.jpg`, `seasonNN-poster.jpg`, `extrafanart/`, Kodi's `<video>-poster.jpg`, Jellyfin's `backdrop2.jpg`, ArrMada's own `img_xxx`. Radarr / Sonarr paths are translated like the NFO scraper (`scraper_service.map_path`). They come first (they are the user's images): the disc, logo and clearart of the folder win over fanart.tv. Served by ArrMada through a **signed address** (`/api/artwork/local/<HMAC>/<path>`, like an S3 pre-signed URL: only what the server signed, only inside the media folders, symlinks resolved, local network only, image extensions only)
+- **fanart.tv personal key** (`FANART_CLIENT_KEY`, free account): enough on its own, new images after 2 days instead of 7; the project key (`FANART_API_KEY`) becomes optional. Every fanart.tv variant is kept (40 per kind), with fanart.tv's light previews for the grid; TMDB adds its logos, posters and backdrops (20 per kind)
+- **Web app — the case opens on the media sheet**: the real Blu-ray / 4K / DVD case replaces the poster at the top of the sheet. When the sheet opens, the front swings open on its hinge (3D), the disc rolls in (its rotation follows the distance, like a wheel) and settles on the hub, then the case closes; a click opens / closes it (the disc spins inside). Reduced motion: no intro
+- **Kodi add-on 1.21.0 — the disc rolls**: going out of the case and back in, its rotation follows the slide (240 px for a 174 px radius = 79°, same timing and curve), then it spins counter-clockwise like a real disc seen from its label. Images from the media folders are shown on the TV too (relative signed address completed with the server address, `feeds.absolute_urls`)
+
+#### Fixed
+- **Settings written in `.env` never reached the server**: `docker-compose.yml` only passes the variables it lists, and `FANART_API_KEY`, `ARTWORK_*`, `AUTO_IMPORT_*` and `ARR_DOWNLOADS_PATH` were missing — the fanart.tv key of 1.20 and the auto-import switches were silently ignored. They are all passed now (same defaults as the server)
+- Titles fetched before the gallery existed are fetched again once (the gallery fills without "Ask everything again")
+- Tests: file name classification (Kodi, Jellyfin, seasons, extrafanart), folder scan, signed address round trip, forged / out-of-folder / wrong-extension addresses refused, local network only, folder images preferred and served without a token, gallery of a title never fetched, personal fanart.tv key alone, fanart / TMDB galleries (order, caps, previews, duplicates); add-on: relative image addresses completed, the disc rolls without slipping (angle = distance / radius, same timing as the slide)
+
 ### Artworks: logos, Blu-ray discs, clearart — and a disc that comes out of a real-looking case (Kodi add-on 1.20.1)
 
 #### Added

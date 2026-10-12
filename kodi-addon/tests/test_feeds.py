@@ -201,3 +201,26 @@ def test_event_cursor_tolerates_bad_payloads() -> None:
     noisy = {"events": [{"id": "x"}, "texte", {"id": 3, "type": "new_import", "data": "?"}]}
     assert cursor.accept(noisy) == [(3, "new_import", {})]
     assert cursor.accept(None) == [] and cursor.accept([1, 2]) == []
+
+
+class TestAbsoluteUrls:
+    """Images des dossiers des médias (1.20.1) : adresse relative du serveur."""
+
+    def test_local_images_get_the_server_address(self) -> None:
+        data = {
+            "items": [
+                {"discart_url": "/api/artwork/local/abc/ZGlzYw.png?v=1", "title": "/api/media"},
+                {"poster_url": "https://image.tmdb.org/t/p/original/p.jpg"},
+            ],
+            "images": {"clearlogo": "/api/artwork/local/def/bG9nbw.png"},
+            "count": 2,
+            "empty": None,
+        }
+        out = feeds.absolute_urls(data, "http://192.168.2.3:8420/")
+        assert out["items"][0]["discart_url"] == (
+            "http://192.168.2.3:8420/api/artwork/local/abc/ZGlzYw.png?v=1"
+        )
+        assert out["items"][0]["title"] == "/api/media"  # pas une image locale
+        assert out["items"][1]["poster_url"].startswith("https://image.tmdb.org/")
+        assert out["images"]["clearlogo"].startswith("http://192.168.2.3:8420/api/artwork/")
+        assert out["count"] == 2 and out["empty"] is None

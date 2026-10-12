@@ -78,6 +78,8 @@ def _normalise_movie(raw: dict[str, Any], service_name: str) -> dict[str, Any]:
         "rating": raw.get("ratings", {}).get("tmdb", {}).get("value"),
         "runtime": raw.get("runtime"),
         "overview": raw.get("overview", ""),
+        # Dossier du film côté Radarr (artworks rangés à côté : disc.png…)
+        "path": raw.get("path"),
     }
 
 
@@ -123,6 +125,8 @@ def _normalise_series(
         "seasons": raw.get("seasonCount", 0),
         "episodes_total": stats.get("totalEpisodeCount", 0),
         "episodes_have": stats.get("episodeFileCount", 0),
+        # Dossier de la série côté Sonarr (poster.jpg, clearlogo.png…)
+        "path": raw.get("path"),
     }
 
 

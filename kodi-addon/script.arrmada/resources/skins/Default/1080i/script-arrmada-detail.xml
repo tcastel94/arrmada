@@ -13,9 +13,10 @@
   transparent sans fichier. L'affiche est dessinée DESSOUS, le boîtier
   (texture case-*.png : plastique, bandeau, charnière, film et reflet) PAR-
   DESSUS ; seul le texte du bandeau est un label. Le disque, dessiné DERRIÈRE
-  le boîtier, en sort vers la gauche quand Window.Property(disc_out) est posée
-  (ouverture, retour de lecture), tourne, et rentre quand elle est effacée
-  (Lire) ou à la fermeture (WindowClose). Rond imprimé fanart.tv (discart) ou,
+  le boîtier, en sort vers la gauche EN ROULANT (rotation = distance / rayon,
+  comme une roue) quand Window.Property(disc_out) est posée (ouverture, retour
+  de lecture), tourne, et rentre en roulant quand elle est effacée (Lire) ou à
+  la fermeture (WindowClose). Rond imprimé fanart.tv (discart) ou,
   à défaut, affiche découpée en disque (masque disc-mask + moyeu transparent
   + tranche) ; le reflet ne tourne pas.
 -->
@@ -232,7 +233,10 @@
 					<fadetime>400</fadetime>
 					<texture background="true">$INFO[Window.Property(discart)]</texture>
 					<visible>!String.IsEmpty(Window.Property(discart))</visible>
-					<animation effect="rotate" end="-360" center="auto" time="12000" loop="true" condition="!String.IsEmpty(Window.Property(disc_out))">Conditional</animation>
+					<!-- Roule en sortant : 240 px pour un rayon de 174 px = 79° (sans glisser) -->
+					<animation effect="rotate" end="79" center="auto" time="950" delay="450" tween="back" easing="out" condition="!String.IsEmpty(Window.Property(disc_out))">Conditional</animation>
+					<animation effect="rotate" end="-79" center="auto" time="380" tween="cubic" easing="in" condition="!String.IsEmpty(Window.Property(disc_out))">WindowClose</animation>
+					<animation effect="rotate" end="360" center="auto" time="12000" loop="true" condition="!String.IsEmpty(Window.Property(disc_out))">Conditional</animation>
 				</control>
 				<!-- Sans rond imprimé : l'affiche découpée en disque, moyeu transparent, tranche -->
 				<control type="group">
@@ -242,7 +246,9 @@
 					<control type="image">
 						<left>0</left><top>-87</top><width>348</width><height>522</height>
 						<texture background="true" diffuse="arrmada/disc-mask.png">$INFO[Window.Property(poster)]</texture>
-						<animation effect="rotate" end="-360" center="auto" time="12000" loop="true" condition="!String.IsEmpty(Window.Property(disc_out))">Conditional</animation>
+						<animation effect="rotate" end="79" center="auto" time="950" delay="450" tween="back" easing="out" condition="!String.IsEmpty(Window.Property(disc_out))">Conditional</animation>
+						<animation effect="rotate" end="-79" center="auto" time="380" tween="cubic" easing="in" condition="!String.IsEmpty(Window.Property(disc_out))">WindowClose</animation>
+						<animation effect="rotate" end="360" center="auto" time="12000" loop="true" condition="!String.IsEmpty(Window.Property(disc_out))">Conditional</animation>
 					</control>
 					<control type="image">
 						<left>0</left><top>0</top><width>348</width><height>348</height>

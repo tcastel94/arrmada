@@ -890,7 +890,7 @@ la TV. Le serveur l'impose (comme le reste du périmètre TV) :
 >   à l'add-on de la TV. Ajouter l'instance ne lie pas la TV : il faut aussi
 >   l'appairer.
 
-### 26. 💿 Boîtier et disque dans la fiche, logos, artworks (1.20.0, boîtier réaliste en 1.20.1)
+### 26. 💿 Boîtier et disque dans la fiche, logos, tous les artworks (1.20 → 1.21.0)
 
 **La fiche montre le film dans un vrai boîtier, façon Aeon Nox.** L'affiche est
 glissée sous le film plastique comme une jaquette ; le boîtier suit le fichier :
@@ -918,30 +918,54 @@ couper moins), jamais déformée.
 > `python3 kodi-addon/tools/make_textures.py`, puis les tests (ils vérifient
 > que l'affiche remplit exactement la fenêtre de la jaquette).
 
-**Le disque sort de la boîte.** À l'ouverture de la fiche, le disque glisse
-hors du boîtier (léger rebond) et tourne lentement. Il **rentre** quand tu
-lances la lecture, **ressort** au retour de la lecture, et rentre à la
-fermeture de la fiche. Le reflet de lumière, lui, reste fixe pendant que le
-disque tourne : c'est ce qui le rend crédible.
+**Le disque sort de la boîte en roulant (1.21.0).** À l'ouverture de la
+fiche, le disque sort du boîtier en roulant pour de vrai : sa rotation suit la
+distance parcourue, comme une roue (240 px pour un rayon de 174 px = 79°,
+même durée et même courbe que le glissement, léger rebond compris). Puis il
+tourne lentement, dans le sens inverse des aiguilles d'une montre, comme un
+vrai disque vu côté étiquette. Il **rentre en roulant** quand tu lances la
+lecture, **ressort** au retour de la lecture, et rentre à la fermeture de la
+fiche. Le reflet de lumière, lui, reste fixe pendant que le disque tourne.
 
-- **Rond imprimé** du vrai Blu-ray quand fanart.tv en a un (films) ;
+- **Rond imprimé** : `disc.png` du dossier du film s'il existe, sinon celui
+  de fanart.tv ;
 - sinon, **disque dessiné à partir de l'affiche** : zone imprimée, moyeu en
   plastique transparent, trou central, tranche (séries comprises).
 
 **Le logo du titre** (titre détouré) remplace le texte en haut à gauche de la
-fiche, comme avant, mais il est maintenant trouvé bien plus souvent, et **en
-français d'abord** : le serveur ne se contente plus du logo de Radarr/Sonarr.
+fiche : `clearlogo.png` du dossier d'abord, sinon fanart.tv / TMDB, **en
+français d'abord**.
 
-**D'où viennent les images ?** Du serveur ArrMada, qui les récupère sur
-fanart.tv (logos HD, disques, clearart, bannières) et TMDB (logos) :
+**D'où viennent les images ?** Du serveur ArrMada, de trois sources, de la
+plus prioritaire à la moins :
 
-- **web app → Médiathèque → bouton « Artworks »** : *Récupérer les
-  manquants* (toute la médiathèque, en arrière-plan sur le serveur, avec la
-  progression) ou *Tout redemander* ;
-- **tâche quotidienne** : les nouveaux titres ont leurs artworks sans clic
-  (`ARTWORK_AUTO_ENABLED`, `ARTWORK_AUTO_INTERVAL_HOURS`) ;
-- **web app → fiche d'un titre → onglet « Artworks »** : le même boîtier et
-  son disque, toutes les images du titre et *Actualiser les artworks*.
+1. **les dossiers des médias** (rien à configurer, `ARTWORK_LOCAL_ENABLED=true`
+   par défaut) : `poster.jpg`, `fanart.jpg`, `clearlogo.png`, `disc.png`,
+   `clearart.png`, `banner.jpg`, `landscape.jpg`, `characterart.png`,
+   `seasonNN-poster.jpg`, `extrafanart/`… (noms Kodi, Jellyfin,
+   tinyMediaManager). Ce sont tes images : elles passent devant ;
+2. **fanart.tv** : toutes les variantes (logos HD, disques, clearart,
+   bannières, vignettes, affiches, fonds, personnages et saisons des séries).
+   Clé **personnelle** d'un compte gratuit (`FANART_CLIENT_KEY`), qui suffit
+   seule ;
+3. **TMDB** (`TMDB_API_KEY`, déjà utilisée par « Pour toi ») : logos,
+   affiches, fonds.
+
+Côté web app :
+
+- **Médiathèque → bouton « Artworks »** : *Récupérer les manquants* (toute
+  la médiathèque, en arrière-plan sur le serveur, avec la progression) ou
+  *Tout redemander* ; une **tâche quotidienne** fait la même chose pour les
+  nouveaux titres (`ARTWORK_AUTO_ENABLED`, `ARTWORK_AUTO_INTERVAL_HOURS`) ;
+- **fiche d'un titre, en haut** : le vrai boîtier remplace l'affiche. À
+  l'ouverture, la façade pivote sur sa charnière (en 3D), le disque arrive en
+  roulant et se pose sur le moyeu, puis le boîtier se referme ; un clic
+  l'ouvre / le referme (le disque tourne dedans). Sur la web app le disque
+  **rentre** dans le boîtier, sur la TV il **sort** : les deux variantes ;
+- **fiche → onglet « Artworks »** : **toutes** les images du titre, groupées
+  par type, avec leur source (Dossier, fanart.tv, TMDB, Radarr / Sonarr), la
+  langue et les « j'aime » ; filtre par source, clic = image en grand,
+  *Actualiser les artworks* pour ce titre.
 
 La TV ne parle jamais à fanart.tv ou TMDB pour savoir quoi afficher : elle
 reçoit les adresses des images avec la médiathèque et la fiche, comme
@@ -950,19 +974,34 @@ l'affiche. Les rangées et les listes du plugin portent aussi l'image
 
 > Analogie : c'est un cache de métadonnées en amont, comme un dépôt miroir
 > (Satellite / Pulp) : le serveur va chercher une fois chez les fournisseurs,
-> les TV ne lisent que le miroir local.
+> les TV ne lisent que le miroir local. Les images des dossiers sont servies
+> par ArrMada avec une **adresse signée**, comme une URL pré-signée S3 : le
+> serveur ne sert que ce qu'il a lui-même signé, uniquement dans les dossiers
+> des médias et en réseau local. Il renvoie une adresse relative
+> (`/api/artwork/local/…`) que la TV et la web app complètent avec l'adresse
+> du serveur qu'elles utilisent.
 
 > Pièges :
-> - **sans `FANART_API_KEY`** (clé personnelle gratuite sur fanart.tv, à
->   mettre dans le `.env` du serveur puis redémarrer), pas de rond imprimé :
->   le disque est dessiné avec l'affiche, et les logos viennent de TMDB
->   seulement. Le bouton « Artworks » le signale ;
+> - **une variable du `.env` n'arrive dans le conteneur que si
+>   `docker-compose.yml` la liste** : c'est le cas depuis la 1.21.0 pour
+>   `FANART_CLIENT_KEY`, `FANART_API_KEY`, `ARTWORK_*` et `AUTO_IMPORT_*`
+>   (en 1.20, la clé fanart.tv était ignorée). Après modification du `.env` :
+>   `./deploy.sh --backend` ;
+> - **sans clé fanart.tv**, seulement les images des dossiers, de TMDB et de
+>   Radarr/Sonarr : le bouton « Artworks » et l'onglet le signalent ;
+> - **Unraid** : la lecture des dossiers peut réveiller des disques en veille
+>   (une fois par titre, puis tous les 30 jours) ; la première récupération
+>   complète est plus longue ;
+> - les chemins Radarr/Sonarr sont traduits comme pour les NFO
+>   (`/media` → `/mnt/user/medias/movies` pour Radarr…) : un dossier hors de
+>   ces racines n'est pas lu ;
 > - les logos SVG de TMDB sont ignorés : Kodi ne sait pas les afficher ;
 > - un titre déjà interrogé n'est redemandé qu'au bout de 30 jours (7 si rien
->   n'avait été trouvé) : pour un titre précis, utilise *Actualiser les
->   artworks* dans sa fiche web, ou *Tout redemander* ;
-> - l'affiche et le fond choisis dans Radarr/Sonarr restent prioritaires : les
->   artworks ne font que combler ce qui manque (sauf le logo, français d'abord).
+>   n'avait été trouvé) : pour un titre précis, *Actualiser les artworks* dans
+>   sa fiche web, ou *Tout redemander* ;
+> - l'affiche et le fond choisis dans Radarr/Sonarr restent ceux de la fiche
+>   et des rangées (ceux du dossier et des sites ne font que combler un
+>   manque) ; toutes les variantes restent visibles dans l'onglet Artworks.
 
 ## 🚀 Installation dans Kodi
 

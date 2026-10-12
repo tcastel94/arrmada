@@ -1,31 +1,31 @@
 "use client";
 
 /**
- * Disque Blu-ray / DVD d'un titre, et le vrai boîtier dont il sort (façon
- * Aeon Nox, le même rendu que la fiche de l'appli Kodi).
+ * Le vrai boîtier Blu-ray / 4K / DVD d'un titre, qui s'ouvre, et son disque
+ * (façon Aeon Nox, le même rendu que la fiche de l'appli Kodi).
  * ----------------------------------------------------------------
- * - `DiscArt` : le rond imprimé du disque (fanart.tv, PNG transparent) ou, à
- *   défaut, un disque dessiné à partir de l'affiche : image recadrée en
- *   cercle, trou central percé par un masque CSS, anneau transparent du moyeu
- *   et micro-sillons. Le reflet de lumière reste FIXE pendant que le disque
- *   tourne (la lampe ne tourne pas avec lui) : c'est ce qui fait « vrai ».
- * - `DiscCase` : un vrai boîtier, l'affiche glissée dessous comme une jaquette.
- *   Les couches, de bas en haut (mêmes valeurs que la texture Kodi générée par
- *   kodi-addon/tools/make_textures.py) :
- *     1. plastique teinté (bleu Blu-ray, noir 4K / DVD, transparent sans fichier) ;
- *     2. bandeau du format (« Blu-ray Disc », « 4K ULTRA HD » + Blu-ray Disc) ;
- *     3. jaquette = l'affiche, recadrée au centre (un Blu-ray est plus large
- *        qu'une affiche) ;
- *     4. charnière à gauche (la jaquette s'enroule autour du dos), ombre
- *        intérieure du film qui la plaque, reflet du film en diagonale.
- *   Proportions : Blu-ray 392 × 530 (un vrai fait 135 × 171,5 mm, un poil plus
- *   large : on recadre moins l'affiche), DVD plus haut 392 × 552, sans bandeau.
+ * - `DiscArt` : le rond imprimé du disque (fanart.tv ou disc.png du dossier,
+ *   PNG transparent) ou, à défaut, un disque dessiné à partir de l'affiche :
+ *   image recadrée en cercle, trou central percé par un masque CSS, anneau
+ *   transparent du moyeu et micro-sillons. Le reflet de lumière reste FIXE
+ *   pendant que le disque tourne (la lampe ne tourne pas avec lui).
+ * - `BluRayCase` : la façade du boîtier, l'affiche glissée dessous comme une
+ *   jaquette. Couches, de bas en haut (mêmes valeurs que la texture Kodi de
+ *   kodi-addon/tools/make_textures.py) : plastique teinté, bandeau du format,
+ *   jaquette recadrée au centre, charnière à gauche, film transparent.
+ * - `CaseTray` : l'intérieur du boîtier ouvert (plateau, picots du moyeu).
+ * - `OpeningCase` : le tout en 3D. À l'ouverture de la fiche, la façade
+ *   pivote sur sa charnière (comme une porte qui s'entrouvre vers toi), le
+ *   disque arrive en roulant et se pose sur le moyeu, puis le boîtier se
+ *   referme. Un clic l'ouvre / le referme (disque qui tourne dedans).
  *
- * Accessibilité : décoratif (aria-hidden), sauf l'affiche et le bouton
- * sortir / ranger. « Réduire les animations » : le disque sort sans rotation.
+ * Proportions : Blu-ray 392 × 530 (un vrai fait 135 × 171,5 mm, un poil plus
+ * large : on recadre moins l'affiche), DVD plus haut 392 × 552, sans bandeau.
+ * Accessibilité : décoratif sauf le bouton ouvrir / fermer ; « Réduire les
+ * animations » : pas d'introduction, ouverture instantanée, disque immobile.
  */
 /* eslint-disable @next/next/no-img-element */
-import { useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
@@ -50,17 +50,39 @@ const HINGE = 30; // charnière, côté gauche
 type CaseStyle = {
     /** Hauteur de la texture Kodi (le ratio du boîtier). */
     height: number;
-    /** Plastique teinté du boîtier. */
+    /** Plastique teinté du boîtier (façade). */
     plastic: string;
+    /** Plastique de l'intérieur (plateau), plus opaque. */
+    tray: string;
     /** Bandeau du haut (dégradé), ou rien (DVD, sans fichier). */
     banner: string | null;
 };
 
 const CASE_STYLE: Record<CaseFormat, CaseStyle> = {
-    bluray: { height: 530, plastic: "rgb(14 91 200 / 0.9)", banner: "linear-gradient(#2D84EA, #0A4AA2)" },
-    uhd: { height: 530, plastic: "rgb(10 11 13 / 0.94)", banner: "linear-gradient(#2A2C31, #040405)" },
-    dvd: { height: 552, plastic: "rgb(10 11 13 / 0.94)", banner: null },
-    none: { height: 530, plastic: "rgb(201 211 226 / 0.22)", banner: null },
+    bluray: {
+        height: 530,
+        plastic: "rgb(14 91 200 / 0.9)",
+        tray: "linear-gradient(160deg, #1663CF, #0B3F8F)",
+        banner: "linear-gradient(#2D84EA, #0A4AA2)",
+    },
+    uhd: {
+        height: 530,
+        plastic: "rgb(10 11 13 / 0.94)",
+        tray: "linear-gradient(160deg, #1D1F24, #07080A)",
+        banner: "linear-gradient(#2A2C31, #040405)",
+    },
+    dvd: {
+        height: 552,
+        plastic: "rgb(10 11 13 / 0.94)",
+        tray: "linear-gradient(160deg, #1D1F24, #07080A)",
+        banner: null,
+    },
+    none: {
+        height: 530,
+        plastic: "rgb(201 211 226 / 0.22)",
+        tray: "linear-gradient(160deg, rgb(201 211 226 / 0.25), rgb(120 130 150 / 0.2))",
+        banner: null,
+    },
 };
 
 /** Charnière : jaquette assombrie vers le dos, arête claire, gorge et son reflet. */
@@ -79,13 +101,16 @@ const SLEEVE_BG = [
 /** Masque : disque plein, trou central transparent (≈ 15 mm sur 120 mm). */
 const HOLE_MASK = "radial-gradient(circle at center, transparent 0 7.5%, #000 8%)";
 
+/** Diamètre du disque / largeur du boîtier (120 mm pour 135 mm). */
+const DISC_RATIO = 0.88;
+
 export function DiscArt({
     discart,
     fallback,
     spinning = false,
     className,
 }: {
-    /** Rond imprimé fanart.tv (déjà circulaire, fond transparent). */
+    /** Rond imprimé (fanart.tv ou disc.png du dossier : déjà circulaire, fond transparent). */
     discart?: string | null;
     /** Affiche / fond utilisé pour dessiner le disque s'il n'y a pas de rond imprimé. */
     fallback?: string | null;
@@ -100,9 +125,11 @@ export function DiscArt({
         <div aria-hidden className={cn("relative aspect-square", className)}>
             {/* Ombre portée (immobile) */}
             <div className="absolute inset-[3%] translate-y-[3%] rounded-full bg-black/60 blur-xl" />
+            {/* Sens inverse des aiguilles d'une montre : un disque vu côté
+                étiquette, et le même sens que quand il roule vers la gauche */}
             <motion.div
                 className="absolute inset-0"
-                animate={spinning && !reduce ? { rotate: 360 } : { rotate: 0 }}
+                animate={spinning && !reduce ? { rotate: -360 } : { rotate: 0 }}
                 transition={spinning && !reduce ? { duration: 14, repeat: Infinity, ease: "linear" } : { duration: 0.6 }}
             >
                 {useDisc ? (
@@ -154,18 +181,21 @@ export function DiscArt({
 }
 
 /**
- * Le boîtier seul : plastique, bandeau, jaquette (affiche), charnière, film.
+ * La façade du boîtier : plastique, bandeau, jaquette (affiche), charnière, film.
  * Prend toute la largeur de son parent ; la hauteur suit le format.
  */
 export function BluRayCase({
     poster,
     format,
     title,
+    shadow = true,
     className,
 }: {
     poster?: string | null;
     format: CaseFormat;
     title: string;
+    /** Ombre portée sous le boîtier (désactivée quand la façade pivote en 3D). */
+    shadow?: boolean;
     className?: string;
 }) {
     const style = CASE_STYLE[format];
@@ -182,8 +212,9 @@ export function BluRayCase({
             className={cn("relative", className)}
             style={{ aspectRatio: `${CASE_W} / ${h}`, containerType: "inline-size" } as CSSProperties}
         >
-            {/* Ombre portée sous le boîtier */}
-            <div aria-hidden className="absolute inset-x-[3%] bottom-[-2%] top-[3%] rounded-[14px] bg-black/75 blur-2xl" />
+            {shadow && (
+                <div aria-hidden className="absolute inset-x-[3%] bottom-[-2%] top-[3%] rounded-[14px] bg-black/75 blur-2xl" />
+            )}
 
             {/* 1. Plastique teinté, arête claire */}
             <div
@@ -204,7 +235,7 @@ export function BluRayCase({
                 {style.banner && (
                     <div
                         aria-hidden
-                        className="relative z-10 flex items-center font-bold text-white shadow-[0_3px_6px_rgb(0_0_0/0.45)]"
+                        className="relative z-10 flex items-center font-bold text-white"
                         style={{
                             height: `${bannerPct}%`,
                             background: style.banner,
@@ -262,11 +293,70 @@ export function BluRayCase({
 }
 
 /**
- * Boîtier + disque qui en sort. Le disque sort vers la droite au montage
- * (≈ 60 % de sa largeur), tourne, et le bouton permet de le ranger / le
- * ressortir.
+ * L'intérieur du boîtier (visible quand la façade s'ouvre) : plateau moulé,
+ * picots du moyeu qui tiennent le disque, logo en relief en bas.
  */
-export function DiscCase({
+export function CaseTray({ format, className }: { format: CaseFormat; className?: string }) {
+    const style = CASE_STYLE[format];
+    return (
+        <div
+            aria-hidden
+            className={cn("relative overflow-hidden rounded-[10px]", className)}
+            style={{
+                aspectRatio: `${CASE_W} / ${style.height}`,
+                background: style.tray,
+                boxShadow: "inset 0 0 0 1px rgb(255 255 255 / 0.2), inset 0 0 24px rgb(0 0 0 / 0.55)",
+                containerType: "inline-size",
+            } as CSSProperties}
+        >
+            {/* Plateau moulé (léger creux) */}
+            <div className="absolute inset-[4%] rounded-[8px] bg-black/25 shadow-[inset_0_2px_10px_rgb(0_0_0/0.6)]" />
+            {/* Logement du disque */}
+            <div
+                className="absolute left-1/2 top-1/2 aspect-square -translate-x-1/2 -translate-y-1/2 rounded-full"
+                style={{
+                    width: `${DISC_RATIO * 100 + 2}%`,
+                    background: "radial-gradient(circle, transparent 66%, rgb(0 0 0 / 0.35) 70%, transparent 71%)",
+                    boxShadow: "inset 0 0 18px rgb(0 0 0 / 0.5)",
+                }}
+            />
+            {/* Picots du moyeu (couronne crantée) + bouton central */}
+            <div
+                className="absolute left-1/2 top-1/2 aspect-square w-[30%] -translate-x-1/2 -translate-y-1/2 rounded-full"
+                style={{
+                    background:
+                        "repeating-conic-gradient(rgb(255 255 255 / 0.32) 0 9deg, rgb(0 0 0 / 0.25) 9deg 22.5deg)",
+                    maskImage: "radial-gradient(circle, transparent 0 48%, #000 50% 70%, transparent 72%)",
+                    WebkitMaskImage: "radial-gradient(circle, transparent 0 48%, #000 50% 70%, transparent 72%)",
+                }}
+            />
+            <div className="absolute left-1/2 top-1/2 aspect-square w-[12%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-br from-white/40 to-black/40 ring-1 ring-white/30" />
+            {/* Logo en relief, en bas du plateau */}
+            {format !== "none" && (
+                <span
+                    className="absolute inset-x-0 bottom-[6%] text-center font-bold text-white/25 [text-shadow:0_-1px_0_rgb(0_0_0/0.4)]"
+                    style={{ fontSize: "4.2cqw" }}
+                >
+                    {format === "dvd" ? "DVD" : "Blu-ray Disc"}
+                </span>
+            )}
+        </div>
+    );
+}
+
+/**
+ * Boîtier en 3D qui s'ouvre, avec le disque qui rentre dedans en roulant.
+ *
+ * Déroulé à l'arrivée sur la fiche (≈ 2,6 s) : la façade s'entrouvre sur sa
+ * charnière, le disque arrive de la droite en roulant (sa rotation suit la
+ * distance parcourue, comme une vraie roue), se pose sur le moyeu, puis le
+ * boîtier se referme. Ensuite, un clic ouvre / referme ; ouvert, le disque
+ * tourne dans son plateau.
+ *
+ * Analogie : trois calques empilés (plateau, disque, façade) ; seule la
+ * façade tourne autour de son bord gauche, comme une porte sur ses gonds.
+ */
+export function OpeningCase({
     poster,
     discart,
     format,
@@ -280,34 +370,88 @@ export function DiscCase({
     className?: string;
 }) {
     const reduce = useReducedMotion();
-    const [out, setOut] = useState(true);
+    const [open, setOpen] = useState(false);
+    // Disque dans son plateau ? (faux au début : il arrive pendant l'introduction)
+    const [discIn, setDiscIn] = useState(!!reduce);
+    const [busy, setBusy] = useState(!reduce);
+
+    useEffect(() => {
+        if (reduce) {
+            setDiscIn(true);
+            setBusy(false);
+            return;
+        }
+        const timers = [
+            window.setTimeout(() => setOpen(true), 350), // la façade s'entrouvre
+            window.setTimeout(() => setDiscIn(true), 850), // le disque arrive en roulant
+            window.setTimeout(() => setOpen(false), 2350), // le boîtier se referme
+            window.setTimeout(() => setBusy(false), 3000),
+        ];
+        return () => timers.forEach(window.clearTimeout);
+    }, [reduce]);
+
+    // Rouler sans glisser : angle (rad) = distance / rayon. Le disque part à
+    // 75 % de son diamètre à droite → 0,75 D / 0,5 D = 1,5 rad ≈ 86°.
+    const ROLL_FROM = 0.75;
+    const ROLL_DEG = Math.round(((ROLL_FROM * 2) * 180) / Math.PI);
 
     return (
         <div className={cn("relative", className)}>
-            {/* Le boîtier prend 64 % de la largeur : le reste accueille le disque sorti */}
-            <div className="relative mr-[36%]">
-                {/* Disque : derrière le boîtier, glisse vers la droite. Diamètre
-                    = 88 % de la largeur du boîtier (120 mm pour 135 mm en vrai). */}
-                <motion.div
-                    className="absolute left-[6%] top-1/2 w-[88%]"
-                    style={{ y: "-50%" }}
-                    initial={{ x: "0%" }}
-                    animate={{ x: out ? "62%" : "0%" }}
-                    transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 70, damping: 16, delay: out ? 0.35 : 0 }}
-                >
-                    <DiscArt discart={discart} fallback={poster} spinning={out} className="w-full" />
-                </motion.div>
-
-                <BluRayCase poster={poster} format={format} title={title} />
-            </div>
-
             <button
                 type="button"
-                onClick={() => setOut((v) => !v)}
-                className="mt-3 text-xs font-medium text-primary hover:underline"
+                onClick={() => !busy && setOpen((v) => !v)}
+                aria-pressed={open}
+                aria-label={open ? `Fermer le boîtier de ${title}` : `Ouvrir le boîtier de ${title}`}
+                className="group relative block w-full rounded-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                style={{ perspective: 1300, perspectiveOrigin: "50% 45%" }}
             >
-                {out ? "Ranger le disque" : "Sortir le disque"}
+                {/* Ombre portée (immobile, sous les trois calques) */}
+                <div aria-hidden className="absolute inset-x-[3%] bottom-[-2%] top-[3%] rounded-[14px] bg-black/75 blur-2xl" />
+
+                <div className="relative" style={{ transformStyle: "preserve-3d" }}>
+                    {/* 1. Intérieur du boîtier (légèrement en retrait : jamais devant la façade) */}
+                    <div style={{ transform: "translateZ(-2px)" }}>
+                        <CaseTray format={format} className="w-full" />
+                    </div>
+
+                    {/* 2. Disque, posé sur le moyeu (ou en route vers lui) */}
+                    <motion.div
+                        className="absolute top-1/2"
+                        style={{ left: `${((1 - DISC_RATIO) / 2) * 100}%`, width: `${DISC_RATIO * 100}%`, y: "-50%", z: -1 }}
+                        initial={false}
+                        animate={
+                            discIn
+                                ? { x: "0%", rotate: 0, opacity: 1 }
+                                : { x: `${ROLL_FROM * 100}%`, rotate: ROLL_DEG, opacity: 0 }
+                        }
+                        transition={
+                            reduce
+                                ? { duration: 0 }
+                                : {
+                                      x: { duration: 1.15, ease: [0.22, 1, 0.36, 1] },
+                                      rotate: { duration: 1.15, ease: [0.22, 1, 0.36, 1] },
+                                      opacity: { duration: 0.35 },
+                                  }
+                        }
+                    >
+                        <DiscArt discart={discart} fallback={poster} spinning={open && discIn && !busy} className="w-full" />
+                    </motion.div>
+
+                    {/* 3. Façade : pivote sur sa charnière (bord gauche), vers toi */}
+                    <motion.div
+                        className="absolute inset-0"
+                        style={{ transformOrigin: "left center", transformStyle: "preserve-3d", backfaceVisibility: "hidden" }}
+                        initial={false}
+                        animate={{ rotateY: open ? -76 : 0 }}
+                        transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 60, damping: 14 }}
+                    >
+                        <BluRayCase poster={poster} format={format} title={title} shadow={false} />
+                    </motion.div>
+                </div>
             </button>
+            <p className="mt-3 text-center text-[11px] font-medium text-muted-foreground">
+                {open ? "Clique pour refermer le boîtier" : "Clique sur le boîtier pour l'ouvrir"}
+            </p>
         </div>
     );
 }

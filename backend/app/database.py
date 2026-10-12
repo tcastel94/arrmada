@@ -72,6 +72,9 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("devices", "kiosk_host", "VARCHAR(255)"),
     ("devices", "kiosk_port", "INTEGER NOT NULL DEFAULT 2323"),
     ("devices", "kiosk_password", "VARCHAR(500)"),
+    # Artworks : toutes les images d'un titre (galerie de l'onglet Artworks)
+    ("media_artwork", "gallery", "JSON"),
+    ("media_artwork", "gallery_count", "INTEGER NOT NULL DEFAULT 0"),
 )
 
 
