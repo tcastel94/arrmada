@@ -109,7 +109,8 @@ def bar_texture(pct: Any) -> str:
 
 
 # Boîtier de la fiche (disque qui en sort) : couleur et bandeau d'après le fichier
-CASE_LABELS = {"uhd": "4K ULTRA HD", "bluray": "BLU-RAY", "dvd": "DVD"}
+# Texte du bandeau du boîtier (le DVD n'a pas de bandeau : libellé informatif)
+CASE_LABELS = {"uhd": "4K ULTRA HD", "bluray": "Blu-ray Disc", "dvd": "DVD"}
 
 
 def case_format(tech: dict, has_file: bool) -> str:

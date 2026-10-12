@@ -351,7 +351,7 @@ if shows and movies:
     wait(1.5)
 
     # Film sans rond imprimé (1.20.0) : disque dessiné à partir de l'affiche,
-    # boîtier BLU-RAY (fichier 1080p). Le retour du disque à la fermeture
+    # boîtier Blu-ray bleu (fichier 1080p). Le retour du disque à la fermeture
     # n'est pas capturable (la capture part après la fermeture) : il est
     # vérifié par tests/test_windows_xml.py.
     run_plugin("detail&kind=movie&arr_id=105&title=Anatomie%20d%27une%20chute&year=2023")

@@ -275,8 +275,45 @@ def test_detail_disc_comes_out_and_goes_back_in() -> None:
     shine = [c for c in images if "disc-shine" in (c.findtext("texture") or "")]
     assert shine and not shine[0].findall("animation"), "le reflet ne tourne pas"
 
-    # Le disque est déclaré avant le plastique du boîtier → caché derrière lui
+    # Le disque est déclaré avant les boîtiers → caché derrière eux
     xml = _xml_path("detail").read_text(encoding="utf-8")
-    assert xml.index("disc-shadow.png") < xml.index("case-insert-mask.png")
+    assert xml.index("disc-shadow.png") < min(
+        xml.index(f"case-{name}.png") for name in make_textures.CASES
+    )
     for case in ("uhd", "bluray", "dvd"):
         assert f"String.IsEqual(Window.Property(case_format),{case})" in xml
+
+
+def _rect(control: ET.Element) -> tuple[int, int, int, int]:
+    return tuple(int(control.findtext(k) or 0) for k in ("left", "top", "width", "height"))  # type: ignore[return-value]
+
+
+def test_detail_cases_fit_their_textures() -> None:
+    """Chaque boîtier (case-*.png) est posé à sa taille réelle, PAR-DESSUS
+    l'affiche, et l'affiche occupe exactement la jaquette prévue par le
+    générateur (sinon elle déborde du plastique ou laisse un trou)."""
+    root = ET.parse(_xml_path("detail")).getroot()
+    groups = {
+        name: group
+        for group in root.iter("control")
+        if group.get("type") == "group"
+        for name in make_textures.CASES
+        if any(
+            (c.findtext("texture") or "") == f"arrmada/case-{name}.png"
+            for c in group.findall("control")
+        )
+    }
+    assert set(groups) == set(make_textures.CASES), "un boîtier par format"
+    for name, group in groups.items():
+        children = group.findall("control")
+        overlay = next(
+            c for c in children if (c.findtext("texture") or "") == f"arrmada/case-{name}.png"
+        )
+        height = make_textures.CASES[name][0]
+        assert _rect(overlay) == (0, 0, make_textures.CASE_W, height), name
+        poster = next(
+            c for c in children if "Window.Property(poster)" in (c.findtext("texture") or "")
+        )
+        assert _rect(poster) == make_textures.case_window(name), name
+        assert children.index(poster) < children.index(overlay), f"{name} : boîtier sur l'affiche"
+        assert poster.findtext("aspectratio") == "scale", f"{name} : affiche recadrée, pas déformée"

@@ -1,21 +1,31 @@
 "use client";
 
 /**
- * Disque Blu-ray / DVD d'un titre, et le boîtier dont il sort.
+ * Disque Blu-ray / DVD d'un titre, et le vrai boîtier dont il sort (façon
+ * Aeon Nox, le même rendu que la fiche de l'appli Kodi).
  * ----------------------------------------------------------------
  * - `DiscArt` : le rond imprimé du disque (fanart.tv, PNG transparent) ou, à
  *   défaut, un disque dessiné à partir de l'affiche : image recadrée en
  *   cercle, trou central percé par un masque CSS, anneau transparent du moyeu
  *   et micro-sillons. Le reflet de lumière reste FIXE pendant que le disque
  *   tourne (la lampe ne tourne pas avec lui) : c'est ce qui fait « vrai ».
- * - `DiscCase` : boîtier (affiche + bandeau BLU-RAY / 4K ULTRA HD / DVD) et
- *   disque qui en sort au montage, tourne, et rentre / ressort au clic.
+ * - `DiscCase` : un vrai boîtier, l'affiche glissée dessous comme une jaquette.
+ *   Les couches, de bas en haut (mêmes valeurs que la texture Kodi générée par
+ *   kodi-addon/tools/make_textures.py) :
+ *     1. plastique teinté (bleu Blu-ray, noir 4K / DVD, transparent sans fichier) ;
+ *     2. bandeau du format (« Blu-ray Disc », « 4K ULTRA HD » + Blu-ray Disc) ;
+ *     3. jaquette = l'affiche, recadrée au centre (un Blu-ray est plus large
+ *        qu'une affiche) ;
+ *     4. charnière à gauche (la jaquette s'enroule autour du dos), ombre
+ *        intérieure du film qui la plaque, reflet du film en diagonale.
+ *   Proportions : Blu-ray 392 × 530 (un vrai fait 135 × 171,5 mm, un poil plus
+ *   large : on recadre moins l'affiche), DVD plus haut 392 × 552, sans bandeau.
  *
- * Accessibilité : décoratif (aria-hidden), sauf le bouton sortir / ranger.
- * « Réduire les animations » : le disque sort sans rotation.
+ * Accessibilité : décoratif (aria-hidden), sauf l'affiche et le bouton
+ * sortir / ranger. « Réduire les animations » : le disque sort sans rotation.
  */
 /* eslint-disable @next/next/no-img-element */
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
@@ -31,12 +41,40 @@ export function caseFormat(resolution: number | string | null | undefined, hasFi
     return "dvd";
 }
 
-const CASE_STYLE: Record<CaseFormat, { band: string; label: string; plastic: string }> = {
-    uhd: { band: "bg-black text-white", label: "4K ULTRA HD", plastic: "ring-black/80 bg-neutral-950" },
-    bluray: { band: "bg-[#0A5FC4] text-white", label: "BLU-RAY", plastic: "ring-[#0A5FC4]/70 bg-[#0B2E5C]" },
-    dvd: { band: "bg-neutral-800 text-white", label: "DVD", plastic: "ring-neutral-700 bg-neutral-900" },
-    none: { band: "", label: "", plastic: "ring-white/15 bg-neutral-900" },
+/* ─── Géométrie du boîtier (en px de la texture Kodi, convertis en %) ─── */
+const CASE_W = 392;
+const FRAME = 8; // plastique visible autour de la jaquette
+const BANNER = 56; // bandeau du format
+const HINGE = 30; // charnière, côté gauche
+
+type CaseStyle = {
+    /** Hauteur de la texture Kodi (le ratio du boîtier). */
+    height: number;
+    /** Plastique teinté du boîtier. */
+    plastic: string;
+    /** Bandeau du haut (dégradé), ou rien (DVD, sans fichier). */
+    banner: string | null;
 };
+
+const CASE_STYLE: Record<CaseFormat, CaseStyle> = {
+    bluray: { height: 530, plastic: "rgb(14 91 200 / 0.9)", banner: "linear-gradient(#2D84EA, #0A4AA2)" },
+    uhd: { height: 530, plastic: "rgb(10 11 13 / 0.94)", banner: "linear-gradient(#2A2C31, #040405)" },
+    dvd: { height: 552, plastic: "rgb(10 11 13 / 0.94)", banner: null },
+    none: { height: 530, plastic: "rgb(201 211 226 / 0.22)", banner: null },
+};
+
+/** Charnière : jaquette assombrie vers le dos, arête claire, gorge et son reflet. */
+const HINGE_BG = [
+    "linear-gradient(90deg, transparent 54%, rgb(0 0 0 / 0.45) 62%, transparent 68%, rgb(255 255 255 / 0.28) 71%, transparent 75%, transparent 88%, rgb(0 0 0 / 0.18) 92%, transparent 95%, rgb(255 255 255 / 0.1) 98%, transparent)",
+    "linear-gradient(90deg, transparent 2%, rgb(255 255 255 / 0.2) 8%, transparent 14%)",
+    "linear-gradient(90deg, rgb(0 0 0 / 0.45), transparent)",
+].join(", ");
+
+/** Film transparent : grand reflet en diagonale à bord net, bande fine derrière, voile. */
+const SLEEVE_BG = [
+    "linear-gradient(135deg, rgb(255 255 255 / 0.13), rgb(255 255 255 / 0.08) 22%, transparent 24.5%, transparent 26.5%, rgb(255 255 255 / 0.06) 27.5%, rgb(255 255 255 / 0.06) 29.5%, transparent 30.5%)",
+    "linear-gradient(rgb(255 255 255 / 0.035), rgb(255 255 255 / 0.035))",
+].join(", ");
 
 /** Masque : disque plein, trou central transparent (≈ 15 mm sur 120 mm). */
 const HOLE_MASK = "radial-gradient(circle at center, transparent 0 7.5%, #000 8%)";
@@ -116,9 +154,117 @@ export function DiscArt({
 }
 
 /**
- * Boîtier + disque qui en sort. `poster` remplit le boîtier ; le disque sort
- * vers la droite au montage (≈ 60 % de sa largeur), tourne, et le bouton
- * permet de le ranger / le ressortir.
+ * Le boîtier seul : plastique, bandeau, jaquette (affiche), charnière, film.
+ * Prend toute la largeur de son parent ; la hauteur suit le format.
+ */
+export function BluRayCase({
+    poster,
+    format,
+    title,
+    className,
+}: {
+    poster?: string | null;
+    format: CaseFormat;
+    title: string;
+    className?: string;
+}) {
+    const style = CASE_STYLE[format];
+    const h = style.height;
+    // Positions en % : horizontales sur la largeur, verticales sur la hauteur
+    const frameX = `${(FRAME / CASE_W) * 100}%`;
+    const frameY = `${(FRAME / h) * 100}%`;
+    const sleeveH = h - 2 * FRAME; // hauteur du film (bandeau + jaquette)
+    const bannerPct = style.banner ? (BANNER / sleeveH) * 100 : 0;
+    const hingePct = (HINGE / (CASE_W - 2 * FRAME)) * 100;
+
+    return (
+        <div
+            className={cn("relative", className)}
+            style={{ aspectRatio: `${CASE_W} / ${h}`, containerType: "inline-size" } as CSSProperties}
+        >
+            {/* Ombre portée sous le boîtier */}
+            <div aria-hidden className="absolute inset-x-[3%] bottom-[-2%] top-[3%] rounded-[14px] bg-black/75 blur-2xl" />
+
+            {/* 1. Plastique teinté, arête claire */}
+            <div
+                aria-hidden
+                className="absolute inset-0 rounded-[10px]"
+                style={{
+                    background: style.plastic,
+                    boxShadow: "inset 0 0 0 1px rgb(255 255 255 / 0.28), inset 0 0 0 2px rgb(0 0 0 / 0.2)",
+                }}
+            />
+
+            {/* Film transparent : bandeau + jaquette, puis charnière et reflets par-dessus */}
+            <div
+                className="absolute overflow-hidden rounded-[3px] shadow-[0_0_0_1px_rgb(0_0_0/0.35)]"
+                style={{ left: frameX, right: frameX, top: frameY, bottom: frameY }}
+            >
+                {/* 2. Bandeau du format */}
+                {style.banner && (
+                    <div
+                        aria-hidden
+                        className="relative z-10 flex items-center font-bold text-white shadow-[0_3px_6px_rgb(0_0_0/0.45)]"
+                        style={{
+                            height: `${bannerPct}%`,
+                            background: style.banner,
+                            boxShadow:
+                                format === "uhd"
+                                    ? "inset 0 1px 0 rgb(255 255 255 / 0.18), inset 0 -2px 0 #B4BAC2, 0 3px 6px rgb(0 0 0 / 0.45)"
+                                    : "inset 0 1px 0 rgb(255 255 255 / 0.4), inset 0 -2px 3px rgb(0 0 0 / 0.35), 0 3px 6px rgb(0 0 0 / 0.45)",
+                        }}
+                    >
+                        {format === "uhd" ? (
+                            <div className="flex w-full items-center justify-between px-[4.5%]">
+                                <span className="tracking-wide" style={{ fontSize: "6.6cqw" }}>
+                                    4K ULTRA HD
+                                </span>
+                                <span className="font-semibold opacity-90" style={{ fontSize: "3.4cqw" }}>
+                                    Blu-ray Disc
+                                </span>
+                            </div>
+                        ) : (
+                            <span
+                                className="w-full text-center [text-shadow:0_1px_2px_rgb(0_0_0/0.4)]"
+                                style={{ fontSize: "6.6cqw" }}
+                            >
+                                Blu-ray Disc
+                            </span>
+                        )}
+                    </div>
+                )}
+
+                {/* 3. Jaquette : l'affiche, recadrée au centre */}
+                <div className="absolute inset-x-0 bottom-0 bg-muted/40" style={{ top: `${bannerPct}%` }}>
+                    {poster && <img src={poster} alt={`Jaquette de ${title}`} className="h-full w-full object-cover" />}
+                </div>
+
+                {/* 4. Charnière (côté gauche, sur toute la hauteur du film) */}
+                <div
+                    aria-hidden
+                    className="pointer-events-none absolute inset-y-0 left-0 z-20"
+                    style={{ width: `${hingePct}%`, background: HINGE_BG }}
+                />
+                {/* Ombre intérieure du film qui plaque la jaquette */}
+                <div aria-hidden className="pointer-events-none absolute inset-0 z-20 shadow-[inset_0_0_10px_rgb(0_0_0/0.5)]" />
+                {/* Reflet du film en diagonale + arêtes claires (haut, droite) */}
+                <div
+                    aria-hidden
+                    className="pointer-events-none absolute inset-0 z-20"
+                    style={{
+                        background: SLEEVE_BG,
+                        boxShadow: "inset 0 1px 0 rgb(255 255 255 / 0.32), inset -1px 0 0 rgb(255 255 255 / 0.14)",
+                    }}
+                />
+            </div>
+        </div>
+    );
+}
+
+/**
+ * Boîtier + disque qui en sort. Le disque sort vers la droite au montage
+ * (≈ 60 % de sa largeur), tourne, et le bouton permet de le ranger / le
+ * ressortir.
  */
 export function DiscCase({
     poster,
@@ -135,7 +281,6 @@ export function DiscCase({
 }) {
     const reduce = useReducedMotion();
     const [out, setOut] = useState(true);
-    const style = CASE_STYLE[format];
 
     return (
         <div className={cn("relative", className)}>
@@ -153,29 +298,7 @@ export function DiscCase({
                     <DiscArt discart={discart} fallback={poster} spinning={out} className="w-full" />
                 </motion.div>
 
-                {/* Boîtier : plastique coloré, bandeau du format, affiche */}
-                <div
-                    className={cn(
-                        "relative aspect-[2/3] overflow-hidden rounded-[10px] p-[3.5%] shadow-[0_30px_70px_-20px_rgb(0_0_0/0.9)] ring-2",
-                        style.plastic,
-                    )}
-                >
-                    <div className="relative h-full w-full overflow-hidden rounded-[5px] bg-muted/40">
-                        {poster && <img src={poster} alt={`Affiche de ${title}`} className="h-full w-full object-cover" />}
-                        {format !== "none" && (
-                            <div
-                                className={cn(
-                                    "absolute inset-x-0 top-0 flex h-[7%] items-center justify-center text-[clamp(8px,1.6vw,13px)] font-black tracking-[0.25em]",
-                                    style.band,
-                                )}
-                            >
-                                {style.label}
-                            </div>
-                        )}
-                        {/* Reflet du film plastique */}
-                        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/15 via-transparent to-transparent" />
-                    </div>
-                </div>
+                <BluRayCase poster={poster} format={format} title={title} />
             </div>
 
             <button

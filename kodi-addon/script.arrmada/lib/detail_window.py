@@ -9,10 +9,12 @@ Ouverture en deux temps, sans jamais figer l'interface :
   2. un fil d'arrière-plan charge la fiche complète (Radarr/Sonarr + Bazarr :
      casting, fichier, notes, sous-titres, saisons) et complète l'écran.
 
-Boîtier et disque (1.20.0) : l'affiche est présentée dans un boîtier BLU-RAY /
-4K ULTRA HD / DVD (d'après le fichier) ; le disque, rond imprimé de fanart.tv
-ou dessiné à partir de l'affiche, en sort à l'ouverture, tourne, rentre quand
-on lance la lecture et à la fermeture (animations du XML, propriété disc_out).
+Boîtier et disque (1.20.0, façon Aeon Nox en 1.20.1) : l'affiche est la jaquette
+d'un vrai boîtier Blu-ray (bleu, bandeau « Blu-ray Disc »), 4K ULTRA HD (noir)
+ou DVD (noir, plus haut), d'après le fichier ; le disque, rond imprimé de
+fanart.tv ou dessiné à partir de l'affiche, en sort à l'ouverture, tourne,
+rentre quand on lance la lecture et à la fermeture (animations du XML,
+propriété disc_out).
 
 Actions (aucune n'est destructrice, ADR-003 décision 1) :
   Lire               film : médiathèque Kodi de cet appareil + préréglage Yamaha de
@@ -173,7 +175,7 @@ class DetailWindow(xbmcgui.WindowXML):
         for key in ("poster", "fanart", "clearlogo", "discart"):
             if model[key]:
                 self.setProperty(key, model[key])
-        # Boîtier : noir 4K ULTRA HD, bleu BLU-RAY, gris DVD, neutre sans fichier
+        # Boîtier : Blu-ray bleu, 4K ULTRA HD noir, DVD noir, transparent sans fichier
         self.setProperty("case_format", model["case_format"])
         self.setProperty("case_label", model["case_label"])
         if not self.getProperty("disc_out"):

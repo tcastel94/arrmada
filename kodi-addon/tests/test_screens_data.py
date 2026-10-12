@@ -228,7 +228,7 @@ class TestCaseAndDisc:
         latest_in_1080p = {"episode_number": 3, "has_file": True, "file": {"resolution": 1080}}
         series = dict(SERIES, seasons=[{"season_number": 1, "episodes": [latest_in_1080p]}])
         d = sd.build_detail(series, "series")
-        assert (d["case_format"], d["case_label"]) == ("bluray", "BLU-RAY")
+        assert (d["case_format"], d["case_label"]) == ("bluray", "Blu-ray Disc")
         assert d["discart"] == ""  # les séries n'ont pas de rond imprimé
 
 

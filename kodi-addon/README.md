@@ -890,17 +890,33 @@ la TV. Le serveur l'impose (comme le reste du périmètre TV) :
 >   à l'add-on de la TV. Ajouter l'instance ne lie pas la TV : il faut aussi
 >   l'appairer.
 
-### 26. 💿 Boîtier et disque dans la fiche, logos, artworks (1.20.0)
+### 26. 💿 Boîtier et disque dans la fiche, logos, artworks (1.20.0, boîtier réaliste en 1.20.1)
 
-**La fiche montre le film dans son boîtier.** L'affiche devient la jaquette
-d'un boîtier dont la couleur suit le fichier :
+**La fiche montre le film dans un vrai boîtier, façon Aeon Nox.** L'affiche est
+glissée sous le film plastique comme une jaquette ; le boîtier suit le fichier :
 
 | Fichier | Boîtier | Bandeau |
 |---|---|---|
-| 4K (2160p) | noir | 4K ULTRA HD |
-| 720p / 1080p | bleu | BLU-RAY |
-| SD (480p / 576p) | gris | DVD |
-| pas de fichier | neutre | aucun |
+| 4K (2160p) | noir | « 4K ULTRA HD » + « Blu-ray Disc » |
+| 720p / 1080p | bleu translucide | « Blu-ray Disc » |
+| SD (480p / 576p) | noir, plus haut (format DVD) | aucun |
+| pas de fichier | transparent, vide | aucun |
+
+Ce qui le rend crédible : les proportions d'un vrai boîtier, la charnière à
+gauche (la jaquette s'enroule autour du dos), le liseré du plastique, le film
+transparent avec son reflet en diagonale et l'ombre là où il plaque la
+jaquette. Un vrai Blu-ray est plus large qu'une affiche : l'affiche est
+recadrée au centre (le boîtier est un poil plus haut qu'un vrai pour en
+couper moins), jamais déformée.
+
+> Comment c'est fait : Kodi ne sait dessiner ni dégradé ni reflet, tout passe
+> par des images. Chaque boîtier est UNE image générée par
+> `tools/make_textures.py` (couleurs comprises, comme un calque PNG posé
+> par-dessus l'affiche) ; seul le texte du bandeau est un label. La web app
+> refait les mêmes calques en CSS. Pour retoucher un boîtier : modifier
+> `CASES` / `case_pixel` dans le générateur, relancer
+> `python3 kodi-addon/tools/make_textures.py`, puis les tests (ils vérifient
+> que l'affiche remplit exactement la fenêtre de la jaquette).
 
 **Le disque sort de la boîte.** À l'ouverture de la fiche, le disque glisse
 hors du boîtier (léger rebond) et tourne lentement. Il **rentre** quand tu

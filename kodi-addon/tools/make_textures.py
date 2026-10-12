@@ -10,7 +10,9 @@ Pourquoi un script plutôt que des images dessinées à la main ?
 
 Les textures sont BLANCHES : la couleur est appliquée dans le XML avec
 `colordiffuse="AARRGGBB"` (ex. accent #4A9EFF → FF4A9EFF). Une seule image
-sert donc pour toutes les couleurs.
+sert donc pour toutes les couleurs. Exceptions, en couleurs intégrées : les
+barres de progression des listes et les boîtiers Blu-ray / 4K / DVD de la
+fiche (plusieurs matières superposées : plastique, bandeau, charnière, reflet).
 
 Les images « 9-slice » (coins préservés, centre étiré) s'utilisent avec
 l'attribut `border` indiqué dans le tableau TEXTURES ci-dessous.
@@ -265,6 +267,152 @@ def disc_shadow() -> AlphaFn:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Boîtiers de la fiche (façon Aeon Nox) : un vrai boîtier posé sur la jaquette
+# ─────────────────────────────────────────────────────────────────────────────
+# L'affiche est dessinée DESSOUS (contrôle image à la place de la jaquette),
+# la texture du boîtier PAR-DESSUS : plastique teinté autour, bandeau du
+# format en haut, charnière à gauche (le plastique s'enroule autour du dos),
+# film transparent avec son reflet en diagonale et une ombre intérieure là où
+# il plaque la jaquette. Seul le texte du bandeau est un label Kodi.
+#
+# Proportions : un Blu-ray mesure 135 × 171,5 mm (0,79) ; on prend 0,74 pour
+# recadrer moins les affiches (2:3), sans que l'œil voie la différence. Un
+# DVD mesure 135 × 190 mm (0,71) : il est plus haut, sans bandeau.
+# Les tailles sont celles du XML (pas d'étirement : bords nets).
+CASE_W = 392
+CASE_FRAME = 8  # plastique visible autour de la jaquette
+CASE_RADIUS = 14  # coins du boîtier
+CASE_BANNER = 56  # bandeau « Blu-ray Disc » / « 4K ULTRA HD »
+CASE_HINGE = 30  # charnière, côté gauche
+
+Rgb = tuple[float, float, float]
+Rgba = tuple[float, float, float, float]
+
+
+def _hex(color: str) -> Rgb:
+    """« #0D5CCC » → (0.05, 0.36, 0.8)."""
+    return tuple(int(color[i : i + 2], 16) / 255 for i in (1, 3, 5))  # type: ignore[return-value]
+
+
+# nom → (hauteur, plastique, opacité du plastique, bandeau haut → bas ou None)
+CASES: dict[str, tuple[int, Rgb, float, tuple[Rgb, Rgb] | None]] = {
+    "bluray": (530, _hex("#0E5BC8"), 0.90, (_hex("#2D84EA"), _hex("#0A4AA2"))),
+    "uhd": (530, _hex("#0A0B0D"), 0.94, (_hex("#2A2C31"), _hex("#040405"))),
+    "dvd": (552, _hex("#0A0B0D"), 0.94, None),
+    "clear": (530, _hex("#C9D3E2"), 0.22, None),  # pas de fichier : boîtier vide
+}
+
+
+def case_window(name: str) -> tuple[int, int, int, int]:
+    """Rectangle de la jaquette (x, y, largeur, hauteur) dans le boîtier : le
+    XML y place l'affiche (tests/test_windows_xml.py vérifie qu'ils collent)."""
+    height, _plastic, _alpha, banner = CASES[name]
+    top = CASE_FRAME + (CASE_BANNER if banner else 0)
+    return CASE_FRAME, top, CASE_W - 2 * CASE_FRAME, height - CASE_FRAME - top
+
+
+def _over(dst: Rgba, rgb: Rgb, alpha: float) -> Rgba:
+    """Pose une couche (couleur, opacité) PAR-DESSUS `dst` (« over » classique)."""
+    if alpha <= 0:
+        return dst
+    r, g, b, a = dst
+    out = alpha + a * (1 - alpha)
+    keep = a * (1 - alpha)
+    return (
+        (rgb[0] * alpha + r * keep) / out,
+        (rgb[1] * alpha + g * keep) / out,
+        (rgb[2] * alpha + b * keep) / out,
+        out,
+    )
+
+
+def _line(x: float, at: float, width: float) -> float:
+    """Trait vertical doux (profil gaussien) centré sur `at`."""
+    return math.exp(-(((x - at) / width) ** 2))
+
+
+def case_pixel(name: str, x: float, y: float) -> Rgba:
+    """Couleur d'un pixel du boîtier `name` (couleur 0-1 + opacité)."""
+    height, plastic, plastic_alpha, banner = CASES[name]
+    w, f = CASE_W, CASE_FRAME
+    white, black = (1.0, 1.0, 1.0), (0.0, 0.0, 0.0)
+
+    edge = coverage(sd_round_rect(x, y, w / 2, height / 2, w / 2, height / 2, CASE_RADIUS))
+    if edge <= 0:
+        return (0.0, 0.0, 0.0, 0.0)
+    depth = -sd_round_rect(x, y, w / 2, height / 2, w / 2, height / 2, CASE_RADIUS)
+    sleeve = sd_round_rect(x, y, w / 2, height / 2, w / 2 - f, height / 2 - f, 3)
+    banner_end = f + CASE_BANNER if banner else f
+
+    px: Rgba = (0.0, 0.0, 0.0, 0.0)
+    if sleeve > 0:
+        # Bord de plastique : teinté, liseré clair sur l'arête, plus sombre vers la jaquette
+        px = _over(px, plastic, plastic_alpha)
+        px = _over(px, white, 0.30 * math.exp(-depth / 1.4))
+        px = _over(px, black, 0.35 * math.exp(-sleeve / 2.0))
+    else:
+        inside = -sleeve  # distance au bord de la jaquette
+        if banner and y < banner_end:
+            # Bandeau : dégradé vertical, fin liseré clair en haut, foncé en bas
+            top, bottom = banner
+            t = smoothstep((y - f) / CASE_BANNER)
+            px = _over(px, tuple(a + (b - a) * t for a, b in zip(top, bottom)), 1.0)  # type: ignore[arg-type]
+            px = _over(px, white, 0.40 * math.exp(-(y - f) / 1.2))
+            px = _over(px, black, 0.55 * math.exp(-(banner_end - y) / 1.5))
+            if name == "uhd":  # filet argenté sous le bandeau 4K
+                px = _over(px, _hex("#B4BAC2"), 0.85 * _line(y, banner_end - 2.5, 1.1))
+        else:
+            # Jaquette : ombre portée du bandeau et du film qui la plaque
+            px = _over(px, black, 0.50 * math.exp(-(y - banner_end) / 5.0) if banner else 0.0)
+        px = _over(px, black, 0.45 * math.exp(-inside / 4.5))
+        # Charnière : la jaquette s'enroule autour du dos (assombrie, arête qui
+        # accroche la lumière), puis la gorge de la charnière et son reflet
+        hinge = (x - f) / CASE_HINGE
+        if hinge < 1.3:
+            px = _over(px, black, 0.45 * (1 - smoothstep(hinge)))
+            px = _over(px, white, 0.20 * _line(x, f + 2.5, 1.6))
+            groove = f + 0.62 * CASE_HINGE
+            px = _over(px, black, 0.45 * _line(x, groove, 1.6))
+            px = _over(px, white, 0.28 * _line(x, groove + 2.6, 1.1))
+            px = _over(px, black, 0.18 * _line(x, f + 0.92 * CASE_HINGE, 1.2))
+            px = _over(px, white, 0.10 * _line(x, f + 0.92 * CASE_HINGE + 2.0, 1.0))
+        # Film transparent : grand reflet en diagonale (bord net) et une bande
+        # plus fine derrière, comme une vitre ; voile léger ; arêtes claires
+        diag = x / w * 0.75 + y / height
+        px = _over(px, white, 0.13 * (1 - smoothstep((diag - 0.42) / 0.035)) * (1 - 0.6 * diag))
+        band = smoothstep((diag - 0.47) / 0.02) * (1 - smoothstep((diag - 0.53) / 0.02))
+        px = _over(px, white, 0.06 * band)
+        px = _over(px, white, 0.035)
+        px = _over(px, white, 0.32 * math.exp(-(y - f) / 1.1))
+        px = _over(px, white, 0.14 * math.exp(-(w - f - x) / 1.6))
+    r, g, b, a = px
+    return (r, g, b, a * edge)
+
+
+def write_rgba(path: Path, width: int, height: int, pixel: Callable[[float, float], Rgba]) -> None:
+    """Écrit un PNG en couleurs (RGBA) ; filtre « Sub » par ligne : les dégradés
+    du boîtier se compressent bien mieux (le PNG reste léger dans le zip)."""
+    rows = bytearray()
+    for y in range(height):
+        line = bytearray()
+        for x in range(width):
+            r, g, b, a = pixel(x + 0.5, y + 0.5)
+            q = max(0, min(255, round(a * 255)))
+            # Pixel transparent : couleur à 0 (inutile, et ça compresse mieux)
+            rgb = (round(r * 255), round(g * 255), round(b * 255)) if q else (0, 0, 0)
+            line += bytes((*rgb, q))
+        rows.append(1)  # filtre « Sub » : chaque octet moins celui du pixel de gauche
+        rows += bytes((line[i] - (line[i - 4] if i >= 4 else 0)) & 0xFF for i in range(len(line)))
+    png = (
+        b"\x89PNG\r\n\x1a\n"
+        + _chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0))
+        + _chunk(b"IDAT", zlib.compress(bytes(rows), 9))
+        + _chunk(b"IEND", b"")
+    )
+    path.write_bytes(png)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Catalogue : nom → (largeur, hauteur, forme, usage / border à mettre en XML)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -296,13 +444,7 @@ TEXTURES: dict[str, tuple[int, int, AlphaFn, str]] = {
         ring(POSTER_W, POSTER_H, 14, 4),
         "anneau de focus des affiches (mêmes coins que le masque)",
     ),
-    # Fiche : boîtier Blu-ray / 4K / DVD et son disque
-    "case-insert-mask.png": (
-        360,
-        540,
-        round_rect(360, 540, 6),
-        "masque `diffuse` de la jaquette dans le boîtier (coins à peine arrondis)",
-    ),
+    # Fiche : le disque du boîtier (les boîtiers eux-mêmes : CASES, en couleurs)
     "disc-mask.png": (
         DISC,
         DISC * 3 // 2,
@@ -370,6 +512,10 @@ def main(out_dir: Path = OUT_DIR) -> None:
     for name, (w, h, fn, usage) in TEXTURES.items():
         write_png(out_dir / name, w, h, fn)
         print(f"  + {name:18} {w:>3}×{h:<3}  {usage}")
+    for name, (height, *_rest) in CASES.items():
+        path = out_dir / f"case-{name}.png"
+        write_rgba(path, CASE_W, height, lambda x, y, n=name: case_pixel(n, x, y))
+        print(f"  + {path.name:18} {CASE_W}×{height}  boîtier, jaquette {case_window(name)}")
     bars = out_dir / "progress"
     bars.mkdir(exist_ok=True)
     for pct in range(0, 101, BAR_STEP):
