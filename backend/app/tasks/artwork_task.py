@@ -33,7 +33,9 @@ def register(scheduler: AsyncIOScheduler) -> None:
         logger.info("artwork_refresh job NOT registered (ARTWORK_AUTO_ENABLED=false)")
         return
     if not any(artwork.sources_configured().values()):
-        logger.info("artwork_refresh job NOT registered (aucune source : fanart.tv, TMDB, dossiers)")
+        logger.info(
+            "artwork_refresh job NOT registered (aucune source : fanart.tv, TMDB, dossiers)"
+        )
         return
     hours = max(1, settings.ARTWORK_AUTO_INTERVAL_HOURS)
     scheduler.add_job(
