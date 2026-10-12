@@ -52,6 +52,7 @@ import {
 } from "lucide-react";
 import { Header } from "@/components/layout/header";
 import { PageContainer } from "@/components/shared/page-container";
+import { ArtworkRefreshButton } from "@/components/library/artwork-refresh-button";
 import { PageHeader, StatPill } from "@/components/shared/page-header";
 import { EmptyState, ErrorState } from "@/components/shared/empty-state";
 import { PosterGridSkeleton, Shimmer } from "@/components/shared/loading-skeleton";
@@ -460,11 +461,15 @@ function MediaLibrary() {
                     title="Médiathèque"
                     description="Tous tes films et séries, avec leur qualité, leurs sous-titres et ce que tu as déjà vu sur Kodi."
                     actions={
-                        <Button asChild>
-                            <Link href="/search">
-                                <Plus /> Ajouter un titre
-                            </Link>
-                        </Button>
+                        <div className="flex items-center gap-2">
+                            {/* Logos, disques, clearart (fanart.tv / TMDB, côté serveur) */}
+                            <ArtworkRefreshButton />
+                            <Button asChild>
+                                <Link href="/search">
+                                    <Plus /> Ajouter un titre
+                                </Link>
+                            </Button>
+                        </div>
                     }
                 >
                     <StatPill label="médias" value={<LiveCount value={facets?.total} />} icon={Library} tone="primary" />

@@ -182,6 +182,89 @@ def grad_v(h: int) -> AlphaFn:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Disque Blu-ray / DVD de la fiche (sort du boîtier et tourne)
+# ─────────────────────────────────────────────────────────────────────────────
+# Proportions d'un vrai disque de 120 mm, en fraction du rayon R :
+#   trou central 15 mm (0,125 R), moyeu transparent jusqu'à ~46 mm (0,38 R),
+#   anneau d'empilage vers 0,28 R, zone imprimée de 0,38 R au bord.
+DISC = 512
+DISC_HOLE, DISC_PRINT = 0.125, 0.38
+
+
+def _disc_radius(x: float, y: float) -> tuple[float, float]:
+    """(distance au centre en px, rayon R en px) pour une texture DISC × DISC."""
+    return math.hypot(x - DISC / 2, y - DISC / 2), DISC / 2 - 1
+
+
+def disc_print_mask() -> AlphaFn:
+    """Masque `diffuse` du disque dessiné, au format de l'AFFICHE (2:3).
+
+    Kodi applique le masque à l'image entière, AVANT tout recadrage
+    (aspectratio « scale ») : sur une affiche recadrée en carré, un masque
+    carré devient une ellipse coupée (disque aux bords plats). On garde donc
+    l'affiche entière (contrôle 2:3, sans recadrage) et le masque est 2:3 :
+    un cercle de la largeur de l'image, centré, zone imprimée seulement."""
+
+    def fn(x: float, y: float) -> float:
+        d = math.hypot(x - DISC / 2, y - DISC * 3 / 4)
+        r = DISC / 2 - 1
+        return min(coverage(d - r), coverage(DISC_PRINT * r - d))
+
+    return fn
+
+
+def disc_hub() -> AlphaFn:
+    """Moyeu en plastique transparent : voile léger, anneau d'empilage, bord du trou."""
+
+    def fn(x: float, y: float) -> float:
+        d, r = _disc_radius(x, y)
+        hub = min(coverage(d - DISC_PRINT * r), coverage(DISC_HOLE * r - d))
+        stack = min(coverage(d - 0.29 * r), coverage(0.27 * r - d))
+        hole_edge = min(coverage(d - 0.145 * r), coverage(DISC_HOLE * r - d))
+        return hub * max(0.30, 0.75 * stack, 0.85 * hole_edge)
+
+    return fn
+
+
+def disc_edge() -> AlphaFn:
+    """Tranche du disque (liseré extérieur) + bord de la zone imprimée."""
+
+    def fn(x: float, y: float) -> float:
+        d, r = _disc_radius(x, y)
+        rim = min(coverage(d - r), coverage(0.975 * r - d))
+        print_edge = min(coverage(d - (DISC_PRINT + 0.008) * r), coverage(DISC_PRINT * r - d))
+        return max(0.55 * rim, 0.35 * print_edge)
+
+    return fn
+
+
+def disc_shine() -> AlphaFn:
+    """Reflet de lumière FIXE (la lampe ne tourne pas avec le disque) : deux
+    pinceaux opposés à 45° et 225°, plus un voile très léger."""
+
+    def fn(x: float, y: float) -> float:
+        d, r = _disc_radius(x, y)
+        inside = min(coverage(d - r), coverage(DISC_HOLE * r - d))
+        if inside <= 0:
+            return 0.0
+        angle = math.degrees(math.atan2(y - DISC / 2, x - DISC / 2)) % 180  # deux pinceaux
+        beam = math.exp(-(((angle - 45) / 16) ** 2))
+        return inside * (0.05 + 0.33 * beam * (0.35 + 0.65 * d / r))
+
+    return fn
+
+
+def disc_shadow() -> AlphaFn:
+    """Ombre douce sous le disque sorti (disque flou)."""
+
+    def fn(x: float, y: float) -> float:
+        d = math.hypot(x - DISC / 2, y - DISC / 2) / (DISC / 2)
+        return 1.0 - smoothstep((d - 0.72) / 0.28)
+
+    return fn
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Catalogue : nom → (largeur, hauteur, forme, usage / border à mettre en XML)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -213,6 +296,23 @@ TEXTURES: dict[str, tuple[int, int, AlphaFn, str]] = {
         ring(POSTER_W, POSTER_H, 14, 4),
         "anneau de focus des affiches (mêmes coins que le masque)",
     ),
+    # Fiche : boîtier Blu-ray / 4K / DVD et son disque
+    "case-insert-mask.png": (
+        360,
+        540,
+        round_rect(360, 540, 6),
+        "masque `diffuse` de la jaquette dans le boîtier (coins à peine arrondis)",
+    ),
+    "disc-mask.png": (
+        DISC,
+        DISC * 3 // 2,
+        disc_print_mask(),
+        "masque `diffuse` du disque dessiné (format affiche 2:3)",
+    ),
+    "disc-hub.png": (DISC, DISC, disc_hub(), "moyeu transparent du disque"),
+    "disc-edge.png": (DISC, DISC, disc_edge(), "tranche du disque"),
+    "disc-shine.png": (DISC, DISC, disc_shine(), "reflet fixe sur le disque qui tourne"),
+    "disc-shadow.png": (256, 256, lambda x, y: disc_shadow()(x * 2, y * 2), "ombre du disque"),
 }
 
 

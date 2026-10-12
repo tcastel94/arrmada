@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.service import Service
+from app.services import artwork
 from app.services.bazarr import BazarrClient
 from app.services.encryption import decrypt_api_key
 from app.services.radarr import RadarrClient
@@ -142,6 +143,8 @@ async def get_movie_detail(
         await radarr.close()
 
     images = _extract_images(raw)
+    # Logo français, disque, clearart… (fanart.tv / TMDB, services/artwork.py)
+    images = await artwork.merge_detail_images(db, "movie", raw.get("tmdbId"), images)
     ratings = raw.get("ratings") or {}
 
     # File info
@@ -264,6 +267,7 @@ async def get_series_detail(
         await sonarr.close()
 
     images = _extract_images(raw)
+    images = await artwork.merge_detail_images(db, "series", raw.get("tvdbId"), images)
     ratings = raw.get("ratings") or {}
     stats = raw.get("statistics") or {}
 

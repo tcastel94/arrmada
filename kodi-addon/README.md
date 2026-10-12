@@ -890,6 +890,64 @@ la TV. Le serveur l'impose (comme le reste du périmètre TV) :
 >   à l'add-on de la TV. Ajouter l'instance ne lie pas la TV : il faut aussi
 >   l'appairer.
 
+### 26. 💿 Boîtier et disque dans la fiche, logos, artworks (1.20.0)
+
+**La fiche montre le film dans son boîtier.** L'affiche devient la jaquette
+d'un boîtier dont la couleur suit le fichier :
+
+| Fichier | Boîtier | Bandeau |
+|---|---|---|
+| 4K (2160p) | noir | 4K ULTRA HD |
+| 720p / 1080p | bleu | BLU-RAY |
+| SD (480p / 576p) | gris | DVD |
+| pas de fichier | neutre | aucun |
+
+**Le disque sort de la boîte.** À l'ouverture de la fiche, le disque glisse
+hors du boîtier (léger rebond) et tourne lentement. Il **rentre** quand tu
+lances la lecture, **ressort** au retour de la lecture, et rentre à la
+fermeture de la fiche. Le reflet de lumière, lui, reste fixe pendant que le
+disque tourne : c'est ce qui le rend crédible.
+
+- **Rond imprimé** du vrai Blu-ray quand fanart.tv en a un (films) ;
+- sinon, **disque dessiné à partir de l'affiche** : zone imprimée, moyeu en
+  plastique transparent, trou central, tranche (séries comprises).
+
+**Le logo du titre** (titre détouré) remplace le texte en haut à gauche de la
+fiche, comme avant, mais il est maintenant trouvé bien plus souvent, et **en
+français d'abord** : le serveur ne se contente plus du logo de Radarr/Sonarr.
+
+**D'où viennent les images ?** Du serveur ArrMada, qui les récupère sur
+fanart.tv (logos HD, disques, clearart, bannières) et TMDB (logos) :
+
+- **web app → Médiathèque → bouton « Artworks »** : *Récupérer les
+  manquants* (toute la médiathèque, en arrière-plan sur le serveur, avec la
+  progression) ou *Tout redemander* ;
+- **tâche quotidienne** : les nouveaux titres ont leurs artworks sans clic
+  (`ARTWORK_AUTO_ENABLED`, `ARTWORK_AUTO_INTERVAL_HOURS`) ;
+- **web app → fiche d'un titre → onglet « Artworks »** : le même boîtier et
+  son disque, toutes les images du titre et *Actualiser les artworks*.
+
+La TV ne parle jamais à fanart.tv ou TMDB pour savoir quoi afficher : elle
+reçoit les adresses des images avec la médiathèque et la fiche, comme
+l'affiche. Les rangées et les listes du plugin portent aussi l'image
+`discart` : les vues de SiLVO qui savent afficher un disque en profitent.
+
+> Analogie : c'est un cache de métadonnées en amont, comme un dépôt miroir
+> (Satellite / Pulp) : le serveur va chercher une fois chez les fournisseurs,
+> les TV ne lisent que le miroir local.
+
+> Pièges :
+> - **sans `FANART_API_KEY`** (clé personnelle gratuite sur fanart.tv, à
+>   mettre dans le `.env` du serveur puis redémarrer), pas de rond imprimé :
+>   le disque est dessiné avec l'affiche, et les logos viennent de TMDB
+>   seulement. Le bouton « Artworks » le signale ;
+> - les logos SVG de TMDB sont ignorés : Kodi ne sait pas les afficher ;
+> - un titre déjà interrogé n'est redemandé qu'au bout de 30 jours (7 si rien
+>   n'avait été trouvé) : pour un titre précis, utilise *Actualiser les
+>   artworks* dans sa fiche web, ou *Tout redemander* ;
+> - l'affiche et le fond choisis dans Radarr/Sonarr restent prioritaires : les
+>   artworks ne font que combler ce qui manque (sauf le logo, français d'abord).
+
 ## 🚀 Installation dans Kodi
 
 > ⚠️ **NVIDIA Shield (Kodi 21, Android)** : l'installation **par le dépôt** ferme

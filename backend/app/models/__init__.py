@@ -12,6 +12,7 @@ class Base(DeclarativeBase):
 # Import all models so they register with Base.metadata
 from app.models.activity import ActivityEvent  # noqa: E402, F401
 from app.models.analytics import AnalyticsSnapshot  # noqa: E402, F401
+from app.models.artwork import MediaArtwork  # noqa: E402, F401
 from app.models.cast import CastDevice  # noqa: E402, F401
 from app.models.device import Device  # noqa: E402, F401
 from app.models.duplicate import DuplicateGroup  # noqa: E402, F401
@@ -38,4 +39,5 @@ __all__ = [
     "CastDevice",
     "Device",
     "WatchState",
+    "MediaArtwork",
 ]

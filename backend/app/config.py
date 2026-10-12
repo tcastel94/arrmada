@@ -46,6 +46,17 @@ class Settings(BaseSettings):
     # ── TMDB ──────────────────────────────────────────────────
     TMDB_API_KEY: str = ""
 
+    # ── Artworks (logos, disques, clearart, bannières) ────────
+    # fanart.tv : logos HD, disques Blu-ray/DVD, clearart, bannières.
+    # Clé personnelle gratuite : https://fanart.tv/get-an-api-key/
+    # Sans elle : logos TMDB seulement (TMDB_API_KEY), et le disque de la
+    # fiche est dessiné à partir de l'affiche.
+    FANART_API_KEY: str = ""
+    # Récupère tout seul les artworks des nouveaux titres (toutes les N heures).
+    # Le bouton « Récupérer les artworks » de la web app reste disponible.
+    ARTWORK_AUTO_ENABLED: bool = True
+    ARTWORK_AUTO_INTERVAL_HOURS: int = 24
+
     # ── Unraid ────────────────────────────────────────────────
     UNRAID_URL: str = ""
     UNRAID_API_KEY: str = ""

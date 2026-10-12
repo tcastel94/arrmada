@@ -108,6 +108,22 @@ def bar_texture(pct: Any) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+# Boîtier de la fiche (disque qui en sort) : couleur et bandeau d'après le fichier
+CASE_LABELS = {"uhd": "4K ULTRA HD", "bluray": "BLU-RAY", "dvd": "DVD"}
+
+
+def case_format(tech: dict, has_file: bool) -> str:
+    """« uhd » (4K, boîtier noir), « bluray » (bleu), « dvd » (SD) ou « none » (pas de fichier)."""
+    if not has_file:
+        return "none"
+    badge = resolution_badge(tech)
+    if badge == "4K":
+        return "uhd"
+    if badge == "SD":
+        return "dvd"
+    return "bluray"  # 720p / 1080p, ou résolution inconnue d'un fichier présent
+
+
 def source_badge(quality: str) -> str:
     """« Remux », « Blu-ray », « WEB-DL »… d'après le nom de qualité *arr."""
     q = str(quality or "").lower()
@@ -294,6 +310,9 @@ def build_detail(detail: dict, kind: str) -> dict[str, Any]:
         subs = [s.strip() for s in str(file["subtitle_languages"]).split("/") if s.strip()]
     subtitles = ", ".join(subs) if subs else "aucun"
 
+    has_file = bool(detail.get("has_file")) if is_movie else bool(file)
+    case = case_format(tech, has_file)
+
     if is_movie:
         status = "Disponible" if detail.get("has_file") else "Manquant"
     else:
@@ -336,6 +355,10 @@ def build_detail(detail: dict, kind: str) -> dict[str, Any]:
         "poster": images.get("poster") or "",
         "fanart": images.get("fanart") or "",
         "clearlogo": images.get("clearlogo") or images.get("logo") or "",
+        # Rond imprimé du disque (fanart.tv) ; vide → disque dessiné avec l'affiche
+        "discart": images.get("discart") or "",
+        "case_format": case,
+        "case_label": CASE_LABELS.get(case, ""),
         "trailer": detail.get("youtube_trailer_id") or "",
         "tmdb_id": str(detail.get("tmdb_id") or "") if is_movie else "",
         "tvdb_id": "" if is_movie else str(detail.get("tvdb_id") or ""),

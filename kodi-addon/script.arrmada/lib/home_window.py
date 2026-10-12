@@ -362,6 +362,7 @@ class HomeWindow(xbmcgui.WindowXML):
                     "thumb": entry["poster"],
                     "fanart": entry["fanart"],
                     "clearlogo": entry["clearlogo"],
+                    "discart": entry.get("discart", ""),
                 }
             )
             # API Kodi 20+ (setInfo est déprécié) : le skin lit ces champs
@@ -456,6 +457,7 @@ class HomeWindow(xbmcgui.WindowXML):
             "poster": item.getArt("poster"),
             "fanart": item.getArt("fanart"),
             "clearlogo": item.getArt("clearlogo"),
+            "discart": item.getArt("discart"),
             "plot": item.getVideoInfoTag().getPlot(),
             "meta": item.getProperty("meta"),
         }

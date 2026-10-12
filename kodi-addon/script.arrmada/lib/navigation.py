@@ -434,6 +434,7 @@ def _entry_from(params: dict) -> dict:
         "poster": params.get("poster") or "",
         "fanart": params.get("fanart") or "",
         "clearlogo": params.get("clearlogo") or "",
+        "discart": params.get("discart") or "",
     }
 
 

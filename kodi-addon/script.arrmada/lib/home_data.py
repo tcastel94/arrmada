@@ -318,6 +318,7 @@ def _recent(items: list[dict]) -> list[dict[str, Any]]:
                 "poster": item.get("poster_url") or "",
                 "fanart": item.get("fanart_url") or "",
                 "clearlogo": item.get("clearlogo_url") or "",
+                "discart": item.get("discart_url") or "",
                 "plot": item.get("overview") or "",
                 "badge": tech[0] if tech else "",
                 "meta": " · ".join(meta),

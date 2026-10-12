@@ -9,6 +9,7 @@ from app.api.activity_timeline import router as activity_timeline_router
 from app.api.ai_search import router as ai_search_router
 from app.api.ambient import router as ambient_router
 from app.api.analytics import router as analytics_router
+from app.api.artwork import router as artwork_router
 from app.api.auth import router as auth_router
 from app.api.calendar import router as calendar_router
 from app.api.cameras import router as cameras_router
@@ -58,6 +59,7 @@ api_router.include_router(kodi_repo_router)  # Dépôt Kodi /kodi/repo (réseau 
 api_router.include_router(services_router)
 api_router.include_router(dashboard_router)
 api_router.include_router(media_router)
+api_router.include_router(artwork_router)  # Logos, disques… (fanart.tv / TMDB)
 api_router.include_router(downloads_router)
 api_router.include_router(analytics_router)
 api_router.include_router(duplicates_router)

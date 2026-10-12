@@ -179,6 +179,9 @@ def make_images(out: Path, font_path: str) -> None:
                                   fill=(255, 255, 255, 255), anchor="rm")
         logo.save(out / f"logo-{idx}.png")
 
+        if idx in DISC_IDX:
+            _disc(title, light, dark, font_path).save(out / f"disc-{idx}.png")
+
     for idx, (name, _role) in enumerate(CAST[: len(PHOTO_COLORS)]):
         color = PHOTO_COLORS[idx]
         photo = _gradient((300, 300), color, (12, 14, 22))
@@ -186,6 +189,36 @@ def make_images(out: Path, font_path: str) -> None:
         ImageDraw.Draw(photo).text((150, 160), initials, font=ImageFont.truetype(font_path, 120),
                                     fill=(255, 255, 255), anchor="mm")
         photo.save(out / f"photo-{idx}.jpg", quality=88)
+
+
+# Films qui ont un rond imprimé sur « fanart.tv » ; les autres (Anatomie d'une
+# chute…) montrent le disque dessiné à partir de l'affiche.
+DISC_IDX = {0, 2, 3, 7, 9, 11}
+
+
+def _disc(title: str, light: tuple, dark: tuple, font_path: str) -> Image.Image:
+    """Rond imprimé façon fanart.tv : PNG 1000 × 1000 transparent, trou central,
+    moyeu translucide, titre et mention BLU-RAY sur la zone imprimée."""
+    size, r = 1000, 498
+    art = _gradient((size, size), light, dark).convert("RGBA")
+    draw = ImageDraw.Draw(art)
+    for k in range(6):  # anneaux décoratifs de l'impression
+        rad = 420 - k * 6
+        draw.ellipse((500 - rad, 500 - rad, 500 + rad, 500 + rad), outline=(255, 255, 255, 40), width=2)
+    words = title.upper()
+    font = ImageFont.truetype(font_path, 68 if len(words) <= 14 else 52)
+    draw.text((500, 290), words, font=font, fill=(255, 255, 255, 255), anchor="mm")
+    draw.text((500, 770), "BLU-RAY DISC", font=ImageFont.truetype(font_path, 34),
+              fill=(255, 255, 255, 220), anchor="mm")
+    mask = Image.new("L", (size, size), 0)
+    m = ImageDraw.Draw(mask)
+    m.ellipse((500 - r, 500 - r, 500 + r, 500 + r), fill=255)
+    hub = int(0.38 * r)
+    m.ellipse((500 - hub, 500 - hub, 500 + hub, 500 + hub), fill=150)  # moyeu translucide
+    hole = int(0.125 * r)
+    m.ellipse((500 - hole, 500 - hole, 500 + hole, 500 + hole), fill=0)  # trou
+    art.putalpha(mask)
+    return art
 
 
 # ── Réponses API ─────────────────────────────────────────────────────────────
@@ -207,6 +240,7 @@ def recent(base: str) -> list[dict]:
                 "poster_url": f"{base}/img/poster-{idx}.jpg" if colors else None,
                 "fanart_url": f"{base}/img/fanart-{idx}.jpg" if colors else None,
                 "clearlogo_url": f"{base}/img/logo-{idx}.png" if colors else None,
+                "discart_url": f"{base}/img/disc-{idx}.png" if idx in DISC_IDX else None,
                 "overview": f"Synopsis de test pour « {title} » : une histoire épique, des "
                 "personnages marquants et une mise en scène soignée.",
                 "has_file": True,
@@ -524,6 +558,8 @@ def detail(base: str, kind: str, arr_id: int) -> dict | None:
         "poster": f"{base}/img/poster-{idx}.jpg" if colors else None,
         "fanart": f"{base}/img/fanart-{idx}.jpg" if colors else None,
         "clearlogo": f"{base}/img/logo-{idx}.png" if colors else None,
+        "discart": f"{base}/img/disc-{idx}.png" if idx in DISC_IDX else None,
+        "disc_type": "bluray" if idx in DISC_IDX else None,
     }
     common = {
         "id": arr_id,

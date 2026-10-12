@@ -194,6 +194,44 @@ class TestDetail:
         assert d["meta"] == "" and d["notes"] == ""
 
 
+class TestCaseAndDisc:
+    """Boîtier de la fiche (1.20.0) : format d'après le fichier, disque fanart.tv."""
+
+    @pytest.mark.parametrize(
+        ("tech", "has_file", "expected"),
+        [
+            ({"resolution": 2160, "quality": "Remux-2160p"}, True, "uhd"),
+            ({"resolution": "3840x2160"}, True, "uhd"),
+            ({"resolution": 1080, "quality": "Bluray-1080p"}, True, "bluray"),
+            ({"resolution": 720}, True, "bluray"),
+            ({"resolution": 480, "quality": "DVD"}, True, "dvd"),
+            ({}, True, "bluray"),  # fichier présent, résolution inconnue
+            ({"resolution": 2160}, False, "none"),  # pas de fichier : boîtier neutre
+        ],
+    )
+    def test_case_format(self, tech, has_file, expected) -> None:
+        assert sd.case_format(tech, has_file) == expected
+
+    def test_movie_in_4k_case_with_printed_disc(self) -> None:
+        movie = {**MOVIE, "images": {**MOVIE["images"], "discart": "disc.png"}}
+        d = sd.build_detail(movie, "movie")
+        assert (d["case_format"], d["case_label"]) == ("uhd", "4K ULTRA HD")
+        assert d["discart"] == "disc.png"
+
+    def test_missing_movie_has_neutral_case_and_drawn_disc(self) -> None:
+        d = sd.build_detail({"title": "X", "has_file": False}, "movie")
+        assert (d["case_format"], d["case_label"], d["discart"]) == ("none", "", "")
+
+    def test_series_case_follows_latest_episode(self) -> None:
+        # Aucun épisode présent : boîtier neutre
+        assert sd.build_detail(SERIES, "series")["case_format"] == "none"
+        latest_in_1080p = {"episode_number": 3, "has_file": True, "file": {"resolution": 1080}}
+        series = dict(SERIES, seasons=[{"season_number": 1, "episodes": [latest_in_1080p]}])
+        d = sd.build_detail(series, "series")
+        assert (d["case_format"], d["case_label"]) == ("bluray", "BLU-RAY")
+        assert d["discart"] == ""  # les séries n'ont pas de rond imprimé
+
+
 QUEUE = [
     {
         "id": 501,

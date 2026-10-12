@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Artworks: logos, Blu-ray discs, clearart — and a disc that comes out of its case (Kodi add-on 1.20.0)
+
+#### Added
+- **Artworks fetched by the server** (`services/artwork.py`, table `media_artwork`): logos, printed Blu-ray / DVD discs, clearart, banners and landscape thumbs from **fanart.tv** (`FANART_API_KEY`, free personal key) and logos from **TMDB** (`TMDB_API_KEY`, already used by "Pour toi"). For each kind the best image wins: French, then English, then textless, then the most liked; HD logos before SD; Blu-ray discs before DVD, 3D last; TMDB SVG logos are skipped (Kodi can't draw them). Titles are keyed like everywhere else (movie: TMDB, series: TVDB)
+- The stored artworks are **merged into the existing answers**: library (`clearlogo_url`, `discart_url`, `disc_type`, `clearart_url`, `banner_url`, `landscape_url`), media sheet (`images.discart`, `images.clearart`…) — so the web app, the TV screens and the SiLVO widgets get them without extra calls. The French logo replaces Radarr/Sonarr's (often English) one; Radarr/Sonarr posters and fanart stay first and are only filled in when missing
+- **"Artworks" button in the Library** (web app): fetch missing artworks for the whole library, or ask everything again; progress (120 / 850 with a ring), stored totals (logos, discs, clearart) and a summary toast; the work runs on the server (`POST /api/artwork/refresh`, `GET /api/artwork/status`, not open to TVs). A title already served is asked again after 30 days (7 if nothing was found, 1 h after a network failure), so clicking again is nearly free. **Daily background job** for new titles (`ARTWORK_AUTO_ENABLED`, `ARTWORK_AUTO_INTERVAL_HOURS`, first pass 10 min after start)
+- **Web app — "Artworks" tab** on every media sheet: the case (poster + 4K ULTRA HD / BLU-RAY / DVD band from the file) with its disc sliding out and spinning — printed disc from fanart.tv, or a disc drawn from the poster (hole, clear hub, grooves; the light reflection does not spin) — "Ranger le disque / Sortir le disque", then every image of the title with its source, and "Actualiser les artworks" (`POST /api/artwork/{type}/{id}/refresh`)
+- **Kodi add-on 1.20.0 — the media sheet shows the poster in a case** (black 4K ULTRA HD, blue BLU-RAY, grey DVD, neutral without a file) **and the disc comes out of it** when the sheet opens (slight bounce), spins, goes back in when playback starts, comes out again when back from playback, and goes back in when the sheet closes. Printed disc from fanart.tv, else drawn from the poster (new textures: print mask, clear hub, edge, fixed reflection, shadow, case insert mask). The logo (now French when available) keeps replacing the title. Rows and plugin listings carry the `discart` art too (SiLVO views can show it)
+
+#### Fixed
+- **Downloads page without posters**: the queue did not carry any image; the web app only found posters if the Library had been opened just before. The server now adds poster, fanart, logo and the clean title of each movie / series (`poster_url`, `fanart_url`, `clearlogo_url`, `media_title`) from the cached library
+- **Server cache could freeze a request forever**: the in-memory cache had a single lock for every key, so a cached computation that needed another cached value (Kodi dashboard → download queue → library) waited for a lock it already held. One lock per key now (regression test reproduces the freeze)
+- Tests: image choice (language, HD, disc type, SVG, broken entries), refresh delays, library / sheet / queue merge, button and per-title refresh, unreachable site vs nothing found; add-on: case format from the file, printed vs drawn disc, XML (disc behind the case, out and back distances, only the disc spins). Bench: printed disc (4K case), drawn disc (Blu-ray case); the disc going back in on close is checked by the XML test (a screenshot is taken after the window has closed). Web app checked with Playwright (desktop and phone)
+
 ### Season packs blocked by Sonarr imported automatically, one card per download
 
 #### Added

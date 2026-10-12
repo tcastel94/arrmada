@@ -6,12 +6,21 @@
     - tout de suite, ce que l'Accueil connaît déjà (titre, affiche, fanart, logo) ;
     - puis la fiche complète du backend (casting, fichier, notes, sous-titres).
   Navigation : actions (500) ↓ casting (600) ou saisons (610) ; Retour ferme.
+
+  Boîtier + disque (1.20.0) : l'affiche est la jaquette d'un boîtier BLU-RAY
+  (bleu), 4K ULTRA HD (noir) ou DVD (gris) selon le fichier (case_format). Le
+  disque, dessiné DERRIÈRE le boîtier, en sort vers la gauche quand
+  Window.Property(disc_out) est posée (ouverture, retour de lecture), tourne,
+  et rentre quand elle est effacée (Lire) ou à la fermeture (WindowClose).
+  Rond imprimé fanart.tv (discart) ou, à défaut, affiche découpée en disque
+  (masque disc-mask + moyeu transparent + tranche) ; le reflet ne tourne pas.
 -->
 <window>
 	<defaultcontrol always="false">501</defaultcontrol>
 	<backgroundcolor>FF0A0E16</backgroundcolor>
 	<animation effect="fade" start="0" end="100" time="300" tween="sine" easing="out">WindowOpen</animation>
-	<animation effect="fade" start="100" end="0" time="200">WindowClose</animation>
+	<!-- Fermeture : le disque rentre d'abord dans le boîtier (380 ms), puis fondu -->
+	<animation effect="fade" start="100" end="0" delay="300" time="220">WindowClose</animation>
 	<controls>
 
 		<!-- ═══════════════ FOND : fanart (Ken Burns) + voiles ═══════════════ -->
@@ -203,6 +212,83 @@
 				<left>-36</left><top>-36</top><width>432</width><height>612</height>
 				<texture border="56" colordiffuse="664A9EFF">arrmada/glow.png</texture>
 			</control>
+
+			<!-- ─── DISQUE (derrière le boîtier) : 320 px ≈ 120 mm pour un boîtier de 135 mm ─── -->
+			<control type="group">
+				<left>20</left><top>110</top><width>320</width><height>320</height>
+				<visible>!String.IsEmpty(Window.Property(poster)) | !String.IsEmpty(Window.Property(discart))</visible>
+				<!-- Sort vers la gauche avec un léger rebond, après l'ouverture de la fiche -->
+				<animation effect="slide" start="0,0" end="-252,0" time="950" delay="450" tween="back" easing="out" condition="!String.IsEmpty(Window.Property(disc_out))">Conditional</animation>
+				<!-- Fermeture : rentre dans le boîtier -->
+				<animation effect="slide" start="0,0" end="252,0" time="380" tween="cubic" easing="in" condition="!String.IsEmpty(Window.Property(disc_out))">WindowClose</animation>
+				<control type="image">
+					<left>-18</left><top>4</top><width>356</width><height>356</height>
+					<texture colordiffuse="B3000000">arrmada/disc-shadow.png</texture>
+				</control>
+				<!-- Rond imprimé fanart.tv -->
+				<control type="image">
+					<left>0</left><top>0</top><width>320</width><height>320</height>
+					<aspectratio>keep</aspectratio>
+					<fadetime>400</fadetime>
+					<texture background="true">$INFO[Window.Property(discart)]</texture>
+					<visible>!String.IsEmpty(Window.Property(discart))</visible>
+					<animation effect="rotate" end="-360" center="auto" time="12000" loop="true" condition="!String.IsEmpty(Window.Property(disc_out))">Conditional</animation>
+				</control>
+				<!-- Sans rond imprimé : l'affiche découpée en disque, moyeu transparent, tranche -->
+				<control type="group">
+					<visible>String.IsEmpty(Window.Property(discart))</visible>
+					<!-- Affiche entière (2:3, sans recadrage : Kodi applique le masque à
+					     l'image entière) ; le masque n'en garde qu'un cercle centré -->
+					<control type="image">
+						<left>0</left><top>-80</top><width>320</width><height>480</height>
+						<texture background="true" diffuse="arrmada/disc-mask.png">$INFO[Window.Property(poster)]</texture>
+						<animation effect="rotate" end="-360" center="auto" time="12000" loop="true" condition="!String.IsEmpty(Window.Property(disc_out))">Conditional</animation>
+					</control>
+					<control type="image">
+						<left>0</left><top>0</top><width>320</width><height>320</height>
+						<texture colordiffuse="D9DCE6F2">arrmada/disc-hub.png</texture>
+					</control>
+					<control type="image">
+						<left>0</left><top>0</top><width>320</width><height>320</height>
+						<texture colordiffuse="99FFFFFF">arrmada/disc-edge.png</texture>
+					</control>
+				</control>
+				<!-- Reflet de lumière : immobile pendant que le disque tourne -->
+				<control type="image">
+					<left>0</left><top>0</top><width>320</width><height>320</height>
+					<texture colordiffuse="FFFFFFFF">arrmada/disc-shine.png</texture>
+				</control>
+			</control>
+
+			<!-- ─── BOÎTIER : plastique coloré selon le format, jaquette, bandeau ─── -->
+			<control type="image">
+				<left>-16</left><top>-16</top><width>392</width><height>572</height>
+				<texture border="26" colordiffuse="FF0B0D10">arrmada/rounded-24.png</texture>
+				<visible>String.IsEqual(Window.Property(case_format),uhd)</visible>
+				<animation effect="fade" time="400">VisibleChange</animation>
+			</control>
+			<control type="image">
+				<left>-16</left><top>-16</top><width>392</width><height>572</height>
+				<texture border="26" colordiffuse="FF0E4FA8">arrmada/rounded-24.png</texture>
+				<visible>String.IsEqual(Window.Property(case_format),bluray)</visible>
+				<animation effect="fade" time="400">VisibleChange</animation>
+			</control>
+			<control type="image">
+				<left>-16</left><top>-16</top><width>392</width><height>572</height>
+				<texture border="26" colordiffuse="FF262A33">arrmada/rounded-24.png</texture>
+				<visible>String.IsEqual(Window.Property(case_format),dvd)</visible>
+				<animation effect="fade" time="400">VisibleChange</animation>
+			</control>
+			<control type="image">
+				<left>-16</left><top>-16</top><width>392</width><height>572</height>
+				<texture border="26" colordiffuse="FF1A2233">arrmada/rounded-24.png</texture>
+				<visible>!String.IsEqual(Window.Property(case_format),uhd) + !String.IsEqual(Window.Property(case_format),bluray) + !String.IsEqual(Window.Property(case_format),dvd)</visible>
+			</control>
+			<!-- Reflet du plastique -->
+			<control type="image">
+				<left>-16</left><top>-16</top><width>392</width><height>572</height>
+				<texture border="26" colordiffuse="2EFFFFFF">arrmada/ring-24.png</texture>
+			</control>
 			<control type="image">
 				<left>0</left><top>0</top><width>360</width><height>540</height>
 				<texture border="26" colordiffuse="FF1A2233">arrmada/rounded-24.png</texture>
@@ -211,7 +297,34 @@
 				<left>0</left><top>0</top><width>360</width><height>540</height>
 				<aspectratio>scale</aspectratio>
 				<fadetime>300</fadetime>
-				<texture background="true" diffuse="arrmada/poster-mask.png">$INFO[Window.Property(poster)]</texture>
+				<texture background="true" diffuse="arrmada/case-insert-mask.png">$INFO[Window.Property(poster)]</texture>
+			</control>
+			<!-- Bandeau du haut de la jaquette : 4K ULTRA HD / BLU-RAY / DVD -->
+			<control type="group">
+				<visible>!String.IsEmpty(Window.Property(case_label))</visible>
+				<animation effect="fade" time="400">VisibleChange</animation>
+				<control type="image">
+					<left>0</left><top>0</top><width>360</width><height>40</height>
+					<texture colordiffuse="F2000000">arrmada/white.png</texture>
+					<visible>String.IsEqual(Window.Property(case_format),uhd)</visible>
+				</control>
+				<control type="image">
+					<left>0</left><top>0</top><width>360</width><height>40</height>
+					<texture colordiffuse="F20A5FC4">arrmada/white.png</texture>
+					<visible>String.IsEqual(Window.Property(case_format),bluray)</visible>
+				</control>
+				<control type="image">
+					<left>0</left><top>0</top><width>360</width><height>40</height>
+					<texture colordiffuse="F215181D">arrmada/white.png</texture>
+					<visible>String.IsEqual(Window.Property(case_format),dvd)</visible>
+				</control>
+				<control type="label">
+					<left>0</left><top>0</top><width>360</width><height>40</height>
+					<font>font12_title</font>
+					<textcolor>FFFFFFFF</textcolor>
+					<align>center</align><aligny>center</aligny>
+					<label>$INFO[Window.Property(case_label)]</label>
+				</control>
 			</control>
 			<!-- Statut : Disponible / Manquant / 15/19 épisodes -->
 			<control type="group">

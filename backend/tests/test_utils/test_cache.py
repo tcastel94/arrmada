@@ -97,3 +97,39 @@ async def test_cache_different_keys():
 
     assert result_a == "a_value"
     assert result_b == "b_value"
+
+
+@pytest.mark.asyncio
+async def test_nested_keys_do_not_deadlock():
+    """Un calcul qui demande une AUTRE clé (tableau de bord → médiathèque).
+
+    Avec l'ancien verrou unique, l'appel imbriqué attendait un verrou déjà
+    tenu par l'appel parent : blocage définitif de la requête.
+    """
+    cache = TTLCache()
+
+    async def library():
+        return ["Dune"]
+
+    async def dashboard():
+        return {"library": await cache.get_or_set("media:all", library, ttl_seconds=60)}
+
+    result = await asyncio.wait_for(cache.get_or_set("dashboard", dashboard, ttl_seconds=60), 2)
+    assert result == {"library": ["Dune"]}
+
+
+@pytest.mark.asyncio
+async def test_same_key_is_computed_once_under_concurrency():
+    """Deux demandes simultanées de la même clé : un seul calcul."""
+    cache = TTLCache()
+    calls = 0
+
+    async def slow():
+        nonlocal calls
+        calls += 1
+        await asyncio.sleep(0.05)
+        return calls
+
+    results = await asyncio.gather(*(cache.get_or_set("k", slow, ttl_seconds=60) for _ in range(5)))
+    assert results == [1] * 5
+    assert calls == 1

@@ -44,8 +44,16 @@ export interface MediaItem {
     studio?: string | null;
     /** Chaîne / plateforme de diffusion (séries). */
     network?: string | null;
-    /** Logo-titre transparent (ClearLogo) fourni par Radarr/Sonarr, s'il existe. */
+    /** Logo-titre transparent (ClearLogo) : fanart.tv / TMDB (français d'abord), sinon Radarr/Sonarr. */
     clearlogo_url?: string | null;
+    /** Artworks récupérés par le serveur (bouton « Récupérer les artworks »). */
+    fanart_url?: string | null;
+    discart_url?: string | null;
+    /** bluray | dvd | 3d (rond imprimé du disque fanart.tv) */
+    disc_type?: string | null;
+    clearart_url?: string | null;
+    banner_url?: string | null;
+    landscape_url?: string | null;
     seasons?: number;
     episodes_total?: number;
     episodes_have?: number;
@@ -271,11 +279,22 @@ export interface MediaDetail {
     tvdb_id?: number;
     ratings: MediaRatings;
     /**
-     * `clearlogo` / `logo` : logo-titre transparent (même URL pour les deux
-     * côté backend ; `logo` est gardé pour compatibilité). Absents si
-     * Radarr/Sonarr n'en connaissent pas.
+     * `clearlogo` / `logo` : logo-titre transparent (`logo` gardé pour
+     * compatibilité). `discart` (rond imprimé du Blu-ray / DVD, films),
+     * `clearart` et `landscape` viennent de fanart.tv / TMDB (bouton
+     * « Récupérer les artworks ») ; absents tant que rien n'a été trouvé.
      */
-    images: { poster: string | null; fanart: string | null; banner: string | null; logo?: string | null; clearlogo?: string | null };
+    images: {
+        poster: string | null;
+        fanart: string | null;
+        banner: string | null;
+        logo?: string | null;
+        clearlogo?: string | null;
+        discart?: string | null;
+        disc_type?: string | null;
+        clearart?: string | null;
+        landscape?: string | null;
+    };
     file?: FileInfo | null;
     seasons?: SeasonDetail[];
     season_count?: number;

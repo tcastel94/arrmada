@@ -13,7 +13,7 @@ from app.config import settings
 from app.database import get_db
 from app.main import app, limiter
 from app.models import Base
-from app.services import fully_kiosk
+from app.services import artwork, fully_kiosk
 from app.utils.cache import cache
 from tests import fake_arr
 
@@ -59,6 +59,8 @@ async def _override_get_db() -> AsyncGenerator[AsyncSession, None]:
 app.dependency_overrides[get_db] = _override_get_db
 # Tablette en mode kiosk (services/fully_kiosk.py) : même base que les tests
 fully_kiosk.session_factory = TestSessionFactory
+# Récupération des artworks en arrière-plan (services/artwork.py) : idem
+artwork.session_factory = TestSessionFactory
 
 # Le login est limité à 5 essais/minute (anti brute-force). Chaque test qui
 # utilise `auth_headers` se reconnecte : sans ça, le 6e test prend un 429

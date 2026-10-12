@@ -118,10 +118,12 @@ def _detail_action(kind: str, arr_id: Any, item: Dict[str, Any], ids: Dict[str, 
         "poster": item.get("poster_url") or "",
         "fanart": item.get("fanart_url") or "",
         "clearlogo": item.get("clearlogo_url") or "",
+        # Rond imprimé du disque (fanart.tv) : la fiche le fait sortir du boîtier
+        "discart": item.get("discart_url") or "",
     }
 
 
-def _art(poster: str, fanart: str = "", clearlogo: str = "") -> Dict[str, str]:
+def _art(poster: str, fanart: str = "", clearlogo: str = "", discart: str = "") -> Dict[str, str]:
     art = {}
     if poster:
         art.update(poster=poster, thumb=poster, icon=poster)
@@ -129,6 +131,8 @@ def _art(poster: str, fanart: str = "", clearlogo: str = "") -> Dict[str, str]:
         art["fanart"] = fanart
     if clearlogo:
         art["clearlogo"] = clearlogo
+    if discart:
+        art["discart"] = discart  # clé standard Kodi : les vues SiLVO savent l'afficher
     return art
 
 
@@ -168,6 +172,7 @@ def entries_media(items: List[Dict[str, Any]], missing: bool = False) -> List[Di
                     item.get("poster_url") or "",
                     item.get("fanart_url") or "",
                     item.get("clearlogo_url") or "",
+                    item.get("discart_url") or "",
                 ),
                 "action": _detail_action(kind, item.get("external_id"), item, ids),
                 "context": ["detail", "upgrade"] if unavailable else ["play", "detail", "upgrade"],

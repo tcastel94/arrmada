@@ -101,6 +101,7 @@ def _normalise_series(
     return {
         "external_id": str(raw.get("id", "")),
         "tmdb_id": raw.get("tvdbId"),  # Sonarr uses TVDB
+        "tmdb_tv_id": raw.get("tmdbId"),  # vrai TMDB (logos TMDB d'une série)
         "title": raw.get("title", "Unknown"),
         "type": "series",
         "year": raw.get("year"),
@@ -166,6 +167,10 @@ async def fetch_all_media(db: AsyncSession) -> list[dict[str, Any]]:
         except Exception as exc:
             logger.error("Failed to fetch media from %s: %s", svc.name, exc)
 
+    # Logos, disques, clearart… récupérés sur fanart.tv / TMDB (services/artwork.py)
+    from app.services.artwork import apply_to_library
+
+    await apply_to_library(all_media)
     return all_media
 
 
@@ -325,7 +330,43 @@ async def get_queue_items(db: AsyncSession) -> list[dict[str, Any]]:
         except Exception as exc:
             logger.error("Failed to fetch queue from %s: %s", svc.name, exc)
 
+    await _attach_queue_artwork(queue_items)
     return queue_items
+
+
+async def _attach_queue_artwork(queue_items: list[dict[str, Any]]) -> None:
+    """Affiche / fond / logo du film ou de la série de chaque téléchargement.
+
+    Lus dans la médiathèque en cache (5 min) : aucun appel *arr de plus en
+    temps normal. Jamais bloquant : sans médiathèque, les cartes restent sans image.
+
+    Session À PART pour la base : le tableau de bord Kodi lit la file en
+    parallèle d'autres requêtes sur la session de l'appelant, et une connexion
+    PostgreSQL refuse deux requêtes simultanées.
+    """
+    if not queue_items:
+        return
+    from app.services import artwork  # même fabrique de sessions que les tâches de fond
+
+    try:
+        async with artwork.session_factory() as own_db:
+            library = await cached_library(own_db)
+    except Exception as exc:
+        logger.debug("Médiathèque indisponible pour les images de la file : %s", exc)
+        return
+    by_id = {(m.get("type"), str(m.get("external_id"))): m for m in library}
+    for item in queue_items:
+        if item.get("movie_id"):
+            media = by_id.get(("movie", str(item["movie_id"])))
+        elif item.get("series_id"):
+            media = by_id.get(("series", str(item["series_id"])))
+        else:
+            media = None
+        if media:
+            item["poster_url"] = media.get("poster_url")
+            item["fanart_url"] = media.get("fanart_url")
+            item["clearlogo_url"] = media.get("clearlogo_url")
+            item["media_title"] = media.get("title")
 
 
 def _calc_progress(item: dict) -> float:

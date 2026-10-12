@@ -241,3 +241,42 @@ def test_shell_menu_and_rows_follow_shell_data() -> None:
     assert [label for _, label in shell_data.MENU] == list(make_shell_xml.MENU)
     assert [title for _, _, title, _ in make_shell_xml.ROWS] == [t for _, t in shell_data.ROWS]
     assert [list_id for _, list_id, _, _ in make_shell_xml.ROWS] == list(constants["ROW_LISTS"])
+
+
+def test_detail_disc_comes_out_and_goes_back_in() -> None:
+    """Fiche (1.20.0) : le disque sort du boîtier, tourne, rentre à la fermeture.
+
+    - dessiné AVANT le boîtier (Kodi dessine dans l'ordre : il est derrière) ;
+    - sortie (Conditional sur disc_out) et rentrée (WindowClose) de même
+      distance : à la fermeture il finit exactement dans le boîtier ;
+    - les deux visuels du disque tournent, le reflet non (la lampe est fixe).
+    """
+    root = ET.parse(_xml_path("detail")).getroot()
+    groups = [
+        g
+        for g in root.iter("control")
+        if g.get("type") == "group"
+        and "disc_out" in "".join(a.get("condition", "") for a in g.findall("animation"))
+    ]
+    assert len(groups) == 1, "un seul groupe « disque » piloté par disc_out"
+    disc = groups[0]
+    slides = {a.text: a for a in disc.findall("animation") if a.get("effect") == "slide"}
+    out_x = int(slides["Conditional"].get("end").split(",")[0])
+    back_x = int(slides["WindowClose"].get("end").split(",")[0])
+    assert out_x < 0 and out_x + back_x == 0
+
+    images = [c for c in disc.iter("control") if c.get("type") == "image"]
+    spinning = [
+        c for c in images if any(a.get("effect") == "rotate" for a in c.findall("animation"))
+    ]
+    textures = [c.findtext("texture") or "" for c in spinning]
+    assert any("Window.Property(discart)" in t for t in textures), "rond imprimé fanart.tv"
+    assert any("Window.Property(poster)" in t for t in textures), "disque dessiné avec l'affiche"
+    shine = [c for c in images if "disc-shine" in (c.findtext("texture") or "")]
+    assert shine and not shine[0].findall("animation"), "le reflet ne tourne pas"
+
+    # Le disque est déclaré avant le plastique du boîtier → caché derrière lui
+    xml = _xml_path("detail").read_text(encoding="utf-8")
+    assert xml.index("disc-shadow.png") < xml.index("case-insert-mask.png")
+    for case in ("uhd", "bluray", "dvd"):
+        assert f"String.IsEqual(Window.Property(case_format),{case})" in xml

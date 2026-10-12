@@ -128,6 +128,12 @@ wait(0.8)
 shot("04a-fiche-ouverture")
 wait(3.0)
 shot("04b-fiche-film")
+log(
+    f"boîtier {xbmc.getInfoLabel('Window.Property(case_format)')} "
+    f"« {xbmc.getInfoLabel('Window.Property(case_label)')} », disque "
+    f"{'imprimé' if xbmc.getInfoLabel('Window.Property(discart)') else 'dessiné'}, "
+    f"sorti={xbmc.getInfoLabel('Window.Property(disc_out)') or 'non'}"
+)
 press("Down")
 press("Right", 2)
 wait(1.0)
@@ -341,6 +347,20 @@ if shows and movies:
     wait(4.0)
     log(f"fiche film : bouton « {xbmc.getInfoLabel('Window.Property(play_label)')} »")
     shot("16a-fiche-film-reprendre")
+    press("Back")
+    wait(1.5)
+
+    # Film sans rond imprimé (1.20.0) : disque dessiné à partir de l'affiche,
+    # boîtier BLU-RAY (fichier 1080p). Le retour du disque à la fermeture
+    # n'est pas capturable (la capture part après la fermeture) : il est
+    # vérifié par tests/test_windows_xml.py.
+    run_plugin("detail&kind=movie&arr_id=105&title=Anatomie%20d%27une%20chute&year=2023")
+    wait(4.0)
+    log(
+        f"boîtier {xbmc.getInfoLabel('Window.Property(case_format)')}, disque "
+        f"{'imprimé' if xbmc.getInfoLabel('Window.Property(discart)') else 'dessiné'}"
+    )
+    shot("16a2-fiche-disque-dessine")
     press("Back")
     wait(1.5)
 

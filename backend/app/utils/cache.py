@@ -24,7 +24,12 @@ class TTLCache:
 
     def __init__(self) -> None:
         self._store: dict[str, tuple[float, Any]] = {}
-        self._lock = asyncio.Lock()
+        # Un verrou PAR CLÉ. Avec un seul verrou global, un calcul qui en
+        # demande un autre (tableau de bord Kodi → file de téléchargement →
+        # médiathèque « media:all ») attendait un verrou qu'il tenait déjà :
+        # la requête restait bloquée pour toujours. Par clé, seuls deux
+        # calculs de la MÊME valeur s'attendent (le second relit le résultat).
+        self._locks: dict[str, asyncio.Lock] = {}
 
     async def get_or_set(
         self,
@@ -40,7 +45,7 @@ class TTLCache:
         if cached and (now - cached[0]) < ttl_seconds:
             return cached[1]
 
-        async with self._lock:
+        async with self._locks.setdefault(key, asyncio.Lock()):
             # Double-check after acquiring lock
             cached = self._store.get(key)
             if cached and (now - cached[0]) < ttl_seconds:

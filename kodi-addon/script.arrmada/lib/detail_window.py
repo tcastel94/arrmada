@@ -9,6 +9,11 @@ Ouverture en deux temps, sans jamais figer l'interface :
   2. un fil d'arrière-plan charge la fiche complète (Radarr/Sonarr + Bazarr :
      casting, fichier, notes, sous-titres, saisons) et complète l'écran.
 
+Boîtier et disque (1.20.0) : l'affiche est présentée dans un boîtier BLU-RAY /
+4K ULTRA HD / DVD (d'après le fichier) ; le disque, rond imprimé de fanart.tv
+ou dessiné à partir de l'affiche, en sort à l'ouverture, tourne, rentre quand
+on lance la lecture et à la fermeture (animations du XML, propriété disc_out).
+
 Actions (aucune n'est destructrice, ADR-003 décision 1) :
   Lire               film : médiathèque Kodi de cet appareil + préréglage Yamaha de
                      la pièce, « Reprendre à … » s'il a été commencé (ADR-004) ;
@@ -54,7 +59,7 @@ def _initials(name: str) -> str:
 class DetailWindow(xbmcgui.WindowXML):
     def __init__(self, *args, **kwargs):
         # `entry` : {"kind", "arr_id", "title", "year", "tmdb_id", "tvdb_id",
-        #            "poster", "fanart", "clearlogo", "plot", "meta"}
+        #            "poster", "fanart", "clearlogo", "discart", "plot", "meta"}
         self._entry: dict = dict(kwargs.get("entry") or {})
         self._opened_at = time.perf_counter()
         self._initialized = False
@@ -68,7 +73,9 @@ class DetailWindow(xbmcgui.WindowXML):
 
     def onInit(self):
         if self._initialized:
-            # Retour d'une lecture : la reprise / le « vu » ont changé.
+            # Retour d'une lecture : la reprise / le « vu » ont changé, et le
+            # disque rangé au lancement de la lecture ressort du boîtier.
+            self._disc_out(True)
             ui.run_in_background(self._load_kodi_state)
             return
         self._initialized = True
@@ -79,16 +86,32 @@ class DetailWindow(xbmcgui.WindowXML):
         self.setProperty("title", entry.get("title", ""))
         self.setProperty("meta", entry.get("meta", ""))
         self.setProperty("overview", entry.get("plot", ""))
-        for art in ("poster", "fanart", "clearlogo"):
+        for art in ("poster", "fanart", "clearlogo", "discart"):
             self.setProperty(art, entry.get(art, ""))
         self.setProperty("rail_title", "Casting" if kind == "movie" else "Saisons")
+        # Le disque sort du boîtier (après l'animation d'ouverture, cf. XML)
+        self._disc_out(True)
         ui.focus_when_visible(self, BTN_PLAY)
         ui.log("Fiche", f"ouverture en {ui.ms_since(self._opened_at)} ms : {entry.get('title')}")
         threading.Thread(target=self._load, name="arrmada-detail", daemon=True).start()
 
     def close_window(self) -> None:
         self._stop.set()
-        self.close()
+        self.close()  # le disque rentre dans le boîtier : animation WindowClose du XML
+
+    def _disc_out(self, out: bool) -> None:
+        """Sort (True) ou range (False) le disque. Sans affiche ni rond imprimé,
+        il n'y a rien à montrer : le disque reste rangé."""
+        has_art = bool(self.getProperty("discart") or self.getProperty("poster"))
+        try:
+            self.setProperty("disc_out", "1" if out and has_art else "")
+        except RuntimeError:
+            pass  # fenêtre fermée entre-temps
+
+    def _play(self, entry: dict) -> None:
+        """Lire : le disque rentre dans le boîtier, puis la lecture démarre."""
+        self._disc_out(False)
+        ui.play_entry(entry)
 
     # ── Chargement de la fiche complète ─────────────────────────────────────
 
@@ -147,9 +170,14 @@ class DetailWindow(xbmcgui.WindowXML):
 
     def _render(self, model: dict) -> None:
         # Les données complètes priment, mais on garde l'existant si un champ manque.
-        for key in ("poster", "fanart", "clearlogo"):
+        for key in ("poster", "fanart", "clearlogo", "discart"):
             if model[key]:
                 self.setProperty(key, model[key])
+        # Boîtier : noir 4K ULTRA HD, bleu BLU-RAY, gris DVD, neutre sans fichier
+        self.setProperty("case_format", model["case_format"])
+        self.setProperty("case_label", model["case_label"])
+        if not self.getProperty("disc_out"):
+            self._disc_out(True)  # affiche arrivée avec la fiche complète
         if model["title"]:
             self.setProperty("title", model["title"])
         self.setProperty("meta", model["meta"] or self._entry.get("meta", ""))
@@ -204,7 +232,7 @@ class DetailWindow(xbmcgui.WindowXML):
         if action_id in ui.BACK_ACTIONS:
             self.close_window()
         elif action_id in ui.PLAY_ACTIONS:
-            ui.play_entry(self._entry)
+            self._play(self._entry)
         elif action_id in ui.MENU_ACTIONS and self._entry.get("kind", "movie") == "movie":
             try:
                 on_play = self.getFocusId() == BTN_PLAY
@@ -231,7 +259,7 @@ class DetailWindow(xbmcgui.WindowXML):
     def onClick(self, controlId):
         entry = self._entry
         if controlId == BTN_PLAY:
-            ui.play_entry(entry)
+            self._play(entry)
         elif controlId == SEASONS:
             # Écran Série directement sur la saison choisie
             index = self.getControl(SEASONS).getSelectedPosition()
@@ -274,6 +302,7 @@ class DetailWindow(xbmcgui.WindowXML):
             return
         op = choices[index][0]
         if op == "restart":
+            self._disc_out(False)
             ui.play_entry(self._entry, resume=False)
         else:
             kodi_library.set_watched("movie", self._movieid, op == "seen")

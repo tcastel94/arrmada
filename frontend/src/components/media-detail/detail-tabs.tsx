@@ -3,19 +3,20 @@
 /**
  * Onglets de la fiche média, synchronisés avec l'URL (?tab=…).
  * ----------------------------------------------------------------
- * - Série : Saisons (défaut) · Fichiers & qualité · Sous-titres · Casting · Infos · Releases
- * - Film  : Infos (défaut) · Fichiers & qualité · Sous-titres · Casting · Releases
+ * - Série : Saisons (défaut) · Fichiers & qualité · Sous-titres · Casting · Infos · Artworks · Releases
+ * - Film  : Infos (défaut) · Fichiers & qualité · Sous-titres · Casting · Artworks · Releases
  * « Recherche » est renommé « Releases », Fichier + Qualité sont fusionnés.
  * La barre d'onglets reste collée sous l'en-tête au défilement et
  * défile horizontalement sur mobile ; la pastille active glisse d'un onglet
  * à l'autre (layoutId).
  */
 import { motion } from "framer-motion";
-import { Captions, HardDrive, Info, Layers, Radar, Users, type LucideIcon } from "lucide-react";
+import { Captions, Disc3, HardDrive, Info, Layers, Radar, Users, type LucideIcon } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { MediaDetail } from "@/hooks/use-media";
 import { SPRING } from "@/lib/motion";
 import { cn } from "@/lib/utils";
+import { ArtworksTab } from "./artworks-tab";
 import { CastSection } from "./cast-section";
 import { FilesQualityTab } from "./files-quality";
 import { InfoTab } from "./info-tab";
@@ -24,7 +25,7 @@ import { ReleasesTab } from "./releases";
 import { SeasonsSection } from "./seasons";
 import { SubtitlesTab, countMissingFr } from "./subtitles";
 
-export type DetailTab = "seasons" | "infos" | "files" | "subtitles" | "cast" | "releases";
+export type DetailTab = "seasons" | "infos" | "files" | "subtitles" | "cast" | "artworks" | "releases";
 
 const META: Record<DetailTab, { label: string; icon: LucideIcon }> = {
     seasons: { label: "Saisons", icon: Layers },
@@ -32,6 +33,7 @@ const META: Record<DetailTab, { label: string; icon: LucideIcon }> = {
     files: { label: "Fichiers & qualité", icon: HardDrive },
     subtitles: { label: "Sous-titres", icon: Captions },
     cast: { label: "Casting", icon: Users },
+    artworks: { label: "Artworks", icon: Disc3 },
     releases: { label: "Releases", icon: Radar },
 };
 
@@ -40,8 +42,8 @@ export function availableTabs(media: MediaDetail): DetailTab[] {
     const hasCast = (media.cast?.length ?? 0) > 0 || (media.crew?.length ?? 0) > 0;
     const tabs: DetailTab[] =
         media.type === "series"
-            ? ["seasons", "files", "subtitles", "cast", "infos", "releases"]
-            : ["infos", "files", "subtitles", "cast", "releases"];
+            ? ["seasons", "files", "subtitles", "cast", "infos", "artworks", "releases"]
+            : ["infos", "files", "subtitles", "cast", "artworks", "releases"];
     return tabs.filter((t) => t !== "cast" || hasCast);
 }
 
@@ -139,6 +141,9 @@ export function DetailTabs({
                     <CastSection cast={media.cast} crew={media.crew} />
                 </TabsContent>
             )}
+            <TabsContent value="artworks">
+                <ArtworksTab media={media} />
+            </TabsContent>
             {/* forceMount : les résultats d'une recherche (lente) survivent au changement d'onglet */}
             <TabsContent value="releases" forceMount className="data-[state=inactive]:hidden">
                 <ReleasesTab media={media} />
