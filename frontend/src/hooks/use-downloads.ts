@@ -38,6 +38,11 @@ export interface DownloadItem {
     detail: string; // message d'état (ex : pourquoi l'import attend)
     indexer: string;
     quality: string;
+    /**
+     * Épisodes couverts par ce téléchargement (pack de saison). Sonarr compte
+     * une ligne par épisode : le serveur les regroupe en une seule carte.
+     */
+    episode_count?: number;
     /** Affiche du média — pas encore renvoyée par le backend (optionnelle). */
     poster_url?: string | null;
 }

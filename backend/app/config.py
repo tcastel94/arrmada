@@ -69,6 +69,11 @@ class Settings(BaseSettings):
     # cour numbering), and an unattended overwrite is unrecoverable.
     # Only explicit, user-initiated imports may overwrite.
     AUTO_IMPORT_ALLOW_OVERWRITE: bool = False
+    # Packs de saison bloqués par Sonarr (« Single episode file contains all
+    # episodes in seasons ») : fichiers « 01. Titre.mkv » rapprochés de leur
+    # épisode (numéro ET titre vérifiés), puis import manuel automatique.
+    # Voir app/services/blocked_imports.py. false = laisser à l'humain.
+    AUTO_IMPORT_BLOCKED_PACKS: bool = True
     # Completed-downloads folder as seen from inside Sonarr/Radarr.
     # Keep it on the same mount as the library: a separate Docker bind
     # mount of the same share still fails link() with EXDEV, turning

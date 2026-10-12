@@ -273,7 +273,19 @@ async def get_queue_items(db: AsyncSession) -> list[dict[str, Any]]:
             try:
                 data = await client.get_queue()
                 records = data.get("records", []) if isinstance(data, dict) else []
-                for item in records:
+                # Sonarr renvoie une ligne PAR ÉPISODE d'un pack de saison, toutes
+                # avec le même downloadId et la taille du pack entier : une seule
+                # carte par téléchargement, sinon 6 cartes identiques et 6 × la
+                # taille dans les totaux de la page Téléchargements.
+                # Clé : téléchargement + titre suivi (une collection de films
+                # dans un seul torrent garde une carte par film).
+                groups: dict[tuple, list[dict[str, Any]]] = {}
+                for record in records:
+                    media = record.get("seriesId") or record.get("movieId")
+                    key = (record.get("downloadId") or f"id:{record.get('id')}", media)
+                    groups.setdefault(key, []).append(record)
+                for group in groups.values():
+                    item = group[0]
                     queue_items.append(
                         {
                             "id": item.get("id"),
@@ -304,6 +316,8 @@ async def get_queue_items(db: AsyncSession) -> list[dict[str, Any]]:
                             ),
                             "indexer": item.get("indexer", ""),
                             "quality": item.get("quality", {}).get("quality", {}).get("name", ""),
+                            # Épisodes couverts par ce téléchargement (pack de saison)
+                            "episode_count": len(group) if svc.type == "sonarr" else 0,
                         }
                     )
             finally:

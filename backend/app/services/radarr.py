@@ -53,7 +53,9 @@ class RadarrClient(ArrBaseClient):
     # ── Queue ─────────────────────────────────────────────────
     async def get_queue(self) -> dict[str, Any]:
         """Fetch the download queue."""
-        return await self.get("/queue", params={"pageSize": 50})
+        # Toute la file : un pack de saison y compte une ligne PAR ÉPISODE,
+        # 50 lignes ne suffisent pas (la fin de la file disparaissait)
+        return await self.get("/queue", params={"pageSize": 1000})
 
     # ── Disk Space ────────────────────────────────────────────
     async def get_disk_space(self) -> list[dict[str, Any]]:

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Season packs blocked by Sonarr imported automatically, one card per download
+
+#### Added
+- **Background auto-import of blocked season packs** (`AUTO_IMPORT_BLOCKED_PACKS`, on by default, runs with the existing auto-import job every 5 min): packs that Sonarr blocks with "Single episode file contains all episodes in seasons" — files named `01. The Hedge Knight.mkv` without `S01E01`, common with public torrents — are re-read through `/manualimport`, each file is matched to its episode, and a `ManualImport` command is sent (`importMode: auto`: hardlink / copy while the torrent still seeds, exactly like Sonarr's own import). Safety first, all or nothing: only that rejection is handled; every file needs an episode number (`01.`, `E01`, `1x01`, `S01E01`), one file per episode, an existing episode, and the title in the file name must match the episode title in Sonarr (files without a title only for a complete season); an episode that already has a file is never replaced unless `AUTO_IMPORT_ALLOW_OVERWRITE`. Doubtful packs are left to the human and listed in the auto-import report (Downloads → Imports) with the reason; each pack is retried at most every 6 h (1 h after an import). `services/blocked_imports.py` (pure, tested)
+
+#### Fixed
+- **Downloads page: one card per download** — Sonarr's queue returns one line per episode of a season pack (same `downloadId`, full pack size on each): the page showed 6 identical cards and counted the pack size 6 times in the totals and per-client counters. Lines are now grouped (badge "6 épisodes"); the TV's Downloads screen benefits too
+- **The whole queue is read** (`pageSize` 50 → 1000): with a few season packs, Sonarr's queue exceeded 50 lines and the end of the queue never showed
+- Tests: the real blocked pack (6 files "01. The Hedge Knight.mkv"…) mapped to episodes 1-6 and imported once; title mismatch, duplicate episode, other rejection, existing file, untitled files, unknown episode, samples; queue grouping
+
 ### Adding from "Pour toi" on the TV (server fix)
 
 #### Fixed

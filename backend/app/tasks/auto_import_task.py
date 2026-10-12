@@ -165,6 +165,23 @@ async def auto_import_job() -> None:
         except Exception as exc:
             logger.error("Auto-import task failed during scanning: %s", exc)
 
+        # Packs de saison bloqués dans la file de Sonarr (torrents surtout) :
+        # « 01. Titre.mkv » sans S01E01 → import manuel quand c'est sûr
+        if settings.AUTO_IMPORT_BLOCKED_PACKS:
+            try:
+                from app.services.blocked_imports import resolve_blocked_packs
+
+                packs = await resolve_blocked_packs(
+                    db, allow_overwrite=settings.AUTO_IMPORT_ALLOW_OVERWRITE
+                )
+                scanned_count += len(packs)
+                imported_count += sum(1 for p in packs if p["status"] == "success")
+                skipped_count += sum(1 for p in packs if p["status"] == "skipped")
+                failed_count += sum(1 for p in packs if p["status"] == "failed")
+                items_report.extend(packs)
+            except Exception as exc:
+                logger.error("Auto-import des packs bloqués impossible : %s", exc)
+
     duration = time.monotonic() - start_time
 
     # Save the execution report (even if empty, to show the task ran!)
