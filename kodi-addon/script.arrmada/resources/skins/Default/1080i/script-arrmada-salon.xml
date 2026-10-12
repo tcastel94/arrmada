@@ -7,6 +7,8 @@
   - Ampli Yamaha : état rafraîchi toutes les 3 s par lib/salon_window.py
     (backend /api/yamaha/*), commandes volume / muet / marche, préréglages.
   Navigation : lecture (800) → ampli (820) ↓ préréglages (830) ; Retour ferme.
+  Pièce sans ampli (bureau, 1.19.1) : propriété no_amp = 1, commandes de
+  l'ampli et préréglages masqués, seul le message reste.
 -->
 <window>
 	<defaultcontrol always="false">822</defaultcontrol>
@@ -192,6 +194,14 @@
 					<font>font12</font>
 					<textcolor>99C9D3E0</textcolor>
 					<label>Lance un film depuis sa fiche (« Lire ») : le préréglage audio de cette pièce s'applique tout seul sur l'ampli.</label>
+					<visible>!String.IsEqual(Window.Property(no_amp),1)</visible>
+				</control>
+				<control type="textbox">
+					<left>132</left><top>430</top><width>770</width><height>140</height>
+					<font>font12</font>
+					<textcolor>99C9D3E0</textcolor>
+					<label>Lance un film depuis sa fiche (« Lire ») : il démarre ici, le son passe par la TV.</label>
+					<visible>String.IsEqual(Window.Property(no_amp),1)</visible>
 				</control>
 			</control>
 			<control type="grouplist" id="800">
@@ -272,6 +282,7 @@
 			</control>
 			<control type="group">
 				<left>1600</left><top>220</top>
+				<visible>!String.IsEqual(Window.Property(no_amp),1)</visible>
 				<control type="image">
 					<left>0</left><top>0</top><width>190</width><height>38</height>
 					<texture border="14" colordiffuse="3334D399">arrmada/rounded-12.png</texture>
@@ -351,6 +362,7 @@
 			</control>
 			<control type="grouplist" id="820">
 				<left>1020</left><top>540</top><width>780</width><height>60</height>
+				<visible>!String.IsEqual(Window.Property(no_amp),1)</visible>
 				<orientation>horizontal</orientation>
 				<itemgap>14</itemgap>
 				<onleft>800</onleft>
@@ -410,9 +422,11 @@
 				<textcolor>FF9CCBFF</textcolor>
 				<aligny>center</aligny>
 				<label>Préréglages audio</label>
+				<visible>!String.IsEqual(Window.Property(no_amp),1)</visible>
 			</control>
 			<control type="list" id="830">
 				<left>1004</left><top>680</top><width>800</width><height>170</height>
+				<visible>!String.IsEqual(Window.Property(no_amp),1)</visible>
 				<orientation>horizontal</orientation>
 				<onup>820</onup>
 				<onleft>800</onleft>

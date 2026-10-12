@@ -128,9 +128,9 @@ télécommande. Phase 0 : **Accueil**. Phase 2 : **Fiche média**,
 Chaque TV reçoit **son propre accès**, comme « connecter la TV » de Netflix :
 plus de mot de passe admin dans Kodi, et un appareil se révoque d'un clic.
 
-1. Sur la TV : **ArrMada → Appairer cette TV**. L'écran affiche un code à 6 caractères et un QR code.
+1. Sur la TV : **accueil ArrMada → Réglages → Appairer cette TV** (une TV pas encore appairée ouvre cet écran **toute seule** à l'arrivée sur l'accueil, 1.19.1). L'écran affiche un code à 6 caractères et un QR code.
 2. Sur le téléphone : scanne le QR code (ou web app → **Réglages → Kodi → Appairer une TV** et saisis le code).
-3. Choisis le **nom**, la **pièce** (Salon / Salle de cinéma) et l'**ampli** de cette TV. La TV se connecte toute seule en quelques secondes.
+3. Choisis le **nom**, la **pièce** (Salon / Salle de cinéma / Bureau) et l'**ampli** de cette TV (pas d'ampli au Bureau). La TV se connecte toute seule en quelques secondes.
 
 Ensuite :
 - l'écran **Salon** et le préréglage appliqué par **Lire** visent **toujours l'ampli de la pièce de cette TV**. Le serveur l'impose : une TV ne peut pas piloter l'ampli d'une autre pièce ;
@@ -841,6 +841,55 @@ Ce que les TV partagent déjà (vu / reprise, § 20) s'affiche aussi dans la
 >   sinon une bulle « n'est pas dans la médiathèque de cette TV » ;
 > - la TV doit être en 1.19.0 ou plus : une plus ancienne ignore la demande.
 
+### 25. 🗂️ Pièce « Bureau » sans ampli, appairer depuis l'accueil (1.19.1)
+
+**Appairer depuis l'appli ArrMada.** Avant, l'appairage n'était accessible
+que par l'interface de Kodi (Extensions → ArrMada → « Appairer cette TV ») :
+introuvable quand Kodi démarre directement sur l'accueil ArrMada. Désormais :
+
+- une TV **pas encore appairée** ouvre l'écran d'appairage **toute seule** en
+  arrivant sur l'accueil ArrMada (une fois par démarrage de Kodi : *Retour*
+  le ferme et il ne revient pas en boucle) ;
+- à tout moment : **Réglages** (dernier bouton du menu de gauche) →
+  *Appairer cette TV* — ou *Refaire l'appairage (TV Sony · Bureau)* si elle
+  l'est déjà —, *Paramètres de l'add-on*, *Réglages de Kodi* ;
+- juste après l'appairage, la TV relève événements et flux **tout de suite**
+  et l'accueil se remplit dans la foulée (avant : jusqu'à 2 min de rangées
+  vides, le temps que les essais espacés reprennent).
+
+**Pièce « Bureau ».** Une troisième pièce, **sans ampli** : le son passe par
+la TV. Le serveur l'impose (comme le reste du périmètre TV) :
+
+- à l'appairage ou en déplaçant une TV au bureau dans la web app, l'ampli est
+  retiré (la liste « Ampli » est grisée : « Pas d'ampli dans cette pièce ») ;
+- une TV du bureau qui demande l'état de l'ampli, une commande ou un
+  préréglage reçoit `no_amp` : **jamais l'ampli du salon** (avant, une TV
+  sans ampli choisi retombait sur le premier ampli actif, celui du salon) ;
+- côté TV : aucun préréglage au lancement d'un film, pas de section *Ampli*
+  dans le panneau pendant le film, et l'écran *Salon* masque volume, muet,
+  marche / veille et préréglages : « Pas d'ampli dans cette pièce : le son
+  passe par la TV. » ;
+- l'écran d'appoint (tablette Fully Kiosk) d'une autre pièce ne suit pas la
+  TV du bureau : elle n'a pas de tablette.
+
+> Analogie : la pièce est un groupe d'hôtes dans un inventaire Ansible. Le
+> groupe « bureau » n'a simplement pas de variable `avr` : les tâches « ampli »
+> sont sautées, au lieu d'aller taper l'hôte d'un autre groupe.
+
+> Pièges :
+> - la TV relit son nom, sa pièce et son ampli à chaque reconnexion au
+>   serveur : après un changement dans la web app, elle suit au plus tard au
+>   redémarrage de Kodi (le serveur, lui, applique la nouvelle pièce
+>   **immédiatement**, quelle que soit la version de la TV) ;
+> - une TV en 1.19.0 ou moins déplacée au bureau ne pilote plus l'ampli (le
+>   serveur refuse), mais affiche encore une section *Ampli* vide : passe-la
+>   en 1.19.1 ;
+> - une **instance** Kodi (adresse JSON-RPC déclarée dans la web app) et un
+>   **appareil appairé** (Paramètres → Kodi → Appareils) sont deux choses :
+>   l'instance sert au serveur à interroger Kodi, l'appairage donne son accès
+>   à l'add-on de la TV. Ajouter l'instance ne lie pas la TV : il faut aussi
+>   l'appairer.
+
 ## 🚀 Installation dans Kodi
 
 > ⚠️ **NVIDIA Shield (Kodi 21, Android)** : l'installation **par le dépôt** ferme
@@ -904,7 +953,7 @@ Copiez le dossier `script.arrmada/` dans le dossier des extensions de Kodi :
    - **Nom de l'appareil** : Ex: `Kodi Salon`.
    - **Langue des sous-titres** : `fr` (ou selon votre choix).
 3. Validez ! Le service démarre automatiquement en arrière-plan.
-4. Appairez la TV (§ 7) : ArrMada → **Appairer cette TV** (sauf passage automatique depuis l'ancien mot de passe).
+4. Appairez la TV (§ 7) : l'accueil ArrMada ouvre l'écran d'appairage tout seul (sinon **Réglages → Appairer cette TV**), sauf passage automatique depuis l'ancien mot de passe.
 
 ---
 

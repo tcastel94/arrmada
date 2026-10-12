@@ -398,14 +398,14 @@ function AmbientView({
                 {auth.kind === "admin" && (
                     <span className="flex items-center gap-1 rounded-full bg-white/5 px-1 py-1 text-slate-400">
                         <span className="px-1.5">Aperçu</span>
-                        {(["salon", "cinema"] as const).map((r) => (
+                        {(["salon", "cinema", "bureau"] as const).map((r) => (
                             <button
                                 key={r}
                                 type="button"
                                 onClick={() => setRoom(r)}
                                 className={cn("rounded-full px-2 py-0.5", room === r ? "bg-[#4A9EFF]/20 text-[#8CC4FF]" : "hover:text-slate-200")}
                             >
-                                {r === "salon" ? "Salon" : "Cinéma"}
+                                {r === "salon" ? "Salon" : r === "cinema" ? "Cinéma" : "Bureau"}
                             </button>
                         ))}
                         <button type="button" onClick={onLeavePreview} className="rounded-full px-2 py-0.5 hover:text-slate-200">
@@ -574,7 +574,7 @@ function RestView({ now, data }: { now: Date; data?: Ambient }) {
 
             <div className="flex flex-col" style={{ gap: u(3) }}>
                 <p className="text-slate-500" style={{ fontSize: u(3) }}>
-                    Rien en lecture{room ? ` dans ${room === "Salon" ? "le salon" : `la ${room.toLowerCase()}`}` : ""}. Lance un film sur
+                    Rien en lecture{room ? ` dans ${room === "Salle de cinéma" ? "la salle de cinéma" : `le ${room.toLowerCase()}`}` : ""}. Lance un film sur
                     Kodi : l&apos;heure de fin s&apos;affichera ici en grand.
                 </p>
                 {hasPanels && (

@@ -21,6 +21,9 @@ Répond comme le vrai backend aux routes lues par l'écran « Accueil » :
   GET /__watch                  ce que la TV a déposé (vérifié par le harnais)
   GET /__watch_push?…           une « autre TV » change un état (+ événement)
   GET /api/kodi/series/371980/episodes  épisodes « Sonarr » de Severance
+  GET /__room?room=bureau       la TV change de pièce dans la web app (1.19.1 :
+                                bureau = pas d'ampli, /api/yamaha/state → no_amp)
+  GET /__presets                préréglages d'ampli reçus (aucun depuis le bureau)
 
 La progression des téléchargements avance à chaque appel, pour vérifier le
 rafraîchissement en direct. Une latence est simulée (--delay) pour voir les
@@ -75,6 +78,7 @@ STATE = {
     "watch": {},  # vu / reprise partagés : clé → état (avec « seq », le curseur)
     "watch_seq": 0,
     "watch_posts": [],  # dépôts reçus de la TV : {"merge", "states"}
+    "presets": 0,  # POST /api/yamaha/preset/apply reçus (relus par /__presets)
     "amp": {"power": "on", "volume": 84, "mute": False, "input": "hdmi1", "sound_program": "surr_decoder"},
 }
 CAST = [
@@ -641,7 +645,13 @@ def yamaha_state() -> dict:
 
 
 PAIR_CODE = "K7P4QX"
-PAIRED_DEVICE = {"id": 1, "name": "Shield Salon", "room": "salon", "avr_name": "Yamaha RX-A2080"}
+PAIRED_DEVICE = {
+    "id": 1, "name": "Shield Salon", "room": "salon", "avr_name": "Yamaha RX-A2080", "has_amp": True,
+}
+ROOMS = {  # pièce → (nom de l'appareil, ampli) comme le vrai serveur (1.19.1)
+    "salon": ("Shield Salon", "Yamaha RX-A2080"),
+    "bureau": ("TV Sony Bureau", None),
+}
 
 
 def make_qr(path: Path, text: str) -> None:
@@ -770,6 +780,17 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
                 }
                 self._json({"changed": watch_store([state], "Shield Cinéma")})
                 return
+            if path == "/__room":  # la TV change de pièce dans la web app (1.19.1)
+                from urllib.parse import parse_qs, urlsplit
+
+                room = parse_qs(urlsplit(self.path).query).get("room", ["salon"])[0]
+                name, avr = ROOMS.get(room, ROOMS["salon"])
+                PAIRED_DEVICE.update(name=name, room=room, avr_name=avr, has_amp=avr is not None)
+                self._json(PAIRED_DEVICE)
+                return
+            if path == "/__presets":  # préréglages d'ampli reçus
+                self._json({"presets": STATE["presets"]})
+                return
             if path == "/__emit":  # le harnais publie un événement temps réel
                 from urllib.parse import parse_qs, urlsplit
 
@@ -887,7 +908,11 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
                     make_qr(file, url)
                 self._json({"url": url, "png": base64.b64encode(file.read_bytes()).decode()})
             elif path == "/api/yamaha/state":
-                self._json(yamaha_state())
+                if STATE["auth"] == "device" and not PAIRED_DEVICE["has_amp"]:
+                    # TV du bureau : comme le vrai serveur, jamais l'ampli du salon
+                    self._json({"devices": [], "status": "no_amp", "detail": "Pas d'ampli dans cette pièce"})
+                else:
+                    self._json(yamaha_state())
             elif path == "/api/yamaha/profiles":
                 self._json({"salon": {"name": "Salon"}, "cinema": {"name": "Salle de cinéma"}})
             else:
@@ -943,6 +968,8 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
                     amp["power"] = "standby" if value == "standby" else "on"
                 self._json({"status": "ok", "action": action})
             elif path == "/api/yamaha/preset/apply":
+                STATE["presets"] += 1
+                sys.stderr.write(f"[mock] préréglage d'ampli reçu : {data}\n")
                 amp["sound_program"] = "straight" if data.get("room") == "salon" else "surr_decoder"
                 self._json({"status": "ok", "room": data.get("room")})
             elif path.startswith("/api/kodi/downloads/"):

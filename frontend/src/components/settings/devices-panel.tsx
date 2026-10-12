@@ -19,7 +19,7 @@
  */
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Link2, Loader2, Speaker, Tablet, Tv } from "lucide-react";
+import { Briefcase, Link2, Loader2, Speaker, Tablet, Tv, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -32,17 +32,20 @@ import { DeviceRow } from "@/components/settings/device-row";
 import { KioskSection } from "@/components/settings/kiosk-section";
 import { FormField } from "@/components/settings/form-field";
 import { useStickyValue } from "@/components/settings/use-sticky-value";
-import { ROOMS, ROOM_META } from "@/components/remote/yamaha-audio";
+import { ROOM_META } from "@/components/remote/yamaha-audio";
 import {
+    DEVICE_ROOMS,
     normalizePairCode,
+    roomHasAmp,
     usePairDevice,
     useDevices,
     useRevokeDevice,
     useUpdateDevice,
+    type DeviceRoom,
     type DeviceSettings,
     type PairedDevice,
 } from "@/hooks/use-devices";
-import { useYamahaSettings, type YamahaRoom } from "@/hooks/use-yamaha";
+import { useYamahaSettings } from "@/hooks/use-yamaha";
 import { plural, timeAgo } from "@/lib/format";
 import { stagger } from "@/lib/motion";
 
@@ -50,6 +53,7 @@ import { stagger } from "@/lib/motion";
 const CODE_LENGTH = 6;
 /** Valeur du menu « ampli » pour « le premier ampli actif ». */
 const FIRST_AVR = "auto";
+const NO_AVR = "none"; // bureau : choix grisé
 
 export function DevicesPanel() {
     const { data: devices, isLoading, isError, error, refetch } = useDevices();
@@ -99,7 +103,7 @@ export function DevicesPanel() {
             >
                 <p className="text-xs leading-relaxed text-muted-foreground">
                     Chaque Kodi appairé a son propre accès : plus de mot de passe admin dans la TV, et tu peux le révoquer d&apos;un
-                    clic. Il pilote toujours l&apos;ampli de sa pièce. Sur la TV : <span className="text-foreground">ArrMada → Appairer cet appareil</span>.
+                    clic. Il pilote toujours l&apos;ampli de sa pièce (aucun au bureau). Sur la TV : <span className="text-foreground">ArrMada → Réglages → Appairer cette TV</span>.
                     Écran d&apos;appoint (tablette sous la TV) : ouvre <span className="font-mono text-foreground">/ecran</span> de la web app sur la
                     tablette, elle affiche un code à valider ici. Elle montre l&apos;heure de fin du film en cours, sans rien pouvoir piloter.
                 </p>
@@ -142,7 +146,10 @@ export function DevicesPanel() {
                                         <span className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
                                             <span className="inline-flex items-center gap-1">
                                                 <Speaker className="h-3 w-3" />
-                                                {d.avr_name ?? "Premier ampli actif"}
+                                                {/* Bureau : aucun ampli (le serveur le refuse), pas « premier actif » */}
+                                                {(d.has_amp ?? roomHasAmp(d.room))
+                                                    ? (d.avr_name ?? "Premier ampli actif")
+                                                    : "Pas d'ampli"}
                                             </span>
                                             {d.platform && <span>{d.platform}</span>}
                                             <span>
@@ -238,8 +245,14 @@ export function DevicesPanel() {
     );
 }
 
-function RoomBadge({ room }: { room: YamahaRoom }) {
-    const meta = ROOM_META[room] ?? ROOM_META.salon;
+/** Libellé et icône d'une pièce : ceux de la télécommande, plus le bureau (sans ampli). */
+function roomMeta(room: DeviceRoom): { label: string; icon: LucideIcon } {
+    if (room === "bureau") return { label: "Bureau", icon: Briefcase };
+    return ROOM_META[room] ?? ROOM_META.salon;
+}
+
+function RoomBadge({ room }: { room: DeviceRoom }) {
+    const meta = roomMeta(room);
     const Icon = meta.icon;
     return (
         <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
@@ -273,7 +286,8 @@ function DeviceForm({
     const { data: amps } = useYamahaSettings();
     const [code, setCode] = useState(initialCode);
     const [name, setName] = useState(initial?.name ?? "");
-    const [room, setRoom] = useState<YamahaRoom>(initial?.room ?? "salon");
+    const [room, setRoom] = useState<DeviceRoom>(initial?.room ?? "salon");
+    const withAmp = roomHasAmp(room);
     const [avr, setAvr] = useState<string>(initial?.avr_service_id ? String(initial.avr_service_id) : FIRST_AVR);
     const [touched, setTouched] = useState(false);
 
@@ -288,7 +302,8 @@ function DeviceForm({
             code,
             name: name.trim(),
             room,
-            avr_service_id: avr === FIRST_AVR ? null : Number(avr),
+            // Bureau : aucun ampli (le serveur l'ignorerait de toute façon)
+            avr_service_id: !withAmp || avr === FIRST_AVR ? null : Number(avr),
         }).catch(() => undefined); // l'erreur est déjà affichée (toast)
     };
 
@@ -318,26 +333,31 @@ function DeviceForm({
                 />
             </FormField>
             <div className="grid gap-4 sm:grid-cols-2">
-                <FormField id={`${idPrefix}-room`} label="Pièce" hint="Préréglage audio appliqué en lançant un film.">
-                    <Select value={room} onValueChange={(v) => setRoom(v as YamahaRoom)}>
+                <FormField
+                    id={`${idPrefix}-room`}
+                    label="Pièce"
+                    hint={withAmp ? "Préréglage audio appliqué en lançant un film." : "Pas d'ampli au bureau : aucun préréglage, rien à piloter."}
+                >
+                    <Select value={room} onValueChange={(v) => setRoom(v as DeviceRoom)}>
                         <SelectTrigger id={`${idPrefix}-room`}>
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                            {ROOMS.map((r) => (
+                            {DEVICE_ROOMS.map((r) => (
                                 <SelectItem key={r} value={r}>
-                                    {ROOM_META[r].label}
+                                    {roomMeta(r).label}
                                 </SelectItem>
                             ))}
                         </SelectContent>
                     </Select>
                 </FormField>
                 <FormField id={`${idPrefix}-avr`} label="Ampli de cette pièce" hint="Celui que la TV pilote (volume, préréglages), ou que l'écran d'appoint affiche.">
-                    <Select value={avr} onValueChange={setAvr}>
+                    <Select value={withAmp ? avr : NO_AVR} onValueChange={setAvr} disabled={!withAmp}>
                         <SelectTrigger id={`${idPrefix}-avr`}>
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
+                            {!withAmp && <SelectItem value={NO_AVR}>Pas d&apos;ampli dans cette pièce</SelectItem>}
                             <SelectItem value={FIRST_AVR}>Premier ampli actif</SelectItem>
                             {(amps ?? []).map((a) => (
                                 <SelectItem key={a.id} value={String(a.id)}>

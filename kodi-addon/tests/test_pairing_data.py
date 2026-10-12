@@ -65,6 +65,46 @@ def test_device_summary() -> None:
     )
 
 
+def test_device_summary_office() -> None:
+    office = {"name": "TV Sony", "room": "bureau", "avr_name": None}
+    assert pd.device_summary(office) == "TV Sony · Bureau"
+
+
+class TestOffice:
+    """Pièce « Bureau » sans ampli, appairage depuis l'accueil (1.19.1)."""
+
+    def test_has_amp(self) -> None:
+        # Le serveur le dit (1.19.1) : il fait foi, quelle que soit la pièce
+        assert pd.has_amp({"room": "bureau", "has_amp": False}) is False
+        assert pd.has_amp({"room": "salon", "has_amp": True}) is True
+        # Serveur plus ancien : on se fie à la pièce
+        assert pd.has_amp({"room": "bureau"}) is False
+        assert pd.has_amp({"room": "Bureau"}) is False
+        assert pd.has_amp({"room": "cinema"}) is True
+        # TV non appairée : comportement d'avant (ampli de la pièce réglée)
+        assert pd.has_amp({}) is True
+        assert pd.has_amp(None) is True
+
+    def test_should_offer_only_once_and_only_when_unpaired(self) -> None:
+        assert pd.should_offer(paired=False, legacy_password=False, already_asked=False)
+        assert not pd.should_offer(paired=True, legacy_password=False, already_asked=False)
+        # Ancien mot de passe : le service appaire la TV tout seul (migration)
+        assert not pd.should_offer(paired=False, legacy_password=True, already_asked=False)
+        # Déjà proposé dans cette session de Kodi : Retour l'a fermé, on n'insiste pas
+        assert not pd.should_offer(paired=False, legacy_password=False, already_asked=True)
+
+    def test_settings_choices(self) -> None:
+        keys = [key for key, _ in pd.settings_choices({})]
+        assert keys == ["pair", "addon", "kodi"]
+        assert pd.settings_choices({})[0][1] == "Appairer cette TV"
+        # Sans jeton, la description ne compte pas : la TV n'est pas appairée
+        assert (
+            pd.settings_choices({"name": "TV Sony", "room": "bureau"})[0][1] == "Appairer cette TV"
+        )
+        paired = {"token": "x", "name": "TV Sony", "room": "bureau", "avr_name": ""}
+        assert pd.settings_choices(paired)[0] == ("pair", "Refaire l'appairage (TV Sony · Bureau)")
+
+
 class TestMigration:
     """Ancien mot de passe → appairage automatique (phase 3)."""
 

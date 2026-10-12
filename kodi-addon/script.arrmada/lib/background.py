@@ -47,6 +47,7 @@ import xbmcgui
 import camera_data
 import device
 import feeds
+import pairing_data
 import remote_data
 import sync_data
 import ui_common as ui
@@ -93,6 +94,10 @@ class BackgroundTasks:
     def tick(self) -> None:
         """Un tour de boucle : au plus un relevé, une étape de synchro et un flux."""
         now = time.time()
+        home = xbmcgui.Window(HOME)
+        if home.getProperty(pairing_data.PAIRED_NOW) == "1":
+            home.clearProperty(pairing_data.PAIRED_NOW)
+            self._after_pairing(now)
         if now >= self._next_poll:
             self._poll_events(now)
         if self._held and not _watching():
@@ -119,6 +124,7 @@ class BackgroundTasks:
         if not self.connected:
             _log("relevé des événements actif (toutes les 5 s)")
             self.sync.wake()  # changements faits ailleurs pendant la coupure
+            self._refresh_device()
         self.connected = True
         self._backoff = feeds.EVENTS_EVERY
         self._next_poll = now + feeds.EVENTS_EVERY
@@ -139,6 +145,35 @@ class BackgroundTasks:
             self._held.extend(bubbles)  # pas de bulle sur le film : résumé à l'arrêt
             return
         self._show(feeds.merge_notifications(bubbles))
+
+    def _after_pairing(self, now: float) -> None:
+        """TV tout juste appairée (1.19.1) : relevé, flux et vu partagé tout de suite.
+
+        Avant l'appairage, le serveur refusait la TV : les essais étaient
+        espacés (jusqu'à 2 min). Sans ce coup de pouce, l'accueil resterait
+        vide quelques minutes.
+        """
+        _log("TV appairée : relevé des événements et des flux tout de suite")
+        self._next_poll = now
+        self._backoff = feeds.EVENTS_EVERY
+        self._retry_at.clear()
+        self._forced |= set(feeds.FEEDS)
+        self.sync.wake()
+
+    def _refresh_device(self) -> None:
+        """Nom, pièce et ampli de cette TV tels que réglés dans la web app.
+
+        Ils peuvent avoir changé depuis l'appairage (TV déplacée au bureau :
+        plus d'ampli). Lu à chaque (re)connexion au serveur.
+        """
+        if not device.load().get("token"):
+            return
+        me = ArrMadaAPI.device_me()
+        if feeds.is_error(me) or not me.get("paired"):
+            return
+        device.update(
+            {key: me[key] for key in ("name", "room", "avr_name", "has_amp") if key in me}
+        )
 
     def _handle(self, event_type: str, data: dict):
         """Rafraîchissements et scan pour un événement ; sa bulle (ou None)."""

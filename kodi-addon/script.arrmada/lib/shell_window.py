@@ -33,6 +33,7 @@ import xbmcgui
 
 import listing
 import navigation
+import pairing_data
 import shell_data
 import ui_common as ui
 import watch_data
@@ -47,6 +48,11 @@ ROW_GROUPS = 500  # rangées (liste verticale qui défile)
 ROW_LISTS = (610, 650, 620, 630, 640)  # ordre de shell_data.ROWS
 
 REFRESH_MINUTES = 2  # relecture des caches tant que l'écran est ouvert
+# Posées par le service quand un flux change. Seulement ceux des rangées :
+# « downloads » change toutes les 30 s pendant un téléchargement, recharger
+# l'accueil à ce rythme gênerait la navigation.
+RELOAD_PROPS = tuple(f"arrmada.reload.{name}" for name in ("recent", "foryou", "upcoming"))
+RELOAD_CHECK = 2.0  # s : l'accueil se recharge dès qu'une de ses rangées change
 SHELL_PROP = shell_data.SHELL_PROP
 SHELL_OFF = shell_data.SHELL_OFF
 
@@ -82,6 +88,7 @@ class ShellWindow(xbmcgui.WindowXML):
         self.setProperty("version", ui.ADDON.getAddonInfo("version"))
         _log(f"ouverture en {ui.ms_since(self._opened_at)} ms")
         threading.Thread(target=self._loop, name="arrmada-shell", daemon=True).start()
+        threading.Thread(target=self._offer_pairing, name="arrmada-pair", daemon=True).start()
 
     def close_window(self) -> None:
         self._stop.set()
@@ -89,12 +96,76 @@ class ShellWindow(xbmcgui.WindowXML):
         self.close()
 
     def _loop(self) -> None:
-        """Fil d'arrière-plan : remplit les rangées, puis les relit de temps en temps."""
+        """Fil d'arrière-plan : remplit les rangées, puis les relit.
+
+        Dès que le service annonce une rangée neuve (`arrmada.reload.recent`…,
+        par exemple juste après l'appairage), sinon toutes les 2 min.
+        """
         monitor = xbmc.Monitor()
+        home = xbmcgui.Window(10000)
+
+        def stamps() -> tuple:
+            return tuple(home.getProperty(prop) for prop in RELOAD_PROPS)
+
         while not self._stop.is_set() and not monitor.abortRequested():
+            seen = stamps()
             self._load()
-            if self._stop.wait(REFRESH_MINUTES * 60):
-                break
+            deadline = time.monotonic() + REFRESH_MINUTES * 60
+            while time.monotonic() < deadline:
+                if self._stop.wait(RELOAD_CHECK) or monitor.abortRequested():
+                    return
+                if stamps() != seen:
+                    break
+
+    # ── Appairage depuis l'accueil (1.19.1) ─────────────────────────────────
+
+    def _offer_pairing(self) -> None:
+        """TV non appairée : l'écran d'appairage s'ouvre tout seul, une fois par session.
+
+        Sans appairage, rien ne marche (le serveur refuse la TV) : comme une
+        appli de streaming qui affiche son code au premier lancement. Ouvert
+        dans une invocation à part (RunPlugin) : l'accueil reste dessous.
+        """
+        import device
+        import migration
+        from api import ArrMadaAPI
+
+        home = xbmcgui.Window(10000)
+        paired = bool(device.token_for(ArrMadaAPI.get_config()["url"]))
+        asked = home.getProperty(pairing_data.PAIR_ASKED) == "1"
+        if not pairing_data.should_offer(paired, migration.needed(), asked):
+            return
+        home.setProperty(pairing_data.PAIR_ASKED, "1")
+        if self._stop.wait(1.5):  # l'accueil s'affiche d'abord
+            return
+        _log("TV non appairée : ouverture de l'appairage")
+        xbmc.executebuiltin("RunPlugin(plugin://script.arrmada/?action=pair)")
+
+    def _settings_menu(self) -> None:
+        """Réglages : appairer cette TV (ou refaire l'appairage), add-on, Kodi."""
+        import device
+
+        choices = pairing_data.settings_choices(device.load())
+        # Liste centrée avec titre (un menu contextuel s'ouvrirait en haut à
+        # gauche et couperait « Refaire l'appairage (TV Sony Bureau · Bureau) »)
+        index = xbmcgui.Dialog().select("Réglages", [label for _, label in choices])
+        choice = choices[index][0] if index >= 0 else ""
+        if choice == "pair":
+            self._pair()
+        elif choice == "addon":
+            ui.ADDON.openSettings()
+        elif choice == "kodi":
+            xbmc.executebuiltin("ActivateWindow(Settings)")
+
+    @staticmethod
+    def _pair() -> None:
+        import pair_window
+
+        paired = pair_window.open_pairing()
+        if paired:
+            ui.notify("ArrMada", f"TV appairée : {pairing_data.device_summary(paired)}", 5000)
+            # Le service relit événements et flux tout de suite ; l'accueil suit
+            xbmcgui.Window(10000).setProperty(pairing_data.PAIRED_NOW, "1")
 
     # ── Rangées ────────────────────────────────────────────────────────────
 
@@ -270,7 +341,7 @@ class ShellWindow(xbmcgui.WindowXML):
 
             home_window.open_home()
         elif key == "settings":
-            ui.ADDON.openSettings()
+            self._settings_menu()
 
     def _quit_menu(self) -> None:
         """Retour : jamais d'accueil Kodi par surprise, toujours une porte de sortie."""

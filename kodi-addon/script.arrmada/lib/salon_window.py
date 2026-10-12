@@ -21,6 +21,7 @@ import threading
 import xbmc
 import xbmcgui
 
+import pairing_data
 import screens_data
 import ui_common as ui
 from api import ArrMadaAPI
@@ -42,7 +43,8 @@ PRESETS = 830
 
 REFRESH_SECONDS = 3
 VOLUME_STEP = 4  # pas de l'ampli par appui (Yamaha : 0,5 dB par unité)
-ROOM_NAMES = {"salon": "Salon", "cinema": "Salle de cinéma"}
+ROOM_NAMES = {"salon": "Salon", "cinema": "Salle de cinéma"}  # pièces avec un ampli
+NO_AMP_MESSAGE = "Pas d'ampli dans cette pièce : le son passe par la TV."
 
 PLAYER_COMMANDS = {
     BTN_BACK30: "Seek(-30)",
@@ -66,12 +68,17 @@ class SalonWindow(xbmcgui.WindowXML):
         if self._initialized:
             return
         self._initialized = True
-        self.setProperty("room_name", ROOM_NAMES.get(ui.room(), ui.room()))
-        self.setProperty("amp_name", "Ampli Yamaha")
+        import device
+
+        self.setProperty("room_name", pairing_data.ROOM_NAMES.get(ui.room(), ui.room()))
         self.setProperty("amp_power", "…")
-        self.setProperty("amp_message", "Connexion à l'ampli…")
+        # Bureau (1.19.1) : commandes masquées d'emblée, sans attendre le serveur
+        with_amp = device.has_amp()
+        self._show_amp(with_amp)
+        self.setProperty("amp_message", "Connexion à l'ampli…" if with_amp else NO_AMP_MESSAGE)
         playing = xbmc.getCondVisibility("Player.HasMedia")
-        ui.focus_when_visible(self, BTN_PLAYPAUSE if playing else BTN_VOL_UP)
+        if playing or with_amp:  # sans ampli ni lecture : rien à sélectionner, Retour ferme
+            ui.focus_when_visible(self, BTN_PLAYPAUSE if playing else BTN_VOL_UP)
         threading.Thread(target=self._loop, name="arrmada-salon", daemon=True).start()
 
     def _loop(self) -> None:
@@ -96,7 +103,11 @@ class SalonWindow(xbmcgui.WindowXML):
                 self._profiles = profiles
         if self._stop.is_set():
             return
-        if not isinstance(state, dict) or state.get("status") == "error":
+        with_amp = not (isinstance(state, dict) and state.get("status") == "no_amp")
+        if not with_amp:  # le serveur fait foi (TV déplacée au bureau depuis)
+            model = screens_data.build_salon({}, {})
+            message = NO_AMP_MESSAGE
+        elif not isinstance(state, dict) or state.get("status") == "error":
             model = screens_data.build_salon({}, {})
             message = "Serveur ArrMada injoignable : ampli indisponible."
         else:
@@ -108,8 +119,17 @@ class SalonWindow(xbmcgui.WindowXML):
                 message = "L'ampli ne répond pas (débranché ou hors réseau ?)."
         try:
             self._render(model, message)
+            self._show_amp(with_amp)
         except RuntimeError:
             pass  # fenêtre fermée
+
+    def _show_amp(self, with_amp: bool) -> None:
+        """Pièce sans ampli : propriété « no_amp » (le XML masque les commandes)."""
+        self.setProperty("no_amp", "" if with_amp else "1")
+        if not with_amp:
+            self.setProperty("amp_name", "Son de la TV")
+        elif not self.getProperty("amp_name"):
+            self.setProperty("amp_name", "Ampli Yamaha")
 
     def _render(self, model: dict, message: str) -> None:
         self._model = model

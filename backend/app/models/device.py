@@ -14,8 +14,14 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models import Base
 
-# Liste fixe (ADR-003, décision 3) : ce sont les deux profils audio Yamaha.
-ROOMS = ("salon", "cinema")
+# Liste fixe (ADR-003, décision 3). Salon et salle de cinéma ont chacun un
+# ampli Yamaha et un profil audio ; le bureau (1.19.1) n'a pas d'ampli.
+ROOMS = ("salon", "cinema", "bureau")
+
+# Pièces équipées d'un ampli (préréglages par pièce). Une TV d'une autre pièce
+# ne pilote jamais d'ampli : sinon « le premier ampli actif » serait celui du
+# salon, et lancer un film au bureau changerait le volume du salon.
+AMP_ROOMS = ("salon", "cinema")
 
 # Sortes d'appareils : une TV (Kodi, périmètre « TV ») ou un écran d'appoint
 # (tablette sous la TV, lecture seule : il affiche, il ne commande rien).

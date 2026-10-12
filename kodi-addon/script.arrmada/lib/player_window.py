@@ -299,7 +299,11 @@ class PlayerPanel(xbmcgui.WindowXMLDialog):
         self._options.setdefault("amp", [])
 
     def _load_amp(self) -> None:
-        """Ampli de la pièce de la TV (réseau : en arrière-plan)."""
+        """Ampli de la pièce de la TV (réseau : en arrière-plan). Rien au bureau."""
+        import device
+
+        if not device.has_amp():
+            return  # pas de section « Ampli » (1.19.1)
         state = ArrMadaAPI.yamaha_state()
         profiles = ArrMadaAPI.yamaha_profiles()
         if self._closed.is_set():

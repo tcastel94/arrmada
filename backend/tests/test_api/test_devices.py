@@ -192,6 +192,43 @@ async def test_update_device(client: AsyncClient, auth_headers: dict) -> None:
     assert resp.status_code == 422
 
 
+async def test_office_tv_never_drives_an_amp(client: AsyncClient, auth_headers: dict) -> None:
+    """Bureau (1.19.1) : pas d'ampli. Sans garde-fou, « le premier ampli actif »
+    serait celui du salon et un film lancé au bureau en changerait le volume."""
+    # Un ampli envoyé pour le bureau est ignoré (même inexistant : pas vérifié)
+    token, device = await _pair(
+        client, auth_headers, name="Sony Bureau", room="bureau", avr_service_id=999
+    )
+    assert device["room"] == "bureau"
+    assert device["avr_service_id"] is None and device["has_amp"] is False
+    tv = {"X-Device-Token": token}
+    state = (await client.get("/api/yamaha/state", headers=tv)).json()
+    assert state["devices"] == [] and state["status"] == "no_amp"
+    for path, body in (
+        ("/api/yamaha/preset/apply", {"media_type": "movie"}),
+        ("/api/yamaha/control", {"action": "volume_step", "value": 2}),
+    ):
+        resp = await client.post(path, json=body, headers=tv)
+        assert resp.status_code == 200 and resp.json()["status"] == "no_amp", path
+    me = (await client.get("/api/devices/me", headers=tv)).json()
+    assert me["has_amp"] is False and me["room"] == "bureau"
+
+
+async def test_moving_a_tv_to_the_office_drops_its_amp(
+    client: AsyncClient, auth_headers: dict
+) -> None:
+    _, device = await _pair(client, auth_headers)
+    assert device["has_amp"] is True
+    resp = await client.patch(
+        f"/api/devices/{device['id']}",
+        json={"room": "bureau", "avr_service_id": 999},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert (body["room"], body["avr_service_id"], body["has_amp"]) == ("bureau", None, False)
+
+
 async def test_web_app_session_is_not_paired(client: AsyncClient, auth_headers: dict) -> None:
     assert (await client.get("/api/devices/me", headers=auth_headers)).json() == {"paired": False}
 

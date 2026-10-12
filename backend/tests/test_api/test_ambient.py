@@ -107,6 +107,9 @@ async def test_ambient_shows_what_the_tv_plays(client: AsyncClient, auth_headers
     assert data["downloads"] == [] and data["amp"] is None  # rien de configuré : blocs vides
     other = (await client.get("/api/ambient?room=cinema", headers=auth_headers)).json()
     assert other["playing"] is None
+    # Bureau (1.19.1) : une pièce à part, sans ampli
+    office = (await client.get("/api/ambient?room=bureau", headers=auth_headers)).json()
+    assert office["room_label"] == "Bureau" and office["playing"] is None and office["amp"] is None
 
 
 async def test_artwork_comes_from_the_library(client: AsyncClient, arr_stack: dict) -> None:

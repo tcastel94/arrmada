@@ -12,13 +12,24 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api-client";
 import type { YamahaRoom } from "@/hooks/use-yamaha";
 
+/**
+ * Pièce d'un appareil. Salon et salle de cinéma ont un ampli Yamaha (et un
+ * profil audio) ; le bureau n'en a pas (1.19.1) : la TV du bureau ne pilote
+ * aucun ampli et n'envoie aucun préréglage.
+ */
+export type DeviceRoom = YamahaRoom | "bureau";
+export const DEVICE_ROOMS: DeviceRoom[] = ["salon", "cinema", "bureau"];
+export const roomHasAmp = (room: DeviceRoom): boolean => room !== "bureau";
+
 export interface PairedDevice {
     id: number;
     name: string;
-    room: YamahaRoom;
-    /** Ampli Yamaha de la pièce ; null = le premier ampli actif. */
+    room: DeviceRoom;
+    /** Ampli Yamaha de la pièce ; null = le premier ampli actif (aucun au bureau). */
     avr_service_id: number | null;
     avr_name: string | null;
+    /** Faux au bureau (absent sur un serveur plus ancien). */
+    has_amp?: boolean;
     /**
      * « tv » : Kodi (jeton « TV »). « screen » : écran d'appoint, la tablette
      * de la page /ecran (jeton en lecture seule, une seule route).
@@ -45,7 +56,7 @@ export interface PairedDevice {
 
 export interface DeviceSettings {
     name: string;
-    room: YamahaRoom;
+    room: DeviceRoom;
     avr_service_id: number | null;
 }
 

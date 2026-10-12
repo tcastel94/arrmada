@@ -31,7 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, get_db, require_admin
 from app.config import settings
 from app.main import limiter
-from app.models.device import ROOMS, Device
+from app.models.device import AMP_ROOMS, ROOMS, Device
 from app.models.service import Service
 from app.services import devices as devices_service
 from app.services import fully_kiosk
@@ -132,6 +132,9 @@ async def _serialize(db: AsyncSession, device: Device) -> dict:
         "room": device.room,
         "avr_service_id": device.avr_service_id,
         "avr_name": avr.name if avr else None,
+        # Faux au bureau : la TV masque l'ampli (panneau, Salon) et n'envoie
+        # aucun préréglage (add-on 1.19.1)
+        "has_amp": device.room in AMP_ROOMS,
         "kind": device.kind or "tv",
         "kiosk_control": bool(device.kiosk_control),
         "kiosk_host": device.kiosk_host or "",
@@ -210,13 +213,15 @@ async def pair_confirm(body: PairConfirmRequest, db: AsyncSession = Depends(get_
             "Code inconnu ou expiré : vérifie le code affiché sur la TV",
         )
     room = _check_room(body.room)
-    await _check_avr(db, body.avr_service_id)
+    # Pièce sans ampli (bureau) : aucun ampli, même si on en envoie un
+    avr_service_id = body.avr_service_id if room in AMP_ROOMS else None
+    await _check_avr(db, avr_service_id)
 
     token = devices_service.new_token()
     device = Device(
         name=body.name.strip(),
         room=room,
-        avr_service_id=body.avr_service_id,
+        avr_service_id=avr_service_id,
         token_hash=devices_service.hash_token(token),
         platform=pending.platform or None,
         last_ip=pending.ip or None,
@@ -258,8 +263,8 @@ async def update_device(
         device.name = body.name.strip()
     if body.room is not None:
         device.room = _check_room(body.room)
-    if body.clear_avr:
-        device.avr_service_id = None
+    if body.clear_avr or device.room not in AMP_ROOMS:
+        device.avr_service_id = None  # pièce sans ampli (bureau) : jamais d'ampli
     elif body.avr_service_id is not None:
         await _check_avr(db, body.avr_service_id)
         device.avr_service_id = body.avr_service_id

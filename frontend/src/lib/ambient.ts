@@ -213,7 +213,7 @@ export function readOptions(search: string): ScreenOptions {
     return {
         dim: level(params.get("seance"), 6),
         rest: level(params.get("repos"), 40),
-        room: params.get("piece") === "cinema" ? "cinema" : "salon",
+        room: ["cinema", "bureau"].includes(params.get("piece") ?? "") ? (params.get("piece") as string) : "salon",
     };
 }
 

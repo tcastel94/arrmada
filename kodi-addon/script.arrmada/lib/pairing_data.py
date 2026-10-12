@@ -10,6 +10,15 @@ Le déroulé côté TV :
 
 from __future__ import annotations
 
+from typing import Any, List, Mapping, Tuple
+
+# Pièces d'un appareil. Salon et salle de cinéma ont un ampli Yamaha ; le
+# bureau (1.19.1) n'en a pas : la TV n'envoie aucun préréglage et masque
+# l'ampli (panneau pendant le film, écran Salon).
+ROOM_NAMES = {"salon": "Salon", "cinema": "Salle de cinéma", "bureau": "Bureau"}
+PAIR_ASKED = "arrmada.pair_asked"  # propriété de Home : appairage déjà proposé
+PAIRED_NOW = "arrmada.paired_now"  # « 1 » : appairage juste fini, le service relit tout
+
 # Plateformes reconnues par Kodi (System.Platform.*), dans l'ordre de test
 PLATFORMS = (
     ("Android", "Android"),
@@ -73,13 +82,44 @@ def poll_outcome(response: dict) -> tuple[str, str]:
 
 def device_summary(device: dict) -> str:
     """« Shield Salon · Salle de cinéma · Yamaha RX-A2080 » (écran de fin)."""
-    rooms = {"salon": "Salon", "cinema": "Salle de cinéma"}
     parts = [
         device.get("name") or "",
-        rooms.get(device.get("room") or "", ""),
+        ROOM_NAMES.get(device.get("room") or "", ""),
         device.get("avr_name") or "",
     ]
     return " · ".join(p for p in parts if p)
+
+
+def has_amp(info: Mapping[str, Any]) -> bool:
+    """Cette TV pilote-t-elle un ampli ? Non au bureau.
+
+    `info` : device.json. Le serveur le dit (`has_amp`, 1.19.1) ; avant, on
+    se fie à la pièce. Une TV non appairée garde l'ancien comportement.
+    """
+    if "has_amp" in (info or {}):
+        return bool(info["has_amp"])
+    return str((info or {}).get("room") or "").lower() != "bureau"
+
+
+def should_offer(paired: bool, legacy_password: bool, already_asked: bool) -> bool:
+    """Ouvrir l'appairage tout seul à l'arrivée sur l'accueil ArrMada ?
+
+    Seulement si la TV n'est pas appairée, n'a pas d'ancien mot de passe
+    (le service l'appaire alors tout seul) et une fois par session de Kodi
+    (Retour ferme l'écran d'appairage : on ne le rouvre pas en boucle).
+    """
+    return not paired and not legacy_password and not already_asked
+
+
+def settings_choices(info: Mapping[str, Any]) -> List[Tuple[str, str]]:
+    """Menu « Réglages » de l'accueil : (clé, libellé)."""
+    summary = device_summary(dict(info or {})) if (info or {}).get("token") else ""
+    pair = f"Refaire l'appairage ({summary})" if summary else "Appairer cette TV"
+    return [
+        ("pair", pair),
+        ("addon", "Paramètres de l'add-on"),
+        ("kodi", "Réglages de Kodi"),
+    ]
 
 
 # ─────────────────────────────────────────────────────────────────────────────

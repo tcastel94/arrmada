@@ -1082,6 +1082,97 @@ else:
     log("TV non appairée ou médiathèque vide : section « Lire sur la TV » sautée")
 
 
+# ── 6n. 1.19.1 : appairer depuis l'accueil ArrMada, TV du bureau sans ampli ─
+def presets():
+    """Préréglages d'ampli reçus par le faux serveur depuis le début du banc."""
+    return json.loads(urllib.request.urlopen(f"{MOCK}/__presets").read())["presets"]
+
+
+def pair_visible():
+    return xbmc.getCondVisibility("Window.IsVisible(script-arrmada-pair.xml)")
+
+
+def device_file():
+    try:
+        with open(_device, encoding="utf-8") as handle:
+            return json.load(handle)
+    except (OSError, ValueError):
+        return {}
+
+
+if shell_open():
+    leave_shell()
+saved_device = device_file()
+# 1. TV non appairée qu'on installe au bureau : l'accueil propose l'appairage tout seul
+urllib.request.urlopen(f"{MOCK}/__room?room=bureau").read()
+if os.path.exists(_device):
+    os.remove(_device)
+xbmcgui.Window(10000).clearProperty("arrmada.pair_asked")
+run_plugin("shell")
+for _ in range(16):
+    wait(0.5)
+    if pair_visible():
+        break
+log(f"TV non appairée : écran d'appairage {'ouvert tout seul' if pair_visible() else 'ABSENT'}")
+shot("24a-appairage-auto")
+for _ in range(50):  # le faux serveur valide au 3e relevé, puis l'écran se ferme seul
+    wait(0.5)
+    if not pair_visible():
+        break
+wait(2.0)
+info = device_file()
+log(
+    f"après appairage : pièce {info.get('room') or '?'}, "
+    f"ampli {'oui' if info.get('has_amp') else 'non'}, "
+    f"accueil {'ouvert' if shell_open() else 'FERMÉ'}"
+)
+shot("24b-appairee-au-bureau")
+# 2. Réglages de l'accueil : « Refaire l'appairage (…) », add-on, Kodi
+xbmc.executebuiltin("SetFocus(411)")
+wait(1.0)
+log(f"focus avant Réglages = {focus()}")
+press("Select")
+wait(1.5)
+log(f"Réglages : {'liste ouverte' if xbmc.getCondVisibility('Window.IsVisible(selectdialog)') else 'RIEN'}")
+shot("24c-reglages-appairage")
+press("Back")
+wait(1.0)
+# 3. Écran Salon depuis le bureau : pas d'ampli, aucun pilotage de celui du salon
+run_plugin("salon")
+wait(3.5)
+log(f"Salon au bureau : « {xbmc.getInfoLabel('Window.Property(amp_message)')} »")
+shot("24d-salon-sans-ampli")
+press("Back")
+wait(1.5)
+# 4. Lecture au bureau : aucun préréglage d'ampli envoyé, panneau sans section Ampli
+before_presets = presets()
+emit_play(device_id=1, media_type="movie", id_type="tmdb", id="1084736",
+          title="Le Comte de Monte-Cristo", resume="0")  # fmt: skip
+started = wait_video(15.0)
+wait(3.0)
+log(
+    f"lecture au bureau : {'en cours' if started else 'RIEN'} ; "
+    f"préréglages d'ampli envoyés : {presets() - before_presets}"
+)
+if started:
+    run_plugin("player")
+    wait(3.5)
+    shot("24e-panneau-sans-ampli")
+    press("Back")
+    wait(1.0)
+    xbmc.executebuiltin("PlayerControl(Stop)")
+    wait(3.0)
+# Retour à la TV du salon pour la suite du banc
+urllib.request.urlopen(f"{MOCK}/__room?room=salon").read()
+if saved_device:
+    with open(_device, "w", encoding="utf-8") as handle:
+        json.dump(saved_device, handle)
+if shell_open():
+    leave_shell()
+xbmc.executebuiltin("ActivateWindow(Home)")
+wait(2.0)
+
+
 # ── 7. Réouverture (cache), panne serveur ──────────────────────────────────
 run_plugin("home")
 wait(1.2)

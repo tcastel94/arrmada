@@ -26,7 +26,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
-from app.models.device import ROOMS
+from app.models.device import AMP_ROOMS, ROOMS
 from app.services.now_playing import now_playing
 from app.utils.cache import cache
 from app.utils.logger import get_logger
@@ -35,7 +35,7 @@ logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/ambient", tags=["ambient"])
 
-ROOM_LABELS = {"salon": "Salon", "cinema": "Salle de cinéma"}
+ROOM_LABELS = {"salon": "Salon", "cinema": "Salle de cinéma", "bureau": "Bureau"}
 MAX_DOWNLOADS = 3
 MAX_UPCOMING = 4
 
@@ -203,7 +203,8 @@ async def ambient(
         "room": room,
         "room_label": ROOM_LABELS.get(room, room),
         "playing": playing_view(state),
-        "amp": await _amp(db, avr),
+        # Bureau : pas d'ampli (sinon l'écran montrerait celui du salon)
+        "amp": await _amp(db, avr) if room in AMP_ROOMS else None,
         "downloads": await _downloads(db),
         "upcoming": await _upcoming(db),
     }

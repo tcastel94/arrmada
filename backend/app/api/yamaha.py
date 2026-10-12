@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
+from app.models.device import AMP_ROOMS
 from app.models.service import Service
 from app.services import yamaha as yamaha_service
 from app.services.encryption import encrypt_api_key
@@ -29,6 +30,18 @@ def _target_avr(user: dict, requested: int | None) -> int | None:
     return requested
 
 
+NO_AMP = {"status": "no_amp", "detail": "Pas d'ampli dans cette pièce"}
+
+
+def _without_amp(user: dict) -> bool:
+    """TV appairée dans une pièce sans ampli (le bureau) : rien à piloter ni à régler.
+
+    Sans ce garde-fou, « le premier ampli actif » serait celui du salon : un
+    film lancé au bureau changerait le volume et le programme sonore du salon.
+    """
+    return user.get("role") == "device" and user.get("room") not in AMP_ROOMS
+
+
 @router.get("/discover")
 async def discover(db: AsyncSession = Depends(get_db)) -> list[dict]:
     """Find Yamaha AVRs on the LAN (SSDP + YXC probe of known subnets)."""
@@ -42,6 +55,8 @@ async def state(
     user: dict = Depends(get_current_user),
 ):
     """Live power/volume/mute/input of the configured AVR(s)."""
+    if _without_amp(user):
+        return {"devices": [], **NO_AMP}
     return await yamaha_service.get_state(db, _target_avr(user, service_id))
 
 
@@ -56,6 +71,8 @@ async def control(
     data: dict, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)
 ):
     """Send a command: volume | volume_step | mute | power | input."""
+    if _without_amp(user):
+        return NO_AMP
     action = (data or {}).get("action")
     if not action:
         return {"status": "error", "detail": "action requise"}
@@ -87,6 +104,8 @@ async def apply_preset(
     data: dict, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)
 ):
     """Apply room audio preset (salon / cinema) based on media context."""
+    if _without_amp(user):
+        return NO_AMP
     # Pièce : celle demandée, sinon celle de la TV appairée, sinon le salon
     room = (data or {}).get("room") or user.get("room") or "salon"
     media_type = (data or {}).get("media_type", "movie")

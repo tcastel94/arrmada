@@ -139,7 +139,7 @@ def find_in_library(entry: dict) -> int | None:
 
 
 def room() -> str:
-    """Pièce de cet appareil : « salon » ou « cinema ».
+    """Pièce de cet appareil : « salon », « cinema » ou « bureau ».
 
     Celle choisie à l'appairage dans la web app si la TV est appairée,
     sinon le réglage « Profil de la pièce » de l'add-on.
@@ -154,7 +154,15 @@ def room() -> str:
 
 
 def apply_room_preset(entry: dict) -> None:
-    """Préréglage Yamaha de la pièce, en arrière-plan (l'ampli peut être lent)."""
+    """Préréglage Yamaha de la pièce, en arrière-plan (l'ampli peut être lent).
+
+    Rien au bureau (1.19.1) : pas d'ampli. Sans ce test, le serveur aurait
+    réglé le premier ampli actif, celui du salon.
+    """
+    import device
+
+    if not device.has_amp():
+        return
 
     def _apply() -> None:
         result = ArrMadaAPI.yamaha_apply_preset(

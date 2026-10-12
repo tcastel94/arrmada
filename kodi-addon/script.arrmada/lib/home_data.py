@@ -46,10 +46,10 @@ NBSP = " "  # espace insécable : séparateur de milliers « 3 412 »
 ERROR_AUTH = {
     "title": "Cette TV n'est pas autorisée",
     "short": "TV non appairée",
-    "action": "menu ArrMada, puis « Appairer cette TV »",
+    "action": "Réglages de l'accueil ArrMada, puis « Appairer cette TV »",
     "hint": (
-        "Le serveur répond, mais refuse cette TV. Menu ArrMada, puis « Appairer cette TV », "
-        "et valide le code dans la web app (Paramètres, puis Kodi)."
+        "Le serveur répond, mais refuse cette TV. Réglages de l'accueil ArrMada, puis "
+        "« Appairer cette TV », et valide le code dans la web app (Paramètres, puis Kodi)."
     ),
 }
 ERROR_DOWN = {

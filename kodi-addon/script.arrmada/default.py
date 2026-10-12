@@ -540,6 +540,8 @@ def main():
         paired = pair_window.open_pairing()
         if paired:
             show_notification("ArrMada", f"TV appairée : {pairing_data.device_summary(paired)}", time_ms=5000)
+            # Le service relit événements et flux tout de suite (1.19.1)
+            xbmcgui.Window(10000).setProperty(pairing_data.PAIRED_NOW, "1")
     elif action == "queue":
         # Écran Téléchargements : RunPlugin(plugin://script.arrmada/?action=queue)
         import downloads_window

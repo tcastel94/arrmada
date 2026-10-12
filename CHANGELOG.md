@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### "Bureau" room without an amplifier, pairing from the ArrMada home (Kodi add-on 1.19.1)
+
+#### Added
+- **Room "Bureau"** (office) for paired devices, **without an amplifier**: the server drops any amplifier when a device is paired in, or moved to, the office (`AMP_ROOMS` = salon, cinema); devices are serialized with `has_amp`; `/api/yamaha/state`, `/control` and `/preset/apply` answer `no_amp` to a TV without an amplifier, and the ambient screen shows no amplifier for that room
+- **Web app**: "Bureau" in the pairing form and the device editor (amplifier list disabled: "Pas d'ampli dans cette pièce"), labels in "Sur la TV" and the ambient screen preview
+- **Add-on 1.19.1 — pairing from the ArrMada home**: an unpaired TV (and no legacy password) opens the pairing screen by itself on the home, once per Kodi session; the home *Réglages* button now opens a list: *Appairer cette TV* / *Refaire l'appairage (…)*, add-on settings, Kodi settings. After pairing, the service polls events and refreshes every feed at once, and the home reloads as soon as a feed changes (`arrmada.reload`) instead of every 2 minutes
+- **Add-on 1.19.1 — no amplifier in the office**: no room preset when playback starts, no *Ampli* section in the in-player panel, the Salon screen hides volume, mute, power and presets ("Pas d'ampli dans cette pièce"); the TV re-reads its name, room and amplifier (`/api/devices/me`) on each reconnection to the server
+- Tests: backend (office device never gets an amplifier, moving a TV to the office drops it, `no_amp` answers, ambient screen); add-on (`has_amp`, pairing offer once and only when unpaired, settings menu). Bench: automatic pairing offer on the home, office TV paired, settings menu, Salon screen and playback without any preset
+
+#### Fixed
+- A paired TV without a chosen amplifier no longer falls back to the first active amplifier (the living-room one) when it sits in a room without an amplifier
+
 ### Shared watched state in the web app, "Play on TV" (Kodi add-on 1.19.0)
 
 #### Added

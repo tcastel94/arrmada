@@ -29,6 +29,8 @@ import type { MediaDetail } from "@/hooks/use-media";
 import type { WatchSeriesState } from "@/hooks/use-watch";
 import { cn } from "@/lib/utils";
 
+const ROOM_LABELS: Record<string, string> = { salon: "Salon", cinema: "Salle de cinéma", bureau: "Bureau" };
+
 /** La TV a relevé les événements récemment (le serveur note son passage une fois par minute). */
 export function isTvOnline(device: Pick<PairedDevice, "last_seen_at">, now = Date.now()): boolean {
     if (!device.last_seen_at) return false;
@@ -149,7 +151,7 @@ function TvItem({ device, onSelect }: { device: PairedDevice; onSelect: () => vo
             <span className="min-w-0 flex-1">
                 <span className="block font-medium">{device.name}</span>
                 <span className="block text-[11px] text-muted-foreground">
-                    {device.room === "cinema" ? "Salle de cinéma" : "Salon"} · {online ? "en ligne" : "absente (éteinte ?)"}
+                    {ROOM_LABELS[device.room] ?? "Salon"} · {online ? "en ligne" : "absente (éteinte ?)"}
                 </span>
             </span>
             <span

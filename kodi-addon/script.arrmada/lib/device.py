@@ -46,6 +46,8 @@ def save(server_url: str, token: str, device: dict) -> None:
         "room": device.get("room") or "",
         "avr_name": device.get("avr_name") or "",
     }
+    if "has_amp" in device:  # serveur 1.19.1 et plus : faux au bureau
+        data["has_amp"] = bool(device["has_amp"])
     tmp = f"{path}.tmp"
     with open(tmp, "w", encoding="utf-8") as handle:
         json.dump(data, handle, ensure_ascii=False)
@@ -76,5 +78,14 @@ def token_for(server_url: str) -> str:
 
 def room() -> str:
     """Pièce choisie à l'appairage ("" si non appairé)."""
+    import pairing_data
+
     value = (load().get("room") or "").lower()
-    return value if value in ("salon", "cinema") else ""
+    return value if value in pairing_data.ROOM_NAMES else ""
+
+
+def has_amp() -> bool:
+    """Faux au bureau (1.19.1) : aucun préréglage, ampli masqué à l'écran."""
+    import pairing_data
+
+    return pairing_data.has_amp(load())
