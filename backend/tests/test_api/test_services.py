@@ -19,10 +19,10 @@ class TestHealth:
 class TestAuth:
     """Test authentication endpoints."""
 
-    async def test_login_success(self, client: AsyncClient) -> None:
+    async def test_login_success(self, client: AsyncClient, admin_password: str) -> None:
         resp = await client.post(
             "/api/auth/login",
-            json={"password": "changeme_use_a_strong_password"},
+            json={"password": admin_password},
         )
         assert resp.status_code == 200
         data = resp.json()

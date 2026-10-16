@@ -38,6 +38,7 @@
 |---------|-----------------|
 | 🔀 Switching between 6+ tabs | One unified dashboard |
 | 🔑 Managing API keys in configs | Setup Wizard with encrypted storage |
+| 🧩 Painful self-hosting | One container, one port, zero config file |
 | 📊 No cross-service analytics | Aggregated library statistics |
 | 🔍 Searching across services | Unified search across all media |
 | 📱 Apps don't look great on mobile | Responsive mobile-first design |
@@ -87,12 +88,13 @@ Live SABnzbd / Deluge queue with per-item actions (retry, blocklist, remove) and
 Server-Sent Events keep every page fresh and raise toasts on imports, grabs and service outages; a floating mini-player follows Kodi playback across pages.
 
 ### 🛡️ Security First
-- JWT authentication with configurable expiration
+- Admin password created in the setup wizard, stored as a scrypt hash (no default password)
+- JWT authentication with a per-instance random secret
 - Fernet-encrypted API keys at rest
 - Rate limiting (anti brute-force)
 - HSTS, CSP, Permissions-Policy headers
 - Non-root Docker container
-- CORS with explicit origin whitelist
+- Same-origin API (CORS closed by default)
 
 ---
 
@@ -119,61 +121,62 @@ Server-Sent Events keep every page fresh and raise toasts on imports, grabs and 
 
 ## 🚀 Quick Start
 
-### Prerequisites
-- [Docker](https://docs.docker.com/get-docker/) & [Docker Compose](https://docs.docker.com/compose/install/)
-- At least one *arr service running on your network
+**One container, one port, no `.env` file.** Works on any machine running Docker:
+Linux server, Synology, Unraid, TrueNAS, Windows/macOS (Docker Desktop), Raspberry Pi
+(images are published for `amd64` and `arm64`).
 
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/YOUR_USERNAME/arrmada.git
-cd arrmada
-```
-
-### 2. Configure environment
+### Linux server / NAS over SSH
 
 ```bash
-cp .env.example .env
-```
-
-Edit `.env` and set your admin password:
-
-```env
-ARRMADA_AUTH_SECRET=your_secure_password_here
-```
-
-> **That's it!** API keys for Sonarr, Radarr, etc. are configured through the Setup Wizard. No need to add them to `.env`.
-
-### 3. Launch
-
-```bash
+mkdir -p /opt/arrmada && cd /opt/arrmada
+curl -fsSLO https://raw.githubusercontent.com/tcastel94/arrmada/main/docker-compose.yml
 docker compose up -d
 ```
 
-### 4. Open ArrMada
+### Synology (DSM 7.2+)
 
-Navigate to `http://your-server:3420` — the Setup Wizard will guide you through the rest! 🧙
+1. **File Station**: create the folder `docker/arrmada`.
+2. **Container Manager → Project → Create**: path `/volume1/docker/arrmada`,
+   source *Create docker-compose.yml*, paste [docker-compose.yml](docker-compose.yml).
+3. Optionally set `PUID`/`PGID` to your DSM user (`id` over SSH, often `1026`/`100`).
+
+### Windows / macOS
+
+Install [Docker Desktop](https://www.docker.com/products/docker-desktop/), save
+[docker-compose.yml](docker-compose.yml) in a folder, then `docker compose up -d` in that folder.
+
+### Then
+
+Open **`http://<machine-ip>:3420`**: the setup wizard creates the admin password,
+scans your network for Sonarr/Radarr/Prowlarr/SABnzbd… and stores the API keys encrypted. 🧙
+
+| Task | Command |
+|------|---------|
+| Update | `docker compose pull && docker compose up -d` |
+| Logs | `docker logs -f arrmada` |
+| Forgot password | `docker exec -it arrmada arrmada-cli set-password` |
+| Backup | copy the `./data` folder (database, keys, password hash) |
+
+> **Behind a reverse proxy** (Synology, Traefik, Nginx Proxy Manager, Caddy): proxy
+> everything to port `3420`. The UI calls the API on the same origin, so HTTPS and
+> custom domains work without extra settings.
 
 ---
 
 ## 🏗️ Architecture
 
 ```
-┌──────────────────────────────────────────────────────┐
-│                    Docker Compose                    │
-├────────────────┬─────────────────┬───────────────────┤
-│   Frontend     │    Backend      │   PostgreSQL      │
-│   Next.js 14   │    FastAPI      │   16-alpine       │
-│   :3420        │    :8420        │   :5432 (internal) │
-│                │                 │                   │
-│   TypeScript   │    Python 3.10+ │   Persistent      │
-│   Tailwind CSS │    SQLAlchemy   │   Volume           │
-│   shadcn/ui    │    Pydantic     │                   │
-│   React Query  │    Fernet       │                   │
-└────────────────┴─────────────────┴───────────────────┘
-         │                 │                │
-         └────── arrmada-network ───────────┘
+┌──────────────────── conteneur arrmada ────────────────────┐
+│                                                           │
+│  :3420  gateway.js ──┬── /api/* ──► FastAPI   127.0.0.1:8420 │
+│  (seul port exposé)  └── reste  ──► Next.js   127.0.0.1:3421 │
+│                                                           │
+│  /app/data : SQLite · clé Fernet · secret JWT · hash admin │
+└───────────────────────────────────────────────────────────┘
 ```
+
+The gateway is a ~100-line dependency-free Node proxy: it streams Server-Sent Events
+without buffering, has no 30 s timeout, and forwards the client IP (login rate limiting).
 
 ### Supported Services
 
@@ -192,25 +195,21 @@ Navigate to `http://your-server:3420` — the Setup Wizard will guide you throug
 
 ## 🐘 Database
 
-ArrMada uses **PostgreSQL** by default (included in the Docker stack). No configuration needed.
+**SQLite** by default (`./data/arrmada.db`, WAL mode): nothing to configure.
 
-### Use an external PostgreSQL database
+> Keep `./data` on a **local disk**: SQLite must not live on an NFS/SMB share.
 
-If you already have a PostgreSQL server, set the connection string in `.env`:
+To use **PostgreSQL**, combine the two compose files:
 
-```env
-DATABASE_URL=postgresql+asyncpg://user:password@your-host:5432/arrmada
+```bash
+echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)" >> .env
+docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d
 ```
 
-Then remove (or comment out) the `arrmada-db` service in `docker-compose.yml`.
+For an external PostgreSQL server, set
+`DATABASE_URL=postgresql+asyncpg://user:password@host:5432/arrmada`.
 
-### Use SQLite (development only)
-
-For local development without Docker:
-
-```env
-DATABASE_URL=sqlite+aiosqlite:///./data/arrmada.db
-```
+Migrating the former 3-container Unraid deployment: see [docs/deploy-unraid.md](docs/deploy-unraid.md).
 
 ---
 
@@ -231,7 +230,14 @@ uvicorn app.main:app --reload --port 8000
 ```bash
 cd frontend
 npm install
-npm run dev
+npm run dev     # http://localhost:3000 — /api is proxied to :8000 in dev
+```
+
+### Docker image
+
+```bash
+docker build -t ghcr.io/tcastel94/arrmada:latest .
+docker compose up -d
 ```
 
 ### Running Tests
@@ -255,11 +261,11 @@ ruff format .
 
 | Layer | Implementation |
 |-------|---------------|
-| **Authentication** | JWT Bearer tokens (HS256) |
+| **Authentication** | scrypt-hashed admin password · JWT (HS256) with auto-generated secret |
 | **API Key Storage** | Fernet encryption (AES-128-CBC) at rest |
 | **Rate Limiting** | 5 attempts/min on login endpoint |
 | **Headers** | HSTS, CSP, X-Frame-Options, Permissions-Policy |
-| **CORS** | Explicit origin whitelist |
+| **CORS** | Same-origin by default (no cross-origin access) |
 | **Docker** | Non-root user, multi-stage build |
 | **Database** | Connection pooling, prepared statements |
 

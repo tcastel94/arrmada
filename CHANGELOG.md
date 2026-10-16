@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Installation zéro configuration — image unique
+
+#### Added
+- **Single Docker image** `ghcr.io/tcastel94/arrmada` (amd64 + arm64): UI + API in one container, **one port (3420)**, no `.env` required
+- `docker/gateway.js`: dependency-free Node gateway routing `/api/*` to FastAPI and the rest to Next.js; streams SSE unbuffered, no 30 s timeout, forwards the client IP (per-client login rate limiting) and the original Host/Proto (works behind any HTTPS reverse proxy)
+- First-run **admin password creation** in the setup wizard (new « Sécurité » step) and on the login page for instances without a password; stored as a scrypt hash in `data/.admin_password`
+- Password change in Settings (current password required); migrates a legacy `ARRMADA_AUTH_SECRET` to a hash
+- `arrmada-cli` inside the container: `set-password`, `reset-password`, `status`
+- JWT secret auto-generated per instance (`data/.jwt_secret`)
+- `PUID` / `PGID` support (data dir ownership, processes run unprivileged)
+- SSE keep-alive comment every 15 s (proxies no longer drop idle streams, dead clients are detected)
+- `docker-compose.postgres.yml` overlay for optional PostgreSQL; `docs/deploy-unraid.md` migration guide
+- CI: image build + smoke test; release workflow publishing multi-arch images on `main` and `v*` tags
+
+#### Changed
+- SQLite is now the default database (WAL mode + busy timeout)
+- The UI calls the API on the same origin (`/api/...`): no more hard-coded `:8420`, CORS closed by default
+- `ARRMADA_AUTH_SECRET` is optional and legacy; shipped placeholders (`changeme…`) are **refused**
+- Webhook URLs now use port 3420 (`http://<host>:3420/api/webhooks/sonarr`)
+
+#### Removed
+- `backend/Dockerfile`, `frontend/Dockerfile`, the 3-container compose and the hard-coded `/mnt/user` mount
+
+#### Fixed
+- Backend tests: login rate limiter reset between tests (15 tests were erroring on `main`)
+
 ### UI v2 — « Neon Armada »
 
 #### Added

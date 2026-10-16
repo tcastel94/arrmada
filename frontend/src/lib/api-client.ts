@@ -81,6 +81,29 @@ export async function login(password: string): Promise<TokenResponse> {
     return data;
 }
 
+/**
+ * Premier lancement : crée le mot de passe admin (refusé par l'API s'il en
+ * existe déjà un) et ouvre directement la session.
+ */
+export async function createAdminPassword(password: string): Promise<TokenResponse> {
+    const data = await apiFetch<TokenResponse>("/api/auth/password", {
+        method: "POST",
+        body: JSON.stringify({ password }),
+    });
+    setToken(data.access_token);
+    return data;
+}
+
+/** Change le mot de passe admin (l'actuel est exigé). Renouvelle la session. */
+export async function changeAdminPassword(currentPassword: string, newPassword: string): Promise<TokenResponse> {
+    const data = await apiFetch<TokenResponse>("/api/auth/password", {
+        method: "PUT",
+        body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    });
+    setToken(data.access_token);
+    return data;
+}
+
 /** Logout */
 export function logout(): void {
     clearToken();

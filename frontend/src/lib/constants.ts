@@ -1,9 +1,15 @@
 import { ServiceType } from "@/types";
 
-/** API base URL */
-export const API_URL = typeof window !== "undefined"
-    ? `${window.location.protocol}//${window.location.hostname}:8420`
-    : (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8420");
+/**
+ * Préfixe des appels API.
+ * Vide par défaut : le navigateur appelle `/api/...` sur la MÊME adresse que
+ * l'interface (même hôte, même port). C'est la passerelle du conteneur
+ * (docker/gateway.js) — ou les rewrites de `next dev` — qui relaie vers
+ * FastAPI. Résultat : un seul port à ouvrir, pas de CORS, et ça marche
+ * derrière n'importe quel reverse proxy HTTPS ou nom de domaine.
+ * NEXT_PUBLIC_API_URL ne sert que si l'API est hébergée ailleurs (rare).
+ */
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 /** Service type metadata */
 export const SERVICE_META: Record<

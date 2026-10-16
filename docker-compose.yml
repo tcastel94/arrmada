@@ -1,93 +1,41 @@
+# ╔════════════════════════════════════════════════════════════╗
+# ║                 ArrMada — installation                     ║
+# ╚════════════════════════════════════════════════════════════╝
+#
+#   1. Copie ce fichier dans un dossier vide (ex : /opt/arrmada,
+#      /volume1/docker/arrmada sur Synology, /mnt/user/appdata/arrmada…)
+#   2. docker compose up -d
+#   3. Ouvre http://<ip-de-la-machine>:3420 → l'assistant fait le reste
+#      (mot de passe admin, détection de tes services *arr, clés API).
+#
+# Aucun fichier .env n'est nécessaire. Mise à jour :
+#   docker compose pull && docker compose up -d
+#
+# Synology (DSM 7.2+) : Container Manager → Projet → Créer → colle ce fichier.
+# Base PostgreSQL au lieu de SQLite : voir docker-compose.postgres.yml.
+
+name: arrmada
+
 services:
-  # ── Backend (FastAPI) ───────────────────────────────────────
-  arrmada-backend:
-    build: ./backend
-    container_name: arrmada-backend
+  arrmada:
+    image: ghcr.io/tcastel94/arrmada:latest
+    container_name: arrmada
     restart: unless-stopped
+    init: true                 # mini-init Docker : signaux + processus zombies
     ports:
-      - "${BACKEND_PORT:-8420}:8000"
+      - "3420:3420"            # interface + API : le SEUL port à ouvrir
     volumes:
-      - ./data:/app/data
-      - /mnt/user:/mnt/user:rw
+      - ./data:/app/data       # base SQLite, clés de chiffrement, mot de passe haché
+      # Optionnel : accès aux fichiers médias (nettoyage, doublons…).
+      # - /chemin/vers/medias:/mnt/user:rw
     environment:
-      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://arrmada:${POSTGRES_PASSWORD:-arrmada}@arrmada-db:5432/arrmada}
-      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3420,http://192.168.2.3:3420}
-      - ARRMADA_AUTH_SECRET=${ARRMADA_AUTH_SECRET:-changeme}
+      - TZ=${TZ:-Europe/Paris}
+      # Propriétaire des fichiers créés dans ./data (commande `id` sur l'hôte).
+      # Synology : souvent 1026/100 — Unraid : 99/100.
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      # ── Optionnel (vide = désactivé) ──
+      - TMDB_API_KEY=${TMDB_API_KEY:-}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
-      - TMDB_API_KEY=${TMDB_API_KEY:-}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
-      - AI_MODEL=${AI_MODEL:-google/gemini-2.0-flash-001}
-    depends_on:
-      arrmada-db:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: "1.0"
-
-  # ── Frontend (Next.js) ──────────────────────────────────────
-  # NEXT_PUBLIC_API_URL must be the URL the USER's BROWSER uses to
-  # reach the backend — NOT the Docker-internal hostname.
-  # Default: http://localhost:8420 (same machine, default port)
-  arrmada-frontend:
-    build:
-      context: ./frontend
-      args:
-        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8420}
-    container_name: arrmada-frontend
-    restart: unless-stopped
-    ports:
-      - "${FRONTEND_PORT:-3420}:3000"
-    environment:
-      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8420}
-    depends_on:
-      arrmada-backend:
-        condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-          cpus: "0.5"
-
-  # ── PostgreSQL ──────────────────────────────────────────────
-  # Integrated by default. To use an EXTERNAL PostgreSQL instead,
-  # remove this service and set DATABASE_URL in the backend env.
-  arrmada-db:
-    image: postgres:16-alpine
-    container_name: arrmada-db
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: arrmada
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-arrmada}
-      POSTGRES_DB: arrmada
-    volumes:
-      - arrmada-pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U arrmada"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-          cpus: "0.5"
-    # Port NOT exposed by default (only accessible inside Docker network)
-    # Uncomment to access from host tools (pgAdmin, DBeaver, etc.):
-    # ports:
-    #   - "5432:5432"
-
-volumes:
-  arrmada-pgdata:
-
-networks:
-  default:
-    name: arrmada-network

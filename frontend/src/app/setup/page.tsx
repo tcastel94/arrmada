@@ -3,7 +3,11 @@
 /**
  * Assistant d'installation (premier lancement, hors coquille applicative).
  * ----------------------------------------------------------------
- * 4 étapes : Bienvenue → Découverte réseau → Services → Terminé.
+ * 5 étapes : Bienvenue → Sécurité (mot de passe admin) → Découverte réseau
+ * → Services → Terminé.
+ * Sécurité : le mot de passe est créé ICI (plus de ARRMADA_AUTH_SECRET à
+ * écrire dans un .env). L'API ouvre la session dans la foulée, donc la
+ * fin de l'assistant mène directement au tableau de bord.
  * Corrections par rapport à l'ancienne version :
  *  - libellés d'étapes enfin affichés, stepper animé ;
  *  - liste des types dérivée de SERVICE_META (plus de copie locale) ;
@@ -24,7 +28,9 @@ import {
     CheckCircle2,
     ChevronLeft,
     KeyRound,
+    LayoutDashboard,
     Loader2,
+    LockKeyhole,
     LogIn,
     Network,
     Plus,
@@ -39,6 +45,7 @@ import {
     Zap,
     type LucideIcon,
 } from "lucide-react";
+import { CreatePasswordForm } from "@/components/auth/create-password-form";
 import { AuroraBackground } from "@/components/fx/aurora-background";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,6 +68,7 @@ import {
     type ServiceSetupItem,
     type SetupTestResult,
 } from "@/hooks/use-setup";
+import { isAuthenticated } from "@/lib/api-client";
 import { plural } from "@/lib/format";
 import { EASE_OUT, SPRING, fadeUp, stagger } from "@/lib/motion";
 import { cn } from "@/lib/utils";
@@ -69,6 +77,7 @@ import { cn } from "@/lib/utils";
 
 const STEPS: { title: string; icon: LucideIcon }[] = [
     { title: "Bienvenue", icon: Sparkles },
+    { title: "Sécurité", icon: LockKeyhole },
     { title: "Découverte", icon: Radar },
     { title: "Services", icon: Server },
     { title: "Terminé", icon: Rocket },
@@ -127,7 +136,7 @@ export default function SetupPage() {
 
     // Déjà configuré → direction le tableau de bord (qui renverra au login si besoin).
     useEffect(() => {
-        if (status?.is_configured && step !== 3) router.replace("/dashboard");
+        if (status?.is_configured && step !== 4) router.replace("/dashboard");
     }, [status, router, step]);
 
     const discoveredKey = (d: DiscoveredService) => `${d.type}:${d.url}`;
@@ -177,7 +186,7 @@ export default function SetupPage() {
             const next = [...prev, ...fresh];
             return next.length > 0 ? next : [blankRow()];
         });
-        goTo(2);
+        goTo(3);
     };
 
     /* ── Édition des lignes ─────────────────────────────────── */
@@ -261,7 +270,7 @@ export default function SetupPage() {
                 })),
             );
             setAdded(res?.services_added ?? rows.length);
-            goTo(3);
+            goTo(4);
         } catch (e) {
             setSubmitError(e instanceof Error ? e.message : "La configuration a échoué.");
         } finally {
@@ -306,6 +315,18 @@ export default function SetupPage() {
                                     {step === 0 && <WelcomeStep databaseType={status?.database_type} onStart={() => goTo(1)} />}
 
                                     {step === 1 && (
+                                        <SecurityStep
+                                            passwordSet={!!status?.password_set}
+                                            onCreated={() => {
+                                                void refetch();
+                                                goTo(2);
+                                            }}
+                                            onBack={() => goTo(0)}
+                                            onContinue={() => goTo(2)}
+                                        />
+                                    )}
+
+                                    {step === 2 && (
                                         <DiscoveryStep
                                             scanning={scanning}
                                             scanError={scanError}
@@ -321,12 +342,12 @@ export default function SetupPage() {
                                                     return next;
                                                 })
                                             }
-                                            onBack={() => goTo(0)}
+                                            onBack={() => goTo(1)}
                                             onContinue={continueToServices}
                                         />
                                     )}
 
-                                    {step === 2 && (
+                                    {step === 3 && (
                                         <div className="space-y-5">
                                             <StepTitle
                                                 icon={Server}
@@ -382,7 +403,7 @@ export default function SetupPage() {
                                             </AnimatePresence>
 
                                             <div className="flex flex-col-reverse gap-2 border-t border-white/[0.06] pt-5 sm:flex-row">
-                                                <Button variant="ghost" onClick={() => goTo(1)}>
+                                                <Button variant="ghost" onClick={() => goTo(2)}>
                                                     <ChevronLeft /> Retour
                                                 </Button>
                                                 <Button onClick={handleComplete} disabled={submitting} size="lg" className="sm:ml-auto">
@@ -393,7 +414,13 @@ export default function SetupPage() {
                                         </div>
                                     )}
 
-                                    {step === 3 && <DoneStep added={added} onLogin={() => router.push("/login")} />}
+                                    {step === 4 && (
+                                        <DoneStep
+                                            added={added}
+                                            loggedIn={isAuthenticated()}
+                                            onOpen={() => router.push(isAuthenticated() ? "/dashboard" : "/login")}
+                                        />
+                                    )}
                                 </motion.section>
                             </AnimatePresence>
                         </div>
@@ -557,7 +584,48 @@ function WelcomeStep({ databaseType, onStart }: { databaseType?: string; onStart
     );
 }
 
-/* ── Étape 1 : Découverte ───────────────────────────────────── */
+/* ── Étape 1 : Sécurité ─────────────────────────────────────── */
+
+function SecurityStep({
+    passwordSet,
+    onCreated,
+    onBack,
+    onContinue,
+}: {
+    passwordSet: boolean;
+    onCreated: () => void;
+    onBack: () => void;
+    onContinue: () => void;
+}) {
+    return (
+        <div className="space-y-5">
+            <StepTitle
+                icon={LockKeyhole}
+                title="Mot de passe administrateur"
+                description="Il protège l'accès à ArrMada (et à tes clés API). Tu pourras le changer plus tard dans Paramètres."
+            />
+            {passwordSet ? (
+                <p className="flex items-start gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3.5 py-2.5 text-sm text-emerald-200">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /> Un mot de passe est déjà défini pour cette instance.
+                </p>
+            ) : (
+                <CreatePasswordForm onCreated={onCreated} submitLabel="Enregistrer et continuer" />
+            )}
+            <div className="flex flex-col-reverse gap-2 border-t border-white/[0.06] pt-5 sm:flex-row">
+                <Button variant="ghost" onClick={onBack}>
+                    <ChevronLeft /> Retour
+                </Button>
+                {passwordSet && (
+                    <Button onClick={onContinue} className="sm:ml-auto">
+                        Continuer <ArrowRight />
+                    </Button>
+                )}
+            </div>
+        </div>
+    );
+}
+
+/* ── Étape 2 : Découverte ───────────────────────────────────── */
 
 function DiscoveryStep({
     scanning,
@@ -709,7 +777,7 @@ function DiscoveryStep({
     );
 }
 
-/* ── Étape 2 : une ligne de service ─────────────────────────── */
+/* ── Étape 3 : une ligne de service ─────────────────────────── */
 
 function ServiceRow({
     index,
@@ -842,9 +910,9 @@ function ServiceRow({
     );
 }
 
-/* ── Étape 3 : Terminé ──────────────────────────────────────── */
+/* ── Étape 4 : Terminé ──────────────────────────────────────── */
 
-function DoneStep({ added, onLogin }: { added: number; onLogin: () => void }) {
+function DoneStep({ added, loggedIn, onOpen }: { added: number; loggedIn: boolean; onOpen: () => void }) {
     return (
         <div className="space-y-6 py-4 text-center">
             <div className="relative mx-auto h-24 w-24">
@@ -877,11 +945,14 @@ function DoneStep({ added, onLogin }: { added: number; onLogin: () => void }) {
                     {plural(added, "service ajouté", "services ajoutés")}. Ta flotte est prête à appareiller.
                 </p>
             </div>
-            <p className="mx-auto max-w-sm rounded-xl border border-white/[0.06] bg-background/30 px-4 py-3 text-xs text-muted-foreground">
-                Connecte-toi avec le mot de passe défini dans <code className="font-mono text-foreground">ARRMADA_AUTH_SECRET</code> (fichier .env du backend).
-            </p>
-            <Button onClick={onLogin} size="lg" className="w-full sm:w-auto sm:px-10">
-                <LogIn /> Se connecter
+            {!loggedIn && (
+                <p className="mx-auto max-w-sm rounded-xl border border-white/[0.06] bg-background/30 px-4 py-3 text-xs text-muted-foreground">
+                    Connecte-toi avec ton mot de passe administrateur.
+                </p>
+            )}
+            <Button onClick={onOpen} size="lg" className="w-full sm:w-auto sm:px-10">
+                {loggedIn ? <LayoutDashboard /> : <LogIn />}
+                {loggedIn ? "Ouvrir le tableau de bord" : "Se connecter"}
             </Button>
         </div>
     );

@@ -8,6 +8,9 @@
  *   - 401 → mot de passe incorrect (+ secousse de la carte)
  *   - 429 → trop de tentatives (limite 5/min côté API)
  *   - réseau → backend injoignable
+ * Instance sans mot de passe (ancienne install restée sur la valeur
+ * d'exemple du .env, ou `arrmada-cli reset-password`) : la carte propose
+ * de le CRÉER au lieu de demander un mot de passe que personne ne connaît.
  */
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -17,6 +20,7 @@ import { ArrowRight, Eye, EyeOff, Loader2, Lock, ShieldAlert } from "lucide-reac
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AuroraBackground } from "@/components/fx/aurora-background";
+import { CreatePasswordForm } from "@/components/auth/create-password-form";
 import { login, isAuthenticated } from "@/lib/api-client";
 import { useSetupStatus } from "@/hooks/use-setup";
 import { EASE_OUT } from "@/lib/motion";
@@ -27,7 +31,8 @@ function explain(err: unknown): string {
     const msg = err instanceof Error ? err.message : String(err);
     if (/not authenticated|401|incorrect|invalid/i.test(msg)) return "Mot de passe incorrect.";
     if (/rate|429|too many/i.test(msg)) return "Trop de tentatives. Patiente une minute avant de réessayer.";
-    if (/failed to fetch|network|load failed/i.test(msg)) return "Backend injoignable. Vérifie que le conteneur arrmada-backend tourne.";
+    if (/unavailable|502|failed to fetch|network|load failed/i.test(msg)) return "Backend injoignable. Vérifie que le conteneur arrmada tourne.";
+    if (/no admin password|409/i.test(msg)) return "Aucun mot de passe n'est encore défini : recharge la page pour le créer.";
     return msg || "Connexion impossible.";
 }
 
@@ -40,6 +45,7 @@ export default function LoginPage() {
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
     const { data: setupStatus, isLoading: setupLoading } = useSetupStatus();
+    const mustCreatePassword = !!setupStatus && setupStatus.is_configured && !setupStatus.password_set;
 
     useEffect(() => {
         // Installation non faite → assistant ; déjà connecté → dashboard.
@@ -47,8 +53,15 @@ export default function LoginPage() {
             router.replace("/setup");
             return;
         }
+        if (setupStatus && !setupStatus.password_set) return;
         if (isAuthenticated()) router.replace("/dashboard");
     }, [router, setupStatus, setupLoading]);
+
+    /** Mot de passe créé : la session est déjà ouverte par l'API. */
+    const handleCreated = () => {
+        setSuccess(true);
+        setTimeout(() => router.push("/dashboard"), 550);
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -108,9 +121,16 @@ export default function LoginPage() {
 
                                 <div className="relative text-center">
                                     <h1 className="text-gradient-animated text-3xl font-bold tracking-tight">ArrMada</h1>
-                                    <p className="mt-1.5 text-sm text-muted-foreground">Le poste de commandement de ta flotte *arr</p>
+                                    <p className="mt-1.5 text-sm text-muted-foreground">
+                                        {mustCreatePassword
+                                            ? "Aucun mot de passe n'est défini : crée celui qui protégera ArrMada."
+                                            : "Le poste de commandement de ta flotte *arr"}
+                                    </p>
                                 </div>
 
+                                {mustCreatePassword ? (
+                                    <CreatePasswordForm onCreated={handleCreated} submitLabel="Créer et monter à bord" className="relative mt-7 text-left" />
+                                ) : (
                                 <form onSubmit={handleSubmit} className="relative mt-7 space-y-4">
                                     <div className="relative">
                                         <Lock className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -162,10 +182,13 @@ export default function LoginPage() {
                                         {!loading && <ArrowRight className="transition-transform group-hover:translate-x-1" />}
                                     </Button>
                                 </form>
+                                )}
 
-                                <p className="relative mt-6 text-center text-[11px] leading-relaxed text-muted-foreground/70">
-                                    Mot de passe = variable <span className="font-mono text-muted-foreground">ARRMADA_AUTH_SECRET</span> du fichier <span className="font-mono text-muted-foreground">.env</span>
-                                </p>
+                                {!mustCreatePassword && (
+                                    <p className="relative mt-6 text-center text-[11px] leading-relaxed text-muted-foreground/70">
+                                        Mot de passe oublié ? <span className="font-mono text-muted-foreground">docker exec -it arrmada arrmada-cli set-password</span>
+                                    </p>
+                                )}
                             </div>
                         </div>
                     </motion.div>

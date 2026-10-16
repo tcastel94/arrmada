@@ -60,8 +60,15 @@ class EventBus:
         self._history: list[SSEEvent] = []  # Keep last 50 events for reconnection
         self._max_history = 50
 
-    async def subscribe(self) -> AsyncGenerator[SSEEvent, None]:
-        """Subscribe to events. Yields SSEEvent objects."""
+    async def subscribe(
+        self, heartbeat: float | None = None
+    ) -> AsyncGenerator[SSEEvent | None, None]:
+        """Subscribe to events. Yields SSEEvent objects.
+
+        With ``heartbeat`` (seconds), yields ``None`` after that much silence
+        so the caller can send a keep-alive: proxies (Next.js rewrite, nginx,
+        Synology reverse proxy…) close idle connections after 30–60 s.
+        """
         queue: asyncio.Queue[SSEEvent] = asyncio.Queue(maxsize=100)
         async with self._lock:
             self._subscribers.append(queue)
@@ -70,7 +77,11 @@ class EventBus:
 
         try:
             while True:
-                event = await queue.get()
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=heartbeat)
+                except TimeoutError:
+                    yield None
+                    continue
                 yield event
         except asyncio.CancelledError:
             pass
