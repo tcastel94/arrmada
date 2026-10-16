@@ -13,6 +13,13 @@ Git (monté dans le conteneur, voir docker-compose.yml) : après un `git pull`,
 la nouvelle version est proposée aux TV sans reconstruire l'image Docker.
 L'adresse du serveur est écrite dans le zip du dépôt au moment où la TV le
 télécharge (celle par laquelle elle joint ArrMada).
+
+Depuis le dépôt 1.1.0, chaque zip a son empreinte SHA-256 (`<zip>.sha256`,
+déclarée par `<hashes>sha256</hashes>`). Comme un `sha256sum -c` avant un
+`dpkg -i` : Kodi vérifie le zip téléchargé, et surtout il le retélécharge à
+chaque installation. Sans empreinte, Kodi réutilise tel quel un zip déjà
+présent dans son dossier `packages/` sous le même nom, même s'il a été
+coupé par un plantage pendant le téléchargement.
 """
 
 from __future__ import annotations
@@ -28,7 +35,9 @@ from app.config import settings
 
 ADDON_ID = "script.arrmada"
 REPO_ID = "repository.arrmada"
-REPO_VERSION = "1.0.0"
+# 1.1.0 : empreintes SHA-256 des zips. Les TV qui ont le dépôt 1.0.0 le mettent
+# à jour toutes seules (il est listé dans addons.xml).
+REPO_VERSION = "1.1.0"
 
 # Fichiers jamais mis dans un zip : caches Python, fichiers cachés (.DS_Store…)
 _SKIP_PARTS = {"__pycache__"}
@@ -72,6 +81,7 @@ def repository_addon_xml(base_url: str) -> str:
             <info compressed="false">{repo}/addons.xml</info>
             <checksum>{repo}/addons.xml.md5</checksum>
             <datadir zip="true">{repo}/</datadir>
+            <hashes>sha256</hashes>
         </dir>
     </extension>
     <extension point="xbmc.addon.metadata">
@@ -99,6 +109,11 @@ def addons_xml(root: Path, base_url: str) -> str:
 
 def md5(text: str) -> str:
     return hashlib.md5(text.encode("utf-8")).hexdigest()  # noqa: S324 — format imposé par Kodi
+
+
+def sha256(data: bytes) -> str:
+    """Empreinte d'un zip, au format lu par Kodi dans `<zip>.sha256` (hexadécimal)."""
+    return hashlib.sha256(data).hexdigest()
 
 
 _ZIP_CACHE: dict[tuple[str, float], bytes] = {}
@@ -130,12 +145,23 @@ def addon_zip(root: Path) -> bytes:
     return _ZIP_CACHE[key]
 
 
+# Date fixe dans le zip du dépôt : deux téléchargements donnent les mêmes octets,
+# donc la même empreinte (sinon l'heure du zip changerait à chaque appel et
+# Kodi verrait une empreinte différente de celle annoncée juste avant).
+_FIXED_DATE = (2024, 1, 1, 0, 0, 0)
+
+
 def repository_zip(root: Path, base_url: str) -> bytes:
     """Zip du dépôt, avec l'adresse de CE serveur écrite dedans."""
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr(f"{REPO_ID}/addon.xml", repository_addon_xml(base_url))
+        entries = [(f"{REPO_ID}/addon.xml", repository_addon_xml(base_url).encode("utf-8"))]
         icon = root / ADDON_ID / "resources" / "icon.png"
         if icon.is_file():
-            archive.write(icon, f"{REPO_ID}/icon.png")
+            entries.append((f"{REPO_ID}/icon.png", icon.read_bytes()))
+        for name, data in entries:
+            info = zipfile.ZipInfo(name, date_time=_FIXED_DATE)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o644 << 16
+            archive.writestr(info, data)
     return buffer.getvalue()

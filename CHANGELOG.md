@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### ArrMada repository on the Shield: investigation, verified zips, crash logs sent to the server (Kodi add-on 1.21.1)
+
+#### Investigation (owner report: installing through the ArrMada repository closes Kodi on the Shield, the same zip from a network share works)
+- **Same content, same install path**: the repository zip and `script.arrmada.zip` have the same structure, and Kodi 21's installer (`AddonInstaller.cpp`, `FilesystemInstaller.cpp`, read in Kodi's source) follows the same steps for both (stop the service, swap the add-on folder, start the service again)
+- **What differs is the moment**: with a repository, Kodi installs updates **on its own**, at Kodi startup (when the last check is older than 24 h) and every 24 h, i.e. **while ArrMada is running** (Kodi starts on the ArrMada home since 1.12). A zip is installed from Kodi's Add-ons menu. Reproduced on the bench with the real `/kodi/repo` router: the update at startup lands while the ArrMada service is still loading, and Kodi unloads the add-on under it (`Unknown addon id 'script.arrmada'`); an update while the ArrMada home is on screen replaces the files under it. Kodi 20 on a PC survives both; the Shield (Kodi 21, Android) could not be tested here
+- Side finding on the bench (Kodi 20 Debian, built with Python 3.12): Kodi crashes when it quits while **any** Python window is open, ArrMada or an empty test window (`Py_EndInterpreter` → `PyObject_GC_UnTrack`, core dump); no crash without a Python window. Closing the windows from a watcher thread on Kodi's stop request did not prevent it and made a window close crash once on the bench, so it was not kept. The Shield runs Kodi 21 with Python 3.11: the crash logs above will tell whether it is affected
+- Workaround documented: Settings → System → Add-ons → Updates → "Notify, but don't install updates" to choose when an update is installed
+
+#### Added
+- **Crash log sent to the server** (add-on 1.21.1): at startup, if the previous Kodi session's log (`kodi.old.log`) does not end with Kodi's normal shutdown line ("Exiting the application..."), the service sends its last 400 KB to the server 30 s later, once per log. The server stores them in `data/kodi-crashes/` (`/mnt/user/appdata/arrmada/data/kodi-crashes/` on the Unraid), 10 kept, with the TV, Kodi and add-on versions in a header. `POST /api/kodi/crash-report` (allowed for TV tokens, bounded size, file name built by the server), `GET /api/kodi/crash-reports` and `/crash-reports/{name}` (admin). Shield-only crashes can now be read without plugging a PC into the TV
+- **SHA-256 for every zip of the repository** (repository 1.1.0): `<hashes>sha256</hashes>` and `<zip>.sha256`. Kodi checks each download and downloads again at every install; without a hash it reused any zip already in its `packages/` folder under the same name, even one cut short by a crash. The repository zip is now byte-identical from one download to the next (fixed dates). TVs with repository 1.0.0 update it on their own
+- Tests: crash log detection (abrupt end, clean exit, once per log, whole lines, state file), crash report endpoint (TV sends, admin reads, TV cannot read, empty log, hostile names, header injection, 10 kept), repository hashes (every zip, stable bytes). Bench: Kodi killed with `kill -9` → the next start sends the log of the killed session, a normal quit sends nothing more; mock server `POST /api/kodi/crash-report`; full bench run unchanged (106 screenshots)
+
+#### Changed
+- Web app (Settings → Kodi → updates): the Shield note says the repository is being tested, the zip remains the safe method, and where crash logs arrive
+
 ### Every artwork of a title, images from the media folders, a case that opens on the web sheet (Kodi add-on 1.21.0)
 
 #### Added

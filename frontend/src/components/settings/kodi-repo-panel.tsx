@@ -76,16 +76,18 @@ export function KodiRepoPanel() {
                         </p>
                     </div>
                     {/* Incident 1.7.0 : sur la Shield, l'installation PAR LE DÉPÔT ferme Kodi,
-                        alors que le même zip installé depuis un partage réseau fonctionne. */}
+                        alors que le même zip installé depuis un partage réseau fonctionne.
+                        1.21.1 : le journal d'un Kodi fermé net arrive sur le serveur. */}
                     <div className="flex gap-2.5 rounded-xl border border-amber-500/25 bg-amber-500/[0.06] p-3 text-xs leading-relaxed text-amber-200">
                         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                         <div>
-                            <p className="font-semibold">NVIDIA Shield (Kodi 21) : pas de dépôt pour l&apos;instant</p>
+                            <p className="font-semibold">NVIDIA Shield (Kodi 21) : dépôt en test</p>
                             <p className="text-amber-200/80">
-                                Installer l&apos;appli depuis le dépôt ferme Kodi sur la Shield (cause en cours d&apos;analyse).
-                                Copie <code className="font-mono">kodi-addon/script.arrmada.zip</code> sur un partage réseau vu
-                                par Kodi, puis Extensions → Installer depuis un fichier zip. Désinstalle le Dépôt ArrMada de la
-                                Shield.
+                                Le dépôt a déjà fermé Kodi sur la Shield. La méthode sûre reste le zip : copie{" "}
+                                <code className="font-mono">kodi-addon/script.arrmada.zip</code> sur un partage réseau vu par
+                                Kodi, puis Extensions → Installer depuis un fichier zip. Depuis l&apos;appli 1.21.1, si Kodi se
+                                ferme, son journal arrive tout seul sur le serveur (
+                                <code className="font-mono">data/kodi-crashes/</code>) au démarrage suivant.
                             </p>
                         </div>
                     </div>

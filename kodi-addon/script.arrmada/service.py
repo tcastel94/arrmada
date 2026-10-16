@@ -30,6 +30,11 @@
   item that just changed is handed to lib/watch_sync.py, which posts it from
   the background tasks), and the "Next episode" card a few seconds before
   the end of a library episode (lib/upnext_window.py)
+- 1.21.1: when the previous Kodi session stopped abruptly (its kodi.old.log
+  lacks Kodi's normal "Exiting the application..." line), the end of that
+  log is sent to the server, 30 s after startup, once per log
+  (lib/crash_report.py → data/kodi-crashes/ on the server). Crashes seen only
+  on the Shield can then be read without plugging a PC into it
 """
 
 from __future__ import annotations
@@ -52,6 +57,7 @@ from audio_switcher import run_audio_switch
 from background import BackgroundTasks
 import migration
 import chapter_data
+import crash_report
 import mkv_chapters
 import player_data
 import playback_data
@@ -424,6 +430,39 @@ def _sync_keymap(safe_mode: bool) -> None:
         _log(f"raccourci du panneau : {exc}", xbmc.LOGWARNING)
 
 
+def _send_crash_report() -> None:
+    """Session de Kodi précédente arrêtée net : fin de son journal → serveur (1.21.1)."""
+    try:
+        log_path = os.path.join(xbmcvfs.translatePath("special://logpath"), crash_report.LOG_NAME)
+        if not os.path.isfile(log_path):
+            return
+        stat = os.stat(log_path)
+        current = crash_report.fingerprint(stat.st_size, stat.st_mtime)
+        profile = xbmcvfs.translatePath(ADDON.getAddonInfo("profile"))
+        state_file = os.path.join(profile, crash_report.STATE_FILE)
+        last_sent = str(crash_report.load_state(state_file).get("last_sent") or "")
+        if current == last_sent:
+            return  # déjà envoyé (service relancé par une mise à jour de l'add-on)
+        tail = crash_report.read_tail(log_path)
+        if not crash_report.should_send(tail, current, last_sent):
+            return  # arrêt normal de Kodi : rien à envoyer
+        result = ArrMadaAPI.send_crash_report(
+            crash_report.payload(
+                tail,
+                stat.st_size,
+                xbmc.getInfoLabel("System.BuildVersion"),
+                ADDON.getAddonInfo("version"),
+            )
+        )
+        if result.get("ok"):
+            crash_report.save_state(state_file, {"last_sent": current})
+            _log(f"Kodi s'était arrêté net : fin du journal envoyée au serveur ({result.get('name')})")
+        else:
+            _log(f"journal de plantage non envoyé : {result.get('message')}", xbmc.LOGWARNING)
+    except Exception as exc:  # jamais au point de faire tomber le service
+        _log(f"journal de plantage : {exc}", xbmc.LOGWARNING)
+
+
 def _start_tasks(monitor: xbmc.Monitor, guard_file: str):
     """Travail de fond (cache + événements), ou None en mode minimal."""
     if get_setting_bool("safe_mode", default=False):
@@ -472,6 +511,9 @@ def main():
 
     shell = ShellWatch()
     _sync_keymap(safe_mode)
+    # Journal de la session précédente si Kodi s'est arrêté net (1.21.1),
+    # une fois Kodi bien démarré ; aussi en mode minimal (c'est là qu'il sert).
+    crash_check_at = time.time() + crash_report.SEND_AFTER
     last_notification_check = 0
     seen_downloads: set[str] = set()
     seen_event_ids: set[int] = set()
@@ -502,6 +544,11 @@ def main():
             _reload_settings()  # le mot de passe vient d'être effacé
             if outcome == "done" and tasks is not None:
                 tasks = BackgroundTasks(monitor)  # relevés tout de suite, avec le jeton
+
+        # 0c. Kodi s'était arrêté net : fin de son journal au serveur (1.21.1)
+        if crash_check_at and time.time() >= crash_check_at:
+            crash_check_at = 0.0
+            _send_crash_report()
 
         # 1. Handle player tracking (+ encart « Épisode suivant », phase 4.4)
         if player.isPlayingVideo():

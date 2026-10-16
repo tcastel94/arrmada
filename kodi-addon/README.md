@@ -173,6 +173,33 @@ aux TV, **sans reconstruire l'image Docker**. Forcer la vérification : Extensio
 > Kodi signale dans son journal que le dépôt est en HTTP (pas HTTPS) : c'est
 > attendu, il n'est joignable que depuis le réseau local.
 
+**Empreintes SHA-256 (dépôt 1.1.0, avec l'appli 1.21.1)** : chaque zip a son
+empreinte (`<zip>.sha256`). Comme un `sha256sum -c` avant un `dpkg -i` : Kodi
+vérifie le zip téléchargé, et surtout il le **retélécharge à chaque
+installation**. Sans empreinte, Kodi réutilisait tel quel un zip déjà présent
+dans son dossier `addons/packages/` sous le même nom, même coupé par un
+plantage pendant un téléchargement précédent. Les TV qui ont le dépôt 1.0.0
+le mettent à jour toutes seules.
+
+**Ce que fait Kodi avec un dépôt, et pourquoi c'est différent d'un zip**
+(lu dans le code de Kodi 21, vérifié sur le banc) :
+- le contenu est le même : le zip du dépôt et `script.arrmada.zip` ont la
+  même structure, et Kodi suit le même chemin d'installation (arrêt du
+  service, remplacement du dossier, redémarrage du service) ;
+- la différence, c'est **le moment** : avec le dépôt, Kodi installe les
+  mises à jour **tout seul**, au démarrage de Kodi (si la dernière
+  vérification date de plus de 24 h) puis toutes les 24 h. Il le fait donc
+  **pendant qu'ArrMada tourne**, alors qu'un zip s'installe depuis le menu
+  Extensions de Kodi. Sur le banc, la mise à jour au démarrage arrive
+  pendant que le service ArrMada se charge : Kodi le coupe en plein
+  chargement (`Unknown addon id 'script.arrmada'` dans le journal), puis le
+  relance. Kodi 20 sur PC le supporte ; sur la Shield (Kodi 21), c'est le
+  suspect n° 1 ;
+- pour garder la main sur ce moment : Paramètres → Système → Extensions →
+  **Mises à jour** → « Avertir, mais ne pas installer ». Kodi signale alors
+  la mise à jour, et tu l'installes quand tu veux (Extensions → Mes
+  extensions → ArrMada → Mettre à jour).
+
 ### 9. 🔊 Boutons volume de la télécommande → ampli de la pièce
 Kodi pour Android **ne reçoit pas** les touches volume : il les laisse au
 système Android (vérifié dans le code source de Kodi, `AndroidKey.cpp`).
@@ -278,6 +305,27 @@ adb shell mv "$KODI/addons/script.arrmada" "$KODI/addons/script.arrmada.off"
 
 Kodi redémarre alors sans ArrMada. Le journal (`kodi.old.log`) indique la
 cause : chercher `ArrMada`, `Fatal`, `Traceback` et les dernières lignes.
+
+**Journal envoyé tout seul au serveur (1.21.1)** : plus besoin d'`adb` dans
+la plupart des cas. Au démarrage, le service relit `kodi.old.log` (la
+session précédente). S'il ne finit pas par la ligne d'arrêt normal de Kodi
+(« Exiting the application... »), 30 s après le démarrage, l'appli envoie
+les 400 derniers Ko au serveur. Comme un `journalctl -b -1` lu après un
+reboot inattendu. Une seule fois par journal ; les 10 plus récents sont
+gardés. Sur l'Unraid :
+
+```bash
+# Liste des journaux reçus (le plus récent en premier)
+ls -lt /mnt/user/appdata/arrmada/data/kodi-crashes/
+# Les 60 dernières lignes du plus récent : ce que Kodi faisait juste avant
+tail -n 60 "$(ls -t /mnt/user/appdata/arrmada/data/kodi-crashes/*.log | head -1)"
+```
+
+L'en-tête du fichier donne la TV, la version de Kodi et celle de l'appli.
+
+> Une « fin anormale » n'est pas toujours un plantage : Android peut aussi
+> tuer Kodi en arrière-plan (veille, manque de mémoire), ou la Shield peut
+> être débranchée. Les dernières lignes font la différence.
 
 ---
 
@@ -1006,12 +1054,15 @@ l'affiche. Les rangées et les listes du plugin portent aussi l'image
 ## 🚀 Installation dans Kodi
 
 > ⚠️ **NVIDIA Shield (Kodi 21, Android)** : l'installation **par le dépôt** ferme
-> Kodi (incident 1.7.0, cause en cours d'analyse), alors que le même zip
-> installé depuis un partage réseau fonctionne. Sur la Shield, utiliser la
-> **méthode 2** et désinstaller le Dépôt ArrMada (sinon Kodi peut proposer la
-> mise à jour par le dépôt).
+> Kodi (incident 1.7.0), alors que le même zip installé depuis un partage
+> réseau fonctionne. Enquête 1.21.1 (§ 8) : même zip et même chemin
+> d'installation, la différence est le moment (Kodi installe seul, pendant
+> qu'ArrMada tourne). Pas reproductible sur le banc (Kodi 20 sur PC). Depuis
+> la 1.21.1, le journal d'un Kodi qui s'est fermé arrive tout seul sur le
+> serveur (§ 12) : un essai du dépôt sur la Shield suffit à trouver la cause.
+> En attendant, la **méthode 2** reste la méthode sûre.
 
-### Méthode 1 : Dépôt ArrMada (mises à jour automatiques ; pas sur la Shield pour l'instant)
+### Méthode 1 : Dépôt ArrMada (mises à jour automatiques ; en test sur la Shield)
 Voir § 8 ci-dessus : une source `http://<serveur>:8420/kodi/repo/`, puis
 `repository.arrmada.zip`, puis « Installer depuis un dépôt ».
 

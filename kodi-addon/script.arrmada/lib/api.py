@@ -227,6 +227,11 @@ class ArrMadaAPI:
         return cls._request("/api/kodi/scrobble", method="POST", data=payload, timeout=5)
 
     @classmethod
+    def send_crash_report(cls, payload: dict) -> dict:
+        """Fin du journal d'une session de Kodi arrêtée net (1.21.1, lib/crash_report.py)."""
+        return cls._request("/api/kodi/crash-report", method="POST", data=payload, timeout=10)
+
+    @classmethod
     def get_addon_status(cls) -> dict:
         """Fetch download queue and service status."""
         return cls._request("/api/kodi/addon-status", method="GET", timeout=10)
@@ -285,7 +290,7 @@ class ArrMadaAPI:
     def remove_queue_item(cls, service_type: str, item_id: int, remove_from_client: bool = True, blocklist: bool = False) -> dict:
         """Cancel/remove a download item."""
         payload = {"remove_from_client": remove_from_client, "blocklist": blocklist}
-        return cls._request(f"/api/kodi/downloads/{service_type}/{item_id}/remove", method="POST", data=payload, timeout=20)
+        return cls._request(f"/api/kodi/downloads/{service_type}/{item_id}/remove", method="POST", data=payload, timeout=10)
 
     @classmethod
     def resume_queue_item(cls, service_type: str, item_id: int) -> dict:

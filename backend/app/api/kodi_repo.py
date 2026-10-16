@@ -4,6 +4,9 @@ Kodi ne sait pas envoyer d'en-tête d'authentification à un dépôt : ces
 routes sont publiques mais limitées au réseau local. Elles ne contiennent
 que le code de l'add-on (déjà public sur GitHub), aucun secret.
 
+Chaque zip a aussi son empreinte `<zip>.sha256` (dépôt 1.1.0 : Kodi vérifie
+le téléchargement et ne réutilise jamais un vieux zip de son cache).
+
 Installation sur la TV, une seule fois :
   Gestionnaire de fichiers → Ajouter une source → http://<serveur>:8420/kodi/repo/
   Extensions → Installer depuis un fichier zip → cette source → repository.arrmada.zip
@@ -93,17 +96,21 @@ async def addons_xml_md5(request: Request) -> Response:
     return _file(kodi_repo.md5(kodi_repo.addons_xml(root, _base_url(request))), "text/plain")
 
 
+_REPO_ZIP = f"{kodi_repo.REPO_ID}-{kodi_repo.REPO_VERSION}.zip"
+
+
 @router.api_route("/repository.arrmada.zip", methods=_GET_HEAD)
-@router.api_route(
-    f"/{kodi_repo.REPO_ID}/{kodi_repo.REPO_ID}-{kodi_repo.REPO_VERSION}.zip", methods=_GET_HEAD
-)
+@router.api_route(f"/{kodi_repo.REPO_ID}/{_REPO_ZIP}", methods=_GET_HEAD)
 async def repository_zip(request: Request) -> Response:
     root = _root(request)
-    return _file(
-        kodi_repo.repository_zip(root, _base_url(request)),
-        "application/zip",
-        f"{kodi_repo.REPO_ID}-{kodi_repo.REPO_VERSION}.zip",
-    )
+    return _file(kodi_repo.repository_zip(root, _base_url(request)), "application/zip", _REPO_ZIP)
+
+
+@router.api_route(f"/{kodi_repo.REPO_ID}/{_REPO_ZIP}.sha256", methods=_GET_HEAD)
+async def repository_zip_sha256(request: Request) -> Response:
+    """Empreinte du zip du dépôt (Kodi la lit avant de le mettre à jour)."""
+    root = _root(request)
+    return _file(kodi_repo.sha256(kodi_repo.repository_zip(root, _base_url(request))), "text/plain")
 
 
 @router.api_route(f"/{kodi_repo.REPO_ID}/icon.png", methods=_GET_HEAD)
@@ -117,11 +124,13 @@ async def repository_icon(request: Request) -> Response:
 
 @router.api_route(f"/{kodi_repo.ADDON_ID}/{{name:path}}", methods=_GET_HEAD)
 async def addon_file(request: Request, name: str) -> Response:
-    """Zip de la version en cours, ou image déclarée dans addon.xml."""
+    """Zip de la version en cours (et son empreinte), ou image déclarée dans addon.xml."""
     root = _root(request)
     version = kodi_repo.addon_version(root)
     if name == f"{kodi_repo.ADDON_ID}-{version}.zip":
         return _file(kodi_repo.addon_zip(root), "application/zip", name)
+    if name == f"{kodi_repo.ADDON_ID}-{version}.zip.sha256":
+        return _file(kodi_repo.sha256(kodi_repo.addon_zip(root)), "text/plain")
     # Liste blanche : seules les images déclarées (pas de « ../ » possible)
     if name in kodi_repo.addon_assets(root):
         path = root / kodi_repo.ADDON_ID / name

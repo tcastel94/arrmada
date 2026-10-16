@@ -25,6 +25,8 @@ Répond comme le vrai backend aux routes lues par l'écran « Accueil » :
   GET /__room?room=bureau       la TV change de pièce dans la web app (1.19.1 :
                                 bureau = pas d'ampli, /api/yamaha/state → no_amp)
   GET /__presets                préréglages d'ampli reçus (aucun depuis le bureau)
+  POST /api/kodi/crash-report   fin du journal d'un Kodi arrêté net (1.21.1)
+  GET /__crash_reports          journaux reçus (vérifiés par le banc)
 
 La progression des téléchargements avance à chaque appel, pour vérifier le
 rafraîchissement en direct. Une latence est simulée (--delay) pour voir les
@@ -81,6 +83,7 @@ STATE = {
     "watch_seq": 0,
     "watch_posts": [],  # dépôts reçus de la TV : {"merge", "states"}
     "presets": 0,  # POST /api/yamaha/preset/apply reçus (relus par /__presets)
+    "crash_reports": [],  # POST /api/kodi/crash-report reçus (relus par /__crash_reports)
     "amp": {"power": "on", "volume": 84, "mute": False, "input": "hdmi1", "sound_program": "surr_decoder"},
 }
 CAST = [
@@ -862,6 +865,9 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
             if path == "/__presets":  # préréglages d'ampli reçus
                 self._json({"presets": STATE["presets"]})
                 return
+            if path == "/__crash_reports":  # journaux de plantage reçus (1.21.1)
+                self._json({"reports": STATE["crash_reports"]})
+                return
             if path == "/__emit":  # le harnais publie un événement temps réel
                 from urllib.parse import parse_qs, urlsplit
 
@@ -1062,6 +1068,19 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
                 else:
                     changed = watch_store(states, "Kodi du banc")
                 self._json({"status": "ok", "changed": changed, "rejected": 0, "cursor": ""})
+            elif path == "/api/kodi/crash-report":
+                log = str(data.get("log") or "")
+                report = {
+                    "name": f"banc-{len(STATE['crash_reports']) + 1}.log",
+                    "chars": len(log),
+                    "size": data.get("size"),
+                    "kodi_version": data.get("kodi_version"),
+                    "addon_version": data.get("addon_version"),
+                    "last_line": log.strip().splitlines()[-1][-200:] if log.strip() else "",
+                }
+                STATE["crash_reports"].append(report)
+                sys.stderr.write(f"[mock] journal de plantage : {json.dumps(report, ensure_ascii=False)}\n")
+                self._json({"ok": True, "name": report["name"], "size": len(log)})
             elif path == "/api/kodi/scrobble":
                 STATE["scrobbles"].append(data)
                 sys.stderr.write(f"[mock] lecture : {json.dumps(data, ensure_ascii=False)}\n")

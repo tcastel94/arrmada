@@ -70,6 +70,29 @@ async def test_addon_zip(client: AsyncClient) -> None:
     assert old.status_code == 404
 
 
+async def test_sha256_of_every_zip(client: AsyncClient) -> None:
+    """Dépôt 1.1.0 : Kodi vérifie chaque zip (et ne réutilise plus un vieux zip)."""
+    resp = await client.get("/kodi/repo/repository.arrmada.zip")
+    with zipfile.ZipFile(io.BytesIO(resp.content)) as archive:
+        xml = archive.read("repository.arrmada/addon.xml").decode()
+    assert "<hashes>sha256</hashes>" in xml
+    assert f'version="{kodi_repo.REPO_VERSION}"' in xml
+
+    zips = (
+        f"/kodi/repo/script.arrmada/script.arrmada-{_version()}.zip",
+        f"/kodi/repo/repository.arrmada/repository.arrmada-{kodi_repo.REPO_VERSION}.zip",
+    )
+    for path in zips:
+        data = (await client.get(path)).content
+        digest = await client.get(f"{path}.sha256")
+        assert digest.status_code == 200, path
+        assert digest.text == hashlib.sha256(data).hexdigest(), path
+        # Deux téléchargements = mêmes octets (sinon l'empreinte ne collerait plus)
+        assert (await client.get(path)).content == data, path
+    old = await client.get("/kodi/repo/script.arrmada/script.arrmada-0.0.1.zip.sha256")
+    assert old.status_code == 404
+
+
 async def test_only_declared_assets_are_served(client: AsyncClient) -> None:
     assert (await client.get("/kodi/repo/script.arrmada/resources/icon.png")).status_code == 200
     for path in ("default.py", "../../backend/app/config.py", "resources/settings.xml"):

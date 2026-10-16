@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import PlainTextResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,7 +13,7 @@ from app.api.deps import get_current_user, get_db, require_admin
 from app.models.device import Device
 from app.models.service import Service
 from app.services import kodi as kodi_service
-from app.services import watch_summary, watch_sync
+from app.services import kodi_crash, watch_summary, watch_sync
 from app.services.encryption import decrypt_api_key, encrypt_api_key
 from app.services.fully_kiosk import kiosk
 from app.services.kodi import discover_kodi, sync_kodi
@@ -295,6 +296,34 @@ async def addon_scrobble(
     # lancé à part, la réponse à la TV n'attend jamais la tablette.
     _background(kiosk.on_playback(room, str((data or {}).get("event") or "progress")))
     return await kodi_service.handle_addon_scrobble(db, data)
+
+
+# ── Journaux de plantage des TV (appli 1.21.1+) ───
+@router.post("/crash-report")
+async def post_crash_report(data: dict, user: dict = Depends(get_current_user)):
+    """La TV envoie la fin du journal d'une session de Kodi qui s'est arrêtée net.
+
+    Rangé dans data/kodi-crashes/ (dossier visible sur l'hôte), 10 gardés.
+    """
+    if not isinstance(data, dict) or not str(data.get("log") or "").strip():
+        raise HTTPException(status_code=400, detail="Journal vide")
+    device = user.get("device_name") or str(data.get("device") or "tv")
+    saved = await asyncio.to_thread(kodi_crash.save_report, device, data)
+    return {"ok": True, **saved}
+
+
+@router.get("/crash-reports", dependencies=[Depends(require_admin)])
+async def list_crash_reports():
+    """Journaux de plantage reçus, du plus récent au plus ancien."""
+    return {"reports": await asyncio.to_thread(kodi_crash.list_reports)}
+
+
+@router.get("/crash-reports/{name}", dependencies=[Depends(require_admin)])
+async def get_crash_report(name: str):
+    text = await asyncio.to_thread(kodi_crash.read_report, name)
+    if text is None:
+        raise HTTPException(status_code=404, detail="Journal introuvable")
+    return PlainTextResponse(text)
 
 
 _BACKGROUND: set = set()  # tâches en cours (référence gardée jusqu'à leur fin)

@@ -109,6 +109,8 @@ _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         ("GET", r"/api/kodi/media/(lookup|recommendations|options)"),
         ("GET", r"/api/kodi/media/(movie|series|tv)/\d+/releases"),
         ("POST", r"/api/kodi/(scrobble|sync)"),
+        # Fin du journal d'une session de Kodi arrêtée net (taille bornée, rien d'exécuté)
+        ("POST", r"/api/kodi/crash-report"),
         # Vu / reprise partagés entre les TV (phase 4.4) : lecture et dépôt d'états
         ("GET", r"/api/kodi/watch-state"),
         ("POST", r"/api/kodi/watch-state"),
