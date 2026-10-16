@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     # Everything persistent lives here (SQLite DB, Fernet key, JWT secret,
     # admin password hash): mount this ONE directory as a volume.
     DATA_DIR: str = "data"
+    # Optional, read-only: the folder holding the OTHER apps' config dirs
+    # (Sonarr, Radarr, SABnzbd…). Lets ArrMada read their API keys itself.
+    APPDATA_DIR: str = "/appdata"
 
     # ── Database ──────────────────────────────────────────────
     # SQLite by default (zero config). PostgreSQL: see docker-compose.postgres.yml

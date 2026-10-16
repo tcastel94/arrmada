@@ -26,6 +26,12 @@ services:
       - "3420:3420"            # interface + API : le SEUL port à ouvrir
     volumes:
       - ./data:/app/data       # base SQLite, clés de chiffrement, mot de passe haché
+      # Optionnel, LECTURE SEULE : dossier des configs de tes autres applis.
+      # ArrMada y lit les clés API (Sonarr, Radarr, SABnzbd…) et les branche
+      # entre elles (Paramètres → Auto-configuration). Exemples :
+      #   Unraid   : /mnt/user/appdata:/appdata:ro
+      #   Synology : /volume1/docker:/appdata:ro
+      # - /chemin/de/tes/configs:/appdata:ro
       # Optionnel : accès aux fichiers médias (nettoyage, doublons…).
       # - /chemin/vers/medias:/mnt/user:rw
     environment:

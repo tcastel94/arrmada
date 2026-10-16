@@ -46,6 +46,7 @@ import {
     type LucideIcon,
 } from "lucide-react";
 import { CreatePasswordForm } from "@/components/auth/create-password-form";
+import { StackWiring } from "@/components/stack/stack-wiring";
 import { AuroraBackground } from "@/components/fx/aurora-background";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -344,6 +345,11 @@ export default function SetupPage() {
                                             }
                                             onBack={() => goTo(1)}
                                             onContinue={continueToServices}
+                                            onImported={(count) => {
+                                                setAdded(count);
+                                                void refetch();
+                                                goTo(4);
+                                            }}
                                         />
                                     )}
 
@@ -637,6 +643,7 @@ function DiscoveryStep({
     onToggle,
     onBack,
     onContinue,
+    onImported,
 }: {
     scanning: boolean;
     scanError: string;
@@ -647,8 +654,12 @@ function DiscoveryStep({
     onToggle: (key: string) => void;
     onBack: () => void;
     onContinue: () => void;
+    /** Import automatique réussi : nombre de services ajoutés à ArrMada. */
+    onImported: (count: number) => void;
 }) {
     const count = discovered?.filter((d) => picked.has(keyOf(d))).length ?? 0;
+    // L'import lit des clés API : il exige la session ouverte à l'étape Sécurité.
+    const canImport = isAuthenticated();
     return (
         <div className="space-y-5">
             <StepTitle
@@ -656,6 +667,27 @@ function DiscoveryStep({
                 title="Découverte réseau"
                 description="ArrMada peut scanner ton réseau local pour trouver Sonarr, Radarr, Prowlarr, SABnzbd… Tu peux aussi passer cette étape."
             />
+
+            {canImport && (
+                <div className="space-y-3 rounded-2xl border border-primary/20 bg-primary/[0.04] p-4">
+                    <div>
+                        <p className="text-sm font-semibold">Import automatique (recommandé)</p>
+                        <p className="text-xs text-muted-foreground">
+                            Clés API lues dans les fichiers de config de tes applis, puis Prowlarr, les clients de
+                            téléchargement et Bazarr branchés entre eux.
+                        </p>
+                    </div>
+                    <StackWiring
+                        variant="wizard"
+                        onApplied={(results) => {
+                            const registered = results.filter((r) => r.ok && r.id.startsWith("register:")).length;
+                            if (registered > 0) onImported(registered);
+                        }}
+                    />
+                </div>
+            )}
+
+            <p className="eyebrow pt-1">{canImport ? "Ou scan réseau classique" : "Scan réseau"}</p>
 
             {/* Radar animé pendant le scan */}
             <AnimatePresence initial={false}>

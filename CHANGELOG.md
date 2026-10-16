@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Auto-configuration de la stack
+
+#### Added
+- **Settings → Auto-configuration** (and in the setup wizard): reads API keys from the apps' own config files (appdata folder mounted read-only at `/appdata`) — Sonarr, Radarr, Lidarr, Readarr, Prowlarr (`config.xml`), Bazarr (`config.yaml` / `config.ini`), SABnzbd (`sabnzbd.ini`), Jellyfin (`jellyfin.db`), Deluge (`web.conf` / `core.conf`), qBittorrent (`qBittorrent.conf`)
+- Address probing: each app is located (LAN IP, Docker DNS name, Docker host) and validated **with its own key**
+- Plan / apply wiring: register apps in ArrMada, Prowlarr → apps (full sync), download clients in every *arr with a dedicated category, Bazarr → Sonarr/Radarr; idempotent, each entry tested by the target app before saving, warnings saved with `forceSave`, one retry on transient failures
+- SABnzbd categories created when missing; Deluge Label plugin enabled automatically for categories
+- Deluge / qBittorrent default passwords detected from their hashes; qBittorrent 5 login (204 + `QBT_SID_<port>` cookie) supported
+- `POST /api/stack/plan`, `POST /api/stack/apply` (authenticated; secrets never sent to the browser)
+
 ### Installation zéro configuration — image unique
 
 #### Added

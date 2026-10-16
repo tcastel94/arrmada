@@ -157,6 +157,32 @@ scans your network for Sonarr/Radarr/Prowlarr/SABnzbd… and stores the API keys
 | Forgot password | `docker exec -it arrmada arrmada-cli set-password` |
 | Backup | copy the `./data` folder (database, keys, password hash) |
 
+### 🪄 Auto-configuration (optional)
+
+Mount the folder holding your other apps' config directories **read-only**, and ArrMada
+reads their API keys itself, then wires the stack together:
+
+```yaml
+    volumes:
+      - ./data:/app/data
+      - /mnt/user/appdata:/appdata:ro     # Unraid  (Synology: /volume1/docker:/appdata:ro)
+```
+
+**Settings → Auto-configuration** (also offered in the setup wizard) then shows a plan you
+review before applying, like `terraform plan` / `apply`:
+
+| Action | What it does |
+|--------|--------------|
+| Add to ArrMada | Sonarr, Radarr, Lidarr, Readarr, Prowlarr, Bazarr, SABnzbd, Jellyfin: key read from `config.xml`, `sabnzbd.ini`, `config.yaml`, `jellyfin.db` |
+| Indexers | Prowlarr → Apps → Sonarr/Radarr/… (full sync) |
+| Download clients | SABnzbd, Deluge, qBittorrent added to each *arr with a dedicated category (`tv`, `movies`…); the SABnzbd category is created and Deluge's Label plugin enabled when needed |
+| Subtitles | Bazarr → Sonarr / Radarr |
+
+Every entry is **tested by the target app** (e.g. Sonarr tests its own connection to SABnzbd)
+before it is saved, and re-running never creates duplicates. Deluge and qBittorrent only store
+password *hashes*: their defaults (`deluge`, `adminadmin`) are detected automatically, otherwise
+type the password once in the UI. Keys and passwords never reach the browser.
+
 > **Behind a reverse proxy** (Synology, Traefik, Nginx Proxy Manager, Caddy): proxy
 > everything to port `3420`. The UI calls the API on the same origin, so HTTPS and
 > custom domains work without extra settings.
