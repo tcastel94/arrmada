@@ -266,6 +266,17 @@ def sort_media(media: list[dict], sort: str, order: str) -> list[dict]:
     return present + absent
 
 
+@router.get("/sources")
+async def media_sources(db: AsyncSession = Depends(get_db)):
+    """Radarr / Sonarr injoignables ? (bandeau de la Médiathèque).
+
+    `ok` faux : le service n'a pas répondu au dernier essai ; `stale` vrai :
+    sa dernière liste connue (`last_ok_at`) est affichée à la place.
+    """
+    await media_aggregator.cached_library(db)  # premier passage : l'état est rempli
+    return media_aggregator.library_status()
+
+
 @router.get("/facets")
 async def media_facets(
     type: str | None = Query(None, description="Limit to one type: movie, series"),
@@ -279,10 +290,7 @@ async def media_facets(
     `genre_counts` (titles per genre) feeds the TV's « Par genre » list.
     """
 
-    async def _fetch():
-        return await media_aggregator.fetch_all_media(db)
-
-    media = list(await cache.get_or_set("media:all", _fetch, ttl_seconds=300))
+    media = await media_aggregator.cached_library(db)
     if type:
         media = [m for m in media if m.get("type") == type]
 
@@ -331,11 +339,7 @@ async def list_media(
 ):
     """Fetch unified media library with filters and pagination (cached 5min)."""
 
-    # Cache the full media fetch (expensive API calls to Sonarr/Radarr)
-    async def _fetch():
-        return await media_aggregator.fetch_all_media(db)
-
-    media = list(await cache.get_or_set("media:all", _fetch, ttl_seconds=300))
+    media = await media_aggregator.cached_library(db)
 
     # Filter by type
     if type:

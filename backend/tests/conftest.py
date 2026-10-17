@@ -13,7 +13,7 @@ from app.config import settings
 from app.database import get_db
 from app.main import app, limiter
 from app.models import Base
-from app.services import artwork, fully_kiosk
+from app.services import artwork, fully_kiosk, media_aggregator
 from app.utils.cache import cache
 from tests import fake_arr
 
@@ -44,6 +44,21 @@ def _clear_cache():
     cache.clear()
     yield
     cache.clear()
+
+
+@pytest.fixture(autouse=True)
+def _isolated_library_snapshot(tmp_path, monkeypatch: pytest.MonkeyPatch):
+    """Dernière liste connue de la médiathèque : propre à chaque test, jamais dans data/.
+
+    Sans ça, un test où Radarr ne répond pas relirait la liste d'un test précédent.
+    """
+    monkeypatch.setattr(media_aggregator, "SNAPSHOT_FILE", tmp_path / "library-snapshot.json")
+    monkeypatch.setattr(media_aggregator, "_snapshots", None)
+    media_aggregator._digests.clear()
+    media_aggregator._status.clear()
+    yield
+    media_aggregator._digests.clear()
+    media_aggregator._status.clear()
 
 
 async def _override_get_db() -> AsyncGenerator[AsyncSession, None]:

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Library: the last known list when Radarr / Sonarr does not answer
+
+#### Fixed
+- **Empty library and no poster on the tablet while Radarr / Sonarr were unreachable** (17/10/2026: their published ports were lost after a Docker network reset). The library was rebuilt without them, and that empty list stayed cached 5 min; the tablet's poster comes from the same list. Each Radarr / Sonarr now keeps its **last list received**, in memory and on disk (`data/library-snapshot.json`, so it survives a server restart), like nginx's `proxy_cache_use_stale error`: a service that does not answer is replaced by its last list, never by nothing. The file is rewritten only when a list changes
+- While a service is down, the server **tries again every 30 s in the background** and keeps answering at once with the list it has (pages never wait for a dead host); back to the usual 5 min cache once every service answers. Every page reads the library through the same function (`cached_library`: library, filters, AI search, Kodi dashboard, activity timeline)
+
+#### Added
+- `GET /api/media/sources`: each Radarr / Sonarr with `ok`, `stale` (last known list shown), `error`, `count`, `last_ok_at`, `down_since`
+- Web app, Library: an amber banner "Radarr ne répond pas (il y a 12 min) : tu vois sa dernière liste connue, 812 titres, reçue il y a 2 h" with a link to the services; the list and counters reload on their own when the service is back. With nothing known yet, the empty state says "Radarr et Sonarr ne répondent pas" instead of "Ta médiathèque est vide — connecte Radarr et Sonarr"
+- Tests: Radarr down keeps its list (and its posters) while Sonarr answers, the list survives a server restart, nothing known → empty but reported, background retry brings the service back without waiting 5 min, file rewritten only on change. Screenshots (mock API): banner over the grid, honest empty state, desktop and phone, no horizontal scroll, no console error
+
 ### ArrMada repository on the Shield: cause found and fixed (server), verified zips, crash logs sent to the server (Kodi add-on 1.21.1)
 
 #### Fixed

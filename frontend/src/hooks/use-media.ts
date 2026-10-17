@@ -128,6 +128,42 @@ export function useMediaFacets() {
     });
 }
 
+/** Une source de la médiathèque (Radarr / Sonarr) au dernier essai du serveur. */
+export interface LibrarySource {
+    id: number;
+    name: string;
+    type: "radarr" | "sonarr";
+    /** Faux : le service n'a pas répondu au dernier essai. */
+    ok: boolean;
+    /** Vrai : sa dernière liste connue est affichée à la place. */
+    stale: boolean;
+    error: string;
+    /** Titres de cette source (dernière liste connue si elle est en panne). */
+    count: number;
+    last_ok_at: string | null;
+    down_since: string | null;
+    checked_at: string;
+}
+
+export interface LibrarySources {
+    degraded: boolean;
+    sources: LibrarySource[];
+}
+
+/**
+ * Radarr / Sonarr injoignables ? (`/api/media/sources`). Relu toutes les 30 s
+ * tant qu'une source est en panne (le serveur réessaie au même rythme), sinon
+ * toutes les 5 min.
+ */
+export function useLibrarySources() {
+    return useQuery<LibrarySources>({
+        queryKey: ["media", "sources"],
+        queryFn: () => apiFetch("/api/media/sources"),
+        staleTime: 15_000,
+        refetchInterval: (q) => (q.state.data?.degraded ? 30_000 : 5 * 60_000),
+    });
+}
+
 export function useMediaSearch(query: string) {
     return useQuery<SearchResponse>({
         queryKey: ["media", "search", query],

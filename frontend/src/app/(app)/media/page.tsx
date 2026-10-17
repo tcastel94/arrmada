@@ -53,6 +53,7 @@ import {
 import { Header } from "@/components/layout/header";
 import { PageContainer } from "@/components/shared/page-container";
 import { ArtworkRefreshButton } from "@/components/library/artwork-refresh-button";
+import { LibrarySourcesBanner } from "@/components/library/library-sources-banner";
 import { PageHeader, StatPill } from "@/components/shared/page-header";
 import { EmptyState, ErrorState } from "@/components/shared/empty-state";
 import { PosterGridSkeleton, Shimmer } from "@/components/shared/loading-skeleton";
@@ -69,7 +70,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useMedia, useMediaFacets, type MediaItem } from "@/hooks/use-media";
+import { useLibrarySources, useMedia, useMediaFacets, type MediaItem } from "@/hooks/use-media";
 import { useKodiSync } from "@/hooks/use-kodi";
 import { useDebounce } from "@/hooks/use-debounce";
 import { apiFetch } from "@/lib/api-client";
@@ -212,6 +213,8 @@ function MediaLibrary() {
         per_page: PER_PAGE,
     });
     const { data: facets } = useMediaFacets();
+    // Radarr / Sonarr injoignables : « ne répond pas » plutôt que « médiathèque vide »
+    const downSources = (useLibrarySources().data?.sources ?? []).filter((source) => !source.ok);
     // Compteurs films / séries : requêtes minuscules (1 élément), servies
     // depuis le cache backend de la bibliothèque.
     const movieCount = useMedia({ type: "movie", per_page: 1 }).data?.pagination.total;
@@ -483,6 +486,9 @@ function MediaLibrary() {
                         <StatPill label="manquants →" value={<LiveCount value={facets?.missing_count} />} icon={PackageX} tone="warning" />
                     </Link>
                 </PageHeader>
+
+                {/* Radarr / Sonarr injoignable : dernière liste connue affichée */}
+                <LibrarySourcesBanner />
 
                 {/* ── Barre d'outils collante ── */}
                 <StickyToolbar>
@@ -781,6 +787,15 @@ function MediaLibrary() {
                                 title="Aucun média ne correspond"
                                 description="Aucun titre de ta bibliothèque ne coche tous ces critères."
                                 action={{ label: "Réinitialiser les filtres", onClick: resetEverything }}
+                            />
+                        ) : downSources.length ? (
+                            <EmptyState
+                                icon={Library}
+                                title={`${downSources.map((source) => source.name).join(" et ")} ${
+                                    downSources.length > 1 ? "ne répondent pas" : "ne répond pas"
+                                }`}
+                                description="Ta médiathèque n'est pas vide : ArrMada n'arrive pas à la lire et n'en a encore aucune copie. Il réessaie toutes les 30\u00a0s ; vérifie que le conteneur tourne et que son port répond."
+                                action={{ label: "Voir les services", href: "/settings/services" }}
                             />
                         ) : (
                             <EmptyState

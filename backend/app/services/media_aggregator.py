@@ -1,7 +1,25 @@
-"""Media aggregator — fetches and normalises media across all *arr services."""
+"""Media aggregator — fetches and normalises media across all *arr services.
+
+Dernière liste connue (17/10/2026) : quand un Radarr / Sonarr ne répond pas
+(conteneur arrêté, réseau Docker cassé…), la médiathèque n'est plus vidée.
+Chaque service a sa dernière liste reçue, gardée en mémoire et sur disque
+(`data/library-snapshot.json`, pour survivre à un redémarrage du serveur),
+comme le `proxy_cache_use_stale error` d'un nginx. Elle est servie à sa place
+et `library_status()` dit qui est injoignable et depuis quand (bandeau de la
+web app). Tant qu'un service est en panne, un nouvel essai part en arrière-
+plan toutes les 30 s, sans faire attendre les pages ; en temps normal, la
+liste reste en cache 5 min comme avant.
+"""
 
 from __future__ import annotations
 
+import asyncio
+import copy
+import hashlib
+import json
+import os
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import select
@@ -133,43 +151,148 @@ def _normalise_series(
 # ── Public API ─────────────────────────────────────────────────
 
 
+# ── Dernière liste connue par service (voir l'en-tête du module) ──────────
+
+SNAPSHOT_FILE = Path("data") / "library-snapshot.json"
+LIBRARY_TTL = 300  # s : médiathèque en cache en temps normal
+RETRY_SECONDS = 30  # s : nouvel essai en fond tant qu'un service ne répond pas
+LIBRARY_TYPES = ("radarr", "sonarr")
+
+_snapshots: dict[str, dict[str, Any]] | None = None  # id du service → dernière liste reçue
+_digests: dict[str, str] = {}  # empreinte de la liste écrite sur disque (évite de réécrire)
+_status: dict[int, dict[str, Any]] = {}  # id du service → dernier essai
+_retry_task: asyncio.Task | None = None
+
+
+def _load_snapshots() -> dict[str, dict[str, Any]]:
+    """Listes gardées sur disque, lues une fois par démarrage du serveur."""
+    global _snapshots
+    if _snapshots is None:
+        try:
+            data = json.loads(SNAPSHOT_FILE.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            data = {}
+        _snapshots = data if isinstance(data, dict) else {}
+    return _snapshots
+
+
+def _write_snapshots(snapshots: dict[str, dict[str, Any]]) -> None:
+    """Écriture atomique (fichier temporaire puis renommage)."""
+    SNAPSHOT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = SNAPSHOT_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(snapshots, ensure_ascii=False), encoding="utf-8")
+    os.replace(tmp, SNAPSHOT_FILE)
+
+
+def _digest(items: list[dict[str, Any]]) -> str:
+    raw = json.dumps(items, sort_keys=True, default=str).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _short_error(exc: Exception) -> str:
+    text = str(exc).strip() or exc.__class__.__name__
+    return text[:200]
+
+
+async def _fetch_service(svc: Service) -> list[dict[str, Any]]:
+    """Liste normalisée d'UN service (lève une exception s'il ne répond pas)."""
+    api_key = decrypt_api_key(svc.api_key)
+    items: list[dict[str, Any]] = []
+    if svc.type == "radarr":
+        client = RadarrClient(url=svc.url, api_key=api_key)
+        try:
+            for m in await client.get_movies():
+                items.append(_normalise_movie(m, svc.name))
+        finally:
+            await client.close()
+    elif svc.type == "sonarr":
+        client = SonarrClient(url=svc.url, api_key=api_key)
+        try:
+            series = await client.get_series()
+            try:
+                profiles = await client.get_quality_profiles()
+                profile_names = {p["id"]: p.get("name", "") for p in profiles if "id" in p}
+            except Exception as exc:  # profiles are cosmetic: never block the library
+                logger.debug("Sonarr quality profiles unavailable: %s", exc)
+                profile_names = {}
+            for s in series:
+                items.append(_normalise_series(s, svc.name, profile_names))
+        finally:
+            await client.close()
+    return items
+
+
 async def fetch_all_media(db: AsyncSession) -> list[dict[str, Any]]:
-    """Fetch media from all connected *arr services and return unified list."""
+    """Fetch media from all connected *arr services and return unified list.
+
+    Un service qui ne répond pas est remplacé par sa dernière liste connue
+    (marquée dans `library_status()`), jamais par une liste vide.
+    """
     stmt = select(Service).where(Service.is_enabled == True)  # noqa: E712
     result = await db.execute(stmt)
-    services = result.scalars().all()
+    services = [svc for svc in result.scalars().all() if svc.type in LIBRARY_TYPES]
 
+    snapshots = await asyncio.to_thread(_load_snapshots)
+    now = datetime.now(UTC).isoformat()
     all_media: list[dict[str, Any]] = []
+    status: dict[int, dict[str, Any]] = {}
+    to_write = False
 
     for svc in services:
-        api_key = decrypt_api_key(svc.api_key)
+        key = str(svc.id)
+        base = {"id": svc.id, "name": svc.name, "type": svc.type, "checked_at": now}
         try:
-            if svc.type == "radarr":
-                client = RadarrClient(url=svc.url, api_key=api_key)
-                try:
-                    movies = await client.get_movies()
-                    for m in movies:
-                        all_media.append(_normalise_movie(m, svc.name))
-                finally:
-                    await client.close()
-
-            elif svc.type == "sonarr":
-                client = SonarrClient(url=svc.url, api_key=api_key)
-                try:
-                    series = await client.get_series()
-                    try:
-                        profiles = await client.get_quality_profiles()
-                        profile_names = {p["id"]: p.get("name", "") for p in profiles if "id" in p}
-                    except Exception as exc:  # profiles are cosmetic: never block the library
-                        logger.debug("Sonarr quality profiles unavailable: %s", exc)
-                        profile_names = {}
-                    for s in series:
-                        all_media.append(_normalise_series(s, svc.name, profile_names))
-                finally:
-                    await client.close()
-
+            items = await _fetch_service(svc)
         except Exception as exc:
-            logger.error("Failed to fetch media from %s: %s", svc.name, exc)
+            error = _short_error(exc)
+            known = snapshots.get(key)
+            if known and isinstance(known.get("items"), list):
+                logger.warning(
+                    "%s injoignable (%s) : dernière liste connue servie (%d titres du %s)",
+                    svc.name,
+                    error,
+                    len(known["items"]),
+                    known.get("saved_at"),
+                )
+                # Copie : les artworks ajoutés plus bas ne doivent pas toucher la liste gardée
+                all_media.extend(copy.deepcopy(known["items"]))
+            else:
+                logger.error("Failed to fetch media from %s: %s", svc.name, error)
+            previous = _status.get(svc.id) or {}
+            status[svc.id] = {
+                **base,
+                "ok": False,
+                "stale": bool(known),
+                "error": error,
+                "count": len(known["items"]) if known else 0,
+                "last_ok_at": (known or {}).get("saved_at"),
+                "down_since": previous.get("down_since") or now,
+            }
+            continue
+
+        status[svc.id] = {
+            **base,
+            "ok": True,
+            "stale": False,
+            "error": "",
+            "count": len(items),
+            "last_ok_at": now,
+            "down_since": None,
+        }
+        digest = _digest(items)
+        snapshots[key] = {"name": svc.name, "type": svc.type, "saved_at": now, "items": items}
+        if _digests.get(key) != digest:
+            _digests[key] = digest
+            to_write = True
+        all_media.extend(copy.deepcopy(items))
+
+    _status.clear()
+    _status.update(status)
+    if to_write:
+        try:
+            await asyncio.to_thread(_write_snapshots, snapshots)
+        except OSError as exc:  # disque plein, droits… : la médiathèque reste servie
+            logger.warning("Dernière liste connue non enregistrée : %s", exc)
 
     # Logos, disques, clearart… récupérés sur fanart.tv / TMDB (services/artwork.py)
     from app.services.artwork import apply_to_library
@@ -178,14 +301,54 @@ async def fetch_all_media(db: AsyncSession) -> list[dict[str, Any]]:
     return all_media
 
 
+def library_degraded() -> bool:
+    """Vrai si un Radarr / Sonarr n'a pas répondu au dernier essai."""
+    return any(not s["ok"] for s in _status.values())
+
+
+def library_status() -> dict[str, Any]:
+    """État des sources de la médiathèque (bandeau de la web app)."""
+    sources = sorted(_status.values(), key=lambda s: (s["type"], s["name"].lower()))
+    return {"degraded": library_degraded(), "sources": [dict(s) for s in sources]}
+
+
+def _retry_in_background() -> None:
+    """Un seul nouvel essai à la fois, avec sa propre session de base de données."""
+    global _retry_task
+    if _retry_task is not None and not _retry_task.done():
+        return
+
+    async def _run() -> None:
+        from app.services import artwork  # même fabrique de sessions que les tâches de fond
+        from app.utils.cache import cache
+
+        try:
+            async with artwork.session_factory() as own_db:
+                media = await fetch_all_media(own_db)
+            cache.set("media:all", media)
+        except Exception as exc:  # jamais au point de casser une requête
+            logger.warning("Nouvel essai de la médiathèque échoué : %s", exc)
+
+    _retry_task = asyncio.create_task(_run())
+
+
 async def cached_library(db: AsyncSession) -> list[dict[str, Any]]:
-    """Toute la médiathèque, via le même cache de 5 min que `/api/media` (clé « media:all »)."""
+    """Toute la médiathèque, en cache 5 min (clé « media:all »), partout la même.
+
+    Service en panne : la liste en cache (avec la dernière liste connue du
+    service) est servie tout de suite, et un nouvel essai part en fond si le
+    dernier date de plus de 30 s — la page ne l'attend pas.
+    """
     from app.utils.cache import cache
+
+    age = cache.age("media:all")
+    if age is not None and age > RETRY_SECONDS and library_degraded():
+        _retry_in_background()
 
     async def _fetch() -> list[dict[str, Any]]:
         return await fetch_all_media(db)
 
-    return list(await cache.get_or_set("media:all", _fetch, ttl_seconds=300))
+    return list(await cache.get_or_set("media:all", _fetch, ttl_seconds=LIBRARY_TTL))
 
 
 async def find_artwork(

@@ -19,7 +19,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, get_db
 from app.services import media_aggregator
 from app.services.activity_log import log_event, query_events, to_dict
-from app.utils.cache import cache
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -198,11 +197,7 @@ async def timeline(
 
     # 3. Enrich (title/poster) from the media library
     try:
-        media = list(
-            await cache.get_or_set(
-                "media:all", lambda: media_aggregator.fetch_all_media(db), ttl_seconds=300
-            )
-        )
+        media = await media_aggregator.cached_library(db)
         by_key = {(m["type"], str(m["external_id"])): m for m in media}
         by_tmdb = {m["tmdb_id"]: m for m in media if m.get("tmdb_id")}
         for it in items:

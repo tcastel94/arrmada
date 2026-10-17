@@ -11,8 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
 from app.config import settings
-from app.services.media_aggregator import fetch_all_media
-from app.utils.cache import cache
+from app.services import media_aggregator
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -183,10 +182,7 @@ async def ai_search(
         return {"error": filters["error"], "items": [], "filters": filters, "ai_available": True}
 
     # 2. Fetch full media library (cached)
-    async def _fetch():
-        return await fetch_all_media(db)
-
-    media = list(await cache.get_or_set("media:all", _fetch, ttl_seconds=300))
+    media = await media_aggregator.cached_library(db)
 
     # 3. Apply filters
     results = _apply_filters(media, filters)

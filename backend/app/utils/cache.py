@@ -55,6 +55,15 @@ class TTLCache:
             self._store[key] = (now, value)
             return value
 
+    def age(self, key: str) -> float | None:
+        """Secondes depuis le calcul de la valeur en cache (None : absente)."""
+        cached = self._store.get(key)
+        return None if cached is None else time.monotonic() - cached[0]
+
+    def set(self, key: str, value: Any) -> None:
+        """Remplace la valeur (calculée ailleurs, ex. par une tâche de fond)."""
+        self._store[key] = (time.monotonic(), value)
+
     def invalidate(self, key: str) -> None:
         """Remove a specific key from the cache."""
         self._store.pop(key, None)

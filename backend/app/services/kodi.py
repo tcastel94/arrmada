@@ -395,13 +395,8 @@ async def _enrich_now_playing(db: AsyncSession, result: dict[str, Any], tmdb: st
     if not tmdb:
         return
     from app.services import media_aggregator
-    from app.utils.cache import cache
 
-    media = list(
-        await cache.get_or_set(
-            "media:all", lambda: media_aggregator.fetch_all_media(db), ttl_seconds=300
-        )
-    )
+    media = await media_aggregator.cached_library(db)
     match = next((m for m in media if str(m.get("tmdb_id")) == str(tmdb)), None)
     if not match:
         return
