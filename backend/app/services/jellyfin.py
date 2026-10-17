@@ -32,7 +32,9 @@ logger = get_logger(__name__)
 class JellyfinClient(ArrBaseClient):
     """Client for the Jellyfin API.
 
-    Jellyfin uses token-based auth via the ``X-Emby-Token`` header.
+    Jellyfin uses token-based auth: ``Authorization: MediaBrowser Token="…"``
+    (see ``auth_header``). The older ``X-Emby-Token`` header is refused by
+    Jellyfin 12 unless legacy authorization is re-enabled.
     """
 
     API_PREFIX: str = ""
@@ -43,7 +45,7 @@ class JellyfinClient(ArrBaseClient):
         if self._client is None or self._client.is_closed:
             self._client = httpx.AsyncClient(
                 base_url=self.base_url,
-                headers={"X-Emby-Token": self.api_key},
+                headers=auth_header(self.api_key),
                 timeout=self.timeout,
             )
         return self._client
@@ -102,6 +104,20 @@ class JellyfinClient(ArrBaseClient):
         return resp.json()
 
 
+# ── Authentification ──────────────────────────────────────────
+
+# Jellyfin 12 désactive par défaut l'« authentification historique » :
+# le paramètre ``api_key=`` et l'en-tête ``X-Emby-Token`` sont refusés (401).
+# On utilise ce que toutes les versions depuis 10.10 acceptent : le paramètre
+# ``ApiKey=`` (adresses données au Chromecast, qui ne sait pas envoyer d'en-tête)
+# et l'en-tête standard ``Authorization: MediaBrowser Token="…"``.
+KEY_PARAM = "ApiKey"
+
+
+def auth_header(key: str) -> dict[str, str]:
+    return {"Authorization": f'MediaBrowser Token="{key}"'}
+
+
 # ── Cast helpers ───────────────────────────────────────────────
 
 
@@ -134,7 +150,7 @@ async def find_movie_item(db: AsyncSession, tmdb_id: int) -> dict[str, Any] | No
     # list with provider ids and match client-side. Libraries are a few thousand
     # items at most — one call, done on-demand when casting.
     params = {
-        "api_key": key,
+        KEY_PARAM: key,
         "recursive": "true",
         "includeItemTypes": "Movie",
         "hasTmdbId": "true",
@@ -165,7 +181,7 @@ def stream_url(
     receiver plays it reliably.
     """
     params = {
-        "api_key": key,
+        KEY_PARAM: key,
         "VideoCodec": "h264",
         "AudioCodec": "aac",
         "AudioChannels": 2,
@@ -208,12 +224,12 @@ async def test_connection(db: AsyncSession) -> dict[str, Any]:
     base, key = cfg
     try:
         async with httpx.AsyncClient(timeout=8) as client:
-            r = await client.get(f"{base}/System/Info?api_key={key}")
+            r = await client.get(f"{base}/System/Info?{KEY_PARAM}={key}")
             r.raise_for_status()
             info = r.json()
             plugins: list[dict[str, Any]] | None = None
             try:  # liste des plugins : clé d'API administrateur (cas normal)
-                rp = await client.get(f"{base}/Plugins?api_key={key}")
+                rp = await client.get(f"{base}/Plugins?{KEY_PARAM}={key}")
                 rp.raise_for_status()
                 plugins = rp.json() if isinstance(rp.json(), list) else None
             except Exception:
@@ -250,7 +266,7 @@ async def _series_index(
     if cached and not refresh and time.monotonic() - cached[0] < SERIES_TTL:
         return cached[1]
     params = {
-        "api_key": key,
+        KEY_PARAM: key,
         "recursive": "true",
         "includeItemTypes": "Series",
         "fields": "ProviderIds",
@@ -296,7 +312,7 @@ async def find_episode_item(
         if series_id is None:
             return None
         r = await client.get(
-            f"{base}/Shows/{series_id}/Episodes?{urlencode({'api_key': key, 'season': season})}"
+            f"{base}/Shows/{series_id}/Episodes?{urlencode({KEY_PARAM: key, 'season': season})}"
         )
         r.raise_for_status()
         item = pick_episode(r.json().get("Items", []), season, episode)
@@ -390,7 +406,7 @@ async def episode_segments(
         item = await find_episode_item(db, tvdb_id, season, episode)
         if item is None:
             return {"status": "ok", "found": False, "segments": []}
-        params = [("api_key", key)] + [("includeSegmentTypes", t) for t in SEGMENT_KINDS]
+        params = [(KEY_PARAM, key)] + [("includeSegmentTypes", t) for t in SEGMENT_KINDS]
         async with httpx.AsyncClient(timeout=10) as client:
             r = await client.get(f"{base}/MediaSegments/{item['id']}?{urlencode(params)}")
         if r.status_code == 404:

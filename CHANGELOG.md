@@ -15,7 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Cast an episode** from the web app: a cast button on every episode with a file (series tab), when Jellyfin is configured; `POST /api/cast/play` accepts `tvdb_id + season + episode` besides `tmdb_id`, the stream is titled "Série · S02E04 · Titre"
 - **Settings → Cast & Jellyfin → Tester la connexion** now says whether markers are available: Jellyfin version (10.10+) and installed marker plugin, or what to install
 - Bench: `BENCH_ONLY=segments kodi-addon/bench/run.sh` (≈ 1 min, real Kodi 20): on an episode without chapters, button at 6 s, jump to 25 s (end of the intro marker), "Épisode suivant" card at 53 s on the end-credits marker, request received by the mock server
-- Tests: server 11 (marker parsing, double episodes, support detection, TV route, series cache and refresh, no-marker cases, no Jellyfin, TV token scope, connection test, episode stream, cast validation); add-on 3 (parsing, button, credits)
+- Jellyfin 12 compatibility: Jellyfin 12 disables "legacy authorization" by default, so the `api_key=` query parameter and the `X-Emby-Token` header are refused (401). ArrMada now uses `ApiKey=` (Cast stream URLs, which a Chromecast fetches without headers) and `Authorization: MediaBrowser Token="…"` (health check), both accepted since 10.10. This also fixes movie casting and the Jellyfin health check on Jellyfin 12
+- Tests: server 12 (fake Jellyfin behaves like 12.x and refuses legacy authorization; marker parsing, double episodes, support detection, TV route, series cache and refresh, no-marker cases, no Jellyfin, TV token scope, connection test, episode stream, cast validation); add-on 3 (parsing, button, credits)
 
 ### No more emojis in the legacy TV menus (Kodi add-on 1.24.2)
 

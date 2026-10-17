@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
+import httpx
 import pytest
 from httpx import AsyncClient
 
@@ -53,12 +55,32 @@ def _segments(params: dict, m: Any) -> Any:
     ]}  # fmt: skip
 
 
+def _jellyfin_12(handle: Any) -> Any:
+    """Comme Jellyfin 12 (authentification historique désactivée par défaut) :
+    ``api_key=`` et ``X-Emby-Token`` → 401 ; ``ApiKey=`` ou
+    ``Authorization: MediaBrowser Token="…"`` → accepté."""
+
+    def guarded(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "jellyfin.test" and request.url.path != "/System/Info/Public":
+            legacy = "api_key" in request.url.params or "X-Emby-Token" in request.headers
+            header = re.fullmatch(
+                r'MediaBrowser Token="([^"]+)"', request.headers.get("Authorization", "")
+            )
+            token = request.url.params.get("ApiKey") or (header and header.group(1))
+            if legacy or token != "j-key":
+                STATE["refused"].append(str(request.url.copy_with(query=None)))
+                return httpx.Response(401)
+        return handle(request)
+
+    return guarded
+
+
 @pytest.fixture
 async def jellyfin(
     client: AsyncClient, arr_stack: dict[str, str], monkeypatch: pytest.MonkeyPatch
 ) -> dict[str, str]:
     CALLS.clear()
-    STATE.update(segments_404=False, extra_series=[])
+    STATE.update(segments_404=False, extra_series=[], refused=[])
     jf._series_cache.clear()
     routes = dict(fake_arr.ROUTES)
     routes["jellyfin.test"] = [
@@ -72,6 +94,7 @@ async def jellyfin(
         (r"/MediaSegments/([^/]+)", _segments),
     ]  # fmt: skip
     monkeypatch.setattr(fake_arr, "ROUTES", routes)
+    monkeypatch.setattr(fake_arr, "handle", _jellyfin_12(fake_arr.handle))
     svc = {"name": "Jellyfin", "type": "jellyfin", "url": JELLYFIN_URL, "api_key": "j-key"}
     assert (await client.post("/api/services", json=svc, headers=arr_stack)).status_code == 201
     return arr_stack
@@ -198,3 +221,21 @@ async def test_cast_play_validates_its_target(client: AsyncClient, jellyfin: dic
     assert r.json() == {
         "status": "error", "detail": "Épisode introuvable dans Jellyfin (ou Jellyfin non configuré).",
     }  # fmt: skip
+
+
+async def test_jellyfin_12_auth_everywhere(client: AsyncClient, jellyfin: dict) -> None:
+    """Aucun appel refusé par un Jellyfin 12 : santé, test, marqueurs, flux de Cast."""
+    from app.services.jellyfin import JellyfinClient
+
+    status = await JellyfinClient(JELLYFIN_URL, "j-key").health_check()
+    assert status.status == "online", status.error
+    assert (await client.get("/api/cast/jellyfin/test", headers=jellyfin)).json()["ok"]
+    await client.get(
+        "/api/kodi/segments",
+        params={"tvdb_id": 280619, "season": 2, "episode": 1},
+        headers=jellyfin,
+    )
+    async with tp.session_factory() as db:
+        stream = await jf.build_episode_stream(db, 280619, 2, 1)
+    assert "ApiKey=j-key" in stream["url"] and "api_key" not in stream["url"]
+    assert STATE["refused"] == []
