@@ -101,6 +101,16 @@ class Settings(BaseSettings):
     # every import into a multi-GB copy.
     ARR_DOWNLOADS_PATH: str = "/media/downloads/complete"
 
+    # ── Demandes lancées depuis la TV (services/tv_priority.py) ─
+    # Tout ce qui est lancé depuis une TV passe en tête de SABnzbd (priorité
+    # Force) : on veut le regarder ce soir. false = file normale pour tous.
+    TV_PRIORITY_ENABLED: bool = True
+    # Passe du « gardien » : une saison arrive en plusieurs NZB, chacun doit
+    # être repassé en Force à son arrivée dans la file.
+    TV_PRIORITY_INTERVAL_SECONDS: int = 15
+    # Demande sans aucun téléchargement trouvé au bout de N heures : abandonnée.
+    TV_REQUEST_TTL_HOURS: int = 24
+
     # ── Caméras Eufy (via le conteneur eufy-security-ws) ──────
     # Ex. ws://192.168.2.3:8424 (EUFY_WS_PORT du pont) ; vide = pas de caméras. Détections relayées
     # vers la TV : person, ring, motion, pet, vehicle, package (virgules).

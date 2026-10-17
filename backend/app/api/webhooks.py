@@ -234,6 +234,12 @@ async def _handle_arr_webhook(
         },
     )
 
+    # Demande lancée depuis la TV : priorité SABnzbd posée dans la seconde
+    if event_type == "Grab" and service_type in ("radarr", "sonarr"):
+        from app.services import tv_priority
+
+        await tv_priority.on_grab(service_type, payload)
+
     # Create in-app notification for important events
     if event_type == "Download":
         try:

@@ -100,6 +100,8 @@ def is_lan_request(client_host: str | None, forwarded_for: str | None) -> bool:
 # sous-titres, file en lecture seule + pause/reprise, ampli, notifications
 # (lecture et « marquer lu »), recommandations, flux temps réel (SSE).
 # Aucune suppression, aucun nettoyage, aucune configuration (ADR-003, décision 1).
+# Seule exception, bornée : annuler SA propre demande « pour ce soir » tant
+# qu'elle est en cours (file vidée, rien d'effacé du disque).
 
 _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
     (method, re.compile(pattern))
@@ -119,6 +121,11 @@ _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         ("POST", r"/api/kodi/media/add"),
         ("POST", r"/api/kodi/media/(movie|series|tv)/\d+/grab"),
         ("POST", r"/api/kodi/downloads/(radarr|sonarr)/\d+/(pause|resume)"),
+        # Demandes « pour ce soir » : liste, annulation de SA demande (vérifié
+        # côté serveur), pause / reprise / tête de file d'UN téléchargement
+        ("GET", r"/api/kodi/tv-requests"),
+        ("POST", r"/api/kodi/tv-requests/\d+/cancel"),
+        ("POST", r"/api/kodi/queue/[A-Za-z0-9_.\-]+/(pause|resume|top)"),
         ("GET", r"/api/media(/.*)?"),
         ("GET", r"/api/downloads"),
         ("GET", r"/api/calendar(/.*)?"),

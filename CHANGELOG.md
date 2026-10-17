@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Downloads launched from the TV jump the queue (server, lot 1 of ADR-005)
+
+#### Added
+- **"Tonight" priority**: anything launched from a TV (search, add with search, hand-picked release) is recorded as a TV request (`tv_requests` table: title, scope movie / series / season / episodes, TV of origin, state) and its downloads go to the **top of SABnzbd with the Force priority**, requests in arrival order. Radarr / Sonarr have no priority of their own: a guardian (`services/tv_priority.py`) matches their queue (`downloadId` = SABnzbd `nzo_id`) every 15 s while a request is open, and at once on the `Grab` webhook. Each NZB of a season is caught as it arrives. Force also downloads while the queue is paused. `"priority": false` opts out
+- Requests close on their own 3 min after their downloads left the queue, or expire after 24 h with nothing found; an unreachable Radarr / Sonarr never closes anything
+- TV routes: `GET /api/kodi/tv-requests`, `POST /api/kodi/tv-requests/{id}/cancel` (only the TV that asked, while in progress: downloads removed without blocklist, monitoring stopped if the request added the title, nothing deleted from disk), `POST /api/kodi/queue/{download_id}/pause|resume|top` (one SABnzbd item; `top` goes right behind the TV requests)
+- `GET /api/downloads`: `download_id`, `episode_ids`, `season_number` and `tv_request` per item
+- SABnzbd client: per-item priority, move, pause and resume
+- Settings: `TV_PRIORITY_ENABLED`, `TV_PRIORITY_INTERVAL_SECONDS`, `TV_REQUEST_TTL_HOURS`
+- Tests: fake SABnzbd with a real ordered queue (Force re-sorts, switch, per-item pause); add from a paired TV goes from last of 11 to first, idempotent second pass, arrival order, no-priority request, season caught NZB by NZB, close / expire / unreachable service, `Grab` webhook, hand-picked release, episode search, cancel by the right TV only, per-item actions, TV scope
+
+#### Fixed
+- TV actions (search, add, grab) now record **which TV** in the activity log (`device` was empty)
+
 ### Library: the last known list when Radarr / Sonarr does not answer
 
 #### Fixed
