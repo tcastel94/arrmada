@@ -2,7 +2,7 @@
 
 Configure in each *arr service:
   Settings → Connect → Webhook
-  URL: http://<arrmada-ip>:8420/api/webhooks/sonarr  (or /radarr, /bazarr)
+  URL: http://<arrmada-ip>:3420/api/webhooks/sonarr  (or /radarr, /bazarr)
   Method: POST
   Events: On Grab, On Import, On Upgrade, On Health Issue, On Rename
 

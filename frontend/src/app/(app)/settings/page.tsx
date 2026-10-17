@@ -49,6 +49,7 @@ import { SpotlightCard } from "@/components/fx/spotlight-card";
 import { RingGauge } from "@/components/fx/ring-gauge";
 import { StatusDot } from "@/components/fx/status-dot";
 import { APP_VERSION } from "@/components/settings/app-version";
+import { PasswordPanel } from "@/components/settings/password-panel";
 import { useBackendVersion, useSettings, useTestTelegram } from "@/hooks/use-settings";
 import { useServices } from "@/hooks/use-services";
 import { useKodiSettings } from "@/hooks/use-kodi";
@@ -262,8 +263,8 @@ export default function SettingsGeneralPage() {
                 </motion.div>
             </section>
 
-            {/* ── Alerte sécurité (si le backend l'expose) ───── */}
-            {settings?.auth.default_secret && (
+            {/* ── Alerte sécurité : mot de passe encore en clair dans le .env ── */}
+            {settings?.auth.password_source === "env" && (
                 <motion.div
                     variants={fadeUp}
                     role="alert"
@@ -271,11 +272,10 @@ export default function SettingsGeneralPage() {
                 >
                     <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
                     <div className="text-sm">
-                        <p className="font-semibold text-amber-200">Mot de passe d&apos;administration par défaut</p>
+                        <p className="font-semibold text-amber-200">Mot de passe stocké en clair</p>
                         <p className="mt-0.5 text-amber-100/80">
-                            Change <code className="rounded bg-black/30 px-1 font-mono text-xs">ARRMADA_AUTH_SECRET</code> dans ton
-                            fichier .env puis redémarre le conteneur : tant qu&apos;il garde la valeur d&apos;exemple, n&apos;importe qui sur
-                            ton réseau peut se connecter.
+                            Il vient de <code className="rounded bg-black/30 px-1 font-mono text-xs">ARRMADA_AUTH_SECRET</code> (.env).
+                            Redéfinis-le ci-dessous : il sera stocké haché et tu pourras retirer la variable.
                         </p>
                     </div>
                 </motion.div>
@@ -372,8 +372,8 @@ export default function SettingsGeneralPage() {
                                 <ConfigRow
                                     icon={ShieldCheck}
                                     label="Authentification"
-                                    tone={settings.auth.default_secret ? "error" : "info"}
-                                    badge={settings.auth.default_secret ? "Mot de passe par défaut" : undefined}
+                                    tone={settings.auth.password_source === "env" ? "warning" : "info"}
+                                    badge={settings.auth.password_source === "env" ? "Mot de passe en clair (.env)" : undefined}
                                     value={`Session valable ${plural(settings.auth.jwt_expiration_hours, "heure")}`}
                                 />
                                 <ConfigRow
@@ -412,6 +412,11 @@ export default function SettingsGeneralPage() {
                                 />
                             </div>
                         </Panel>
+                    </motion.div>
+
+                    {/* ── Mot de passe administrateur ──────────── */}
+                    <motion.div variants={fadeUp} className="lg:col-span-2">
+                        <PasswordPanel source={settings.auth.password_source} />
                     </motion.div>
                 </div>
             )}

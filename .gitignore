@@ -52,3 +52,6 @@ htmlcov/
 
 # Misc
 *.log
+
+# Réglages propres à un hôte (PostgreSQL, montages, PUID…) — voir docs/deploy-unraid.md
+docker-compose.override.yml

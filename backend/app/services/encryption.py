@@ -9,7 +9,7 @@ from cryptography.fernet import Fernet
 
 from app.config import settings
 
-_DATA_DIR = Path("data")
+_DATA_DIR = Path(settings.DATA_DIR)
 _KEY_FILE = _DATA_DIR / ".fernet_key"
 
 

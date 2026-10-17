@@ -25,10 +25,22 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+def auth_headers(key: str) -> dict[str, str]:
+    """Token headers accepted by every Jellyfin version (old + ≥ 10.11)."""
+    return {"Authorization": f'MediaBrowser Token="{key}"', "X-Emby-Token": key}
+
+
+def auth_params(key: str) -> dict[str, str]:
+    """Same for URLs that cannot carry headers (Chromecast stream URL)."""
+    return {"ApiKey": key, "api_key": key}
+
+
 class JellyfinClient(ArrBaseClient):
     """Client for the Jellyfin API.
 
-    Jellyfin uses token-based auth via the ``X-Emby-Token`` header.
+    Jellyfin ≥ 10.11 only accepts ``Authorization: MediaBrowser Token="…"``
+    (legacy ``X-Emby-Token`` / ``?api_key=`` answer 401). Both forms are sent:
+    older servers read the legacy one, newer ones the new one.
     """
 
     API_PREFIX: str = ""
@@ -39,7 +51,7 @@ class JellyfinClient(ArrBaseClient):
         if self._client is None or self._client.is_closed:
             self._client = httpx.AsyncClient(
                 base_url=self.base_url,
-                headers={"X-Emby-Token": self.api_key},
+                headers=auth_headers(self.api_key),
                 timeout=self.timeout,
             )
         return self._client
@@ -100,6 +112,7 @@ class JellyfinClient(ArrBaseClient):
 
 # ── Cast helpers ───────────────────────────────────────────────
 
+
 def _base(url: str) -> str:
     u = (url or "").strip().rstrip("/")
     if u and not u.startswith("http"):
@@ -129,7 +142,7 @@ async def find_movie_item(db: AsyncSession, tmdb_id: int) -> Optional[dict[str, 
     # list with provider ids and match client-side. Libraries are a few thousand
     # items at most — one call, done on-demand when casting.
     params = {
-        "api_key": key,
+        **auth_params(key),
         "recursive": "true",
         "includeItemTypes": "Movie",
         "hasTmdbId": "true",
@@ -146,7 +159,9 @@ async def find_movie_item(db: AsyncSession, tmdb_id: int) -> Optional[dict[str, 
     return None
 
 
-def stream_url(base: str, key: str, item_id: str, *, max_width: int = 1920, bitrate: int = 8_000_000) -> str:
+def stream_url(
+    base: str, key: str, item_id: str, *, max_width: int = 1920, bitrate: int = 8_000_000
+) -> str:
     """Build a progressive MP4 URL Jellyfin transcodes to Chromecast-friendly H.264/AAC.
 
     We deliberately use a progressive (single-file) MP4 stream rather than HLS.
@@ -158,7 +173,7 @@ def stream_url(base: str, key: str, item_id: str, *, max_width: int = 1920, bitr
     receiver plays it reliably.
     """
     params = {
-        "api_key": key,
+        **auth_params(key),
         "VideoCodec": "h264",
         "AudioCodec": "aac",
         "AudioChannels": 2,
@@ -201,7 +216,7 @@ async def test_connection(db: AsyncSession) -> dict[str, Any]:
     base, key = cfg
     try:
         async with httpx.AsyncClient(timeout=8) as client:
-            r = await client.get(f"{base}/System/Info?api_key={key}")
+            r = await client.get(f"{base}/System/Info", headers=auth_headers(key))
             r.raise_for_status()
             info = r.json()
         return {"ok": True, "server": info.get("ServerName"), "version": info.get("Version")}

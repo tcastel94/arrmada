@@ -184,7 +184,7 @@ function TmdbGuide() {
                     <pre className="overflow-x-auto rounded-xl bg-black/40 px-3 py-2 font-mono text-xs text-brand ring-1 ring-white/[0.06]">
                         TMDB_API_KEY=ta_cle_api
                     </pre>
-                    <p className="text-xs text-muted-foreground">Redémarre ensuite le conteneur arrmada-backend.</p>
+                    <p className="text-xs text-muted-foreground">Redémarre ensuite le conteneur arrmada.</p>
                     <Button variant="outline" size="sm" asChild>
                         <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noreferrer noopener">
                             <Clapperboard /> Obtenir une clé TMDB

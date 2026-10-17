@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
 from app.config import settings
+from app.services import auth_store
 from app.services.telegram import send_message
 from app.utils.logger import get_logger
 
@@ -44,9 +45,11 @@ async def get_settings():
         },
         "auth": {
             "jwt_expiration_hours": settings.JWT_EXPIRATION_HOURS,
-            # True while the admin password is still the shipped default.
-            "default_secret": settings.ARRMADA_AUTH_SECRET
-            in ("changeme", "changeme_use_a_strong_password", ""),
+            # True while no admin password exists (instance unclaimed).
+            "default_secret": not auth_store.is_password_set(),
+            # "file" (hashed, changeable in the UI) or "env" (legacy
+            # ARRMADA_AUTH_SECRET, plaintext in .env).
+            "password_source": auth_store.password_source(),
         },
         "cors": {
             "origins": settings.cors_origin_list,

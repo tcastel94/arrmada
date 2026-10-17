@@ -37,6 +37,7 @@ from app.api.quality import router as quality_router
 from app.api.cleanup import router as cleanup_router
 from app.api.ai_search import router as ai_search_router
 from app.api.subtitles import router as subtitles_router
+from app.api.stack import router as stack_router
 
 # Main router that includes all sub-routers
 api_router = APIRouter()
@@ -56,6 +57,7 @@ api_router.include_router(duplicates_router)
 api_router.include_router(search_router)
 api_router.include_router(requests_router)
 api_router.include_router(settings_router)
+api_router.include_router(stack_router)
 api_router.include_router(recommendations_router)
 api_router.include_router(files_router)
 api_router.include_router(trash_guides_router)
