@@ -27,7 +27,7 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 # Phase d'une demande, dans l'ordre du parcours
-PHASES = ("searching", "downloading", "importing", "ready", "blocked", "notfound")
+PHASES = ("searching", "downloading", "importing", "subtitles", "ready", "blocked", "notfound")
 
 _IMPORTING = {"importpending", "importing"}
 _BLOCKED = {"importblocked", "failed", "failedpending"}
@@ -60,6 +60,8 @@ def build_card(request: dict[str, Any], items: list[dict[str, Any]]) -> dict[str
         phase = "notfound"
     elif blocked or errors:
         phase = "blocked"
+    elif not items and request.get("subtitles") == "searching":
+        phase = "subtitles"  # importé, Bazarr cherche (lot 4)
     elif items and (tracked & _IMPORTING or (size and left <= 0)):
         phase = "importing"
     elif items:
@@ -73,7 +75,9 @@ def build_card(request: dict[str, Any], items: list[dict[str, Any]]) -> dict[str
     return {
         **request,
         "phase": phase,
-        "progress": 100.0 if phase in ("importing", "ready") and not items else progress,
+        "progress": 100.0
+        if phase in ("importing", "subtitles", "ready") and not items
+        else progress,
         "size_bytes": size,
         "size_left_bytes": left,
         "time_left_seconds": time_left,

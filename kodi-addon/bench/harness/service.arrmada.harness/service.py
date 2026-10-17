@@ -154,6 +154,9 @@ def downloads_screen():
     wait(3.0)
     log(f"écran Téléchargements : focus={focus()}")
     shot("dl-10-ecran-telechargements")
+    press("Right")  # carte « Sous-titres en cours » (Severance)
+    wait(0.8)
+    shot("dl-10b-carte-sous-titres")
     press("Right")  # carte bloquée (The Bear)
     wait(0.8)
     shot("dl-11-carte-bloquee")
@@ -178,6 +181,78 @@ def downloads_screen():
     log(f"actions reçues par le serveur : {actions}")
     press("Back")
     wait(1.0)
+
+
+def ready_open():
+    return xbmc.getCondVisibility("Window.IsVisible(script-arrmada-ready.xml)")
+
+
+def emit_ready(**fields):
+    """Ce que publie le serveur quand une demande TV est importée et sous-titrée (lot 4)."""
+    fields.setdefault("at", datetime.now(timezone.utc).isoformat())
+    query = urllib.parse.urlencode(dict(fields, type="tv_ready"))
+    urllib.request.urlopen(f"{MOCK}/__emit?{query}").read()
+
+
+def ready_popup():
+    """ADR-005, lot 4 : « Prêt à regarder » sur la TV qui a demandé, et elle seule."""
+    me = 0
+    for _ in range(40):  # appairage automatique (migration) au démarrage
+        me = device_id_now()
+        if me:
+            break
+        wait(0.5)
+    film = {"title": "Le Comte de Monte-Cristo", "media_type": "movie", "id_type": "tmdb",
+            "id": 1084736, "quality": "Bluray-1080p", "subtitles": "fr",
+            "poster": f"{MOCK}/img/poster-2.jpg"}  # fmt: skip
+    emit_ready(device_id=me + 100, **film)  # lancé depuis une autre TV
+    wait(8)
+    log(f"annonce pour une autre TV : pop-up {'OUVERTE' if ready_open() else 'absente'}")
+    emit_ready(device_id=me, **film)
+    for _ in range(30):
+        if ready_open():
+            break
+        wait(0.5)
+    wait(1.2)
+    log(f"annonce pour cette TV ({me}) : pop-up {'ouverte' if ready_open() else 'ABSENTE'}")
+    shot("dl-20-pret-a-regarder")
+    press("Select")  # « Regarder »
+    wait(1.0)
+    shot("dl-21-mise-a-jour-mediatheque")
+    playing = False
+    for _ in range(90):
+        wait(0.5)
+        if xbmc.Player().isPlayingVideo():
+            playing = True
+            break
+    log(f"« Regarder » : lecture {'lancée' if playing else 'NON LANCÉE'}")
+    wait(2.0)
+    shot("dl-22-lecture")
+    xbmc.Player().stop()
+    wait(2.0)
+
+
+def device_id_now():
+    path = xbmcvfs.translatePath("special://profile/addon_data/script.arrmada/device.json")
+    try:
+        with open(path, encoding="utf-8") as handle:
+            return int(json.load(handle).get("id") or 0)
+    except (OSError, ValueError, TypeError):
+        return 0
+
+
+if os.environ.get("BENCH_ONLY") == "ready":
+    for _ in range(6):
+        if not xbmc.getCondVisibility("Window.IsActive(yesnodialog)"):
+            break
+        press("Back", 1, 1.0)
+    if shell_open():
+        leave_shell()
+    ready_popup()
+    xbmc.executebuiltin("Quit")
+    while not MONITOR.abortRequested():
+        wait(1)
+    raise SystemExit
 
 
 if os.environ.get("BENCH_ONLY") == "board":
@@ -1467,6 +1542,7 @@ wait(1.5)
 # ── ADR-005 : feuille « Télécharger » ──────────────────────────────────────
 download_sheet()
 downloads_screen()
+ready_popup()
 
 log("terminé")
 

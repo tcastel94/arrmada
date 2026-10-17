@@ -48,6 +48,7 @@ import camera_data
 import device
 import feeds
 import pairing_data
+import ready_data
 import remote_data
 import sync_data
 import ui_common as ui
@@ -88,6 +89,7 @@ class BackgroundTasks:
         self._changed: set = set()  # flux modifiés, pas encore annoncés au skin
         self._last_scan = 0.0
         self._held: list = []  # bulles retenues pendant un film (résumé à l'arrêt)
+        self._ready_held: list = []  # « Prêt à regarder » arrivés pendant un film
         self.sync = watch_sync.WatchSync(monitor)  # vu / reprise partagés (phase 4.4)
         self.connected = False  # le dernier relevé a réussi (lu par service.py)
 
@@ -104,6 +106,10 @@ class BackgroundTasks:
             # Film terminé : ce qui s'est passé pendant la séance, en une bulle
             self._show(feeds.merge_notifications(self._held, heading="Pendant ta séance"))
             self._held = []
+        if self._ready_held and not _watching():
+            # Film terminé : le titre arrivé entre-temps (le plus récent)
+            self._open_ready(self._ready_held[-1])
+            self._ready_held = []
         if self.connected and not self._monitor.abortRequested():
             self.sync.tick(now)
             self._refresh_one_feed(now)
@@ -186,6 +192,9 @@ class BackgroundTasks:
         if event_type == remote_data.EVENT:
             self._remote_play(data)  # « Lire sur la TV » depuis la web app (1.19)
             return None
+        if event_type == ready_data.EVENT:
+            self._ready(data)  # « Prêt à regarder » (ADR-005, lot 4)
+            return None
         self._forced |= feeds.feeds_for_event(event_type, data)
         # Un titre seulement ajouté à Radarr/Sonarr n'a pas encore de fichier
         if event_type == "new_import" and data.get("event", "Download") == "Download":
@@ -206,6 +215,26 @@ class BackgroundTasks:
             return  # pour une autre TV, ou trop vieille (TV rallumée, serveur redémarré)
         params = remote_data.plugin_params(data)
         _log(f"lecture demandée depuis la web app : {remote_data.describe(params)}")
+        query = urllib.parse.urlencode(params)
+        xbmc.executebuiltin(f"RunPlugin(plugin://script.arrmada/?{query})")
+
+    # ── « Prêt à regarder » (ADR-005, lot 4) ─────────────────────────────
+
+    def _ready(self, data: dict) -> None:
+        """Titre demandé par CETTE TV : pop-up « Regarder », après le film en cours."""
+        now = datetime.now(timezone.utc)
+        if not ready_data.for_me(data, device.load().get("id"), now):
+            return  # lancé depuis une autre TV (elle a sa propre pop-up)
+        params = ready_data.popup_params(data)
+        if _watching():
+            _log(f"prêt à regarder pendant la lecture : {params.get('title')} (après le film)")
+            self._ready_held.append(params)
+            return
+        self._open_ready(params)
+
+    def _open_ready(self, params: dict) -> None:
+        """Pop-up dans une invocation à part : la boucle du service n'attend jamais."""
+        _log(f"prêt à regarder : {params.get('title')}")
         query = urllib.parse.urlencode(params)
         xbmc.executebuiltin(f"RunPlugin(plugin://script.arrmada/?{query})")
 

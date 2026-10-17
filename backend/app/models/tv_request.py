@@ -19,8 +19,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models import Base
 
-# open      : en cours (recherche ou téléchargement)
-# done      : téléchargements terminés (sortis de la file)
+# open      : en cours (recherche, téléchargement, import, sous-titres)
+# done      : prête : importée (et sous-titrée si possible), sortie de la file
 # cancelled : annulée depuis la TV qui l'avait lancée
 # expired   : rien trouvé dans le délai
 STATUSES = ("open", "done", "cancelled", "expired")
@@ -59,6 +59,12 @@ class TvRequest(Base):
     grabbed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Lot 4 : import vu par le webhook « Download », sous-titres cherchés à ce moment-là
+    imported_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # searching | fr | en | missing | off (pas de Bazarr) ; None = pas encore importé
+    subtitles: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # De quoi lancer la lecture sur la TV (« Regarder ») : ids publics, épisode, qualité
+    ready_info: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     def __repr__(self) -> str:
         return f"<TvRequest {self.title} ({self.scope}) {self.status} via {self.device_name}>"

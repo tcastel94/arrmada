@@ -60,7 +60,7 @@ Contraintes relevées dans le code (add-on 1.21.1) :
 | 1 | Serveur : client SABnzbd par élément, table `tv_requests`, gardien, routes TV | ✅ |
 | 2 | TV : feuille « Télécharger » (série / saison / épisode, « Pour ce soir »), ajout Sonarr `monitor: none` | ✅ appli 1.22.0 |
 | 3 | TV : écran Téléchargements refait (voie « Pour ce soir », actions par élément, Débloquer) | ✅ appli 1.23.0 |
-| 4 | Bazarr à l'import, notification « Prêt à regarder » sur la bonne TV, badge TV dans la web app | à faire |
+| 4 | Bazarr à l'import, notification « Prêt à regarder » sur la bonne TV, badge TV dans la web app | ✅ appli 1.24.0 |
 
 ## Routes ajoutées (périmètre TV)
 
@@ -107,6 +107,31 @@ garde-fous que la tâche de fond), l'import manuel des *arr limité aux fichiers
 **sans aucun refus** (un fichier qui en écraserait un autre porte toujours un
 refus), et liste noire + recherche pour un échec. Pas de script shell : il n'y
 en a pas sur le serveur, ce sont ces routines Python.
+
+Lot 4 :
+
+- **Sous-titres à l'import** (`services/tv_subtitles.py`) : au webhook
+  « Download » d'un titre demandé depuis la TV, la demande note l'import et de
+  quoi lancer la lecture (TMDB du film, ou TVDB + saison + épisode), puis
+  Bazarr cherche en arrière-plan : français (complets puis forcés), relancé
+  toutes les 20 s pendant 3 min (Bazarr met un moment à voir le nouveau
+  fichier), puis anglais en repli. Titre sans profil de langues dans Bazarr :
+  on lui met le premier profil qui contient le français. Bazarr absent :
+  prête tout de suite, sans sous-titres.
+- **Prête** : un film ou un seul épisode, dès l'import et les sous-titres ;
+  une saison ou une série, 3 min après la sortie de file (épisodes suivants).
+  Le gardien publie alors l'événement `tv_ready` avec le numéro de la TV
+  d'origine.
+- **Sur la TV** : seule la TV d'origine ouvre la pop-up « Prêt à regarder »
+  (poster, qualité, sous-titres, *Regarder* / *Plus tard*), jamais pendant un
+  film (elle attend la fin). *Regarder* réutilise « Lire sur la TV » ; si la
+  médiathèque Kodi de la TV n'a pas encore le fichier, elle est mise à jour et
+  la lecture réessayée pendant ~30 s.
+- **Cartes** : 5 étapes, *Trouvé → Télécharg. → Import → Sous-titres → Prêt*.
+- **Web app** : pastille « TV · Salon TV · ce soir » sur les téléchargements
+  lancés depuis une TV.
+- Colonnes ajoutées à `tv_requests` (`imported_at`, `subtitles`,
+  `ready_info`) au démarrage, sans migration (`database._ADDED_COLUMNS`).
 
 `GET /api/downloads` donne en plus `download_id`, `episode_ids`, `season_number`
 et `tv_request` (TV d'origine, prioritaire ou non) pour chaque téléchargement.

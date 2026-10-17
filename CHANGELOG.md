@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### "Prêt à regarder": subtitles at import, ready popup on the right TV, TV badge in the web app (Kodi add-on 1.24.0, lot 4 of ADR-005)
+
+#### Added
+- **Subtitles at import** (`services/tv_subtitles.py`): on the `Download` webhook of a title requested from a TV, the request records the import and what the TV needs to play it (TMDB of the movie, or TVDB + season + episode); Bazarr then searches in the background: French (full, then forced), retried every 20 s for 3 min (Bazarr needs a moment to see the new file), English as a fallback. A title without a Bazarr language profile gets the first profile containing French. Without Bazarr the request is ready at once, without subtitles
+- **Ready**: a movie or a single episode as soon as it is imported and its subtitles searched; a season or a series 3 min after leaving the queue (next episodes). The priority guardian then publishes `tv_ready` with the id of the TV that asked
+- **"Prêt à regarder" popup on that TV only** (`script-arrmada-ready.xml`, `lib/ready_window.py`, logic in `lib/ready_data.py`): poster, quality, subtitles found, **Regarder** / *Plus tard*, closes by itself after a minute; never over a film (waits for the end of playback). *Regarder* reuses "Lire sur la TV"; when the TV's Kodi library does not have the file yet, it is updated and playback retried for ~30 s
+- Cards: 5 steps *Trouvé → Télécharg. → Import → Sous-titres → Prêt*, "Sous-titres en cours…" phase, ready cards say which subtitles were found
+- **Web app**: "TV · Salon TV · ce soir" badge on downloads launched from a TV (`tv_request` of `/api/downloads`)
+- `tv_requests` gets `imported_at`, `subtitles`, `ready_info`, added at startup without migration
+- Bench: `BENCH_ONLY=ready kodi-addon/bench/run.sh` (≈ 1 min, real Kodi 20): announcement for another TV ignored, popup on this TV, *Regarder* updates the library then plays
+- Tests: server 11 (import targets, ready info, languages and profiles, ready rules, subtitles phase, French found after Bazarr discovers the file + profile set + event for the right TV, English fallback, no Bazarr, one episode with its numbers, a season waits, ordinary import untouched); add-on 10 (addressing, popup texts, Regarder parameters, subtitle labels, five-step cards, XML checks of the popup)
+
 ### TV Downloads screen rebuilt: "Pour ce soir" lane, per-item actions, "Débloquer" (Kodi add-on 1.23.0, lot 3 of ADR-005)
 
 #### Added

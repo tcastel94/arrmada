@@ -76,6 +76,29 @@ const TRACK_TONES = {
     danger: "border-red-500/25 bg-red-500/[0.08] text-red-300",
 } as const;
 
+/**
+ * Pastille « TV · Salon TV » : téléchargement lancé depuis une TV (ADR-005).
+ * Prioritaire = passé en tête de SABnzbd (« pour ce soir »).
+ */
+function TvRequestBadge({ request }: { request: NonNullable<DownloadItem["tv_request"]> }) {
+    return (
+        <Tooltip>
+            <TooltipTrigger asChild>
+                <span className="inline-flex items-center gap-1 rounded-md bg-cyan-400/10 px-1.5 py-px text-[10px] font-semibold text-cyan-300 ring-1 ring-inset ring-cyan-400/25">
+                    <Tv className="h-3 w-3" strokeWidth={2} aria-hidden />
+                    {request.device_name}
+                    {request.priority && <span className="text-cyan-200/80">· ce soir</span>}
+                </span>
+            </TooltipTrigger>
+            <TooltipContent>
+                {request.priority
+                    ? "Lancé depuis la TV pour ce soir : passe devant le reste de la file"
+                    : "Lancé depuis la TV, dans la file normale"}
+            </TooltipContent>
+        </Tooltip>
+    );
+}
+
 // forwardRef : AnimatePresence en mode « popLayout » doit pouvoir mesurer
 // la carte qui sort pour faire glisser les suivantes.
 export const DownloadCard = forwardRef<HTMLLIElement, DownloadCardProps>(function DownloadCard(
@@ -170,6 +193,7 @@ export const DownloadCard = forwardRef<HTMLLIElement, DownloadCardProps>(functio
                                     {status.label}
                                 </span>
                                 <ClientBadge client={item.download_client} protocol={item.protocol} />
+                                {item.tv_request && <TvRequestBadge request={item.tv_request} />}
                                 {(item.episode_count ?? 0) > 1 && (
                                     <span className="rounded-md bg-primary/10 px-1.5 py-px text-[10px] font-semibold text-primary ring-1 ring-inset ring-primary/20">
                                         {item.episode_count} épisodes

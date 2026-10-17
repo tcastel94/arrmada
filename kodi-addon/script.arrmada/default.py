@@ -486,6 +486,10 @@ def main():
         # « Lire sur la TV » depuis la web app (1.19.0) : lancé par le service
         import kodi_library
         kodi_library.remote_play(params)
+    elif action == "ready":
+        # « Prêt à regarder » (ADR-005, lot 4) : ouvert par le service sur la bonne TV
+        import ready_window
+        ready_window.show(params)
     elif action == "camera":
         # Pop-up d'une caméra Eufy par-dessus le film (ouverte par le service)
         import camera_window

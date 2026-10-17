@@ -121,6 +121,7 @@ jobs:
           FILES="$FILES $LIB/tonight_data.py $LIB/remote_data.py $LIB/crash_report.py"
           FILES="$FILES $LIB/download_data.py $LIB/download_window.py"
           FILES="$FILES $LIB/board_data.py $LIB/unstick_window.py"
+          FILES="$FILES $LIB/ready_data.py $LIB/ready_window.py"
           FILES="$FILES kodi-addon/tests kodi-addon/tools"
           ruff check $FILES
           ruff format --check $FILES

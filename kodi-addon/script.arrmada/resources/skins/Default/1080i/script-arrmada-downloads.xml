@@ -7,7 +7,7 @@
   rafraîchi toutes les 5 s, mis à jour sur place.
 
     720  « Pour ce soir » : une carte par demande lancée depuis une TV (heure
-         « Prêt vers », étapes Trouvé → Téléchargement → Import → Prêt)
+         « Prêt vers », étapes Trouvé → Téléchargement → Import → Sous-titres → Prêt)
     700  le reste de la file (Radarr + Sonarr)
     710  711 « Pause sauf ce soir » (les demandes TV sont en priorité Force :
          SABnzbd les télécharge même en pause), 712 « Tout reprendre »
@@ -201,112 +201,139 @@
 						<label>$INFO[ListItem.Property(detail)]</label>
 					</control>
 					<control type="image">
-						<left>224</left><top>206</top><width>144</width><height>36</height>
+						<left>224</left><top>206</top><width>116</width><height>36</height>
 						<texture border="14" colordiffuse="3334D399">arrmada/rounded-12.png</texture>
 						<visible>String.IsEqual(ListItem.Property(s1_state),done)</visible>
 					</control>
 					<control type="image">
-						<left>224</left><top>206</top><width>144</width><height>36</height>
+						<left>224</left><top>206</top><width>116</width><height>36</height>
 						<texture border="14" colordiffuse="554A9EFF">arrmada/rounded-12.png</texture>
 						<visible>String.IsEqual(ListItem.Property(s1_state),now)</visible>
 					</control>
 					<control type="image">
-						<left>224</left><top>206</top><width>144</width><height>36</height>
+						<left>224</left><top>206</top><width>116</width><height>36</height>
 						<texture border="14" colordiffuse="40F87171">arrmada/rounded-12.png</texture>
 						<visible>String.IsEqual(ListItem.Property(s1_state),err)</visible>
 					</control>
 					<control type="image">
-						<left>224</left><top>206</top><width>144</width><height>36</height>
+						<left>224</left><top>206</top><width>116</width><height>36</height>
 						<texture border="14" colordiffuse="14FFFFFF">arrmada/rounded-12.png</texture>
 						<visible>String.IsEmpty(ListItem.Property(s1_state))</visible>
 					</control>
 					<control type="label">
-						<left>224</left><top>206</top><width>144</width><height>36</height>
+						<left>224</left><top>206</top><width>116</width><height>36</height>
 						<font>font10</font>
 						<textcolor>FFF5F7FA</textcolor>
 						<align>center</align><aligny>center</aligny>
 						<label>$INFO[ListItem.Property(s1)]</label>
 					</control>
 					<control type="image">
-						<left>376</left><top>206</top><width>144</width><height>36</height>
+						<left>348</left><top>206</top><width>116</width><height>36</height>
 						<texture border="14" colordiffuse="3334D399">arrmada/rounded-12.png</texture>
 						<visible>String.IsEqual(ListItem.Property(s2_state),done)</visible>
 					</control>
 					<control type="image">
-						<left>376</left><top>206</top><width>144</width><height>36</height>
+						<left>348</left><top>206</top><width>116</width><height>36</height>
 						<texture border="14" colordiffuse="554A9EFF">arrmada/rounded-12.png</texture>
 						<visible>String.IsEqual(ListItem.Property(s2_state),now)</visible>
 					</control>
 					<control type="image">
-						<left>376</left><top>206</top><width>144</width><height>36</height>
+						<left>348</left><top>206</top><width>116</width><height>36</height>
 						<texture border="14" colordiffuse="40F87171">arrmada/rounded-12.png</texture>
 						<visible>String.IsEqual(ListItem.Property(s2_state),err)</visible>
 					</control>
 					<control type="image">
-						<left>376</left><top>206</top><width>144</width><height>36</height>
+						<left>348</left><top>206</top><width>116</width><height>36</height>
 						<texture border="14" colordiffuse="14FFFFFF">arrmada/rounded-12.png</texture>
 						<visible>String.IsEmpty(ListItem.Property(s2_state))</visible>
 					</control>
 					<control type="label">
-						<left>376</left><top>206</top><width>144</width><height>36</height>
+						<left>348</left><top>206</top><width>116</width><height>36</height>
 						<font>font10</font>
 						<textcolor>FFF5F7FA</textcolor>
 						<align>center</align><aligny>center</aligny>
 						<label>$INFO[ListItem.Property(s2)]</label>
 					</control>
 					<control type="image">
-						<left>528</left><top>206</top><width>144</width><height>36</height>
+						<left>472</left><top>206</top><width>116</width><height>36</height>
 						<texture border="14" colordiffuse="3334D399">arrmada/rounded-12.png</texture>
 						<visible>String.IsEqual(ListItem.Property(s3_state),done)</visible>
 					</control>
 					<control type="image">
-						<left>528</left><top>206</top><width>144</width><height>36</height>
+						<left>472</left><top>206</top><width>116</width><height>36</height>
 						<texture border="14" colordiffuse="554A9EFF">arrmada/rounded-12.png</texture>
 						<visible>String.IsEqual(ListItem.Property(s3_state),now)</visible>
 					</control>
 					<control type="image">
-						<left>528</left><top>206</top><width>144</width><height>36</height>
+						<left>472</left><top>206</top><width>116</width><height>36</height>
 						<texture border="14" colordiffuse="40F87171">arrmada/rounded-12.png</texture>
 						<visible>String.IsEqual(ListItem.Property(s3_state),err)</visible>
 					</control>
 					<control type="image">
-						<left>528</left><top>206</top><width>144</width><height>36</height>
+						<left>472</left><top>206</top><width>116</width><height>36</height>
 						<texture border="14" colordiffuse="14FFFFFF">arrmada/rounded-12.png</texture>
 						<visible>String.IsEmpty(ListItem.Property(s3_state))</visible>
 					</control>
 					<control type="label">
-						<left>528</left><top>206</top><width>144</width><height>36</height>
+						<left>472</left><top>206</top><width>116</width><height>36</height>
 						<font>font10</font>
 						<textcolor>FFF5F7FA</textcolor>
 						<align>center</align><aligny>center</aligny>
 						<label>$INFO[ListItem.Property(s3)]</label>
 					</control>
 					<control type="image">
-						<left>680</left><top>206</top><width>144</width><height>36</height>
+						<left>596</left><top>206</top><width>116</width><height>36</height>
 						<texture border="14" colordiffuse="3334D399">arrmada/rounded-12.png</texture>
 						<visible>String.IsEqual(ListItem.Property(s4_state),done)</visible>
 					</control>
 					<control type="image">
-						<left>680</left><top>206</top><width>144</width><height>36</height>
+						<left>596</left><top>206</top><width>116</width><height>36</height>
 						<texture border="14" colordiffuse="554A9EFF">arrmada/rounded-12.png</texture>
 						<visible>String.IsEqual(ListItem.Property(s4_state),now)</visible>
 					</control>
 					<control type="image">
-						<left>680</left><top>206</top><width>144</width><height>36</height>
+						<left>596</left><top>206</top><width>116</width><height>36</height>
 						<texture border="14" colordiffuse="40F87171">arrmada/rounded-12.png</texture>
 						<visible>String.IsEqual(ListItem.Property(s4_state),err)</visible>
 					</control>
 					<control type="image">
-						<left>680</left><top>206</top><width>144</width><height>36</height>
+						<left>596</left><top>206</top><width>116</width><height>36</height>
 						<texture border="14" colordiffuse="14FFFFFF">arrmada/rounded-12.png</texture>
 						<visible>String.IsEmpty(ListItem.Property(s4_state))</visible>
 					</control>
 					<control type="label">
-						<left>680</left><top>206</top><width>144</width><height>36</height>
+						<left>596</left><top>206</top><width>116</width><height>36</height>
 						<font>font10</font>
 						<textcolor>FFF5F7FA</textcolor>
 						<align>center</align><aligny>center</aligny>
 						<label>$INFO[ListItem.Property(s4)]</label>
+					</control>
+					<control type="image">
+						<left>720</left><top>206</top><width>116</width><height>36</height>
+						<texture border="14" colordiffuse="3334D399">arrmada/rounded-12.png</texture>
+						<visible>String.IsEqual(ListItem.Property(s5_state),done)</visible>
+					</control>
+					<control type="image">
+						<left>720</left><top>206</top><width>116</width><height>36</height>
+						<texture border="14" colordiffuse="554A9EFF">arrmada/rounded-12.png</texture>
+						<visible>String.IsEqual(ListItem.Property(s5_state),now)</visible>
+					</control>
+					<control type="image">
+						<left>720</left><top>206</top><width>116</width><height>36</height>
+						<texture border="14" colordiffuse="40F87171">arrmada/rounded-12.png</texture>
+						<visible>String.IsEqual(ListItem.Property(s5_state),err)</visible>
+					</control>
+					<control type="image">
+						<left>720</left><top>206</top><width>116</width><height>36</height>
+						<texture border="14" colordiffuse="14FFFFFF">arrmada/rounded-12.png</texture>
+						<visible>String.IsEmpty(ListItem.Property(s5_state))</visible>
+					</control>
+					<control type="label">
+						<left>720</left><top>206</top><width>116</width><height>36</height>
+						<font>font10</font>
+						<textcolor>FFF5F7FA</textcolor>
+						<align>center</align><aligny>center</aligny>
+						<label>$INFO[ListItem.Property(s5)]</label>
 					</control>
 				</control>
 			</itemlayout>
@@ -398,112 +425,139 @@
 						<label>$INFO[ListItem.Property(detail)]</label>
 					</control>
 					<control type="image">
-						<left>224</left><top>206</top><width>144</width><height>36</height>
+						<left>224</left><top>206</top><width>116</width><height>36</height>
 						<texture border="14" colordiffuse="3334D399">arrmada/rounded-12.png</texture>
 						<visible>String.IsEqual(ListItem.Property(s1_state),done)</visible>
 					</control>
 					<control type="image">
-						<left>224</left><top>206</top><width>144</width><height>36</height>
+						<left>224</left><top>206</top><width>116</width><height>36</height>
 						<texture border="14" colordiffuse="554A9EFF">arrmada/rounded-12.png</texture>
 						<visible>String.IsEqual(ListItem.Property(s1_state),now)</visible>
 					</control>
 					<control type="image">
-						<left>224</left><top>206</top><width>144</width><height>36</height>
+						<left>224</left><top>206</top><width>116</width><height>36</height>
 						<texture border="14" colordiffuse="40F87171">arrmada/rounded-12.png</texture>
 						<visible>String.IsEqual(ListItem.Property(s1_state),err)</visible>
 					</control>
 					<control type="image">
-						<left>224</left><top>206</top><width>144</width><height>36</height>
+						<left>224</left><top>206</top><width>116</width><height>36</height>
 						<texture border="14" colordiffuse="14FFFFFF">arrmada/rounded-12.png</texture>
 						<visible>String.IsEmpty(ListItem.Property(s1_state))</visible>
 					</control>
 					<control type="label">
-						<left>224</left><top>206</top><width>144</width><height>36</height>
+						<left>224</left><top>206</top><width>116</width><height>36</height>
 						<font>font10</font>
 						<textcolor>FFF5F7FA</textcolor>
 						<align>center</align><aligny>center</aligny>
 						<label>$INFO[ListItem.Property(s1)]</label>
 					</control>
 					<control type="image">
-						<left>376</left><top>206</top><width>144</width><height>36</height>
+						<left>348</left><top>206</top><width>116</width><height>36</height>
 						<texture border="14" colordiffuse="3334D399">arrmada/rounded-12.png</texture>
 						<visible>String.IsEqual(ListItem.Property(s2_state),done)</visible>
 					</control>
 					<control type="image">
-						<left>376</left><top>206</top><width>144</width><height>36</height>
+						<left>348</left><top>206</top><width>116</width><height>36</height>
 						<texture border="14" colordiffuse="554A9EFF">arrmada/rounded-12.png</texture>
 						<visible>String.IsEqual(ListItem.Property(s2_state),now)</visible>
 					</control>
 					<control type="image">
-						<left>376</left><top>206</top><width>144</width><height>36</height>
+						<left>348</left><top>206</top><width>116</width><height>36</height>
 						<texture border="14" colordiffuse="40F87171">arrmada/rounded-12.png</texture>
 						<visible>String.IsEqual(ListItem.Property(s2_state),err)</visible>
 					</control>
 					<control type="image">
-						<left>376</left><top>206</top><width>144</width><height>36</height>
+						<left>348</left><top>206</top><width>116</width><height>36</height>
 						<texture border="14" colordiffuse="14FFFFFF">arrmada/rounded-12.png</texture>
 						<visible>String.IsEmpty(ListItem.Property(s2_state))</visible>
 					</control>
 					<control type="label">
-						<left>376</left><top>206</top><width>144</width><height>36</height>
+						<left>348</left><top>206</top><width>116</width><height>36</height>
 						<font>font10</font>
 						<textcolor>FFF5F7FA</textcolor>
 						<align>center</align><aligny>center</aligny>
 						<label>$INFO[ListItem.Property(s2)]</label>
 					</control>
 					<control type="image">
-						<left>528</left><top>206</top><width>144</width><height>36</height>
+						<left>472</left><top>206</top><width>116</width><height>36</height>
 						<texture border="14" colordiffuse="3334D399">arrmada/rounded-12.png</texture>
 						<visible>String.IsEqual(ListItem.Property(s3_state),done)</visible>
 					</control>
 					<control type="image">
-						<left>528</left><top>206</top><width>144</width><height>36</height>
+						<left>472</left><top>206</top><width>116</width><height>36</height>
 						<texture border="14" colordiffuse="554A9EFF">arrmada/rounded-12.png</texture>
 						<visible>String.IsEqual(ListItem.Property(s3_state),now)</visible>
 					</control>
 					<control type="image">
-						<left>528</left><top>206</top><width>144</width><height>36</height>
+						<left>472</left><top>206</top><width>116</width><height>36</height>
 						<texture border="14" colordiffuse="40F87171">arrmada/rounded-12.png</texture>
 						<visible>String.IsEqual(ListItem.Property(s3_state),err)</visible>
 					</control>
 					<control type="image">
-						<left>528</left><top>206</top><width>144</width><height>36</height>
+						<left>472</left><top>206</top><width>116</width><height>36</height>
 						<texture border="14" colordiffuse="14FFFFFF">arrmada/rounded-12.png</texture>
 						<visible>String.IsEmpty(ListItem.Property(s3_state))</visible>
 					</control>
 					<control type="label">
-						<left>528</left><top>206</top><width>144</width><height>36</height>
+						<left>472</left><top>206</top><width>116</width><height>36</height>
 						<font>font10</font>
 						<textcolor>FFF5F7FA</textcolor>
 						<align>center</align><aligny>center</aligny>
 						<label>$INFO[ListItem.Property(s3)]</label>
 					</control>
 					<control type="image">
-						<left>680</left><top>206</top><width>144</width><height>36</height>
+						<left>596</left><top>206</top><width>116</width><height>36</height>
 						<texture border="14" colordiffuse="3334D399">arrmada/rounded-12.png</texture>
 						<visible>String.IsEqual(ListItem.Property(s4_state),done)</visible>
 					</control>
 					<control type="image">
-						<left>680</left><top>206</top><width>144</width><height>36</height>
+						<left>596</left><top>206</top><width>116</width><height>36</height>
 						<texture border="14" colordiffuse="554A9EFF">arrmada/rounded-12.png</texture>
 						<visible>String.IsEqual(ListItem.Property(s4_state),now)</visible>
 					</control>
 					<control type="image">
-						<left>680</left><top>206</top><width>144</width><height>36</height>
+						<left>596</left><top>206</top><width>116</width><height>36</height>
 						<texture border="14" colordiffuse="40F87171">arrmada/rounded-12.png</texture>
 						<visible>String.IsEqual(ListItem.Property(s4_state),err)</visible>
 					</control>
 					<control type="image">
-						<left>680</left><top>206</top><width>144</width><height>36</height>
+						<left>596</left><top>206</top><width>116</width><height>36</height>
 						<texture border="14" colordiffuse="14FFFFFF">arrmada/rounded-12.png</texture>
 						<visible>String.IsEmpty(ListItem.Property(s4_state))</visible>
 					</control>
 					<control type="label">
-						<left>680</left><top>206</top><width>144</width><height>36</height>
+						<left>596</left><top>206</top><width>116</width><height>36</height>
 						<font>font10</font>
 						<textcolor>FFF5F7FA</textcolor>
 						<align>center</align><aligny>center</aligny>
 						<label>$INFO[ListItem.Property(s4)]</label>
+					</control>
+					<control type="image">
+						<left>720</left><top>206</top><width>116</width><height>36</height>
+						<texture border="14" colordiffuse="3334D399">arrmada/rounded-12.png</texture>
+						<visible>String.IsEqual(ListItem.Property(s5_state),done)</visible>
+					</control>
+					<control type="image">
+						<left>720</left><top>206</top><width>116</width><height>36</height>
+						<texture border="14" colordiffuse="554A9EFF">arrmada/rounded-12.png</texture>
+						<visible>String.IsEqual(ListItem.Property(s5_state),now)</visible>
+					</control>
+					<control type="image">
+						<left>720</left><top>206</top><width>116</width><height>36</height>
+						<texture border="14" colordiffuse="40F87171">arrmada/rounded-12.png</texture>
+						<visible>String.IsEqual(ListItem.Property(s5_state),err)</visible>
+					</control>
+					<control type="image">
+						<left>720</left><top>206</top><width>116</width><height>36</height>
+						<texture border="14" colordiffuse="14FFFFFF">arrmada/rounded-12.png</texture>
+						<visible>String.IsEmpty(ListItem.Property(s5_state))</visible>
+					</control>
+					<control type="label">
+						<left>720</left><top>206</top><width>116</width><height>36</height>
+						<font>font10</font>
+						<textcolor>FFF5F7FA</textcolor>
+						<align>center</align><aligny>center</aligny>
+						<label>$INFO[ListItem.Property(s5)]</label>
 					</control>
 					<control type="label">
 						<left>224</left><top>248</top><width>612</width><height>28</height>

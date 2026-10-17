@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Génère la mise en page de l'écran Téléchargements (ADR-005, lot 3).
 
-Pourquoi un script : chaque carte « Pour ce soir » a 4 étapes (Trouvé,
-Téléchargement, Import, Prêt) en 4 états chacune, et chaque ligne de la file
+Pourquoi un script : chaque carte « Pour ce soir » a 5 étapes (Trouvé,
+Téléchargement, Import, Sous-titres, Prêt) en 4 états chacune, et chaque ligne de la file
 6 couleurs d'état, le tout deux fois (élément normal et élément sélectionné).
 Écrit à la main, c'est une centaine de blocs presque identiques ; ici, un
 seul modèle (comme un gabarit Jinja ou Ansible).
@@ -47,8 +47,8 @@ STEP_COLORS = [
 
 def steps(t):
     out = []
-    for n in range(1, 5):
-        left = 224 + (n - 1) * 152
+    for n in range(1, 6):
+        left = 224 + (n - 1) * 124
         for state, bg in STEP_COLORS:
             cond = (
                 f"String.IsEqual(ListItem.Property(s{n}_state),{state})"
@@ -56,12 +56,12 @@ def steps(t):
                 else f"String.IsEmpty(ListItem.Property(s{n}_state))"
             )
             out.append(f"""{t}<control type="image">
-{t}	<left>{left}</left><top>206</top><width>144</width><height>36</height>
+{t}	<left>{left}</left><top>206</top><width>116</width><height>36</height>
 {t}	<texture border="14" colordiffuse="{bg}">arrmada/rounded-12.png</texture>
 {t}	<visible>{cond}</visible>
 {t}</control>""")
         out.append(f"""{t}<control type="label">
-{t}	<left>{left}</left><top>206</top><width>144</width><height>36</height>
+{t}	<left>{left}</left><top>206</top><width>116</width><height>36</height>
 {t}	<font>font10</font>
 {t}	<textcolor>FFF5F7FA</textcolor>
 {t}	<align>center</align><aligny>center</aligny>
@@ -323,7 +323,7 @@ def render() -> str:
   rafraîchi toutes les 5 s, mis à jour sur place.
 
     720  « Pour ce soir » : une carte par demande lancée depuis une TV (heure
-         « Prêt vers », étapes Trouvé → Téléchargement → Import → Prêt)
+         « Prêt vers », étapes Trouvé → Téléchargement → Import → Sous-titres → Prêt)
     700  le reste de la file (Radarr + Sonarr)
     710  711 « Pause sauf ce soir » (les demandes TV sont en priorité Force :
          SABnzbd les télécharge même en pause), 712 « Tout reprendre »

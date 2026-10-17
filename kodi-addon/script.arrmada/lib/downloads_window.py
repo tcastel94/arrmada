@@ -45,7 +45,7 @@ REFRESH_SECONDS = 5
 
 _CARD_KEYS = (
     "who", "headline", "detail", "phase", "bar", "poster", "fanart", "hint", "mine",
-    "s1", "s1_state", "s2", "s2_state", "s3", "s3_state", "s4", "s4_state",
+    "s1", "s1_state", "s2", "s2_state", "s3", "s3_state", "s4", "s4_state", "s5", "s5_state",
 )  # fmt: skip
 _ROW_KEYS = (
     "meta", "pct", "bar", "sizes", "eta_speed", "status", "family", "detail", "hint", "poster",

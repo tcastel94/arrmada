@@ -4,7 +4,7 @@
 Le serveur envoie le tableau (GET /api/kodi/downloads/board) ; ce module en
 tire ce que l'écran affiche :
   - les cartes « Pour ce soir » : heure « Prêt vers 20:58 », étapes du
-    parcours (Trouvé → Téléchargement → Import → Prêt), TV d'origine ;
+    parcours (Trouvé → Téléchargement → Import → Sous-titres → Prêt), TV d'origine ;
   - les actions de chaque carte et de chaque ligne de la file (menu de OK) ;
   - le résumé de l'en-tête et le contenu du dialogue « Débloquer ».
 """
@@ -14,26 +14,29 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
+from ready_data import subtitles_label
 from screens_data import bar_texture, human_bytes
 
 # Import + sous-titres après la fin du téléchargement : marge ajoutée à l'heure
 # « Prêt vers » (un import Sonarr/Radarr prend en général 1 à 2 minutes).
 READY_MARGIN = timedelta(minutes=2)
 
-STEPS = ("Trouvé", "Téléchargement", "Import", "Prêt")
+STEPS = ("Trouvé", "Télécharg.", "Import", "Sous-titres", "Prêt")
 
-# Étape en cours selon la phase : (états des 4 étapes)
+# Étape en cours selon la phase : (états des 5 étapes)
 _STEP_STATES = {
-    "searching": ("now", "", "", ""),
-    "downloading": ("done", "now", "", ""),
-    "importing": ("done", "done", "now", ""),
-    "ready": ("done", "done", "done", "done"),
-    "notfound": ("err", "", "", ""),
+    "searching": ("now", "", "", "", ""),
+    "downloading": ("done", "now", "", "", ""),
+    "importing": ("done", "done", "now", "", ""),
+    "subtitles": ("done", "done", "done", "now", ""),
+    "ready": ("done", "done", "done", "done", "done"),
+    "notfound": ("err", "", "", "", ""),
 }
 
 _HEADLINES = {
     "searching": "Recherche d'une version…",
     "importing": "Import sur le NAS…",
+    "subtitles": "Sous-titres en cours…",
     "ready": "Prêt à regarder",
     "notfound": "Introuvable pour l'instant",
 }
@@ -128,9 +131,11 @@ def card_model(card: Dict[str, Any], now: datetime) -> Dict[str, str]:
     """Propriétés d'une carte « Pour ce soir » (voir script-arrmada-downloads.xml)."""
     phase = str(card.get("phase") or "searching")
     pct = float(card.get("progress") or 0)
-    states = list(_STEP_STATES.get(phase, ("", "", "", "")))
+    states = list(_STEP_STATES.get(phase, ("", "", "", "", "")))
     if phase == "blocked":  # bloqué au téléchargement, ou à l'import
-        states = ["done", "done", "err", ""] if pct >= 100 else ["done", "err", "", ""]
+        states = ["done", "done", "err", "", ""] if pct >= 100 else ["done", "err", "", "", ""]
+    if phase == "ready" and card.get("subtitles") in ("missing", "off", "", None):
+        states[3] = ""  # prête sans sous-titres (pas de Bazarr, ou rien trouvé)
 
     if phase == "downloading":
         when = ready_at(card.get("time_left_seconds"), now)
@@ -155,6 +160,10 @@ def card_model(card: Dict[str, Any], now: datetime) -> Dict[str, str]:
             detail += " · torrent : pas de priorité possible"
     elif phase == "notfound":
         detail = "Aucune release pour l'instant"
+    elif phase == "subtitles":
+        detail = "Recherche Bazarr : français, sinon anglais"
+    elif phase == "ready":
+        detail = subtitles_label(card.get("subtitles")).capitalize()
     actions = card_actions(card)
     model = {
         "key": f"req:{card.get('id')}",

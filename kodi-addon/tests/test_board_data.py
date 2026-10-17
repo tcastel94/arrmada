@@ -44,8 +44,10 @@ def test_downloading_card() -> None:
     assert model["headline"] == "Prêt vers 20:59"
     assert model["who"] == "Salon TV · il y a 4 min · Bluray-2160p · 21,4 Go"
     assert model["detail"] == "62 %" and model["bar"] == "bar-062"
-    assert [model[f"s{i}_state"] for i in range(1, 5)] == ["done", "now", "", ""]
-    assert [model[f"s{i}"] for i in range(1, 5)] == ["Trouvé", "Téléchargement", "Import", "Prêt"]
+    assert [model[f"s{i}_state"] for i in range(1, 6)] == ["done", "now", "", "", ""]
+    assert [model[f"s{i}"] for i in range(1, 6)] == [
+        "Trouvé", "Télécharg.", "Import", "Sous-titres", "Prêt",
+    ]  # fmt: skip
     assert model["hint"] == "OK : Fiche · Annuler"
     torrent = bd.card_model(dict(CARD, protocol="torrent"), NOW)
     assert torrent["detail"].endswith("torrent : pas de priorité possible")
@@ -54,22 +56,30 @@ def test_downloading_card() -> None:
 def test_other_phases() -> None:
     searching = bd.card_model(dict(CARD, phase="searching", time_left_seconds=None), NOW)
     assert searching["headline"] == "Recherche d'une version…"
-    assert [searching[f"s{i}_state"] for i in range(1, 5)] == ["now", "", "", ""]
+    assert [searching[f"s{i}_state"] for i in range(1, 6)] == ["now", "", "", "", ""]
     assert "Rechercher" in searching["hint"]
-    ready = bd.card_model(dict(CARD, phase="ready", status="done", can_cancel=False), NOW)
+    ready = bd.card_model(
+        dict(CARD, phase="ready", status="done", can_cancel=False, subtitles="fr"), NOW
+    )
     assert ready["headline"] == "Prêt à regarder" and ready["hint"] == "OK : Fiche"
-    assert {ready[f"s{i}_state"] for i in range(1, 5)} == {"done"}
+    assert {ready[f"s{i}_state"] for i in range(1, 6)} == {"done"}
+    assert ready["detail"] == "Sous-titres français"
+    bare = bd.card_model(dict(CARD, phase="ready", status="done", subtitles="off"), NOW)
+    assert [bare[f"s{i}_state"] for i in range(1, 6)] == ["done", "done", "done", "", "done"]
+    subs = bd.card_model(dict(CARD, phase="subtitles"), NOW)
+    assert subs["headline"] == "Sous-titres en cours…"
+    assert [subs[f"s{i}_state"] for i in range(1, 6)] == ["done", "done", "done", "now", ""]
     blocked = dict(CARD, phase="blocked", error="Unable to parse episode",
                    blocked_download={"service_type": "radarr", "download_id": "n"})  # fmt: skip
     model = bd.card_model(blocked, NOW)
     assert model["headline"] == "Bloqué" and model["detail"] == "Unable to parse episode"
-    assert [model[f"s{i}_state"] for i in range(1, 5)] == ["done", "err", "", ""]
+    assert [model[f"s{i}_state"] for i in range(1, 6)] == ["done", "err", "", "", ""]
     assert bd.card_actions(blocked)[0] == ("unstick", "Débloquer")
     at_import = bd.card_model(dict(blocked, progress=100.0), NOW)
-    assert [at_import[f"s{i}_state"] for i in range(1, 5)] == ["done", "done", "err", ""]
+    assert [at_import[f"s{i}_state"] for i in range(1, 6)] == ["done", "done", "err", "", ""]
     notfound = bd.card_model(dict(CARD, phase="notfound", status="expired"), NOW)
     assert notfound["headline"] == "Introuvable pour l'instant"
-    assert [notfound[f"s{i}_state"] for i in range(1, 5)] == ["err", "", "", ""]
+    assert [notfound[f"s{i}_state"] for i in range(1, 6)] == ["err", "", "", "", ""]
 
 
 def test_cancel_only_for_my_running_request() -> None:

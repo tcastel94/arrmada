@@ -43,6 +43,7 @@ WINDOWS = {
     "skip": ("script-arrmada-skip.xml", "skip_window.py"),
     "download": ("script-arrmada-download.xml", "download_window.py"),
     "unstick": ("script-arrmada-unstick.xml", "unstick_window.py"),
+    "ready": ("script-arrmada-ready.xml", "ready_window.py"),
 }
 
 # Noms de police présents dans TOUS les jeux de polices (« fontsets ») d'Aeon

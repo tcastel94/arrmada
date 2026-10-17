@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ArrMada — pop-up « Prêt à regarder » (ADR-005, lot 4).
+
+  Ouverte par le service sur la TV qui a lancé la demande (lib/ready_window.py),
+  en bas à droite, par-dessus l'écran en cours ; se referme seule au bout
+  d'une minute. Jamais pendant un film : elle attend la fin de la lecture.
+    971  Regarder (lecture depuis la médiathèque de cette TV, ampli de la pièce)
+    972  Plus tard
+-->
+<window type="dialog">
+	<defaultcontrol always="true">971</defaultcontrol>
+	<animation effect="slide" start="0,80" end="0,0" time="400" tween="cubic" easing="out">WindowOpen</animation>
+	<animation effect="fade" start="0" end="100" time="300">WindowOpen</animation>
+	<animation effect="fade" start="100" end="0" time="200">WindowClose</animation>
+	<controls>
+		<control type="group">
+			<left>1004</left><top>640</top>
+			<control type="image">
+				<left>-24</left><top>-24</top><width>916</width><height>404</height>
+				<texture border="56" colordiffuse="5534D399">arrmada/glow.png</texture>
+			</control>
+			<control type="image">
+				<width>868</width><height>356</height>
+				<texture border="26" colordiffuse="F7121826">arrmada/rounded-24.png</texture>
+			</control>
+			<control type="image">
+				<width>868</width><height>356</height>
+				<texture border="26" colordiffuse="8034D399">arrmada/ring-24.png</texture>
+			</control>
+			<control type="image">
+				<left>28</left><top>28</top><width>200</width><height>300</height>
+				<texture border="14" colordiffuse="1AFFFFFF">arrmada/rounded-12.png</texture>
+			</control>
+			<control type="image">
+				<left>28</left><top>28</top><width>200</width><height>300</height>
+				<aspectratio>scale</aspectratio>
+				<texture background="true">$INFO[Window.Property(poster)]</texture>
+			</control>
+			<control type="image">
+				<left>256</left><top>32</top><width>250</width><height>44</height>
+				<texture border="14" colordiffuse="3334D399">arrmada/rounded-12.png</texture>
+			</control>
+			<control type="label">
+				<left>256</left><top>32</top><width>250</width><height>44</height>
+				<font>font12</font>
+				<textcolor>FF6EE7B7</textcolor>
+				<align>center</align><aligny>center</aligny>
+				<label>Prêt à regarder</label>
+			</control>
+			<control type="label">
+				<left>256</left><top>92</top><width>584</width><height>110</height>
+				<font>font15_bold</font>
+				<textcolor>FFF5F7FA</textcolor>
+				<wrapmultiline>true</wrapmultiline>
+				<label>$INFO[Window.Property(title)]</label>
+			</control>
+			<control type="label">
+				<left>256</left><top>204</top><width>584</width><height>36</height>
+				<font>font12</font>
+				<textcolor>B3DCE3EE</textcolor>
+				<aligny>center</aligny>
+				<label>$INFO[Window.Property(details)]</label>
+			</control>
+			<control type="grouplist" id="970">
+				<left>256</left><top>256</top><width>584</width><height>72</height>
+				<orientation>horizontal</orientation>
+				<itemgap>16</itemgap>
+				<control type="button" id="971">
+					<width>300</width><height>72</height>
+					<label>Regarder</label>
+					<font>font13</font>
+					<textcolor>FF8CC4FF</textcolor>
+					<focusedcolor>FF0A0E16</focusedcolor>
+					<align>center</align><aligny>center</aligny>
+					<texturenofocus border="14" colordiffuse="334A9EFF">arrmada/rounded-12.png</texturenofocus>
+					<texturefocus border="14" colordiffuse="FF4A9EFF">arrmada/rounded-12.png</texturefocus>
+					<visible>String.IsEqual(Window.Property(can_play),1)</visible>
+					<animation effect="zoom" start="100" end="105" time="160" tween="cubic" easing="out" center="auto">Focus</animation>
+					<animation effect="zoom" start="105" end="100" time="160" tween="cubic" easing="out" center="auto">UnFocus</animation>
+				</control>
+				<control type="button" id="972">
+					<width>220</width><height>72</height>
+					<label>Plus tard</label>
+					<font>font13</font>
+					<textcolor>D9F5F7FA</textcolor>
+					<focusedcolor>FF0A0E16</focusedcolor>
+					<align>center</align><aligny>center</aligny>
+					<texturenofocus border="14" colordiffuse="1AFFFFFF">arrmada/rounded-12.png</texturenofocus>
+					<texturefocus border="14" colordiffuse="FF4A9EFF">arrmada/rounded-12.png</texturefocus>
+					<animation effect="zoom" start="100" end="105" time="160" tween="cubic" easing="out" center="auto">Focus</animation>
+					<animation effect="zoom" start="105" end="100" time="160" tween="cubic" easing="out" center="auto">UnFocus</animation>
+				</control>
+			</control>
+		</control>
+	</controls>
+</window>

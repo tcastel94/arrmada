@@ -392,6 +392,8 @@ def as_dict(req: TvRequest, viewer_device_id: int | None = None) -> dict[str, An
         "requested_at": iso(req.requested_at),
         "grabbed_at": iso(req.grabbed_at),
         "closed_at": iso(req.closed_at),
+        "imported_at": iso(req.imported_at),
+        "subtitles": req.subtitles or "",
     }
 
 
@@ -483,6 +485,7 @@ async def enforce(extra_records: list[dict[str, Any]] | None = None) -> dict[str
         answered |= {r["service_type"] for r in extra_records or []}
 
         wanted: list[str] = []
+        ready: list[TvRequest] = []
         closed = 0
         for req in requests:
             matched = select_records(req, records)
@@ -496,9 +499,12 @@ async def enforce(extra_records: list[dict[str, Any]] | None = None) -> dict[str
                 continue
             if req.service_type not in answered:
                 continue  # file illisible : on ne conclut rien
-            last = _aware(req.last_seen_at or req.grabbed_at)
-            if last is not None and now - last > CLOSE_AFTER:
+            if req.subtitles == "searching" and not _too_long(req.imported_at, now):
+                continue  # sous-titres en cours (lot 4) : prête juste après
+            last = _aware(req.last_seen_at or req.grabbed_at or req.imported_at)
+            if last is not None and (ready_now(req) or now - last > CLOSE_AFTER):
                 req.status, req.closed_at = "done", now
+                ready.append(req)
                 closed += 1
             elif last is None and now - _aware(req.requested_at) > timedelta(
                 hours=settings.TV_REQUEST_TTL_HOURS
@@ -506,6 +512,8 @@ async def enforce(extra_records: list[dict[str, Any]] | None = None) -> dict[str
                 req.status, req.closed_at = "expired", now
                 closed += 1
         await db.commit()
+        for req in ready:
+            await _announce_ready(req, now)
 
         stats = await _apply_sab(db, wanted)
     if stats["forced"] or stats["moved"] or closed:
@@ -516,6 +524,66 @@ async def enforce(extra_records: list[dict[str, Any]] | None = None) -> dict[str
             closed,
         )
     return {"open": len(requests) - closed, "closed": closed, "wanted": wanted, **stats}
+
+
+# Sous-titres jamais revenus (tâche coupée par un redémarrage…) : prête quand même
+SUBTITLES_GIVE_UP = timedelta(minutes=6)
+
+
+def _too_long(imported_at: datetime | None, now: datetime) -> bool:
+    imported = _aware(imported_at)
+    return imported is None or now - imported > SUBTITLES_GIVE_UP
+
+
+def ready_now(req: TvRequest) -> bool:
+    """Prête dès l'import (et les sous-titres) : un film, ou un seul épisode.
+
+    Une saison ou une série arrive en plusieurs NZB : on garde alors le délai
+    CLOSE_AFTER, le temps que les épisodes suivants entrent dans la file.
+    """
+    if req.imported_at is None:
+        return False
+    return req.scope == "movie" or (req.scope == "episode" and len(req.episode_ids or []) <= 1)
+
+
+def ready_event(req: TvRequest, now: datetime) -> dict[str, Any]:
+    """Données de l'événement « tv_ready » (format de « Lire sur la TV » pour la lecture)."""
+    info = dict(req.ready_info or {})
+    return {
+        "request_id": req.id,
+        "device_id": req.device_id,
+        "device_name": req.device_name,
+        "room": req.room,
+        "title": req.title,
+        "subtitles": req.subtitles or "",
+        "quality": info.get("quality") or "",
+        "media_type": info.get("media_type") or ("movie" if req.service_type == "radarr" else ""),
+        "id_type": info.get("id_type") or "",
+        "id": info.get("id"),
+        "season": info.get("season"),
+        "episode": info.get("episode"),
+        "service_type": req.service_type,
+        "arr_id": req.arr_id,
+        "at": now.isoformat(),
+    }
+
+
+async def _announce_ready(req: TvRequest, now: datetime) -> None:
+    """Prévient la TV qui a lancé la demande (relevé des événements toutes les 5 s)."""
+    from app.services.media_aggregator import find_artwork
+    from app.utils.event_bus import event_bus
+
+    data = ready_event(req, now)
+    try:
+        async with session_factory() as db:
+            art = await find_artwork(
+                db, "movie" if req.service_type == "radarr" else "series", data["id"], req.title
+            )
+        data["poster"] = art.get("poster") or ""
+    except Exception:
+        data["poster"] = ""
+    await event_bus.publish("tv_ready", data)
+    logger.info("Prêt à regarder : %s (TV %s)", req.title, req.device_name)
 
 
 def kick(extra_records: list[dict[str, Any]] | None = None, delay: float = 0) -> None:

@@ -90,6 +90,19 @@ télécommande. Phase 0 : **Accueil**. Phase 2 : **Fiche média**,
 > ⚠️ Les torrents (Deluge) n'ont ni *Passer en tête* ni *Pause* : seul
 > SABnzbd sait le faire. *Débloquer* et *Fiche* restent possibles.
 
+**Prêt à regarder** (1.24.0, ADR-005 lot 4)
+- Dès qu'un titre lancé depuis la TV est importé, le serveur cherche ses
+  sous-titres (français, sinon anglais) ; la carte affiche l'étape
+  *Sous-titres*.
+- Puis **la TV qui l'a demandé** (et elle seule) affiche une pop-up en bas à
+  droite : affiche, qualité, sous-titres trouvés, **Regarder** / *Plus tard*
+  (fermeture seule au bout d'une minute). Pendant un film : la pop-up attend
+  la fin de la lecture.
+- *Regarder* lance le titre depuis la médiathèque de la TV (reprise, ampli de
+  la pièce). Fichier tout juste arrivé : la médiathèque de la TV est mise à
+  jour et la lecture réessayée pendant ~30 s.
+- Banc : `BENCH_ONLY=ready kodi-addon/bench/run.sh` (≈ 1 min).
+
 **Salon** (bouton *Salon* de l'Accueil, ou en raccourci pendant un film)
 - **Lecture en cours** sur cet appareil : affiche, titre, définition et audio, temps écoulé / durée, heure de fin, pastille *En pause*. Boutons *− 30 s*, *Lecture / Pause*, *+ 30 s*, *Stop*. Ces infos viennent de Kodi lui-même : elles restent à jour même serveur coupé.
 - **Ampli Yamaha** : état, volume (% et dB), entrée, programme sonore. Boutons *Vol −*, *Vol +*, *Muet*, *Marche / Veille*. Rafraîchi toutes les 3 s, et tout de suite après chaque commande.
