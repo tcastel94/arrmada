@@ -22,6 +22,7 @@ Répond comme le vrai backend aux routes lues par l'écran « Accueil » :
   GET /__watch                  ce que la TV a déposé (vérifié par le harnais)
   GET /__watch_push?…           une « autre TV » change un état (+ événement)
   GET /api/kodi/series/371980/episodes  épisodes « Sonarr » de Severance
+  GET /api/kodi/segments        marqueurs Jellyfin des épisodes de Severance (1.25.0)
   GET /__room?room=bureau       la TV change de pièce dans la web app (1.19.1 :
                                 bureau = pas d'ampli, /api/yamaha/state → no_amp)
   GET /__presets                préréglages d'ampli reçus (aucun depuis le bureau)
@@ -85,6 +86,7 @@ STATE = {
     "presets": 0,  # POST /api/yamaha/preset/apply reçus (relus par /__presets)
     "crash_reports": [],  # POST /api/kodi/crash-report reçus (relus par /__crash_reports)
     "downloads": [],  # POST /api/kodi/media/download reçus (relus par /__downloads)
+    "segments": [],  # GET /api/kodi/segments reçus (1.25.0, relus par /__segments)
     "actions": [],  # actions de l'écran Téléchargements (lot 3, relues par /__actions)
     "amp": {"power": "on", "volume": 84, "mute": False, "input": "hdmi1", "sound_program": "surr_decoder"},
 }
@@ -922,6 +924,9 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
                 STATE["down"], STATE["deny"] = False, True
                 self._json({"deny": True})
                 return
+            if path == "/__segments":  # le harnais relit les demandes de marqueurs
+                self._json(STATE["segments"])
+                return
             if path == "/__scrobbles":  # le harnais relit le suivi de lecture reçu
                 self._json(STATE["scrobbles"])
                 return
@@ -1019,6 +1024,20 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
 
                 query = {k: v[0] for k, v in parse_qs(urlsplit(self.path).query).items()}
                 self._json(lookup(base, query.get("q", "")))
+            elif path == "/api/kodi/segments":
+                # Marqueurs Jellyfin (1.25.0) : intro 5-25 s et générique 50-80 s
+                # des épisodes de Severance (clips de 90 s, sans chapitres)
+                from urllib.parse import parse_qs, urlsplit
+
+                query = {k: v[0] for k, v in parse_qs(urlsplit(self.path).query).items()}
+                STATE["segments"].append(query)
+                if query.get("tvdb_id") == "371980":
+                    self._json({"status": "ok", "found": True, "segments": [
+                        {"kind": "intro", "start": 5.0, "end": 25.0},
+                        {"kind": "credits", "start": 50.0, "end": 80.0},
+                    ]})  # fmt: skip
+                else:
+                    self._json({"status": "ok", "found": False, "segments": []})
             elif path == "/api/kodi/media/seasons":
                 from urllib.parse import parse_qs, urlsplit
 

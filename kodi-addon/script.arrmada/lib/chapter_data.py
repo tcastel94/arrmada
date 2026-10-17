@@ -11,8 +11,10 @@ par seconde :
   - chapitre de générique de fin d'un épisode → l'encart « Épisode suivant »
     s'ouvre tout de suite, sans attendre les 20 dernières secondes.
 
-Sans chapitres nommés (« Chapitre 01 »…), rien ne s'affiche : aucune
-devinette sur la position de l'intro.
+Sans chapitres nommés (« Chapitre 01 »…) : marqueurs calculés par Jellyfin
+(1.25.0, plugin Intro Skipper ou Chapter Segments Provider), demandés au
+serveur ArrMada au début de l'épisode : `segment_offer_at` / `segment_credits_at`.
+Sans l'un ni l'autre, rien ne s'affiche : aucune devinette sur la position.
 
 Sous Kodi 20, le « chapitre en cours » du lecteur ne bouge pas pendant une
 lecture normale (vérifié sur le banc). Pour les MKV, on lit donc la liste
@@ -119,3 +121,58 @@ def credits_at(chapters: List[Tuple[float, str]], seconds: float, is_episode: bo
 def credits_started(name: Any, is_episode: bool) -> bool:
     """Générique de fin d'un épisode : l'encart « Épisode suivant » peut s'ouvrir."""
     return is_episode and chapter_kind(name) == "credits"
+
+
+# ── Marqueurs de Jellyfin (1.25.0) : quand le fichier n'a pas de chapitres nommés ──
+
+# Numérotés à part des chapitres (1001, 1002…) dans l'ensemble « déjà proposés »
+SEGMENT_BASE = 1000
+
+
+def parse_segments(response: Any) -> List[Dict[str, Any]]:
+    """Réponse de GET /api/kodi/segments → [{kind, start, end}] valides, triés."""
+    if not isinstance(response, dict) or response.get("status") != "ok":
+        return []
+    out = []
+    for seg in response.get("segments") or []:
+        if not isinstance(seg, dict) or seg.get("kind") not in ("intro", "recap", "credits"):
+            continue
+        try:
+            start, end = float(seg.get("start")), float(seg.get("end"))
+        except (TypeError, ValueError):
+            continue
+        if end > start >= 0:
+            out.append({"kind": seg["kind"], "start": start, "end": end})
+    return sorted(out, key=lambda seg: seg["start"])
+
+
+def segment_offer_at(
+    segments: List[Dict[str, Any]], seconds: float, offered: set, file: str
+) -> Optional[Dict[str, str]]:
+    """Bouton à proposer pendant une intro / un récap repéré par Jellyfin, ou None.
+
+    Même forme que `skip_offer_at` : saut à la fin du marqueur (`to`), bouton
+    retiré quand on l'atteint (`until`), une seule fois par marqueur.
+    """
+    for index, seg in enumerate(segments or [], 1):
+        if seg["kind"] not in LABELS or not seg["start"] <= seconds < seg["end"]:
+            continue
+        key = SEGMENT_BASE + index
+        if (file, key) in offered or seg["end"] - seconds < 2:
+            return None
+        return {
+            "action": ACTION,
+            "kind": seg["kind"],
+            "label": LABELS[seg["kind"]],
+            "chapter": str(key),
+            "to": f"{seg['end']:.1f}",
+            "until": f"{seg['end']:.1f}",
+        }
+    return None
+
+
+def segment_credits_at(segments: List[Dict[str, Any]], seconds: float) -> bool:
+    """Générique de fin repéré par Jellyfin : « Épisode suivant » peut s'ouvrir."""
+    return any(
+        seg["kind"] == "credits" and seg["start"] <= seconds < seg["end"] for seg in segments or []
+    )

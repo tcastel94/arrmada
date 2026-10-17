@@ -515,6 +515,16 @@ async def addon_media_seasons(
     )
 
 
+@router.get("/segments")
+async def addon_segments(
+    tvdb_id: int, season: int, episode: int, db: AsyncSession = Depends(get_db)
+):
+    """Intro / récap / générique d'un épisode, calculés par Jellyfin (« Passer l'intro »)."""
+    from app.services import jellyfin
+
+    return await jellyfin.episode_segments(db, tvdb_id, season, episode)
+
+
 @router.post("/media/download")
 async def addon_media_download(
     data: dict, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Jellyfin: "Passer l'intro" without chapters, cast episodes (Kodi add-on 1.25.0)
+
+#### Added
+- **Episode markers from Jellyfin** (`services/jellyfin.py`, "media segments", Jellyfin 10.10+): the server finds the episode in Jellyfin (series TVDB, cached 10 min, refreshed once for a series added since; season; episode, double-episode files included) and returns its intro / recap / end-credits markers in seconds (`GET /api/kodi/segments?tvdb_id=&season=&episode=`, allowed for TV tokens, read-only). Markers come from a Jellyfin plugin (Intro Skipper, Chapter Segments Provider); Preview / Commercial ignored; Jellyfin older than 10.10, not configured, episode unknown: empty list
+- **TV**: at the start of a library episode the add-on asks for the markers in a background thread (the service loop never waits); named chapters stay first, markers are used when they say nothing: same "Passer l'intro" / "Passer le récap" button jumping to the end of the marker, and the "Épisode suivant" card as soon as the end credits start. Gated by the existing *Bouton « Passer l'intro »* setting
+- **Cast an episode** from the web app: a cast button on every episode with a file (series tab), when Jellyfin is configured; `POST /api/cast/play` accepts `tvdb_id + season + episode` besides `tmdb_id`, the stream is titled "Série · S02E04 · Titre"
+- **Settings → Cast & Jellyfin → Tester la connexion** now says whether markers are available: Jellyfin version (10.10+) and installed marker plugin, or what to install
+- Bench: `BENCH_ONLY=segments kodi-addon/bench/run.sh` (≈ 1 min, real Kodi 20): on an episode without chapters, button at 6 s, jump to 25 s (end of the intro marker), "Épisode suivant" card at 53 s on the end-credits marker, request received by the mock server
+- Tests: server 11 (marker parsing, double episodes, support detection, TV route, series cache and refresh, no-marker cases, no Jellyfin, TV token scope, connection test, episode stream, cast validation); add-on 3 (parsing, button, credits)
+
 ### No more emojis in the legacy TV menus (Kodi add-on 1.24.2)
 
 #### Fixed

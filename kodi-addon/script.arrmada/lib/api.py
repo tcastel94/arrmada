@@ -275,6 +275,12 @@ class ArrMadaAPI:
         return cls._request(f"/api/kodi/media/seasons?{query}", method="GET", timeout=25)
 
     @classmethod
+    def get_segments(cls, tvdb_id, season, episode) -> dict:
+        """Intro / récap / générique d'un épisode, repérés par Jellyfin (1.25.0)."""
+        query = urllib.parse.urlencode({"tvdb_id": tvdb_id, "season": season, "episode": episode})
+        return cls._request(f"/api/kodi/segments?{query}", method="GET", timeout=15)
+
+    @classmethod
     def start_download(cls, payload: dict) -> dict:
         """Feuille « Télécharger » : film, série, saison ou épisodes (ADR-005)."""
         return cls._request("/api/kodi/media/download", method="POST", data=payload, timeout=30)

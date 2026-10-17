@@ -108,6 +108,9 @@ class ArrMadaPlayer(xbmc.Player):
         self._file = ""  # vidéo en cours (chapitres déjà proposés, sous-titres)
         self._skip_offered: set = set()  # (fichier, n° de chapitre) déjà proposés
         self._chapters = None  # chapitres lus dans le fichier MKV (None : pas encore lus)
+        # Marqueurs de Jellyfin (intro, récap, générique) de l'épisode en cours,
+        # demandés en arrière-plan au début de l'épisode (1.25.0) ; [] : aucun
+        self._segments: list = []
         self._autosubs_at = 0.0  # vérification des sous-titres prévue (1.17)
 
     def _track_library_item(self) -> None:
@@ -128,9 +131,46 @@ class ArrMadaPlayer(xbmc.Player):
             self._file = ""
         self._skip_offered = set()
         self._chapters = None
+        self._segments = []
+        if current and current[0] == "episode" and get_setting_bool("skip_intro", default=True):
+            threading.Thread(
+                target=self._load_segments,
+                args=(current[1], self._file),
+                name="arrmada-segments",
+                daemon=True,
+            ).start()
         # Sous-titres automatiques : seulement pour la médiathèque (Bazarr ne
         # connaît que ce que Radarr / Sonarr connaissent)
         self._autosubs_at = time.time() + player_data.AUTO_SUBTITLES_DELAY if current else 0.0
+
+    def _load_segments(self, episodeid: int, file: str) -> None:
+        """Marqueurs Jellyfin de l'épisode (fil à part : la boucle n'attend jamais).
+
+        Série (TVDB), saison et numéro viennent de la médiathèque Kodi ; le
+        serveur ArrMada retrouve l'épisode dans Jellyfin. Pas de Jellyfin, pas
+        de plugin, épisode inconnu : liste vide, rien ne change.
+        """
+        try:
+            episode = ui_common.jsonrpc(
+                "VideoLibrary.GetEpisodeDetails",
+                {"episodeid": episodeid, "properties": ["tvshowid", "season", "episode"]},
+            ).get("episodedetails") or {}
+            show = ui_common.jsonrpc(
+                "VideoLibrary.GetTVShowDetails",
+                {"tvshowid": episode.get("tvshowid", -1), "properties": ["uniqueid"]},
+            ).get("tvshowdetails") or {}
+            tvdb = (show.get("uniqueid") or {}).get("tvdb")
+            if not tvdb or episode.get("season") is None:
+                return
+            response = ArrMadaAPI.get_segments(tvdb, episode["season"], episode.get("episode"))
+            segments = chapter_data.parse_segments(response)
+        except Exception as exc:  # jamais au point de gêner la lecture
+            _log(f"marqueurs Jellyfin : {exc}", xbmc.LOGDEBUG)
+            return
+        if segments and file == self._file:  # toujours le même épisode à l'écran
+            self._segments = segments
+            kinds = ", ".join(f"{s['kind']} {s['start']:.0f}-{s['end']:.0f} s" for s in segments)
+            _log(f"marqueurs Jellyfin : {kinds}")
 
     def _release_library_item(self) -> None:
         """Arrêt ou fin : Kodi enregistre vu / reprise, on le dépose dans 3 s."""
@@ -218,6 +258,8 @@ class ArrMadaPlayer(xbmc.Player):
             credits = chapter_data.credits_at(chapters, position, True)
         else:
             credits = chapter_data.credits_started(xbmc.getInfoLabel("Player.ChapterName"), True)
+        # Générique repéré par Jellyfin (1.25.0) quand les chapitres ne disent rien
+        credits = credits or chapter_data.segment_credits_at(self._segments, position)
         early = credits and total - position > threshold
         if not early and not upnext_data.should_offer(total - position, total, threshold, False, True):
             return
@@ -256,13 +298,14 @@ class ArrMadaPlayer(xbmc.Player):
         return self._chapters
 
     def check_chapters(self) -> None:
-        """Bouton « Passer l'intro » quand le chapitre en cours en est une (1.17)."""
+        """Bouton « Passer l'intro » : chapitre d'intro (1.17), sinon marqueur Jellyfin (1.25)."""
         if not get_setting_bool("skip_intro", default=True):
             return
         chapters = self._file_chapters()
         count = len(chapters) or _number("Player.ChapterCount")
-        if count < 2:
-            return  # fichier sans chapitres : rien à faire (cas le plus courant)
+        segments = self._segments
+        if count < 2 and not segments:
+            return  # ni chapitres ni marqueurs : rien à faire
         if xbmc.getCondVisibility(
             "Window.IsVisible(busydialog) | Window.IsVisible(busydialognocancel)"
         ):
@@ -270,19 +313,24 @@ class ArrMadaPlayer(xbmc.Player):
         home = xbmcgui.Window(10000)
         if home.getProperty(player_data.POPUP_PROP) or home.getProperty(upnext_data.POPUP_PROP):
             return  # panneau ou encart déjà à l'écran
+        try:
+            position = self.getTime()
+        except Exception:
+            return
+        offer = None
         if chapters:
-            try:
-                position = self.getTime()
-            except Exception:
-                return
             offer = chapter_data.skip_offer_at(chapters, position, self._skip_offered, self._file)
-        else:
+        elif count >= 2:
             offer = chapter_data.skip_offer(
                 xbmc.getInfoLabel("Player.ChapterName"),
                 _number("Player.Chapter"),
                 count,
                 self._skip_offered,
                 self._file,
+            )
+        if offer is None and segments:
+            offer = chapter_data.segment_offer_at(
+                segments, position, self._skip_offered, self._file
             )
         if offer is None:
             return

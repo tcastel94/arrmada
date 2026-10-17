@@ -290,6 +290,72 @@ def toasts():
     shot("toast-2-ecran-kodi")
 
 
+def jellyfin_markers():
+    """1.25.0 : « Passer l'intro » et encart du générique d'après les marqueurs
+    Jellyfin, sur un épisode SANS chapitres (clip de 90 s)."""
+
+    def call(method, params=None):
+        request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params or {}}
+        return json.loads(xbmc.executeJSONRPC(json.dumps(request))).get("result") or {}
+
+    def position():
+        t = call("Player.GetProperties", {"playerid": 1, "properties": ["time"]}).get("time") or {}
+        return t.get("minutes", 0) * 60 + t.get("seconds", 0)
+
+    def wait_prop(name, seconds):
+        for _ in range(int(seconds * 2)):
+            wait(0.5)
+            if xbmc.getInfoLabel(f"Window(Home).Property({name})") == "1":
+                return True
+        return False
+
+    call("VideoLibrary.Scan")
+    wait(2.0)
+    for _ in range(60):
+        if not xbmc.getCondVisibility("Library.IsScanningVideo"):
+            break
+        wait(1.0)
+    shows = call("VideoLibrary.GetTVShows").get("tvshows") or []
+    eps = call("VideoLibrary.GetEpisodes", {"tvshowid": shows[0]["tvshowid"],
+                                            "properties": ["season", "episode"]})  # fmt: skip
+    byk = {(e["season"], e["episode"]): e["episodeid"] for e in eps.get("episodes") or []}
+    call("Player.Open", {"item": {"episodeid": byk[(1, 3)]}, "options": {"resume": False}})
+    opened = wait_prop("arrmada.skip_open", 25.0)  # intro de 5 à 25 s
+    wait(0.8)
+    label = xbmc.getInfoLabel("Control.GetLabel(301)")
+    log(f"marqueurs : bouton {'« ' + label + ' »' if opened else 'ABSENT'} à {position()} s")
+    shot("seg-1-passer-intro")
+    press("Select")
+    wait(2.0)
+    log(f"après « Passer l'intro » : {position()} s (fin du marqueur : 25 s)")
+    # Générique 50-80 s : encart « Épisode suivant » bien avant les 20 dernières s
+    call("Player.Seek", {"playerid": 1, "value": {"time": {
+        "hours": 0, "minutes": 0, "seconds": 52, "milliseconds": 0}}})  # fmt: skip
+    opened = wait_prop("arrmada.upnext_open", 8.0)
+    wait(1.0)
+    log(f"générique Jellyfin : encart {'ouvert' if opened else 'ABSENT'} à {position()} s")
+    shot("seg-2-generique-encart")
+    press("Back")
+    xbmc.Player().stop()
+    wait(1.5)
+    asked = json.loads(urllib.request.urlopen(f"{MOCK}/__segments").read())
+    log(f"marqueurs demandés au serveur : {asked}")
+
+
+if os.environ.get("BENCH_ONLY") == "segments":
+    for _ in range(6):
+        if not xbmc.getCondVisibility("Window.IsActive(yesnodialog)"):
+            break
+        press("Back", 1, 1.0)
+    if shell_open():
+        leave_shell()
+    jellyfin_markers()
+    xbmc.executebuiltin("Quit")
+    while not MONITOR.abortRequested():
+        wait(1)
+    raise SystemExit
+
+
 if os.environ.get("BENCH_ONLY") == "toast":
     for _ in range(6):
         if not xbmc.getCondVisibility("Window.IsActive(yesnodialog)"):

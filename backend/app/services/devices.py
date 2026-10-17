@@ -129,6 +129,8 @@ _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         # Écran Téléchargements (lot 3) : tableau, diagnostic, « Débloquer »
         # (import sans écrasement ou autre release ; médiathèque jamais touchée)
         ("GET", r"/api/kodi/downloads/board"),
+        # Marqueurs d'épisode de Jellyfin (« Passer l'intro » sans chapitres)
+        ("GET", r"/api/kodi/segments"),
         ("GET", r"/api/kodi/downloads/(radarr|sonarr)/[A-Za-z0-9_.\-]+/diagnose"),
         ("POST", r"/api/kodi/downloads/(radarr|sonarr)/[A-Za-z0-9_.\-]+/unstick"),
         ("GET", r"/api/media(/.*)?"),

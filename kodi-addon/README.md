@@ -846,6 +846,22 @@ sans attendre les 20 dernières secondes.
 > autres formats (MP4…) gardent l'information de Kodi : le bouton n'y
 > apparaît qu'après un saut dans le fichier.
 
+**Sans chapitres nommés : marqueurs de Jellyfin** (1.25.0). Au début d'un
+épisode de la médiathèque, l'add-on demande au serveur ArrMada où sont
+l'intro, le récap et le générique de fin ; le serveur retrouve l'épisode dans
+Jellyfin (TVDB de la série + saison + épisode) et lit ses marqueurs (« media
+segments », Jellyfin 10.10 ou plus). Même bouton, même encart qu'avec les
+chapitres, qui restent prioritaires. Il faut, côté Jellyfin :
+1. la série dans une bibliothèque Jellyfin (mêmes fichiers que Sonarr) ;
+2. un plugin qui calcule les marqueurs : **Intro Skipper** (dépôt
+   `https://intro-skipper.org/manifest.json`, Tableau de bord → Extensions →
+   Dépôts), ou *Chapter Segments Provider* (marqueurs tirés des chapitres) ;
+3. l'analyse faite : tâche planifiée *Media segment scan* (ou celle du
+   plugin), longue la première fois (lance-la la nuit).
+Web app → *Paramètres → Cast & Jellyfin → Tester la connexion* indique si
+le serveur et un plugin de marqueurs sont prêts. Pas de Jellyfin, pas de
+plugin ou épisode pas encore analysé : rien ne change (aucune devinette).
+
 **Sous-titres automatiques** : 8 s après le début d'un film ou d'un épisode
 de la médiathèque, si l'audio est dans une autre langue que la tienne
 (réglage *Langue des sous-titres*, `fr` par défaut) **et** qu'aucune piste
@@ -1209,7 +1225,7 @@ Copiez le dossier `script.arrmada/` dans le dossier des extensions de Kodi :
 | Vu / reprise partagés entre les TV : règles pures / travail du service | `script.arrmada/lib/sync_data.py` / `script.arrmada/lib/watch_sync.py` (serveur : `backend/app/services/watch_sync.py`) |
 | Encart « Épisode suivant » : logique pure / fenêtre | `script.arrmada/lib/upnext_data.py` / `script.arrmada/lib/upnext_window.py` |
 | Panneau pendant le film (pistes, Bazarr, ampli, fichier de touches) : logique pure / fenêtre | `script.arrmada/lib/player_data.py` / `script.arrmada/lib/player_window.py` |
-| « Passer l'intro » (chapitres nommés) : logique pure / bouton | `script.arrmada/lib/chapter_data.py` / `script.arrmada/lib/skip_window.py` |
+| « Passer l'intro » (chapitres nommés, marqueurs Jellyfin) : logique pure / bouton | `script.arrmada/lib/chapter_data.py` / `script.arrmada/lib/skip_window.py` |
 | Dépôt Kodi servi par le backend | `backend/app/services/kodi_repo.py`, `backend/app/api/kodi_repo.py` |
 | Textures (coins arrondis, halo, dégradés, barres de progression) | générées par `python3 kodi-addon/tools/make_textures.py` |
 | Tests (sans Kodi, lancés en CI) | `pytest kodi-addon/tests` |
