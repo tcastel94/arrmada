@@ -181,24 +181,30 @@ dans son dossier `addons/packages/` sous le même nom, même coupé par un
 plantage pendant un téléchargement précédent. Les TV qui ont le dépôt 1.0.0
 le mettent à jour toutes seules.
 
-**Ce que fait Kodi avec un dépôt, et pourquoi c'est différent d'un zip**
-(lu dans le code de Kodi 21, vérifié sur le banc) :
-- le contenu est le même : le zip du dépôt et `script.arrmada.zip` ont la
-  même structure, et Kodi suit le même chemin d'installation (arrêt du
-  service, remplacement du dossier, redémarrage du service) ;
-- la différence, c'est **le moment** : avec le dépôt, Kodi installe les
-  mises à jour **tout seul**, au démarrage de Kodi (si la dernière
-  vérification date de plus de 24 h) puis toutes les 24 h. Il le fait donc
-  **pendant qu'ArrMada tourne**, alors qu'un zip s'installe depuis le menu
-  Extensions de Kodi. Sur le banc, la mise à jour au démarrage arrive
-  pendant que le service ArrMada se charge : Kodi le coupe en plein
-  chargement (`Unknown addon id 'script.arrmada'` dans le journal), puis le
-  relance. Kodi 20 sur PC le supporte ; sur la Shield (Kodi 21), c'est le
-  suspect n° 1 ;
-- pour garder la main sur ce moment : Paramètres → Système → Extensions →
-  **Mises à jour** → « Avertir, mais ne pas installer ». Kodi signale alors
-  la mise à jour, et tu l'installes quand tu veux (Extensions → Mes
-  extensions → ArrMada → Mettre à jour).
+**Le plantage de la Shield (incident 1.7.0, cause trouvée le 17/10/2026)** :
+« Installer depuis un fichier zip » avec la source `http://<serveur>:8420/kodi/repo/`
+ne télécharge pas le zip : Kodi le **lit sur place**, par morceaux (requêtes
+HTTP « Range », comme une reprise de téléchargement `curl -C -`), en
+commençant par la fin du fichier, où se trouve le sommaire du zip. Le
+serveur ignorait ces demandes et renvoyait tout le fichier : Kodi n'arrivait
+pas à lire le zip (`Requested range was not delivered by the server(33)`,
+puis `GetDirectory - Error getting zip://http…`), puis **plantait dans son
+propre message d'erreur** (bug de Kodi 20 et 21 : `InstallFromZip` lit le
+premier élément d'une liste vide). Le même zip depuis un partage SMB
+marchait, parce que SMB sait lire n'importe quel morceau d'un fichier.
+Depuis le 17/10/2026, le serveur répond aux morceaux (`206 Partial
+Content`) : reproduit puis corrigé sur le banc avec le vrai Kodi et les
+mêmes gestes. Trouvé grâce au journal envoyé tout seul par l'appli 1.21.1
+(§ 12).
+
+**Deux façons d'utiliser la source ArrMada** (les deux marchent) :
+- **Installer depuis un fichier zip** → ArrMada → `script.arrmada/script.arrmada-<version>.zip` :
+  installation à la main, comme avec un partage réseau ;
+- **Installer depuis un dépôt** → Dépôt ArrMada → ArrMada (après avoir
+  installé `repository.arrmada.zip` une fois) : Kodi propose ensuite les
+  mises à jour **tout seul**, au démarrage puis toutes les 24 h, même
+  pendant qu'ArrMada tourne. Pour choisir le moment : Paramètres → Système
+  → Extensions → **Mises à jour** → « Avertir, mais ne pas installer ».
 
 ### 9. 🔊 Boutons volume de la télécommande → ampli de la pièce
 Kodi pour Android **ne reçoit pas** les touches volume : il les laisse au
@@ -1053,16 +1059,12 @@ l'affiche. Les rangées et les listes du plugin portent aussi l'image
 
 ## 🚀 Installation dans Kodi
 
-> ⚠️ **NVIDIA Shield (Kodi 21, Android)** : l'installation **par le dépôt** ferme
-> Kodi (incident 1.7.0), alors que le même zip installé depuis un partage
-> réseau fonctionne. Enquête 1.21.1 (§ 8) : même zip et même chemin
-> d'installation, la différence est le moment (Kodi installe seul, pendant
-> qu'ArrMada tourne). Pas reproductible sur le banc (Kodi 20 sur PC). Depuis
-> la 1.21.1, le journal d'un Kodi qui s'est fermé arrive tout seul sur le
-> serveur (§ 12) : un essai du dépôt sur la Shield suffit à trouver la cause.
-> En attendant, la **méthode 2** reste la méthode sûre.
+> ✅ **NVIDIA Shield (Kodi 21, Android)** : l'installation depuis la source
+> ArrMada fermait Kodi (incident 1.7.0). Cause trouvée et corrigée côté
+> serveur le 17/10/2026 (§ 8) : il suffit de mettre le serveur à jour, rien à
+> changer sur la TV.
 
-### Méthode 1 : Dépôt ArrMada (mises à jour automatiques ; en test sur la Shield)
+### Méthode 1 : Dépôt ArrMada (mises à jour automatiques)
 Voir § 8 ci-dessus : une source `http://<serveur>:8420/kodi/repo/`, puis
 `repository.arrmada.zip`, puis « Installer depuis un dépôt ».
 

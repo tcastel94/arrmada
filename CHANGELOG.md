@@ -7,13 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### ArrMada repository on the Shield: investigation, verified zips, crash logs sent to the server (Kodi add-on 1.21.1)
+### ArrMada repository on the Shield: cause found and fixed (server), verified zips, crash logs sent to the server (Kodi add-on 1.21.1)
 
-#### Investigation (owner report: installing through the ArrMada repository closes Kodi on the Shield, the same zip from a network share works)
-- **Same content, same install path**: the repository zip and `script.arrmada.zip` have the same structure, and Kodi 21's installer (`AddonInstaller.cpp`, `FilesystemInstaller.cpp`, read in Kodi's source) follows the same steps for both (stop the service, swap the add-on folder, start the service again)
-- **What differs is the moment**: with a repository, Kodi installs updates **on its own**, at Kodi startup (when the last check is older than 24 h) and every 24 h, i.e. **while ArrMada is running** (Kodi starts on the ArrMada home since 1.12). A zip is installed from Kodi's Add-ons menu. Reproduced on the bench with the real `/kodi/repo` router: the update at startup lands while the ArrMada service is still loading, and Kodi unloads the add-on under it (`Unknown addon id 'script.arrmada'`); an update while the ArrMada home is on screen replaces the files under it. Kodi 20 on a PC survives both; the Shield (Kodi 21, Android) could not be tested here
-- Side finding on the bench (Kodi 20 Debian, built with Python 3.12): Kodi crashes when it quits while **any** Python window is open, ArrMada or an empty test window (`Py_EndInterpreter` → `PyObject_GC_UnTrack`, core dump); no crash without a Python window. Closing the windows from a watcher thread on Kodi's stop request did not prevent it and made a window close crash once on the bench, so it was not kept. The Shield runs Kodi 21 with Python 3.11: the crash logs above will tell whether it is affected
-- Workaround documented: Settings → System → Add-ons → Updates → "Notify, but don't install updates" to choose when an update is installed
+#### Fixed
+- **Kodi closed on the Shield when the add-on was installed from the ArrMada source** (incident 1.7.0, cause found on 17/10/2026 with the crash log sent by add-on 1.21.1). "Install from zip file" on the `http://<server>:8420/kodi/repo/` source does not download the zip: Kodi reads it in place (`zip://http…/`), piece by piece, starting with its end (the zip's table of contents), through HTTP `Range` requests — like a `curl -C -` resume. The server ignored them and sent the whole file each time (200 instead of 206): `CCurlFile … Requested range was not delivered by the server(33)`, then `GetDirectory - Error getting zip://http…`. Kodi 20 and 21 then crash in their own error message (`CAddonInstaller::InstallFromZip` reads the first item of an empty list, `items[0]`). The zip from a network share worked because SMB reads any part of a file. Every `/kodi/repo` answer now supports byte ranges (206 with `Content-Range`, 416 outside the file, `Accept-Ranges: bytes`; several ranges at once or malformed headers → whole file, as HTTP allows)
+- Reproduced and checked on the bench (real Kodi 20, real `/kodi/repo` router, the owner's exact steps: Add-ons → Install from zip file → ArrMada source → `script.arrmada/script.arrmada-1.21.1.zip`): the old server gives the Shield's two last log lines and a crash in `CAddonInstaller::InstallFromZip` (SIGSEGV, core dump); the fixed server installs 1.21.0 → 1.21.1 (about 300 range requests) and Kodi stays up. Both in a fresh Kodi session (Kodi keeps a zip's table of contents in memory once read)
+- Tests: the zip read in place like Kodi (end of file first, then the table of contents, then the whole file rebuilt from 64 KB pieces and opened), ranges outside the file (416), ignored ranges (several, other unit, reversed), small answers (`addons.xml`), range rules
+
+#### Investigation notes
+- The real repository (Add-ons → Install from repository → ArrMada repository) was never in cause: it downloads whole files into `packages/` first. With it, Kodi installs updates on its own at startup and every 24 h, while ArrMada runs; seen on the bench: an update at startup unloads the add-on while its service is still loading (`Unknown addon id 'script.arrmada'`), which Kodi handles. "Notify, but don't install updates" (Settings → System → Add-ons → Updates) chooses the moment
+- Bench only (Kodi 20 Debian built with Python 3.12): Kodi crashes when it quits while any Python window is open, ArrMada or an empty test window (`Py_EndInterpreter`); not the Shield's issue
 
 #### Added
 - **Crash log sent to the server** (add-on 1.21.1): at startup, if the previous Kodi session's log (`kodi.old.log`) does not end with Kodi's normal shutdown line ("Exiting the application..."), the service sends its last 400 KB to the server 30 s later, once per log. The server stores them in `data/kodi-crashes/` (`/mnt/user/appdata/arrmada/data/kodi-crashes/` on the Unraid), 10 kept, with the TV, Kodi and add-on versions in a header. `POST /api/kodi/crash-report` (allowed for TV tokens, bounded size, file name built by the server), `GET /api/kodi/crash-reports` and `/crash-reports/{name}` (admin). Shield-only crashes can now be read without plugging a PC into the TV
@@ -21,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tests: crash log detection (abrupt end, clean exit, once per log, whole lines, state file), crash report endpoint (TV sends, admin reads, TV cannot read, empty log, hostile names, header injection, 10 kept), repository hashes (every zip, stable bytes). Bench: Kodi killed with `kill -9` → the next start sends the log of the killed session, a normal quit sends nothing more; mock server `POST /api/kodi/crash-report`; full bench run unchanged (106 screenshots)
 
 #### Changed
-- Web app (Settings → Kodi → updates): the Shield note says the repository is being tested, the zip remains the safe method, and where crash logs arrive
+- Web app (Settings → Kodi → updates): the "no repository on the Shield" warning is gone; a short note says where crash logs arrive
 
 ### Every artwork of a title, images from the media folders, a case that opens on the web sheet (Kodi add-on 1.21.0)
 

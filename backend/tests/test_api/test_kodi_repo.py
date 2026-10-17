@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import struct
 import xml.etree.ElementTree as ET
 import zipfile
 from collections.abc import AsyncGenerator
@@ -91,6 +92,74 @@ async def test_sha256_of_every_zip(client: AsyncClient) -> None:
         assert (await client.get(path)).content == data, path
     old = await client.get("/kodi/repo/script.arrmada/script.arrmada-0.0.1.zip.sha256")
     assert old.status_code == 404
+
+
+async def test_zip_read_in_place_like_kodi(client: AsyncClient) -> None:
+    """« Installer depuis un fichier zip » avec la source http:// : Kodi lit le zip
+    sur place, par morceaux (incident Shield 1.7.0, cause trouvée en 1.21.1).
+
+    Même chemin que Kodi : la fin du fichier d'abord (sommaire du zip), puis le
+    sommaire lui-même. Avant le correctif, le serveur renvoyait tout le fichier
+    (200) et Kodi échouait (« Requested range was not delivered », curl 33).
+    """
+    url = f"/kodi/repo/script.arrmada/script.arrmada-{_version()}.zip"
+    whole = (await client.get(url)).content
+    size = len(whole)
+    head = await client.head(url)
+    assert head.headers["accept-ranges"] == "bytes"
+
+    tail = await client.get(url, headers={"Range": "bytes=-22"})
+    assert tail.status_code == 206
+    assert tail.headers["content-range"] == f"bytes {size - 22}-{size - 1}/{size}"
+    assert tail.content == whole[-22:]
+    # Fin de sommaire du zip (EOCD) : taille et position du sommaire
+    signature, *_, dir_size, dir_offset, _ = struct.unpack("<IHHHHIIH", tail.content)
+    assert signature == 0x06054B50
+    directory = await client.get(
+        url, headers={"Range": f"bytes={dir_offset}-{dir_offset + dir_size - 1}"}
+    )
+    assert directory.status_code == 206
+    assert directory.content == whole[dir_offset : dir_offset + dir_size]
+    assert b"script.arrmada/addon.xml" in directory.content
+
+    # Le fichier entier, recomposé morceau par morceau, est bien le même zip
+    chunks = []
+    for start in range(0, size, 65536):
+        part = await client.get(url, headers={"Range": f"bytes={start}-{start + 65535}"})
+        assert part.status_code == 206
+        chunks.append(part.content)
+    assert b"".join(chunks) == whole
+    with zipfile.ZipFile(io.BytesIO(b"".join(chunks))) as archive:
+        assert "script.arrmada/addon.xml" in archive.namelist()
+
+
+async def test_ranges_out_of_file_or_ignored(client: AsyncClient) -> None:
+    url = f"/kodi/repo/script.arrmada/script.arrmada-{_version()}.zip"
+    size = len((await client.get(url)).content)
+    beyond = await client.get(url, headers={"Range": f"bytes={size}-"})
+    assert beyond.status_code == 416
+    assert beyond.headers["content-range"] == f"bytes */{size}"
+    end = await client.get(url, headers={"Range": f"bytes={size - 10}-{size + 500}"})
+    assert end.status_code == 206 and len(end.content) == 10  # coupé à la fin du fichier
+    # Plusieurs morceaux, autre unité, morceau à l'envers : tout le fichier (200)
+    for header in ("bytes=0-9,20-29", "items=0-5", "bytes=10-5", "bytes=-"):
+        resp = await client.get(url, headers={"Range": header})
+        assert resp.status_code == 200 and len(resp.content) == size, header
+    # Les petites réponses aussi (addons.xml, empreintes)
+    xml = await client.get("/kodi/repo/addons.xml", headers={"Range": "bytes=0-4"})
+    assert xml.status_code == 206 and xml.content == b"<?xml"
+
+
+def test_byte_range_rules() -> None:
+    assert kodi_repo.byte_range(None, 100) is None
+    assert kodi_repo.byte_range("bytes=0-9", 100) == (0, 9)
+    assert kodi_repo.byte_range("bytes=90-", 100) == (90, 99)
+    assert kodi_repo.byte_range("bytes=-22", 100) == (78, 99)
+    assert kodi_repo.byte_range("bytes=-500", 100) == (0, 99)
+    assert kodi_repo.byte_range(" bytes=5-5 ", 100) == (5, 5)
+    for header in ("bytes=100-", "bytes=-0"):
+        with pytest.raises(kodi_repo.RangeNotSatisfiable):
+            kodi_repo.byte_range(header, 100)
 
 
 async def test_only_declared_assets_are_served(client: AsyncClient) -> None:

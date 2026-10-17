@@ -14,6 +14,16 @@ la nouvelle version est proposée aux TV sans reconstruire l'image Docker.
 L'adresse du serveur est écrite dans le zip du dépôt au moment où la TV le
 télécharge (celle par laquelle elle joint ArrMada).
 
+Lecture par morceaux (requêtes HTTP « Range », comme un `curl -C -`) : quand
+on choisit « Installer depuis un fichier zip » avec la source http://…/kodi/repo/,
+Kodi ne télécharge pas le zip, il le lit sur place (`zip://http…/`) et
+demande d'abord sa fin (le sommaire du zip). Un serveur qui ignore la demande
+et renvoie le fichier entier fait échouer la lecture, et Kodi 20 / 21 plante
+alors dans son propre message d'erreur (`items[0]` sur une liste vide,
+AddonInstaller.cpp). C'était le plantage de la Shield « par le dépôt »
+(incident 1.7.0, cause trouvée le 17/10/2026 grâce au journal envoyé par
+l'appli 1.21.1). Toutes les réponses du dépôt acceptent donc les morceaux.
+
 Depuis le dépôt 1.1.0, chaque zip a son empreinte SHA-256 (`<zip>.sha256`,
 déclarée par `<hashes>sha256</hashes>`). Comme un `sha256sum -c` avant un
 `dpkg -i` : Kodi vérifie le zip téléchargé, et surtout il le retélécharge à
@@ -114,6 +124,39 @@ def md5(text: str) -> str:
 def sha256(data: bytes) -> str:
     """Empreinte d'un zip, au format lu par Kodi dans `<zip>.sha256` (hexadécimal)."""
     return hashlib.sha256(data).hexdigest()
+
+
+_RANGE_RE = re.compile(r"bytes=(\d*)-(\d*)")
+
+
+class RangeNotSatisfiable(ValueError):
+    """Morceau demandé hors du fichier (réponse 416)."""
+
+
+def byte_range(header: str | None, size: int) -> tuple[int, int] | None:
+    """Morceau demandé par un en-tête `Range` → (début, fin incluse), ou None.
+
+    None = servir le fichier entier : pas d'en-tête, en-tête illisible, ou
+    plusieurs morceaux à la fois (« bytes=0-9,20-29 », jamais demandé par
+    Kodi ; la norme HTTP permet alors de tout renvoyer). Formes acceptées :
+    « bytes=100-199 », « bytes=100- » (jusqu'à la fin), « bytes=-22 » (les
+    22 derniers octets : c'est ainsi que Kodi lit le sommaire d'un zip).
+    """
+    match = _RANGE_RE.fullmatch((header or "").strip())
+    if not match or not (match[1] or match[2]):
+        return None
+    if match[1]:
+        start = int(match[1])
+        end = int(match[2]) if match[2] else size - 1
+        if match[2] and end < start:
+            return None  # en-tête incohérent (« bytes=10-5 ») : ignoré
+        if start >= size:
+            raise RangeNotSatisfiable(header)
+        return start, min(end, size - 1)
+    suffix = int(match[2])
+    if suffix == 0 or size == 0:
+        raise RangeNotSatisfiable(header)
+    return max(0, size - suffix), size - 1
 
 
 _ZIP_CACHE: dict[tuple[str, float], bytes] = {}

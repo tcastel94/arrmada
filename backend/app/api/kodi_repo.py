@@ -45,12 +45,30 @@ def _base_url(request: Request) -> str:
     return str(request.base_url).rstrip("/")
 
 
-def _file(content: bytes | str, media_type: str, filename: str | None = None) -> Response:
+def _file(
+    request: Request, content: bytes | str, media_type: str, filename: str | None = None
+) -> Response:
+    """Réponse du dépôt, entière ou par morceau (en-tête `Range`, voir kodi_repo.byte_range).
+
+    Kodi lit un zip sur place quand on l'installe depuis la source http:// :
+    sans réponse 206 aux morceaux demandés, la lecture échoue et Kodi plante.
+    """
     body = content.encode("utf-8") if isinstance(content, str) else content
-    headers = {"Cache-Control": "no-cache"}
+    headers = {"Cache-Control": "no-cache", "Accept-Ranges": "bytes"}
     if filename:
         headers["Content-Disposition"] = f'attachment; filename="{filename}"'
-    return Response(content=body, media_type=media_type, headers=headers)
+    try:
+        part = kodi_repo.byte_range(request.headers.get("range"), len(body))
+    except kodi_repo.RangeNotSatisfiable:
+        headers["Content-Range"] = f"bytes */{len(body)}"
+        return Response(status_code=416, headers=headers)
+    if part is None:
+        return Response(content=body, media_type=media_type, headers=headers)
+    start, end = part
+    headers["Content-Range"] = f"bytes {start}-{end}/{len(body)}"
+    return Response(
+        content=body[start : end + 1], status_code=206, media_type=media_type, headers=headers
+    )
 
 
 @router.api_route("/", methods=_GET_HEAD)
@@ -69,7 +87,7 @@ async def listing(request: Request) -> Response:
         "<!doctype html><html><head><meta charset='utf-8'><title>Dépôt Kodi ArrMada</title>"
         f"</head><body><h1>Dépôt Kodi ArrMada</h1><ul>\n{items}\n</ul></body></html>"
     )
-    return _file(html, "text/html; charset=utf-8")
+    return _file(request, html, "text/html; charset=utf-8")
 
 
 @router.get("/info.json")
@@ -87,13 +105,15 @@ async def info(request: Request) -> dict:
 @router.api_route("/addons.xml", methods=_GET_HEAD)
 async def addons_xml(request: Request) -> Response:
     root = _root(request)
-    return _file(kodi_repo.addons_xml(root, _base_url(request)), "application/xml")
+    return _file(request, kodi_repo.addons_xml(root, _base_url(request)), "application/xml")
 
 
 @router.api_route("/addons.xml.md5", methods=_GET_HEAD)
 async def addons_xml_md5(request: Request) -> Response:
     root = _root(request)
-    return _file(kodi_repo.md5(kodi_repo.addons_xml(root, _base_url(request))), "text/plain")
+    return _file(
+        request, kodi_repo.md5(kodi_repo.addons_xml(root, _base_url(request))), "text/plain"
+    )
 
 
 _REPO_ZIP = f"{kodi_repo.REPO_ID}-{kodi_repo.REPO_VERSION}.zip"
@@ -103,14 +123,18 @@ _REPO_ZIP = f"{kodi_repo.REPO_ID}-{kodi_repo.REPO_VERSION}.zip"
 @router.api_route(f"/{kodi_repo.REPO_ID}/{_REPO_ZIP}", methods=_GET_HEAD)
 async def repository_zip(request: Request) -> Response:
     root = _root(request)
-    return _file(kodi_repo.repository_zip(root, _base_url(request)), "application/zip", _REPO_ZIP)
+    return _file(
+        request, kodi_repo.repository_zip(root, _base_url(request)), "application/zip", _REPO_ZIP
+    )
 
 
 @router.api_route(f"/{kodi_repo.REPO_ID}/{_REPO_ZIP}.sha256", methods=_GET_HEAD)
 async def repository_zip_sha256(request: Request) -> Response:
     """Empreinte du zip du dépôt (Kodi la lit avant de le mettre à jour)."""
     root = _root(request)
-    return _file(kodi_repo.sha256(kodi_repo.repository_zip(root, _base_url(request))), "text/plain")
+    return _file(
+        request, kodi_repo.sha256(kodi_repo.repository_zip(root, _base_url(request))), "text/plain"
+    )
 
 
 @router.api_route(f"/{kodi_repo.REPO_ID}/icon.png", methods=_GET_HEAD)
@@ -119,7 +143,7 @@ async def repository_icon(request: Request) -> Response:
     icon = root / kodi_repo.ADDON_ID / "resources" / "icon.png"
     if not icon.is_file():
         raise HTTPException(status.HTTP_404_NOT_FOUND)
-    return _file(icon.read_bytes(), "image/png")
+    return _file(request, icon.read_bytes(), "image/png")
 
 
 @router.api_route(f"/{kodi_repo.ADDON_ID}/{{name:path}}", methods=_GET_HEAD)
@@ -128,12 +152,12 @@ async def addon_file(request: Request, name: str) -> Response:
     root = _root(request)
     version = kodi_repo.addon_version(root)
     if name == f"{kodi_repo.ADDON_ID}-{version}.zip":
-        return _file(kodi_repo.addon_zip(root), "application/zip", name)
+        return _file(request, kodi_repo.addon_zip(root), "application/zip", name)
     if name == f"{kodi_repo.ADDON_ID}-{version}.zip.sha256":
-        return _file(kodi_repo.sha256(kodi_repo.addon_zip(root)), "text/plain")
+        return _file(request, kodi_repo.sha256(kodi_repo.addon_zip(root)), "text/plain")
     # Liste blanche : seules les images déclarées (pas de « ../ » possible)
     if name in kodi_repo.addon_assets(root):
         path = root / kodi_repo.ADDON_ID / name
         media = "image/png" if name.endswith(".png") else "image/jpeg"
-        return _file(path.read_bytes(), media)
+        return _file(request, path.read_bytes(), media)
     raise HTTPException(status.HTTP_404_NOT_FOUND, "Fichier absent du dépôt")
