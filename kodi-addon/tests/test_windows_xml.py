@@ -20,6 +20,8 @@ import pytest
 import make_downloads_xml
 import make_shell_xml
 import make_textures
+import toast_data
+import toast_xml
 
 ADDON = Path(__file__).resolve().parent.parent / "script.arrmada"
 SKIN = ADDON / "resources" / "skins" / "Default"
@@ -234,6 +236,26 @@ def test_downloads_xml_matches_generator() -> None:
     assert _xml_path("downloads").read_text(encoding="utf-8") == make_downloads_xml.render(), (
         "script-arrmada-downloads.xml pas à jour : python3 kodi-addon/tools/make_downloads_xml.py"
     )
+
+
+@pytest.mark.parametrize("name", toast_data.WINDOWS)
+def test_arrmada_screens_carry_the_toast(name: str) -> None:
+    """Chaque écran plein écran porte la bulle ArrMada à jour, en dernier
+    (dessinée par-dessus le reste) ; sinon les bulles de ces écrans restent
+    invisibles (le service croit l'écran équipé)."""
+    text = (SKIN / "1080i" / name).read_text(encoding="utf-8")
+    assert toast_xml.BLOCK in text, (
+        f"bulle absente ou périmée : python3 kodi-addon/tools/toast_xml.py ({name})"
+    )
+    assert text.endswith(toast_xml.BLOCK + toast_xml.TAIL)
+    assert name in {xml for xml, _ in WINDOWS.values()}
+
+
+def test_toast_block_has_no_focusable_control() -> None:
+    """Une bulle ne doit jamais prendre la main sur la télécommande."""
+    block = ET.fromstring(f"<controls>{toast_xml.BLOCK}</controls>")
+    kinds = {c.get("type") for c in block.iter("control")}
+    assert kinds <= {"group", "image", "label", "textbox"}
 
 
 def test_shell_menu_and_rows_follow_shell_data() -> None:

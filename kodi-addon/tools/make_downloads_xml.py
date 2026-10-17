@@ -17,6 +17,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import toast_xml
+
 OUT = (
     Path(__file__).resolve().parent.parent
     / "script.arrmada"
@@ -313,7 +315,7 @@ def button(t, cid, label, width):
 T4, T5 = "\t" * 4, "\t" * 5
 
 
-def render() -> str:
+def _layout() -> str:
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <!--
   ArrMada — écran « Téléchargements » (ADR-005, lot 3 ; phase 2 de l'ADR-003).
@@ -511,6 +513,11 @@ def render() -> str:
 	</controls>
 </window>
 """
+
+
+def render() -> str:
+    """L'écran complet, avec la bulle ArrMada commune (tools/toast_xml.py)."""
+    return toast_xml.apply(_layout())
 
 
 def main(out: Path = OUT) -> None:

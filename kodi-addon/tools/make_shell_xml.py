@@ -18,6 +18,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import toast_xml
+
 OUT = (
     Path(__file__).resolve().parent.parent
     / "script.arrmada"
@@ -458,7 +460,7 @@ def render() -> str:
         down = lists[index + 1] if index + 1 < len(lists) else 0
         rows.append(row(group_id, list_id, title, shape, up, down))
     body = body.replace("@ROWS@", "\n".join(rows))
-    return f"{HEADER}\n{body}"
+    return toast_xml.apply(f"{HEADER}\n{body}")  # + bulle ArrMada commune
 
 
 def main(out: Path = OUT) -> None:

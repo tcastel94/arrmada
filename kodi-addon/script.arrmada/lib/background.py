@@ -51,6 +51,7 @@ import pairing_data
 import ready_data
 import remote_data
 import sync_data
+import toast
 import ui_common as ui
 import watch_sync
 from api import ArrMadaAPI
@@ -261,9 +262,8 @@ class BackgroundTasks:
             xbmc.executebuiltin(f"RunPlugin(plugin://script.arrmada/?{query})")
             return
         bubble = camera_data.bubble(data, image, local_time=now)
-        icon = bubble["icon"] or ui.ADDON.getAddonInfo("icon")
-        xbmcgui.Dialog().notification(
-            bubble["heading"], bubble["message"], icon, camera_data.NOTIFY_MS, True
+        toast.post(
+            bubble["heading"], bubble["message"], bubble["icon"], camera_data.NOTIFY_MS, sound=True
         )
 
     @staticmethod
@@ -298,11 +298,10 @@ class BackgroundTasks:
 
     @staticmethod
     def _show(bubbles: list) -> None:
-        """Bulles en haut de l'écran, avec l'affiche du titre, sans son."""
-        dialog = xbmcgui.Dialog()
+        """Bulles avec l'affiche du titre, sans son : en bas à droite sur un écran
+        ArrMada (le menu du haut reste visible), bulle Kodi ailleurs."""
         for bubble in bubbles:
-            icon = bubble.get("icon") or ui.ADDON.getAddonInfo("icon")
-            dialog.notification(bubble["heading"], bubble["message"], icon, 7000, False)
+            toast.post(bubble["heading"], bubble["message"], bubble.get("icon") or "", 7000)
 
     def _scan_library(self) -> None:
         """Nouveau fichier sur le NAS : la médiathèque Kodi le découvre."""

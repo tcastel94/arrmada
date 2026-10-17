@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Notifications no longer hide the top menu of the TV app (Kodi add-on 1.24.1)
+
+#### Fixed
+- Kodi's notification bubble is drawn by the skin (Aeon Nox SiLVO) at the top of the screen, right over the ArrMada menu, and an add-on cannot move it. While an ArrMada screen is shown, notifications now appear **bottom right** in an ArrMada bubble drawn by the screen itself (poster, title, two lines, red outline for errors), never focusable, queued one after the other by the service (`lib/toast.py`, logic in `lib/toast_data.py`). Elsewhere (Kodi screens, playback) the Kodi bubble is kept; if the service is not running, too
+- All add-on notifications go through it: server events, camera bubbles, `ui.notify`, `show_notification`
+- Emojis removed from notification texts (the TV font showed "📥" as an empty square)
+
+#### Added
+- `kodi-addon/tools/toast_xml.py` places the shared bubble block in the 9 full-screen windows (generated screens call it); a test checks every screen carries it, last, without any focusable control
+- Bench: `BENCH_ONLY=toast kodi-addon/bench/run.sh` (≈ 1 min, real Kodi 20): ArrMada bubble on the ArrMada home with the menu visible, cleared on time, Kodi bubble on a Kodi screen
+- Tests: 7 (glyph cleaning, bounds, service heartbeat, queue, show/clear/next, fallback when leaving ArrMada, screen condition) + XML checks
+
 ### "Prêt à regarder": subtitles at import, ready popup on the right TV, TV badge in the web app (Kodi add-on 1.24.0, lot 4 of ADR-005)
 
 #### Added

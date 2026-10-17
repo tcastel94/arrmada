@@ -241,6 +241,67 @@ def device_id_now():
         return 0
 
 
+def emit_import(**fields):
+    """Ce que publie le serveur à l'import d'un fichier (webhook Radarr/Sonarr)."""
+    query = urllib.parse.urlencode(dict(fields, type="new_import", event="Download"))
+    urllib.request.urlopen(f"{MOCK}/__emit?{query}").read()
+
+
+def toast_shown():
+    return xbmc.getInfoLabel("Window(Home).Property(arrmada.toast)") == "1"
+
+
+def toasts():
+    """1.24.1 : bulle ArrMada en bas à droite sur un écran ArrMada (menu du haut
+    visible), bulle Kodi ailleurs ; jamais d'emoji en carré."""
+    for _ in range(40):  # l'accueil ArrMada s'ouvre au démarrage
+        if shell_open():
+            break
+        wait(0.5)
+    wait(3.0)
+    emit_import(title="📥 Game of Thrones", episode_title="S03E09 · Les Pluies de Castamere",
+                quality="WEBDL-1080p", poster=f"{MOCK}/img/poster-3.jpg")  # fmt: skip
+    for _ in range(30):
+        if toast_shown():
+            break
+        wait(0.5)
+    wait(0.8)
+    log(f"accueil ArrMada : bulle ArrMada {'affichée' if toast_shown() else 'ABSENTE'}")
+    log(f"bulle Kodi pendant ce temps : {xbmc.getCondVisibility('Window.IsActive(notification)')}")
+    log(f"titre : {xbmc.getInfoLabel('Window(Home).Property(arrmada.toast.heading)')}"
+        f" · {xbmc.getInfoLabel('Window(Home).Property(arrmada.toast.message)')}")  # fmt: skip
+    shot("toast-1-accueil-arrmada")
+    for _ in range(20):  # 7 s d'affichage puis effacée
+        if not toast_shown():
+            break
+        wait(0.5)
+    log(f"bulle ArrMada effacée à l'échéance : {not toast_shown()}")
+    leave_shell()
+    emit_import(title="Dune : Deuxième partie", quality="Bluray-2160p",
+                poster=f"{MOCK}/img/poster-2.jpg")  # fmt: skip
+    kodi_bubble = False
+    for _ in range(30):
+        kodi_bubble = xbmc.getCondVisibility("Window.IsActive(notification)")
+        if kodi_bubble:
+            break
+        wait(0.5)
+    log(f"écran Kodi : bulle Kodi {'affichée' if kodi_bubble else 'ABSENTE'},"
+        f" bulle ArrMada {'AFFICHÉE' if toast_shown() else 'absente'}")  # fmt: skip
+    shot("toast-2-ecran-kodi")
+
+
+if os.environ.get("BENCH_ONLY") == "toast":
+    for _ in range(6):
+        if not xbmc.getCondVisibility("Window.IsActive(yesnodialog)"):
+            break
+        press("Back", 1, 1.0)
+    toasts()
+    xbmc.executebuiltin("Quit")
+    while not MONITOR.abortRequested():
+        wait(1)
+    raise SystemExit
+
+
 if os.environ.get("BENCH_ONLY") == "ready":
     for _ in range(6):
         if not xbmc.getCondVisibility("Window.IsActive(yesnodialog)"):

@@ -103,6 +103,16 @@ télécommande. Phase 0 : **Accueil**. Phase 2 : **Fiche média**,
   jour et la lecture réessayée pendant ~30 s.
 - Banc : `BENCH_ONLY=ready kodi-addon/bench/run.sh` (≈ 1 min).
 
+**Bulles** (1.24.1)
+- Sur un écran ArrMada, les notifications (import, téléchargement lancé,
+  caméra, résultat d'une action…) s'affichent **en bas à droite**, dans le
+  style de l'appli : le menu du haut reste visible et utilisable. Elles ne
+  prennent jamais la main sur la télécommande et s'enchaînent sans se
+  chevaucher.
+- Ailleurs (écrans de Kodi, film en cours), c'est la bulle habituelle de Kodi.
+- Emojis retirés des messages (la police de la TV les affichait en carré).
+- Banc : `BENCH_ONLY=toast kodi-addon/bench/run.sh` (≈ 1 min).
+
 **Salon** (bouton *Salon* de l'Accueil, ou en raccourci pendant un film)
 - **Lecture en cours** sur cet appareil : affiche, titre, définition et audio, temps écoulé / durée, heure de fin, pastille *En pause*. Boutons *− 30 s*, *Lecture / Pause*, *+ 30 s*, *Stop*. Ces infos viennent de Kodi lui-même : elles restent à jour même serveur coupé.
 - **Ampli Yamaha** : état, volume (% et dB), entrée, programme sonore. Boutons *Vol −*, *Vol +*, *Muet*, *Marche / Veille*. Rafraîchi toutes les 3 s, et tout de suite après chaque commande.

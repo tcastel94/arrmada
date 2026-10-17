@@ -911,5 +911,59 @@
 			<align>right</align><aligny>center</aligny>
 			<label>OK : actions   ·   Retour : accueil</label>
 		</control>
+		<!-- toast:begin · bulle ArrMada, bloc posé par tools/toast_xml.py (ne pas modifier ici) -->
+		<control type="group">
+			<left>1236</left><top>912</top>
+			<visible>!String.IsEmpty(Window(Home).Property(arrmada.toast))</visible>
+			<animation effect="slide" start="0,48" end="0,0" time="320" tween="cubic" easing="out">Visible</animation>
+			<animation effect="fade" start="0" end="100" time="320">Visible</animation>
+			<animation effect="fade" start="100" end="0" time="240">Hidden</animation>
+			<control type="image">
+				<left>-20</left><top>-20</top><width>684</width><height>164</height>
+				<texture border="56" colordiffuse="664A9EFF">arrmada/glow.png</texture>
+			</control>
+			<control type="image">
+				<width>644</width><height>124</height>
+				<texture border="26" colordiffuse="F7121826">arrmada/rounded-24.png</texture>
+			</control>
+			<control type="image">
+				<width>644</width><height>124</height>
+				<texture border="26" colordiffuse="804A9EFF">arrmada/ring-24.png</texture>
+				<visible>String.IsEmpty(Window(Home).Property(arrmada.toast.error))</visible>
+			</control>
+			<control type="image">
+				<width>644</width><height>124</height>
+				<texture border="26" colordiffuse="99F87171">arrmada/ring-24.png</texture>
+				<visible>!String.IsEmpty(Window(Home).Property(arrmada.toast.error))</visible>
+			</control>
+			<control type="image">
+				<left>18</left><top>14</top><width>64</width><height>96</height>
+				<aspectratio>keep</aspectratio>
+				<texture background="true">$INFO[Window(Home).Property(arrmada.toast.icon)]</texture>
+			</control>
+			<control type="label">
+				<left>100</left><top>14</top><width>524</width><height>36</height>
+				<font>font13</font>
+				<textcolor>FF8CC4FF</textcolor>
+				<aligny>center</aligny>
+				<label>$INFO[Window(Home).Property(arrmada.toast.heading)]</label>
+				<visible>String.IsEmpty(Window(Home).Property(arrmada.toast.error))</visible>
+			</control>
+			<control type="label">
+				<left>100</left><top>14</top><width>524</width><height>36</height>
+				<font>font13</font>
+				<textcolor>FFFCA5A5</textcolor>
+				<aligny>center</aligny>
+				<label>$INFO[Window(Home).Property(arrmada.toast.heading)]</label>
+				<visible>!String.IsEmpty(Window(Home).Property(arrmada.toast.error))</visible>
+			</control>
+			<control type="textbox">
+				<left>100</left><top>52</top><width>524</width><height>62</height>
+				<font>font12</font>
+				<textcolor>D9F5F7FA</textcolor>
+				<label>$INFO[Window(Home).Property(arrmada.toast.message)]</label>
+			</control>
+		</control>
+		<!-- toast:end -->
 	</controls>
 </window>
