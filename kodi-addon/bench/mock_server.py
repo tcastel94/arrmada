@@ -85,6 +85,7 @@ STATE = {
     "presets": 0,  # POST /api/yamaha/preset/apply reçus (relus par /__presets)
     "crash_reports": [],  # POST /api/kodi/crash-report reçus (relus par /__crash_reports)
     "downloads": [],  # POST /api/kodi/media/download reçus (relus par /__downloads)
+    "actions": [],  # actions de l'écran Téléchargements (lot 3, relues par /__actions)
     "amp": {"power": "on", "volume": 84, "mute": False, "input": "hdmi1", "sound_program": "surr_decoder"},
 }
 CAST = [
@@ -681,6 +682,7 @@ def queue() -> dict:
             "indexer": "NZBgeek",
             "movie_id": 100 + i if service == "radarr" else None,
             "series_id": 104 if service == "sonarr" else None,
+            "download_id": f"SABnzbd_nzo_{500 + i}",
             **(extra or {}),
         }
 
@@ -698,6 +700,60 @@ def queue() -> dict:
               "error": "Import bloqué : épisode déjà présent avec une meilleure qualité"}),
     ]
     return {"items": items, "total": len(items)}
+
+
+def board(base: str) -> dict:
+    """Écran Téléchargements (ADR-005, lot 3) : 3 demandes TV + le reste de la file."""
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc)
+    GB = 1024**3
+    common = {"status": "open", "mine": True, "can_cancel": True, "service_type": "radarr",
+              "protocol": "usenet", "grabbed_at": now.isoformat(), "items": 1}  # fmt: skip
+    tonight = [
+        {**common, "id": 1, "title": "Dune : Deuxième partie", "phase": "downloading",
+         "progress": 62.0, "time_left_seconds": 15 * 60, "device_name": "Salon TV",
+         "requested_at": (now - timedelta(minutes=4)).isoformat(), "quality": "Remux-2160p",
+         "size_bytes": 21.4 * GB, "arr_id": 101, "poster_url": f"{base}/img/poster-1.jpg",
+         "fanart_url": f"{base}/img/fanart-1.jpg"},
+        {**common, "id": 2, "title": "The Bear · S02E04", "phase": "blocked", "progress": 100.0,
+         "service_type": "sonarr", "device_name": "Chambre TV", "mine": False,
+         "can_cancel": False, "requested_at": (now - timedelta(minutes=12)).isoformat(),
+         "quality": "WEBDL-1080p", "size_bytes": 1.6 * GB, "arr_id": 104,
+         "error": "Unable to parse episode : nom de fichier exotique",
+         "blocked_download": {"service_type": "sonarr", "download_id": "BEAR-HASH"},
+         "poster_url": f"{base}/img/poster-3.jpg", "fanart_url": f"{base}/img/fanart-3.jpg"},
+        {**common, "id": 3, "title": "Past Lives", "status": "done", "phase": "ready",
+         "progress": 100.0, "can_cancel": False, "device_name": "Salon TV",
+         "requested_at": (now - timedelta(minutes=95)).isoformat(),
+         "closed_at": (now - timedelta(minutes=20)).isoformat(), "quality": "Bluray-1080p",
+         "size_bytes": 9.8 * GB, "arr_id": 105, "poster_url": f"{base}/img/poster-5.jpg",
+         "fanart_url": f"{base}/img/fanart-5.jpg"},
+    ]  # fmt: skip
+    cancelled = {a["id"] for a in STATE["actions"] if a.get("op") == "cancel"}
+    items = queue()["items"]
+    for i, it in enumerate(items):
+        it["poster_url"] = f"{base}/img/poster-{(i % 6) + 1}.jpg"
+    return {
+        "tonight": [c for c in tonight if c["id"] not in cancelled],
+        "queue": items,
+        "sab": {"paused": STATE["paused"], "kbpersec": 0.0 if STATE["paused"] else 49356.8},
+    }
+
+
+def diagnosis(download_id: str) -> dict:
+    if download_id == "BEAR-HASH":
+        return {"status": "ok", "case": "import", "title": "The.Bear.S02E04.1080p.WEB",
+                "action": "Importer", "can_fix": True, "steps": [
+                    {"state": "ok", "text": "Téléchargé en entier", "detail": "SABnzbd : 1,6 Go"},
+                    {"state": "err", "text": "Sonarr n'importe pas tout seul",
+                     "detail": "Unable to parse episode : nom de fichier exotique"},
+                    {"state": "next", "text": "J'importe les fichiers qu'il reconnaît",
+                     "detail": "Sans écraser de fichier ; le reste se règle dans la web app"},
+                ]}  # fmt: skip
+    return {"status": "ok", "case": "fine", "title": download_id, "action": "", "can_fix": False,
+            "steps": [{"state": "ok", "text": "Rien de bloqué",
+                       "detail": "Le téléchargement suit son cours"}]}  # fmt: skip
 
 
 def yamaha_state() -> dict:
@@ -895,6 +951,9 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
             if path == "/__presets":  # préréglages d'ampli reçus
                 self._json({"presets": STATE["presets"]})
                 return
+            if path == "/__actions":  # actions de l'écran Téléchargements (lot 3)
+                self._json(STATE["actions"])
+                return
             if path == "/__downloads":  # demandes « Télécharger » reçues (ADR-005)
                 self._json(STATE["downloads"])
                 return
@@ -933,6 +992,10 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
                     self.send_error(404)
                 else:
                     self._json(payload)
+            elif path == "/api/kodi/downloads/board":
+                self._json(board(base))
+            elif path.startswith("/api/kodi/downloads/") and path.endswith("/diagnose"):
+                self._json(diagnosis(path.split("/")[-2]))
             elif path == "/api/downloads":
                 self._json(queue())
             elif path == "/api/calendar":
@@ -1087,6 +1150,20 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
                 sys.stderr.write(f"[mock] préréglage d'ampli reçu : {data}\n")
                 amp["sound_program"] = "straight" if data.get("room") == "salon" else "surr_decoder"
                 self._json({"status": "ok", "room": data.get("room")})
+            elif path.startswith("/api/kodi/downloads/") and path.endswith("/unstick"):
+                STATE["actions"].append({"op": "unstick", "id": path.split("/")[-2]})
+                self._json({"status": "ok", "case": "import",
+                            "message": "Import lancé : 1 fichier(s)"})  # fmt: skip
+            elif path.startswith("/api/kodi/queue/"):
+                _, _, _, _, download_id, op = path.split("/")
+                STATE["actions"].append({"op": op, "id": download_id})
+                self._json({"status": "ok", "message": {"top": "Passé en tête de file",
+                            "pause": "Mis en pause", "resume": "Repris"}.get(op, "ok")})  # fmt: skip
+            elif path.startswith("/api/kodi/tv-requests/"):
+                _, _, _, _, request_id, op = path.split("/")
+                STATE["actions"].append({"op": op, "id": int(request_id)})
+                self._json({"status": "ok", "message": "Demande annulée" if op == "cancel"
+                            else "Nouvelle recherche lancée"})  # fmt: skip
             elif path.startswith("/api/kodi/downloads/"):
                 STATE["paused"] = path.endswith("/pause")
                 self._json({"status": "ok", "message": "ok"})

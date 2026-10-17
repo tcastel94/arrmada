@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pytest
 
+import make_downloads_xml
 import make_shell_xml
 import make_textures
 
@@ -41,6 +42,7 @@ WINDOWS = {
     "player": ("script-arrmada-player.xml", "player_window.py"),
     "skip": ("script-arrmada-skip.xml", "skip_window.py"),
     "download": ("script-arrmada-download.xml", "download_window.py"),
+    "unstick": ("script-arrmada-unstick.xml", "unstick_window.py"),
 }
 
 # Noms de police présents dans TOUS les jeux de polices (« fontsets ») d'Aeon
@@ -223,6 +225,13 @@ def test_shell_xml_matches_generator() -> None:
     """L'accueil média est généré (tools/make_shell_xml.py) : le fichier versionné est à jour."""
     assert _xml_path("shell").read_text(encoding="utf-8") == make_shell_xml.render(), (
         "script-arrmada-shell.xml pas à jour : python3 kodi-addon/tools/make_shell_xml.py"
+    )
+
+
+def test_downloads_xml_matches_generator() -> None:
+    """L'écran Téléchargements est généré (tools/make_downloads_xml.py) : fichier à jour."""
+    assert _xml_path("downloads").read_text(encoding="utf-8") == make_downloads_xml.render(), (
+        "script-arrmada-downloads.xml pas à jour : python3 kodi-addon/tools/make_downloads_xml.py"
     )
 
 

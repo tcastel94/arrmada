@@ -144,6 +144,56 @@ def download_sheet():
     log(f"feuille film fermée après envoi : {not sheet_open()} ; reçu : {downloads_received()}")
 
 
+def downloads_screen():
+    """ADR-005, lot 3 : écran Téléchargements (Pour ce soir, file, Débloquer, actions)."""
+    run_plugin("queue")
+    for _ in range(20):
+        if xbmc.getCondVisibility("Window.IsVisible(script-arrmada-downloads.xml)"):
+            break
+        wait(0.3)
+    wait(3.0)
+    log(f"écran Téléchargements : focus={focus()}")
+    shot("dl-10-ecran-telechargements")
+    press("Right")  # carte bloquée (The Bear)
+    wait(0.8)
+    shot("dl-11-carte-bloquee")
+    press("Select")  # menu de la carte
+    wait(1.0)
+    shot("dl-12-menu-carte")
+    press("Select")  # « Débloquer »
+    wait(2.0)
+    shot("dl-13-debloquer")
+    press("Select")  # bouton « Importer » (focus posé dessus)
+    wait(1.5)
+    shot("dl-14-debloque")
+    press("Down")  # file
+    wait(0.8)
+    shot("dl-15-file")
+    press("Select")
+    wait(1.0)
+    shot("dl-16-menu-ligne")
+    press("Select")  # « Passer en tête »
+    wait(1.5)
+    actions = json.loads(urllib.request.urlopen(f"{MOCK}/__actions").read())
+    log(f"actions reçues par le serveur : {actions}")
+    press("Back")
+    wait(1.0)
+
+
+if os.environ.get("BENCH_ONLY") == "board":
+    for _ in range(6):
+        if not xbmc.getCondVisibility("Window.IsActive(yesnodialog)"):
+            break
+        press("Back", 1, 1.0)
+    if shell_open():
+        leave_shell()
+    downloads_screen()
+    xbmc.executebuiltin("Quit")
+    while not MONITOR.abortRequested():
+        wait(1)
+    raise SystemExit
+
+
 if os.environ.get("BENCH_ONLY") == "download":
     # Kodi tout juste installé : « Activer cet add-on ? » au premier démarrage
     for _ in range(6):
@@ -1416,6 +1466,7 @@ wait(1.5)
 
 # ── ADR-005 : feuille « Télécharger » ──────────────────────────────────────
 download_sheet()
+downloads_screen()
 
 log("terminé")
 

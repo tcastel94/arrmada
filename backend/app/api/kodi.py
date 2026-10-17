@@ -13,7 +13,15 @@ from app.api.deps import get_current_user, get_db, require_admin
 from app.models.device import Device
 from app.models.service import Service
 from app.services import kodi as kodi_service
-from app.services import kodi_crash, tv_download, tv_priority, watch_summary, watch_sync
+from app.services import (
+    kodi_crash,
+    tv_board,
+    tv_download,
+    tv_priority,
+    unstick,
+    watch_summary,
+    watch_sync,
+)
 from app.services.encryption import decrypt_api_key, encrypt_api_key
 from app.services.fully_kiosk import kiosk
 from app.services.kodi import discover_kodi, sync_kodi
@@ -592,6 +600,17 @@ async def cancel_tv_request(
     return result
 
 
+@router.post("/tv-requests/{request_id}/retry")
+async def retry_tv_request(
+    request_id: int, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)
+):
+    """Relance la recherche d'une demande (même portée), qui repart pour 24 h."""
+    result = await tv_priority.retry_request(db, request_id, user)
+    if result.get("status") != "ok":
+        raise HTTPException(status_code=result.get("code", 400), detail=result["message"])
+    return result
+
+
 @router.post("/queue/{download_id}/{action}")
 async def addon_queue_item_action(
     download_id: str, action: str, db: AsyncSession = Depends(get_db)
@@ -603,6 +622,35 @@ async def addon_queue_item_action(
     if result.get("status") != "ok":
         raise HTTPException(status_code=409, detail=result["message"])
     return result
+
+
+# ── Écran Téléchargements de la TV (ADR-005, lot 3) ───────────
+@router.get("/downloads/board")
+async def addon_downloads_board(
+    db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)
+):
+    """Voie « Pour ce soir », reste de la file et état de SABnzbd, en un appel."""
+    return await tv_board.build_board(db, user.get("device_id"))
+
+
+@router.get("/downloads/{service_type}/{download_id}/diagnose")
+async def addon_download_diagnose(
+    service_type: str, download_id: str, db: AsyncSession = Depends(get_db)
+):
+    """Pourquoi ce téléchargement est bloqué, et ce que « Débloquer » fera."""
+    return await unstick.diagnose(db, service_type, download_id)
+
+
+@router.post("/downloads/{service_type}/{download_id}/unstick")
+async def addon_download_unstick(
+    service_type: str,
+    download_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    """Débloquer : le serveur refait le diagnostic et applique son remède."""
+    device = tv_priority.origin_of(user)["device_name"] if user.get("role") == "device" else None
+    return await unstick.unstick(db, service_type, download_id, device)
 
 
 # ── Kodi Maintenance & Cleanup ────────────────────────────────

@@ -44,7 +44,7 @@ Contraintes relevées dans le code (add-on 1.21.1) :
    en cours.** C'est la seule exception à la décision 1 de l'ADR-003 (rien de
    destructif sur la TV). Elle reste bornée : téléchargements retirés de la file
    sans blocklist, surveillance arrêtée si la demande avait ajouté le titre,
-   **rien n'est effacé du disque**, et le serveur vérifie que c'est bien la TV
+   **rien n'est effacé dans la médiathèque** (seul le téléchargement en cours est retiré du client, avec ses fichiers partiels), et le serveur vérifie que c'est bien la TV
    d'origine.
 6. **Usenet d'abord pour « ce soir »** (à appliquer au choix automatique de
    release, lot 2) : la priorité ne s'applique qu'à SABnzbd ; Deluge
@@ -59,7 +59,7 @@ Contraintes relevées dans le code (add-on 1.21.1) :
 |---|---|---|
 | 1 | Serveur : client SABnzbd par élément, table `tv_requests`, gardien, routes TV | ✅ |
 | 2 | TV : feuille « Télécharger » (série / saison / épisode, « Pour ce soir »), ajout Sonarr `monitor: none` | ✅ appli 1.22.0 |
-| 3 | TV : écran Téléchargements refait (voie « Pour ce soir », actions par élément, Débloquer) | à faire |
+| 3 | TV : écran Téléchargements refait (voie « Pour ce soir », actions par élément, Débloquer) | ✅ appli 1.23.0 |
 | 4 | Bazarr à l'import, notification « Prêt à regarder » sur la bonne TV, badge TV dans la web app | à faire |
 
 ## Routes ajoutées (périmètre TV)
@@ -91,6 +91,22 @@ Comment le lot 2 applique les décisions :
   recherche automatique classique du *arr.
 - Film déjà présent avec son fichier : réponse « déjà sur le NAS », rien n'est
   lancé (la « Meilleure version » reste dans la fiche).
+
+Lot 3 :
+
+| Route | Rôle |
+|---|---|
+| `GET /api/kodi/downloads/board` | Tout l'écran en un appel : cartes « Pour ce soir » (phase, progression, temps restant, TV, annulable), reste de la file, état de SABnzbd |
+| `GET /api/kodi/downloads/{radarr\|sonarr}/{download_id}/diagnose` | Diagnostic d'un téléchargement : ce qui va, ce qui bloque, ce que « Débloquer » fera |
+| `POST /api/kodi/downloads/{radarr\|sonarr}/{download_id}/unstick` | Le serveur refait le diagnostic et applique le remède |
+| `POST /api/kodi/tv-requests/{id}/retry` | Relance la recherche d'une demande, même portée ; elle repart pour 24 h |
+
+« Débloquer » (`services/unstick.py`) réutilise ce qui existe : le planificateur
+des packs de saison bloqués (`blocked_imports.plan_for_download`, mêmes
+garde-fous que la tâche de fond), l'import manuel des *arr limité aux fichiers
+**sans aucun refus** (un fichier qui en écraserait un autre porte toujours un
+refus), et liste noire + recherche pour un échec. Pas de script shell : il n'y
+en a pas sur le serveur, ce sont ces routines Python.
 
 `GET /api/downloads` donne en plus `download_id`, `episode_ids`, `season_number`
 et `tv_request` (TV d'origine, prioritaire ou non) pour chaque téléchargement.

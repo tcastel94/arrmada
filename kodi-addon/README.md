@@ -61,18 +61,34 @@ télécommande. Phase 0 : **Accueil**. Phase 2 : **Fiche média**,
 - Actions : **Lire** (médiathèque Kodi de l'appareil + préréglage Yamaha de la pièce), **Bande-annonce** (films, add-on YouTube requis), **Meilleure version** (recherche Radarr/Sonarr), **Sous-titres** (recherche Bazarr, films).
 - L'écran s'affiche tout de suite avec ce que l'Accueil connaît déjà (titre, affiche, fanart), puis se complète en arrière-plan (environ 0,5 s).
 
-**Téléchargements**
-- Toute la file Radarr/Sonarr : barre de progression, pourcentage, temps restant, **débit estimé** (calculé entre deux rafraîchissements), taille, statut coloré (*En cours*, *En pause*, *En attente*, *Import en attente*, *Erreur*) et la raison d'une erreur d'import.
-- Rafraîchi toutes les 5 s, sans clignotement : seules les valeurs changent, la sélection reste en place.
-- OK sur une ligne : ouvre la fiche du titre (et affiche le détail d'une erreur).
-- Boutons **Tout mettre en pause** / **Tout reprendre**.
+**Téléchargements** (refait en 1.23.0, ADR-005 lot 3)
+- **Pour ce soir** : une carte par demande lancée depuis une TV, avec l'heure
+  à laquelle ce sera prêt (« Prêt vers 20:58 », fin du téléchargement + 2 min
+  d'import), les étapes *Trouvé → Téléchargement → Import → Prêt*, la TV qui
+  l'a lancée, et l'erreur si c'est bloqué. Les demandes terminées restent 12 h
+  (« Prêt à regarder »). Sans demande : un rappel du mode d'emploi.
+- **File d'attente** : le reste de la file Radarr/Sonarr (affiche, barre,
+  pourcentage, temps restant, **débit estimé**, statut coloré).
+- **OK = menu d'actions**, rappelé en bas de l'élément sélectionné
+  (« OK : En tête · Pause · Fiche ») :
+  - ligne Usenet : *Passer en tête* (juste derrière les demandes TV),
+    *Mettre en pause* / *Reprendre* (cet élément seul) ;
+  - ligne ou carte bloquée : **Débloquer** (voir plus bas) ;
+  - carte : *Annuler ma demande* (seulement la TV qui l'a lancée, rien n'est
+    effacé de la médiathèque), *Relancer la recherche* (introuvable) ;
+  - partout : *Fiche du titre*.
+- **Pause sauf ce soir** / **Tout reprendre** : pause de tout SABnzbd ; les
+  demandes TV (priorité Force) continuent pendant la pause.
+- **Débloquer** : le serveur fait un diagnostic (point vert : ce qui va, rouge :
+  ce qui bloque, bleu : ce que le bouton va faire) et propose UNE action :
+  pack de saison refusé par Sonarr → import épisode par épisode ; téléchargé
+  mais pas importé → import des fichiers reconnus ; échec → cette version en
+  liste noire et recherche d'une autre. Jamais d'écrasement ni d'effacement.
+- Rafraîchi toutes les 5 s en un seul appel, sans clignotement.
+- Serveur plus ancien (pas de tableau) : la file seule, comme avant.
 
-> ⚠️ **La pause porte sur toute la file SABnzbd**, pas sur un seul titre :
-> c'est ce que fait le serveur aujourd'hui (pause/reprise globales). Les
-> lignes passent à « En pause » avec un délai d'environ une minute, le temps
-> que Radarr/Sonarr relisent SABnzbd. Une pause titre par titre demandera
-> une évolution du backend. Aucune suppression n'est possible depuis la TV
-> (décision 1 de l'ADR-003).
+> ⚠️ Les torrents (Deluge) n'ont ni *Passer en tête* ni *Pause* : seul
+> SABnzbd sait le faire. *Débloquer* et *Fiche* restent possibles.
 
 **Salon** (bouton *Salon* de l'Accueil, ou en raccourci pendant un film)
 - **Lecture en cours** sur cet appareil : affiche, titre, définition et audio, temps écoulé / durée, heure de fin, pastille *En pause*. Boutons *− 30 s*, *Lecture / Pause*, *+ 30 s*, *Stop*. Ces infos viennent de Kodi lui-même : elles restent à jour même serveur coupé.

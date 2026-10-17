@@ -101,7 +101,7 @@ def is_lan_request(client_host: str | None, forwarded_for: str | None) -> bool:
 # (lecture et « marquer lu »), recommandations, flux temps réel (SSE).
 # Aucune suppression, aucun nettoyage, aucune configuration (ADR-003, décision 1).
 # Seule exception, bornée : annuler SA propre demande « pour ce soir » tant
-# qu'elle est en cours (file vidée, rien d'effacé du disque).
+# qu'elle est en cours (téléchargement retiré du client, médiathèque intacte).
 
 _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
     (method, re.compile(pattern))
@@ -124,8 +124,13 @@ _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         # Demandes « pour ce soir » : liste, annulation de SA demande (vérifié
         # côté serveur), pause / reprise / tête de file d'UN téléchargement
         ("GET", r"/api/kodi/tv-requests"),
-        ("POST", r"/api/kodi/tv-requests/\d+/cancel"),
+        ("POST", r"/api/kodi/tv-requests/\d+/(cancel|retry)"),
         ("POST", r"/api/kodi/queue/[A-Za-z0-9_.\-]+/(pause|resume|top)"),
+        # Écran Téléchargements (lot 3) : tableau, diagnostic, « Débloquer »
+        # (import sans écrasement ou autre release ; médiathèque jamais touchée)
+        ("GET", r"/api/kodi/downloads/board"),
+        ("GET", r"/api/kodi/downloads/(radarr|sonarr)/[A-Za-z0-9_.\-]+/diagnose"),
+        ("POST", r"/api/kodi/downloads/(radarr|sonarr)/[A-Za-z0-9_.\-]+/unstick"),
         ("GET", r"/api/media(/.*)?"),
         ("GET", r"/api/downloads"),
         ("GET", r"/api/calendar(/.*)?"),

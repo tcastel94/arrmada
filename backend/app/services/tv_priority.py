@@ -597,7 +597,8 @@ async def cancel_request(db: AsyncSession, request_id: int, user: dict[str, Any]
     Seule la TV qui l'a lancée peut l'annuler (la web app aussi). On retire
     ses téléchargements de la file, sans blocklist, et si la demande avait
     ajouté le titre, on arrête sa surveillance pour qu'il ne revienne pas.
-    Rien n'est supprimé du disque.
+    La médiathèque n'est jamais touchée (seul le téléchargement en cours est
+    retiré du client, avec ses fichiers partiels).
     """
     from app.services.activity_log import log_event
 
@@ -651,6 +652,53 @@ async def cancel_request(db: AsyncSession, request_id: int, user: dict[str, Any]
         detail=f"{removed} téléchargement(s) retiré(s) de la file",
     )
     return {"status": "ok", "removed": removed, "message": f"« {req.title} » annulé"}
+
+
+async def retry_request(db: AsyncSession, request_id: int, user: dict[str, Any]) -> dict[str, Any]:
+    """« Relancer la recherche » d'une demande (rien trouvé, ou encore en recherche).
+
+    Même portée que la demande (film, série, saison, épisodes) ; la demande
+    repart comme neuve (ordre d'arrivée : maintenant), pour 24 h de plus.
+    """
+    from app.services.activity_log import log_event
+
+    req = await db.get(TvRequest, request_id)
+    if req is None:
+        return {"status": "error", "code": 404, "message": "Demande introuvable"}
+    if req.status not in ("open", "expired"):
+        return {"status": "error", "code": 409, "message": "Cette demande est déjà terminée"}
+    services = await _services(db, (req.service_type,))
+    if not services:
+        return {"status": "error", "code": 409, "message": "Service non configuré"}
+    client = _arr_client(services[0])
+    try:
+        if isinstance(client, RadarrClient):
+            await client.search_movie(req.arr_id)
+        elif req.scope == "episode" and req.episode_ids:
+            await client.search_episodes(list(req.episode_ids))
+        elif req.scope == "season" and req.season is not None:
+            await client.search_season(req.arr_id, req.season)
+        else:
+            await client.search_series(req.arr_id)
+    except Exception as exc:
+        logger.warning("Nouvelle recherche de la demande %s impossible : %s", req.id, exc)
+        return {"status": "error", "code": 502, "message": f"Recherche impossible : {exc}"}
+    finally:
+        await client.close()
+    req.status, req.closed_at = "open", None
+    req.requested_at, req.grabbed_at, req.last_seen_at = _now(), None, None
+    await db.commit()
+    await log_event(
+        category="media",
+        action="tv_request_retry",
+        status="ok",
+        source="kodi",
+        media_type="movie" if req.service_type == "radarr" else "series",
+        media_id=req.arr_id,
+        title=req.title,
+        device=origin_of(user)["device_name"] if user.get("role") == "device" else None,
+    )
+    return {"status": "ok", "message": f"Nouvelle recherche lancée pour « {req.title} »"}
 
 
 async def _stop_monitoring(client: RadarrClient | SonarrClient, req: TvRequest) -> None:

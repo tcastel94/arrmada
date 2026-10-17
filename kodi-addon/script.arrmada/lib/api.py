@@ -279,6 +279,40 @@ class ArrMadaAPI:
         """Feuille « Télécharger » : film, série, saison ou épisodes (ADR-005)."""
         return cls._request("/api/kodi/media/download", method="POST", data=payload, timeout=30)
 
+    # ── Écran Téléchargements (ADR-005, lot 3) ──────────────────────────────
+    @classmethod
+    def get_board(cls) -> dict:
+        """Voie « Pour ce soir », reste de la file et état de SABnzbd, en un appel."""
+        return cls._request("/api/kodi/downloads/board", method="GET", timeout=15)
+
+    @classmethod
+    def queue_action(cls, download_id: str, action: str) -> dict:
+        """pause | resume | top sur UN téléchargement SABnzbd."""
+        quoted = urllib.parse.quote(download_id, safe="")
+        return cls._request(f"/api/kodi/queue/{quoted}/{action}", method="POST", data={}, timeout=15)
+
+    @classmethod
+    def cancel_request(cls, request_id: int) -> dict:
+        """Annule SA demande « pour ce soir » (médiathèque jamais touchée)."""
+        return cls._request(f"/api/kodi/tv-requests/{int(request_id)}/cancel", method="POST", data={}, timeout=20)
+
+    @classmethod
+    def retry_request(cls, request_id: int) -> dict:
+        """Relance la recherche d'une demande (même portée)."""
+        return cls._request(f"/api/kodi/tv-requests/{int(request_id)}/retry", method="POST", data={}, timeout=20)
+
+    @classmethod
+    def diagnose_download(cls, service_type: str, download_id: str) -> dict:
+        """Pourquoi ce téléchargement est bloqué, et ce que « Débloquer » fera."""
+        quoted = urllib.parse.quote(download_id, safe="")
+        return cls._request(f"/api/kodi/downloads/{service_type}/{quoted}/diagnose", method="GET", timeout=20)
+
+    @classmethod
+    def unstick_download(cls, service_type: str, download_id: str) -> dict:
+        """Débloquer : le serveur refait le diagnostic et applique le remède."""
+        quoted = urllib.parse.quote(download_id, safe="")
+        return cls._request(f"/api/kodi/downloads/{service_type}/{quoted}/unstick", method="POST", data={}, timeout=40)
+
     @classmethod
     def get_releases(cls, media_type: str, arr_id: int) -> dict:
         """Fetch candidate releases from indexers."""
