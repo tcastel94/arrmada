@@ -53,7 +53,7 @@ def add_media_item(item: dict):
     rating = item.get("rating") or 0.0
 
     # Badge in title
-    badge = " [✅ En médiathèque]" if in_lib else " [➕ Demander]"
+    badge = " [En médiathèque]" if in_lib else " [Demander]"
     year_str = f" ({year})" if year else ""
     display_title = f"{title}{year_str}{badge}"
 
@@ -227,18 +227,18 @@ def show_media_details_dialog(params: dict):
     if year:
         header += f" ({year})"
 
-    status_tag = "✅ Déjà dans votre médiathèque" if in_lib else "➕ Non possédé"
+    status_tag = "Déjà dans votre médiathèque" if in_lib else "Non possédé"
 
     options = []
     if in_lib and arr_id:
-        options.append(("🎯 Choisir une Release manuellement (Torrent vs Usenet)", "pick_release"))
-        options.append(("🚀 Forcer la recherche automatique d'une meilleure release", "auto_search"))
-        options.append(("📖 Lire le synopsis complet", "show_plot"))
+        options.append(("Choisir une Release manuellement (Torrent vs Usenet)", "pick_release"))
+        options.append(("Forcer la recherche automatique d'une meilleure release", "auto_search"))
+        options.append(("Lire le synopsis complet", "show_plot"))
     else:
-        options.append(("🎛️ Demander & Télécharger (Qualité 1080p/4K, Dossier, Releases)", "add_wizard"))
-        options.append(("📖 Lire le synopsis complet", "show_plot"))
+        options.append(("Demander & Télécharger (Qualité 1080p/4K, Dossier, Releases)", "add_wizard"))
+        options.append(("Lire le synopsis complet", "show_plot"))
 
-    choice = xbmcgui.Dialog().select(f"🏴‍☠️ {header} — {status_tag}", [o[0] for o in options])
+    choice = xbmcgui.Dialog().select(f"{header} — {status_tag}", [o[0] for o in options])
     if choice < 0:
         return
 
@@ -285,8 +285,8 @@ def show_media_details_dialog(params: dict):
 
         # Step 3: Mode
         mode_choice = xbmcgui.Dialog().select(f"Étape 3/3 — Mode de téléchargement", [
-            "🚀 Téléchargement Automatique (Meilleure release)",
-            "🎯 Choisir la Release manuellement (Torrent vs Usenet)",
+            "Téléchargement Automatique (Meilleure release)",
+            "Choisir la Release manuellement (Torrent vs Usenet)",
         ])
         if mode_choice < 0:
             return
@@ -356,10 +356,10 @@ def show_downloads_dialog():
     item_id = selected.get("id") or idx + 1
 
     actions = [
-        "▶️ Reprendre le telechargement (Resume)",
-        "⏸️ Mettre en pause (Pause)",
-        "🗑️ Annuler et supprimer du client",
-        "⛔ Supprimer et bloquer cette version (Blocklist)",
+        "Reprendre le telechargement (Resume)",
+        "Mettre en pause (Pause)",
+        "Annuler et supprimer du client",
+        "Supprimer et bloquer cette version (Blocklist)",
     ]
 
     action_idx = xbmcgui.Dialog().select(f"Action pour : {title[:50]}...", actions)

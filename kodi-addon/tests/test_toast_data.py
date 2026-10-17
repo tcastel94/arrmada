@@ -14,6 +14,8 @@ def test_clean_drops_glyphs_missing_from_the_tv_font() -> None:
     )
     assert td.clean("✅ Prêt · 4K ▶ Lire ⚠️") == "Prêt · 4K Lire"
     assert td.clean("  Accents é à ç…  ") == "Accents é à ç…"
+    # Flèche de chemin : « › » (dans la police), pas un carré ni un trou
+    assert td.clean("Accueil → Réglages → Appairer") == "Accueil › Réglages › Appairer"
     assert td.clean(None) == ""
 
 

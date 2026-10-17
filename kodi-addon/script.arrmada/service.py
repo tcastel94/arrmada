@@ -485,7 +485,7 @@ def _start_tasks(monitor: xbmc.Monitor, guard_file: str):
         )
         show_notification(
             "ArrMada · mode minimal",
-            "Kodi s'est fermé 2 fois au démarrage. Réglage : Paramètres → Avancé",
+            "Kodi s'est fermé 2 fois au démarrage. Réglage : Paramètres › Avancé",
             is_error=False,
             time_ms=12000,
         )

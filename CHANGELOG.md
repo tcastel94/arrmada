@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### No more emojis in the legacy TV menus (Kodi add-on 1.24.2)
+
+#### Fixed
+- "Options avancées" wizard, release picker, search results and the context menu showed their emojis (✅ ➕ 🎯 🚀 🏴‍☠️…) as empty squares with the TV font: removed, texts unchanged otherwise
+- Path arrows in displayed texts ("Paramètres → Avancé") become "›", which the font draws; bubbles convert them the same way
+
+#### Added
+- `tests/test_no_emoji.py`: every string of the add-on's Python code is checked, a new emoji fails CI (arrows stay allowed in docstrings and logs)
+
 ### Notifications no longer hide the top menu of the TV app (Kodi add-on 1.24.1)
 
 #### Fixed

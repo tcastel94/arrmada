@@ -28,7 +28,7 @@ def _format_size(size_bytes: int | None) -> str:
 def pick_and_grab_release(media_type: str, arr_id: int, title: str):
     """Fetch releases from indexers and let user choose Torrent or Usenet release."""
     p_dialog = xbmcgui.DialogProgress()
-    p_dialog.create("🏴‍☠️ ArrMada", f"Recherche des releases pour {title}...\n(Interrogation Prowlarr / Usenet / Torrent)")
+    p_dialog.create("ArrMada", f"Recherche des releases pour {title}...\n(Interrogation Prowlarr / Usenet / Torrent)")
     p_dialog.update(30)
 
     res = ArrMadaAPI.get_releases(media_type, arr_id)
@@ -52,7 +52,7 @@ def pick_and_grab_release(media_type: str, arr_id: int, title: str):
         size = r.get("size_human", "")
         indexer = r.get("indexer", "")
         rel_title = r.get("title", "")
-        rejected_mark = " ⚠️ [Rejeté]" if r.get("rejected") else ""
+        rejected_mark = " [Rejeté]" if r.get("rejected") else ""
         labels.append(f"[{proto_icon} | {qual} | {size} | {indexer}]{rejected_mark}\n{rel_title}")
 
     choice = xbmcgui.Dialog().select(f"Releases pour {title} ({len(releases)})", labels)
@@ -87,12 +87,12 @@ def pick_and_grab_release(media_type: str, arr_id: int, title: str):
 
 
 def main():
-    query = xbmcgui.Dialog().input("🏴‍☠️ ArrMada : Rechercher un film ou une série")
+    query = xbmcgui.Dialog().input("ArrMada : Rechercher un film ou une série")
     if not query:
         return
 
     p_dialog = xbmcgui.DialogProgress()
-    p_dialog.create("🏴‍☠️ ArrMada", f"Recherche de '{query}'...")
+    p_dialog.create("ArrMada", f"Recherche de '{query}'...")
     p_dialog.update(50)
 
     results = ArrMadaAPI.lookup_media(query)
@@ -105,9 +105,9 @@ def main():
     # Build result list labels
     labels = []
     for item in results:
-        mtype = "🎬 Film" if item.get("type") == "movie" else "📺 Série"
+        mtype = "Film" if item.get("type") == "movie" else "Série"
         year = f" ({item.get('year')})" if item.get("year") else ""
-        in_lib = " [✅ Déjà dans la médiathèque]" if item.get("in_library") else " [➕ Non possédé]"
+        in_lib = " [Déjà dans la médiathèque]" if item.get("in_library") else " [Non possédé]"
         labels.append(f"{mtype} : {item.get('title')}{year}{in_lib}")
 
     choice = xbmcgui.Dialog().select(f"Résultats ({len(results)})", labels)
@@ -123,10 +123,10 @@ def main():
     # Case A: Already in library
     if in_library and arr_id:
         action_choice = xbmcgui.Dialog().select(
-            f"🎬 {title} (Déjà possédé)",
+            f"{title} (Déjà possédé)",
             [
-                "🎯 Choisir une Release manuellement (Torrent vs Usenet)",
-                "🚀 Forcer la recherche automatique d'une meilleure version",
+                "Choisir une Release manuellement (Torrent vs Usenet)",
+                "Forcer la recherche automatique d'une meilleure version",
             ]
         )
         if action_choice == 0:
@@ -168,8 +168,8 @@ def main():
 
     # Step 3: Download Mode
     mode_options = [
-        "🚀 Téléchargement Automatique (ArrMada choisit la meilleure release)",
-        "🎯 Choisir la Release manuellement (Sélection Torrent / Usenet)",
+        "Téléchargement Automatique (ArrMada choisit la meilleure release)",
+        "Choisir la Release manuellement (Sélection Torrent / Usenet)",
     ]
     mode_choice = xbmcgui.Dialog().select(f"Étape 3/3 — Mode de recherche", mode_options)
     if mode_choice < 0:

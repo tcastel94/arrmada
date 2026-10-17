@@ -110,7 +110,9 @@ télécommande. Phase 0 : **Accueil**. Phase 2 : **Fiche média**,
   prennent jamais la main sur la télécommande et s'enchaînent sans se
   chevaucher.
 - Ailleurs (écrans de Kodi, film en cours), c'est la bulle habituelle de Kodi.
-- Emojis retirés des messages (la police de la TV les affichait en carré).
+- Emojis retirés des messages (la police de la TV les affichait en carré),
+  et des menus « Options avancées » / menu contextuel (1.24.2) ; les flèches
+  de chemin deviennent « › ». Un test refuse tout nouvel emoji dans l'appli.
 - Banc : `BENCH_ONLY=toast kodi-addon/bench/run.sh` (≈ 1 min).
 
 **Salon** (bouton *Salon* de l'Accueil, ou en raccourci pendant un film)

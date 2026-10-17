@@ -57,15 +57,17 @@ QUEUE_MAX = 4  # au-delà, les plus anciennes sont abandonnées
 BEAT_STALE = 10  # s sans battement : service arrêté
 
 # Emojis et pictogrammes absents de la police de la TV (carré vide à l'écran)
-_SYMBOLS = re.compile(
+SYMBOLS = re.compile(
     "[\U0001f000-\U0001faff\u2190-\u21ff\u2300-\u23ff\u25a0-\u25ff"
     "\u2600-\u27bf\u2b00-\u2bff\ufe0f\u200d]"
 )
+# Flèches de chemin (« Paramètres → Avancé ») : « › », que la police sait dessiner
+_ARROWS = str.maketrans({"\u2192": "\u203a", "\u21d2": "\u203a", "\u279c": "\u203a"})
 
 
 def clean(text: Any) -> str:
     """Texte affichable par la police de la TV : sans emoji, espaces normalisés."""
-    return " ".join(_SYMBOLS.sub(" ", str(text or "")).split())
+    return " ".join(SYMBOLS.sub(" ", str(text or "").translate(_ARROWS)).split())
 
 
 def bubble(
