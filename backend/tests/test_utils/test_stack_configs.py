@@ -148,3 +148,26 @@ def test_jellyfin_api_key_from_db(tmp_path: Path) -> None:
 def test_missing_or_empty_appdata(tmp_path: Path) -> None:
     assert scan_appdata(tmp_path / "nope") == []
     assert scan_appdata(tmp_path) == []
+
+
+def test_jellyfin_key_still_in_wal_journal(tmp_path: Path) -> None:
+    """A key created minutes ago lives in jellyfin.db-wal, not yet in the db.
+
+    Regression: opening with ``immutable=1`` ignored the journal (key missing).
+    """
+    db_path = tmp_path / "jellyfin" / "data" / "data" / "jellyfin.db"
+    db_path.parent.mkdir(parents=True)
+    writer = sqlite3.connect(db_path)
+    writer.execute("PRAGMA journal_mode=WAL")
+    writer.execute("PRAGMA wal_autocheckpoint=0")  # keep everything in the -wal file
+    writer.execute(
+        "CREATE TABLE ApiKeys (Id INTEGER, DateCreated TEXT, Name TEXT, AccessToken TEXT)"
+    )
+    writer.execute("INSERT INTO ApiKeys VALUES (1, '2026-10-17', 'arrmada', 'fresh-token')")
+    writer.commit()
+    try:
+        assert Path(f"{db_path}-wal").stat().st_size > 0
+        (jf,) = scan_appdata(tmp_path)
+        assert jf.api_key == "fresh-token"
+    finally:
+        writer.close()

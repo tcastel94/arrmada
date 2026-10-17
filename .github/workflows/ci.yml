@@ -78,6 +78,33 @@ jobs:
       - name: Build
         run: npm run build
 
+  # ── Installeur ─────────────────────────────────────────────
+  installer:
+    name: "Installer — shellcheck & dry-run"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ShellCheck
+        run: shellcheck install.sh docker/entrypoint.sh docker/arrmada-cli deploy.sh
+
+      - name: Dry-run on every platform
+        run: |
+          for platform in linux synology unraid macos; do
+            for torrent in deluge qbittorrent none; do
+              echo "::group::${platform} / ${torrent}"
+              ARRMADA_PLATFORM=$platform ./install.sh --dry-run --yes --torrent $torrent > out.log 2>&1 \
+                || { cat out.log; exit 1; }
+              grep -q "name: arrmada-stack" out.log
+              echo "::endgroup::"
+            done
+          done
+
+      - name: Dry-run under bash 3.2 (macOS)
+        run: |
+          docker run --rm -v "$PWD/install.sh:/install.sh:ro" -e ARRMADA_PLATFORM=macos -e HOME=/Users/ci \
+            bash:3.2 bash /install.sh --dry-run --yes --torrent qbittorrent
+
   # ── Docker ─────────────────────────────────────────────────
   # Construit l'image unique (sans la publier) puis la démarre pour de
   # vrai : passerelle + API + interface doivent répondre sur :3420.

@@ -6,6 +6,8 @@
   prowlarr_app    Prowlarr → Settings → Apps → Sonarr/Radarr/Lidarr/Readarr
   download_client Sonarr/Radarr/… → Settings → Download clients → SABnzbd/Deluge/qBittorrent
   bazarr_link     Bazarr → Settings → Sonarr / Radarr
+  root_folder     Sonarr/Radarr → Media management → Root folders (TRaSH layout,
+                  only when install.sh created the stack: see ``stack.json``)
 
 Each action is idempotent: if the target already has an equivalent entry
 (same implementation, same port) it is reported as ``done`` and never
@@ -20,6 +22,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -166,6 +169,21 @@ def _from_config(
     )
 
 
+def load_stack_metadata() -> dict[str, Any]:
+    """``DATA_DIR/stack.json``, written by install.sh (0600, owned by PUID).
+
+    Holds the torrent passwords install.sh generated (Deluge / qBittorrent
+    only keep a hash: we could not read them back) and the TRaSH root
+    folders. Absent for stacks not created by the installer.
+    """
+    path = Path(settings.DATA_DIR) / "stack.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 async def build_inventory(
     db: AsyncSession,
     *,
@@ -173,7 +191,13 @@ async def build_inventory(
     credentials: dict[str, dict[str, str]] | None = None,
 ) -> tuple[list[App], bool]:
     """Merge ArrMada's registered services with the configs found in appdata."""
-    credentials = credentials or {}
+    # Passwords typed in the UI win over the ones install.sh generated.
+    stored = load_stack_metadata().get("credentials") or {}
+    credentials = {
+        k: {**(stored.get(k) or {}), **(credentials or {}).get(k, {})}
+        for k in {*stored, *(credentials or {})}
+        if isinstance(stored.get(k, {}), dict)
+    }
     user_hosts = [h.strip() for h in (user_hosts or []) if h and h.strip()]
 
     rows = (await db.execute(select(Service).where(Service.type.in_(REGISTRABLE)))).scalars().all()
@@ -458,6 +482,29 @@ async def build_plan(
                 action.status = "done"
             actions.append(action)
 
+    # 5. Root folders (TRaSH layout created by install.sh)
+    root_folders = load_stack_metadata().get("root_folders") or {}
+    for mgr in managers:
+        path = root_folders.get(mgr.type)
+        if not path or not mgr.usable:
+            continue
+        existing = await _existing(mgr, "/rootfolder")
+        if existing is None:
+            continue
+        paths = {str(e.get("path", "")).rstrip("/") for e in existing}
+        if paths and path.rstrip("/") not in paths:
+            continue  # the user already chose other root folders: leave them
+        actions.append(
+            Action(
+                id=f"root_folder:{mgr.name}:{path}",
+                kind="root_folder",
+                target=mgr.name,
+                subject=path,
+                title=f"{mgr.name} : dossier médias {path}",
+                status="done" if paths else "todo",
+            )
+        )
+
     return Plan(
         apps=apps, actions=actions, appdata_dir=settings.APPDATA_DIR, appdata_mounted=mounted
     )
@@ -644,6 +691,14 @@ async def _download_client(mgr: App, dl: App) -> str:
     raise RuntimeError(" | ".join(errors))
 
 
+async def _root_folder(mgr: App, path: str) -> str:
+    async with _arr_client(mgr) as client:
+        resp = await client.post("/rootfolder", json={"path": path})
+        if resp.status_code >= 400:
+            raise RuntimeError(_error_text(resp))
+    return f"{path} ajouté comme dossier racine de {mgr.name}"
+
+
 async def _bazarr_link(bazarr: App, mgr: App) -> str:
     host, port, ssl, url_base = _split(mgr.url or "")
     kind = mgr.type
@@ -696,6 +751,8 @@ async def apply_plan(
                 )
             elif action.kind == "bazarr_link":
                 message = await _bazarr_link(_app(plan, action.target), _app(plan, action.subject))
+            elif action.kind == "root_folder":
+                message = await _root_folder(_app(plan, action.target), action.subject)
             else:  # pragma: no cover - plan only emits the kinds above
                 raise RuntimeError(f"type d'action inconnu : {action.kind}")
             results.append(ActionResult(action.id, True, message))

@@ -26,7 +26,9 @@ import hmac
 import json
 import os
 import re
+import shutil
 import sqlite3
+import tempfile
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -364,14 +366,26 @@ def parse_qbittorrent_conf(path: Path, root: Path) -> FoundConfig | None:
 
 def parse_jellyfin_db(path: Path, root: Path) -> FoundConfig | None:
     """Read the first API key from jellyfin.db (Jellyfin ≥ 10.9)."""
-    # immutable=1: the mount is read-only, SQLite must not try to write WAL files.
-    uri = f"file:{path}?mode=ro&immutable=1"
+    # Jellyfin keeps recent writes in jellyfin.db-wal. On a read-only mount
+    # SQLite can neither replay that journal in place nor create its -shm
+    # file, and "immutable=1" would silently IGNORE the journal (a key created
+    # minutes ago would be missing). So read a private copy of db + wal + shm.
     try:
-        with sqlite3.connect(uri, uri=True, timeout=2) as conn:
-            row = conn.execute(
-                "SELECT AccessToken FROM ApiKeys ORDER BY DateCreated LIMIT 1"
-            ).fetchone()
-    except sqlite3.Error:
+        with tempfile.TemporaryDirectory(prefix="arrmada-jf-") as tmp:
+            copy = Path(tmp) / "jellyfin.db"
+            shutil.copyfile(path, copy)
+            for suffix in ("-wal", "-shm"):
+                journal = Path(f"{path}{suffix}")
+                if journal.is_file():
+                    shutil.copyfile(journal, Path(f"{copy}{suffix}"))
+            conn = sqlite3.connect(copy, timeout=2)
+            try:
+                row = conn.execute(
+                    "SELECT AccessToken FROM ApiKeys ORDER BY DateCreated LIMIT 1"
+                ).fetchone()
+            finally:
+                conn.close()
+    except (sqlite3.Error, OSError):
         return None
     port = 8096
     # network.xml lives in the config dir: same folder or a few levels up.

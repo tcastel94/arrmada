@@ -26,6 +26,7 @@ from typing import Any
 
 import httpx
 
+from app.services.jellyfin import auth_headers as jellyfin_auth
 from app.services.stack.configs import FoundConfig
 from app.utils.logger import get_logger
 
@@ -170,9 +171,14 @@ async def _check(
                 )
             return details
         if t == "jellyfin":
-            resp = await client.get(
-                f"{base}/System/Info", headers={"X-Emby-Token": config.api_key or ""}
-            )
+            if not config.api_key:
+                # No key yet: still locate it (public endpoint), so the UI says
+                # "create an API key" instead of a misleading "unreachable".
+                resp = await client.get(f"{base}/System/Info/Public")
+                if resp.status_code != 200 or "Jellyfin" not in resp.text:
+                    return None
+                return {"version": resp.json().get("Version")}
+            resp = await client.get(f"{base}/System/Info", headers=jellyfin_auth(config.api_key))
             if resp.status_code != 200:
                 return None
             return {"version": resp.json().get("Version")}

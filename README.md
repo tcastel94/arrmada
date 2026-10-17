@@ -125,7 +125,24 @@ Server-Sent Events keep every page fresh and raise toasts on imports, grabs and 
 Linux server, Synology, Unraid, TrueNAS, Windows/macOS (Docker Desktop), Raspberry Pi
 (images are published for `amd64` and `arm64`).
 
-### Linux server / NAS over SSH
+### 🧰 Starting from scratch? Install the whole stack
+
+One command installs **Sonarr, Radarr, Prowlarr, Bazarr, SABnzbd, Deluge or qBittorrent,
+Jellyfin and ArrMada**, adapted to the machine (paths, PUID/PGID, compose flavour), with the
+[TRaSH Guides](https://trash-guides.info/) folder layout (hardlinks) and **pre-generated API keys**:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tcastel94/arrmada/main/install.sh | sudo bash
+```
+
+Then open ArrMada → setup wizard → *Import automatique* → **Appliquer**: indexers, download
+clients, categories, Bazarr and root folders are wired in one click. Apps already installed are
+detected and left untouched. Details, options and per-platform defaults:
+[docs/installer.md](docs/installer.md).
+
+### Already have your apps? Install ArrMada only
+
+#### Linux server / NAS over SSH
 
 ```bash
 mkdir -p /opt/arrmada && cd /opt/arrmada
@@ -133,14 +150,14 @@ curl -fsSLO https://raw.githubusercontent.com/tcastel94/arrmada/main/docker-comp
 docker compose up -d
 ```
 
-### Synology (DSM 7.2+)
+#### Synology (DSM 7.2+)
 
 1. **File Station**: create the folder `docker/arrmada`.
 2. **Container Manager → Project → Create**: path `/volume1/docker/arrmada`,
    source *Create docker-compose.yml*, paste [docker-compose.yml](docker-compose.yml).
 3. Optionally set `PUID`/`PGID` to your DSM user (`id` over SSH, often `1026`/`100`).
 
-### Windows / macOS
+#### Windows / macOS
 
 Install [Docker Desktop](https://www.docker.com/products/docker-desktop/), save
 [docker-compose.yml](docker-compose.yml) in a folder, then `docker compose up -d` in that folder.

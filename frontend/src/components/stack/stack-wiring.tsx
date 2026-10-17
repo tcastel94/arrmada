@@ -54,6 +54,7 @@ const KIND_LABELS: Record<StackActionKind, { title: string; hint: string }> = {
     prowlarr_app: { title: "Indexeurs", hint: "Prowlarr pousse ses indexeurs vers Sonarr, Radarr…" },
     download_client: { title: "Clients de téléchargement", hint: "Catégorie dédiée par appli (tv, movies…)." },
     bazarr_link: { title: "Sous-titres", hint: "Bazarr suit les séries et films de Sonarr / Radarr." },
+    root_folder: { title: "Dossiers médias", hint: "Arborescence TRaSH créée par l'installeur (/data/media/…)." },
 };
 
 const SOURCE_LABELS: Record<StackApp["source"], string> = {

@@ -44,7 +44,7 @@ export interface StackApp {
     registered: boolean;
 }
 
-export type StackActionKind = "register" | "prowlarr_app" | "download_client" | "bazarr_link";
+export type StackActionKind = "register" | "prowlarr_app" | "download_client" | "bazarr_link" | "root_folder";
 
 export interface StackAction {
     id: string;

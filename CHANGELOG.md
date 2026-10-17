@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Installeur de stack complète
+
+#### Added
+- `install.sh`: one-command install of Sonarr, Radarr, Prowlarr, Bazarr, SABnzbd, Deluge or qBittorrent, Jellyfin and ArrMada — platform detection (Unraid, Synology, Linux, macOS/WSL) for paths, PUID/PGID, timezone, IP, `/dev/dri`; TRaSH `/data` layout; pre-generated API keys and passwords in each app's config (never overwriting an existing file); existing containers detected and kept; port check; `docker:cli` fallback when Compose is missing; generated `compose.sh`, `credentials.txt` and `stack.json`; Jellyfin first-run wizard automated (admin account, libraries, API key); `--dry-run`, `--uninstall`; bash 3.2 compatible, shellcheck clean
+- Wiring: root folders `/data/media/tv` / `/data/media/movies` for installer-created stacks; torrent passwords read from `stack.json`
+- CI: installer shellcheck, dry-run matrix (4 platforms × 3 torrent options) and bash 3.2 run
+- `docs/installer.md`
+
+#### Fixed
+- Jellyfin ≥ 10.11 authentication (health check, Cast, connection test): `Authorization: MediaBrowser Token` / `ApiKey` sent alongside the legacy forms, which now answer 401
+- Jellyfin API key read from `jellyfin.db` even while still in the WAL journal (read-only mount)
+- Jellyfin without an API key is reported as "create a key", not "unreachable"
+
 ### Auto-configuration de la stack
 
 #### Added
