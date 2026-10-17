@@ -13,9 +13,7 @@ class TestMediaEndpoints:
         resp = await client.get("/api/media")
         assert resp.status_code == 401
 
-    async def test_list_media_empty(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_list_media_empty(self, client: AsyncClient, auth_headers: dict) -> None:
         """With no services, media list should return empty or error."""
         resp = await client.get("/api/media", headers=auth_headers)
         assert resp.status_code == 200
@@ -24,9 +22,7 @@ class TestMediaEndpoints:
         assert "pagination" in data
         assert data["pagination"]["total"] >= 0
 
-    async def test_list_media_with_filters(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_list_media_with_filters(self, client: AsyncClient, auth_headers: dict) -> None:
         """Test media list with type filter."""
         resp = await client.get(
             "/api/media?type=movie&page=1&per_page=10",
@@ -37,9 +33,7 @@ class TestMediaEndpoints:
         assert "items" in data
         assert data["pagination"]["per_page"] == 10
 
-    async def test_list_media_with_search(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_list_media_with_search(self, client: AsyncClient, auth_headers: dict) -> None:
         """Test media list with search query."""
         resp = await client.get(
             "/api/media?search=test&sort=title&order=asc",
@@ -60,9 +54,7 @@ class TestDownloadsEndpoints:
         resp = await client.get("/api/downloads")
         assert resp.status_code == 401
 
-    async def test_downloads_empty(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_downloads_empty(self, client: AsyncClient, auth_headers: dict) -> None:
         """With no services, downloads should return empty."""
         resp = await client.get("/api/downloads", headers=auth_headers)
         assert resp.status_code == 200
@@ -78,9 +70,7 @@ class TestAnalyticsEndpoints:
         resp = await client.get("/api/analytics")
         assert resp.status_code == 401
 
-    async def test_analytics_returns_data(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_analytics_returns_data(self, client: AsyncClient, auth_headers: dict) -> None:
         resp = await client.get("/api/analytics", headers=auth_headers)
         assert resp.status_code == 200
 
@@ -92,9 +82,7 @@ class TestDuplicatesEndpoints:
         resp = await client.get("/api/duplicates")
         assert resp.status_code == 401
 
-    async def test_duplicates_empty(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_duplicates_empty(self, client: AsyncClient, auth_headers: dict) -> None:
         resp = await client.get("/api/duplicates", headers=auth_headers)
         assert resp.status_code == 200
 
@@ -106,8 +94,6 @@ class TestRecommendationsEndpoints:
         resp = await client.get("/api/recommendations")
         assert resp.status_code == 401
 
-    async def test_recommendations_empty(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_recommendations_empty(self, client: AsyncClient, auth_headers: dict) -> None:
         resp = await client.get("/api/recommendations", headers=auth_headers)
         assert resp.status_code == 200

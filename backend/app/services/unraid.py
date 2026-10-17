@@ -27,21 +27,23 @@ DOCKER_CONTAINERS_QUERY = """
 }
 """
 
+# Actions live under the `docker` mutation namespace and take a PrefixedID
+# (the full compound id returned by the containers query, e.g. "<hostId>:<cid>").
 DOCKER_START_MUTATION = """
-mutation ($id: String!) {
-  dockerContainerStart(id: $id)
+mutation ($id: PrefixedID!) {
+  docker { start(id: $id) { id state } }
 }
 """
 
 DOCKER_STOP_MUTATION = """
-mutation ($id: String!) {
-  dockerContainerStop(id: $id)
+mutation ($id: PrefixedID!) {
+  docker { stop(id: $id) { id state } }
 }
 """
 
 DOCKER_RESTART_MUTATION = """
-mutation ($id: String!) {
-  dockerContainerRestart(id: $id)
+mutation ($id: PrefixedID!) {
+  docker { restart(id: $id) { id state } }
 }
 """
 
@@ -127,14 +129,20 @@ class UnraidClient:
             name = names[0].lstrip("/") if names else "unknown"
             state_raw = (c.get("state") or "").upper()
 
-            containers.append({
-                "name": name,
-                "status": _normalize_state(state_raw),
-                "image": c.get("image", ""),
-                "id": (c.get("id") or "")[:12],
-                "status_text": c.get("status", ""),
-                "state_raw": state_raw,
-            })
+            # Keep the FULL compound id (Unraid returns "<hostId>:<containerId>").
+            # It must stay intact: it's unique per container (used as the React
+            # key) and it's the PrefixedID the start/stop/restart mutations expect.
+            # Truncating it collapsed every container to the same host prefix.
+            containers.append(
+                {
+                    "name": name,
+                    "status": _normalize_state(state_raw),
+                    "image": c.get("image", ""),
+                    "id": c.get("id") or "",
+                    "status_text": c.get("status", ""),
+                    "state_raw": state_raw,
+                }
+            )
         return containers
 
     async def docker_action(self, container_id: str, action: str) -> str:

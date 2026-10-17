@@ -17,7 +17,7 @@ import { createContext, useCallback, useContext, useMemo, useRef, useState, type
 import { toast } from "sonner";
 import { useCreateRequest } from "@/hooks/use-requests";
 import type { LookupItem } from "@/hooks/use-search";
-import type { TMDBItem } from "@/hooks/use-recommendations";
+import type { TMDBDetail, TMDBItem } from "@/hooks/use-recommendations";
 
 /** Titre ajoutable, quelle que soit sa provenance (lookup *arr ou TMDB). */
 export interface AddableItem {
@@ -80,6 +80,23 @@ export function fromTmdb(it: TMDBItem): AddableItem {
         tvdb_id: null,
         in_library: !!it.in_library,
     };
+}
+
+/**
+ * Fiche TMDB détaillée → AddableItem (même clé que la tuile d'origine, donc
+ * même état « en cours / ajouté » partout).
+ */
+export function fromTmdbDetail(d: TMDBDetail): AddableItem {
+    return fromTmdb({
+        tmdb_id: d.tmdb_id,
+        title: d.title,
+        type: d.type,
+        year: d.year,
+        overview: d.overview,
+        rating: d.rating,
+        poster_url: d.poster_url,
+        in_library: d.in_library,
+    });
 }
 
 /** Lien vers la fiche externe (TMDB en priorité, sinon TheTVDB). */
@@ -170,4 +187,13 @@ export function useAdder(): AdderApi {
     const ctx = useContext(AdderContext);
     if (!ctx) throw new Error("useAdder doit être utilisé à l'intérieur de <AdderProvider>");
     return ctx;
+}
+
+/**
+ * Variante sans exception : null hors d'un <AdderProvider>. Sert aux
+ * composants réutilisables ailleurs que sur /search (ex : la modale de
+ * détail TMDB), qui créent alors leur propre fournisseur.
+ */
+export function useOptionalAdder(): AdderApi | null {
+    return useContext(AdderContext);
 }

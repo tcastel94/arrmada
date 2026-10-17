@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import datetime as dt
-from typing import Optional
 
 from sqlalchemy import Date, Text
 from sqlalchemy.orm import Mapped, mapped_column
@@ -24,8 +23,8 @@ class AnalyticsSnapshot(Base):
     total_books: Mapped[int] = mapped_column(default=0)
     total_size_gb: Mapped[float] = mapped_column(default=0.0)
     downloads_count: Mapped[int] = mapped_column(default=0)
-    quality_breakdown_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    genre_breakdown_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    quality_breakdown_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    genre_breakdown_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     def __repr__(self) -> str:
         return f"<AnalyticsSnapshot {self.date}>"

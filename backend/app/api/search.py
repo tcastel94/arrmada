@@ -48,18 +48,20 @@ async def unified_search(
         try:
             raw_results = await client.search(q)
             for r in raw_results[:30]:
-                indexer_results.append({
-                    "title": r.get("title", "Unknown"),
-                    "indexer": r.get("indexer", "Unknown"),
-                    "size_bytes": r.get("size", 0),
-                    "seeders": r.get("seeders", 0),
-                    "leechers": r.get("leechers", 0),
-                    "age_days": r.get("age", 0),
-                    "download_url": r.get("downloadUrl"),
-                    "info_url": r.get("infoUrl"),
-                    "categories": [c.get("name", "") for c in r.get("categories", [])],
-                    "protocol": r.get("protocol", "unknown"),
-                })
+                indexer_results.append(
+                    {
+                        "title": r.get("title", "Unknown"),
+                        "indexer": r.get("indexer", "Unknown"),
+                        "size_bytes": r.get("size", 0),
+                        "seeders": r.get("seeders", 0),
+                        "leechers": r.get("leechers", 0),
+                        "age_days": r.get("age", 0),
+                        "download_url": r.get("downloadUrl"),
+                        "info_url": r.get("infoUrl"),
+                        "categories": [c.get("name", "") for c in r.get("categories", [])],
+                        "protocol": r.get("protocol", "unknown"),
+                    }
+                )
         except Exception as exc:
             logger.error("Prowlarr search failed for %s: %s", svc.name, exc)
         finally:

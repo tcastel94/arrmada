@@ -30,6 +30,30 @@ export interface MediaItem {
     rating: number | null;
     runtime: number | null;
     overview: string;
+    /*
+     * Infos techniques du fichier (films uniquement : une série n'a pas de
+     * « fichier » unique). Optionnelles : un backend plus ancien ne les
+     * renvoie pas. Radarr donne la résolution en nombre (2160) ou en texte.
+     */
+    resolution?: string | number | null;
+    video_codec?: string | null;
+    video_dynamic_range?: string | null;
+    audio_codec?: string | null;
+    audio_channels?: number | null;
+    /** Studio de production (films). */
+    studio?: string | null;
+    /** Chaîne / plateforme de diffusion (séries). */
+    network?: string | null;
+    /** Logo-titre transparent (ClearLogo) : fanart.tv / TMDB (français d'abord), sinon Radarr/Sonarr. */
+    clearlogo_url?: string | null;
+    /** Artworks récupérés par le serveur (bouton « Récupérer les artworks »). */
+    fanart_url?: string | null;
+    discart_url?: string | null;
+    /** bluray | dvd | 3d (rond imprimé du disque fanart.tv) */
+    disc_type?: string | null;
+    clearart_url?: string | null;
+    banner_url?: string | null;
+    landscape_url?: string | null;
     seasons?: number;
     episodes_total?: number;
     episodes_have?: number;
@@ -101,6 +125,42 @@ export function useMediaFacets() {
         queryKey: ["media", "facets"],
         queryFn: () => apiFetch("/api/media/facets"),
         staleTime: 5 * 60_000,
+    });
+}
+
+/** Une source de la médiathèque (Radarr / Sonarr) au dernier essai du serveur. */
+export interface LibrarySource {
+    id: number;
+    name: string;
+    type: "radarr" | "sonarr";
+    /** Faux : le service n'a pas répondu au dernier essai. */
+    ok: boolean;
+    /** Vrai : sa dernière liste connue est affichée à la place. */
+    stale: boolean;
+    error: string;
+    /** Titres de cette source (dernière liste connue si elle est en panne). */
+    count: number;
+    last_ok_at: string | null;
+    down_since: string | null;
+    checked_at: string;
+}
+
+export interface LibrarySources {
+    degraded: boolean;
+    sources: LibrarySource[];
+}
+
+/**
+ * Radarr / Sonarr injoignables ? (`/api/media/sources`). Relu toutes les 30 s
+ * tant qu'une source est en panne (le serveur réessaie au même rythme), sinon
+ * toutes les 5 min.
+ */
+export function useLibrarySources() {
+    return useQuery<LibrarySources>({
+        queryKey: ["media", "sources"],
+        queryFn: () => apiFetch("/api/media/sources"),
+        staleTime: 15_000,
+        refetchInterval: (q) => (q.state.data?.degraded ? 30_000 : 5 * 60_000),
     });
 }
 
@@ -254,7 +314,23 @@ export interface MediaDetail {
     imdb_id?: string;
     tvdb_id?: number;
     ratings: MediaRatings;
-    images: { poster: string | null; fanart: string | null; banner: string | null };
+    /**
+     * `clearlogo` / `logo` : logo-titre transparent (`logo` gardé pour
+     * compatibilité). `discart` (rond imprimé du Blu-ray / DVD, films),
+     * `clearart` et `landscape` viennent de fanart.tv / TMDB (bouton
+     * « Récupérer les artworks ») ; absents tant que rien n'a été trouvé.
+     */
+    images: {
+        poster: string | null;
+        fanart: string | null;
+        banner: string | null;
+        logo?: string | null;
+        clearlogo?: string | null;
+        discart?: string | null;
+        disc_type?: string | null;
+        clearart?: string | null;
+        landscape?: string | null;
+    };
     file?: FileInfo | null;
     seasons?: SeasonDetail[];
     season_count?: number;

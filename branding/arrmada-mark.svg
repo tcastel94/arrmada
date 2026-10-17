@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!--
+    ArrMada — logo « Lecture » (source unique de la marque).
+    Un « A » dont la barre est un bouton lecture : médiathèque + commande.
+    Couleurs : dégradé accent #4A9EFF → cyan #22E0EE, lecture #EAF6FF.
+    Toutes les images (favicon, icônes, Kodi, partage) sont produites à partir
+    de ce fichier par branding/export.py. Le composant React
+    frontend/src/components/brand/brand-mark.tsx reprend les mêmes tracés.
+  -->
+  <defs>
+    <linearGradient id="arrmada-g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4A9EFF"/>
+      <stop offset="1" stop-color="#22E0EE"/>
+    </linearGradient>
+  </defs>
+  <path d="M11 54 L32 9 L53 54" fill="none" stroke="url(#arrmada-g)" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M27 34.8v14.4a1.6 1.6 0 0 0 2.4 1.4l11.4-7.2a1.6 1.6 0 0 0 0-2.8l-11.4-7.2a1.6 1.6 0 0 0-2.4 1.4z" fill="#EAF6FF"/>
+</svg>

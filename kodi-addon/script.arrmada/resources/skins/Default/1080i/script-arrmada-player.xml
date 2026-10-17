@@ -1,0 +1,229 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ArrMada — panneau pendant le film (ADR-004, phase 4.5).
+
+  Repère 1920 × 1080. Ouvert par un appui long sur OK pendant la lecture
+  (fichier de touches posé par le service) ; la vidéo continue au-dessus.
+  Données posées par lib/player_window.py :
+    title, subtitle (« S01E05 · Titre ») ; le temps vient directement du
+    lecteur (Player.Time, Player.FinishTime…), mis à jour par Kodi.
+  Colonne de gauche (200) : sections Audio / Sous-titres / Ampli / Lecture,
+  avec l'état en cours. Colonne de droite (300) : les choix de la section
+  (point bleu : choix actuel). Retour ferme le panneau.
+-->
+<window>
+	<defaultcontrol always="true">200</defaultcontrol>
+	<animation effect="fade" start="0" end="100" time="250">WindowOpen</animation>
+	<animation effect="fade" start="100" end="0" time="200">WindowClose</animation>
+	<controls>
+		<!-- Voile : le haut de l'image reste visible -->
+		<!-- Dégradé puis fond plein, tous deux opaques à la jonction : pas de
+		     ligne visible (vu sur le banc avec un fond à 90 %). -->
+		<control type="image">
+			<left>0</left><top>180</top><width>1920</width><height>440</height>
+			<texture colordiffuse="FF0A0E16">arrmada/grad-v.png</texture>
+		</control>
+		<control type="image">
+			<left>0</left><top>610</top><width>1920</width><height>470</height>
+			<texture colordiffuse="FF0A0E16">arrmada/white.png</texture>
+		</control>
+
+		<control type="group" id="100">
+			<animation effect="slide" start="0,120" end="0,0" time="350" tween="cubic" easing="out">WindowOpen</animation>
+
+			<!-- ═══════════════ EN-TÊTE : titre, temps, progression ═══════════════ -->
+			<control type="label">
+				<left>96</left><top>452</top><width>1180</width><height>60</height>
+				<font>font14_title</font>
+				<textcolor>FFF5F7FA</textcolor>
+				<aligny>center</aligny>
+				<label>$INFO[Window.Property(title)]</label>
+			</control>
+			<control type="label">
+				<left>96</left><top>508</top><width>1180</width><height>36</height>
+				<font>font12</font>
+				<textcolor>FF9CCBFF</textcolor>
+				<aligny>center</aligny>
+				<label>$INFO[Window.Property(subtitle)]</label>
+			</control>
+			<control type="label">
+				<left>1296</left><top>452</top><width>528</width><height>60</height>
+				<font>font14_title</font>
+				<textcolor>FFF5F7FA</textcolor>
+				<align>right</align><aligny>center</aligny>
+				<label>$INFO[Player.FinishTime,Fin à ]</label>
+			</control>
+			<control type="label">
+				<left>1296</left><top>508</top><width>528</width><height>36</height>
+				<font>font12</font>
+				<textcolor>B3C9D3E0</textcolor>
+				<align>right</align><aligny>center</aligny>
+				<label>$INFO[Player.Time]$INFO[Player.Duration, / ]$INFO[Player.TimeRemaining, · reste ]</label>
+			</control>
+			<control type="progress">
+				<left>96</left><top>560</top><width>1728</width><height>8</height>
+				<texturebg colordiffuse="33FFFFFF">arrmada/white.png</texturebg>
+				<midtexture colordiffuse="FF4A9EFF">arrmada/white.png</midtexture>
+				<info>Player.Progress</info>
+			</control>
+
+			<!-- ═══════════════ SECTIONS ═══════════════ -->
+			<control type="list" id="200">
+				<left>80</left><top>600</top><width>440</width><height>420</height>
+				<orientation>vertical</orientation>
+				<onright>300</onright>
+				<scrolltime tween="cubic" easing="out">200</scrolltime>
+				<itemlayout width="440" height="96">
+					<control type="image">
+						<left>16</left><top>8</top><width>408</width><height>80</height>
+						<texture border="14" colordiffuse="14FFFFFF">arrmada/rounded-12.png</texture>
+					</control>
+					<control type="label">
+						<left>40</left><top>12</top><width>370</width><height>38</height>
+						<font>font13</font>
+						<textcolor>D9F5F7FA</textcolor>
+						<aligny>center</aligny>
+						<label>$INFO[ListItem.Label]</label>
+					</control>
+					<control type="label">
+						<left>40</left><top>48</top><width>370</width><height>30</height>
+						<font>font10</font>
+						<textcolor>80C9D3E0</textcolor>
+						<aligny>center</aligny>
+						<label>$INFO[ListItem.Label2]</label>
+					</control>
+				</itemlayout>
+				<focusedlayout width="440" height="96">
+					<control type="image">
+						<left>16</left><top>8</top><width>408</width><height>80</height>
+						<texture border="14" colordiffuse="FF4A9EFF">arrmada/rounded-12.png</texture>
+						<visible>Control.HasFocus(200)</visible>
+					</control>
+					<control type="image">
+						<left>16</left><top>8</top><width>408</width><height>80</height>
+						<texture border="14" colordiffuse="404A9EFF">arrmada/rounded-12.png</texture>
+						<visible>!Control.HasFocus(200)</visible>
+					</control>
+					<control type="label">
+						<left>40</left><top>12</top><width>370</width><height>38</height>
+						<font>font13</font>
+						<textcolor>FF0A0E16</textcolor>
+						<aligny>center</aligny>
+						<label>$INFO[ListItem.Label]</label>
+						<visible>Control.HasFocus(200)</visible>
+					</control>
+					<control type="label">
+						<left>40</left><top>12</top><width>370</width><height>38</height>
+						<font>font13</font>
+						<textcolor>FFF5F7FA</textcolor>
+						<aligny>center</aligny>
+						<label>$INFO[ListItem.Label]</label>
+						<visible>!Control.HasFocus(200)</visible>
+					</control>
+					<control type="label">
+						<left>40</left><top>48</top><width>370</width><height>30</height>
+						<font>font10</font>
+						<textcolor>CC0A0E16</textcolor>
+						<aligny>center</aligny>
+						<label>$INFO[ListItem.Label2]</label>
+						<visible>Control.HasFocus(200)</visible>
+					</control>
+					<control type="label">
+						<left>40</left><top>48</top><width>370</width><height>30</height>
+						<font>font10</font>
+						<textcolor>FF9CCBFF</textcolor>
+						<aligny>center</aligny>
+						<label>$INFO[ListItem.Label2]</label>
+						<visible>!Control.HasFocus(200)</visible>
+					</control>
+				</focusedlayout>
+			</control>
+
+			<!-- ═══════════════ CHOIX DE LA SECTION ═══════════════ -->
+			<control type="list" id="300">
+				<left>540</left><top>600</top><width>1300</width><height>420</height>
+				<orientation>vertical</orientation>
+				<onleft>200</onleft>
+				<scrolltime tween="cubic" easing="out">200</scrolltime>
+				<itemlayout width="1300" height="70">
+					<control type="image">
+						<left>24</left><top>25</top><width>20</width><height>20</height>
+						<texture colordiffuse="FF4A9EFF">arrmada/circle.png</texture>
+						<visible>String.IsEqual(ListItem.Property(selected),1)</visible>
+					</control>
+					<control type="label">
+						<left>64</left><top>0</top><width>640</width><height>70</height>
+						<font>font13</font>
+						<textcolor>D9F5F7FA</textcolor>
+						<aligny>center</aligny>
+						<label>$INFO[ListItem.Label]</label>
+					</control>
+					<control type="label">
+						<left>704</left><top>0</top><width>570</width><height>70</height>
+						<font>font12</font>
+						<textcolor>80C9D3E0</textcolor>
+						<align>right</align><aligny>center</aligny>
+						<label>$INFO[ListItem.Label2]</label>
+					</control>
+				</itemlayout>
+				<focusedlayout width="1300" height="70">
+					<control type="image">
+						<left>8</left><top>4</top><width>1284</width><height>62</height>
+						<texture border="14" colordiffuse="FF4A9EFF">arrmada/rounded-12.png</texture>
+						<visible>Control.HasFocus(300)</visible>
+					</control>
+					<control type="image">
+						<left>24</left><top>25</top><width>20</width><height>20</height>
+						<texture colordiffuse="FF0A0E16">arrmada/circle.png</texture>
+						<visible>Control.HasFocus(300) + String.IsEqual(ListItem.Property(selected),1)</visible>
+					</control>
+					<control type="image">
+						<left>24</left><top>25</top><width>20</width><height>20</height>
+						<texture colordiffuse="FF4A9EFF">arrmada/circle.png</texture>
+						<visible>!Control.HasFocus(300) + String.IsEqual(ListItem.Property(selected),1)</visible>
+					</control>
+					<control type="label">
+						<left>64</left><top>0</top><width>640</width><height>70</height>
+						<font>font13</font>
+						<textcolor>FF0A0E16</textcolor>
+						<aligny>center</aligny>
+						<label>$INFO[ListItem.Label]</label>
+						<visible>Control.HasFocus(300)</visible>
+					</control>
+					<control type="label">
+						<left>64</left><top>0</top><width>640</width><height>70</height>
+						<font>font13</font>
+						<textcolor>D9F5F7FA</textcolor>
+						<aligny>center</aligny>
+						<label>$INFO[ListItem.Label]</label>
+						<visible>!Control.HasFocus(300)</visible>
+					</control>
+					<control type="label">
+						<left>704</left><top>0</top><width>570</width><height>70</height>
+						<font>font12</font>
+						<textcolor>CC0A0E16</textcolor>
+						<align>right</align><aligny>center</aligny>
+						<label>$INFO[ListItem.Label2]</label>
+						<visible>Control.HasFocus(300)</visible>
+					</control>
+					<control type="label">
+						<left>704</left><top>0</top><width>570</width><height>70</height>
+						<font>font12</font>
+						<textcolor>80C9D3E0</textcolor>
+						<align>right</align><aligny>center</aligny>
+						<label>$INFO[ListItem.Label2]</label>
+						<visible>!Control.HasFocus(300)</visible>
+					</control>
+				</focusedlayout>
+			</control>
+
+			<control type="label">
+				<left>540</left><top>1028</top><width>1284</width><height>36</height>
+				<font>font10</font>
+				<textcolor>80C9D3E0</textcolor>
+				<align>right</align><aligny>center</aligny>
+				<label>OK : choisir · Retour : revenir au film</label>
+			</control>
+		</control>
+	</controls>
+</window>

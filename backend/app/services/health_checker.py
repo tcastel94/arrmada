@@ -31,14 +31,14 @@ def _init_client_map() -> None:
     """Lazily populate the client map to avoid circular imports."""
     if _CLIENT_MAP:
         return
-    from app.services.sonarr import SonarrClient
-    from app.services.radarr import RadarrClient
-    from app.services.lidarr import LidarrClient
-    from app.services.readarr import ReadarrClient
-    from app.services.prowlarr import ProwlarrClient
     from app.services.bazarr import BazarrClient
     from app.services.jellyfin import JellyfinClient
+    from app.services.lidarr import LidarrClient
+    from app.services.prowlarr import ProwlarrClient
+    from app.services.radarr import RadarrClient
+    from app.services.readarr import ReadarrClient
     from app.services.sabnzbd import SabnzbdClient
+    from app.services.sonarr import SonarrClient
 
     _register_client("sonarr", SonarrClient)
     _register_client("radarr", RadarrClient)
@@ -93,26 +93,35 @@ async def check_and_record(service: Service, db: AsyncSession) -> HealthStatus:
     if previous_status == "online" and result.status == "offline":
         # SSE event
         try:
-            from app.utils.event_bus import event_bus
             import asyncio
-            asyncio.ensure_future(event_bus.publish("service_status", {
-                "service": service.name,
-                "type": service.type,
-                "status": "offline",
-                "error": result.error,
-                "previous": previous_status,
-            }))
+
+            from app.utils.event_bus import event_bus
+
+            asyncio.ensure_future(
+                event_bus.publish(
+                    "service_status",
+                    {
+                        "service": service.name,
+                        "type": service.type,
+                        "status": "offline",
+                        "error": result.error,
+                        "previous": previous_status,
+                    },
+                )
+            )
         except Exception:
             pass
         # Telegram
         try:
             from app.services.telegram import notify_service_down
+
             await notify_service_down(service.name, result.error or "Unknown")
         except Exception as exc:
             logger.debug("Telegram notification skipped: %s", exc)
         # In-app notification
         try:
             from app.services.notification_service import create_notification
+
             await create_notification(
                 db,
                 type="service_down",
@@ -127,26 +136,35 @@ async def check_and_record(service: Service, db: AsyncSession) -> HealthStatus:
     elif previous_status == "offline" and result.status == "online":
         # SSE event
         try:
-            from app.utils.event_bus import event_bus
             import asyncio
-            asyncio.ensure_future(event_bus.publish("service_status", {
-                "service": service.name,
-                "type": service.type,
-                "status": "online",
-                "latency_ms": result.latency_ms,
-                "previous": previous_status,
-            }))
+
+            from app.utils.event_bus import event_bus
+
+            asyncio.ensure_future(
+                event_bus.publish(
+                    "service_status",
+                    {
+                        "service": service.name,
+                        "type": service.type,
+                        "status": "online",
+                        "latency_ms": result.latency_ms,
+                        "previous": previous_status,
+                    },
+                )
+            )
         except Exception:
             pass
         # Telegram
         try:
             from app.services.telegram import notify_service_recovered
+
             await notify_service_recovered(service.name, result.latency_ms or 0)
         except Exception as exc:
             logger.debug("Telegram notification skipped: %s", exc)
         # In-app notification
         try:
             from app.services.notification_service import create_notification
+
             await create_notification(
                 db,
                 type="service_recovered",

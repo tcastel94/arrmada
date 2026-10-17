@@ -1,17 +1,24 @@
 """Kodi API — settings and synchronization."""
 
+import asyncio
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import PlainTextResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db, require_admin
+from app.models.device import Device
 from app.models.service import Service
 from app.services import kodi as kodi_service
+from app.services import kodi_crash, watch_summary, watch_sync
 from app.services.encryption import decrypt_api_key, encrypt_api_key
+from app.services.fully_kiosk import kiosk
 from app.services.kodi import discover_kodi, sync_kodi
 from app.utils.cache import cache
+from app.utils.event_bus import event_bus
 
 router = APIRouter(
     prefix="/api/kodi",
@@ -19,10 +26,12 @@ router = APIRouter(
     dependencies=[Depends(get_current_user)],
 )
 
+
 @router.get("/discover")
 async def discover_instances() -> list[dict]:
     """Discover Kodi instances using mDNS."""
     return await discover_kodi()
+
 
 @router.post("/sync")
 async def trigger_kodi_sync(db: AsyncSession = Depends(get_db)):
@@ -36,9 +45,11 @@ async def play_on_kodi(data: dict, db: AsyncSession = Depends(get_db)):
     tmdb_id = data.get("tmdb_id")
     if not tmdb_id:
         return {"status": "error", "detail": "tmdb_id requis"}
-    result = await kodi_service.play_movie(db, int(tmdb_id), data.get("service_id"))
+    room = data.get("room") or "salon"
+    result = await kodi_service.play_movie(db, int(tmdb_id), data.get("service_id"), room=room)
 
     from app.services.activity_log import log_event
+
     ok = result.get("status") == "ok"
     await log_event(
         category="playback",
@@ -74,6 +85,7 @@ async def control(data: dict, db: AsyncSession = Depends(get_db)):
 @router.get("/watched-status")
 async def watched_status(db: AsyncSession = Depends(get_db)):
     """Watched/resume state per TMDB id from Kodi (cached 60s)."""
+
     async def _compute():
         return await kodi_service.get_watched_status(db)
 
@@ -97,6 +109,7 @@ async def kodi_drift(db: AsyncSession = Depends(get_db)):
 async def test_kodi(service_id: int, db: AsyncSession = Depends(get_db)):
     """Ping a Kodi instance and read its version."""
     return await kodi_service.test_connection(db, service_id)
+
 
 # ── Settings (instances) ──────────────────────────────────────
 # Les identifiants Kodi sont stockés chiffrés dans `Service.api_key` sous la
@@ -213,7 +226,9 @@ async def update_kodi_setting(service_id: int, data: dict, db: AsyncSession = De
     url = (data.get("url") or "").strip().rstrip("/")
     if url and url != svc.url:
         dup = await db.execute(
-            select(Service).where(Service.type == "kodi", Service.url == url, Service.id != service_id)
+            select(Service).where(
+                Service.type == "kodi", Service.url == url, Service.id != service_id
+            )
         )
         if dup.scalars().first():
             raise HTTPException(status_code=409, detail="Un autre Kodi utilise déjà cette URL")
@@ -238,3 +253,297 @@ async def delete_kodi_setting(service_id: int, db: AsyncSession = Depends(get_db
         await db.delete(svc)
         await db.commit()
     return {"status": "deleted"}
+
+
+# ── Kodi Add-on Endpoints ─────────────────────────────────────
+@router.post("/actions/subtitles")
+async def addon_subtitles_action(data: dict, db: AsyncSession = Depends(get_db)):
+    """Trigger Bazarr subtitle search & download from Kodi add-on."""
+    return await kodi_service.handle_addon_subtitles(db, data)
+
+
+@router.post("/actions/subtitles/sync")
+async def addon_subtitles_sync_action(data: dict, db: AsyncSession = Depends(get_db)):
+    """Trigger Bazarr FFsubsync audio-aligned subtitle synchronization from Kodi add-on."""
+    return await kodi_service.handle_addon_sync_subtitles(db, data)
+
+
+@router.post("/actions/search")
+async def addon_search_action(data: dict, db: AsyncSession = Depends(get_db)):
+    """Trigger Radarr/Sonarr release search from Kodi add-on."""
+    return await kodi_service.handle_addon_search(db, data)
+
+
+@router.post("/scrobble")
+async def addon_scrobble(
+    data: dict, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)
+):
+    """Receive live playback status & scrobbles from Kodi add-on service.
+
+    Also feeds the per-room "now playing" state shown by the living-room
+    screen (`/api/ambient`): the room is the paired TV's, else the add-on's
+    own room setting.
+    """
+    import time
+
+    from app.services.now_playing import now_playing
+
+    room = user.get("room") or str((data or {}).get("room") or "salon")
+    if user.get("device_name"):
+        data = dict(data, device_name=user["device_name"])
+    now_playing.record(room, data or {}, time.time())
+    # Tablette de la pièce en mode kiosk pendant le média (Fully Kiosk) :
+    # lancé à part, la réponse à la TV n'attend jamais la tablette.
+    _background(kiosk.on_playback(room, str((data or {}).get("event") or "progress")))
+    return await kodi_service.handle_addon_scrobble(db, data)
+
+
+# ── Journaux de plantage des TV (appli 1.21.1+) ───
+@router.post("/crash-report")
+async def post_crash_report(data: dict, user: dict = Depends(get_current_user)):
+    """La TV envoie la fin du journal d'une session de Kodi qui s'est arrêtée net.
+
+    Rangé dans data/kodi-crashes/ (dossier visible sur l'hôte), 10 gardés.
+    """
+    if not isinstance(data, dict) or not str(data.get("log") or "").strip():
+        raise HTTPException(status_code=400, detail="Journal vide")
+    device = user.get("device_name") or str(data.get("device") or "tv")
+    saved = await asyncio.to_thread(kodi_crash.save_report, device, data)
+    return {"ok": True, **saved}
+
+
+@router.get("/crash-reports", dependencies=[Depends(require_admin)])
+async def list_crash_reports():
+    """Journaux de plantage reçus, du plus récent au plus ancien."""
+    return {"reports": await asyncio.to_thread(kodi_crash.list_reports)}
+
+
+@router.get("/crash-reports/{name}", dependencies=[Depends(require_admin)])
+async def get_crash_report(name: str):
+    text = await asyncio.to_thread(kodi_crash.read_report, name)
+    if text is None:
+        raise HTTPException(status_code=404, detail="Journal introuvable")
+    return PlainTextResponse(text)
+
+
+_BACKGROUND: set = set()  # tâches en cours (référence gardée jusqu'à leur fin)
+
+
+def _background(coro) -> None:
+    task = asyncio.create_task(coro)
+    _BACKGROUND.add(task)
+    task.add_done_callback(_BACKGROUND.discard)
+
+
+# ── Vu / reprise partagés entre les TV (ADR-004, phase 4.4) ───
+@router.get("/watch-state")
+async def get_watch_states(
+    since: str | None = None, limit: int = watch_sync.MAX_STATES, db: AsyncSession = Depends(get_db)
+):
+    """États vu / reprise modifiés après `since` (curseur rendu par l'appel précédent).
+
+    Sans `since` : tout, page par page (premier passage d'une TV). `more`
+    vrai : il en reste, rappeler avec le nouveau curseur.
+    """
+    states, more = await watch_sync.changes(db, watch_sync.parse_cursor(since), limit)
+    cursor = states[-1]["updated_at"] if states else (since or "")
+    return {"states": states, "cursor": cursor, "more": more}
+
+
+@router.post("/watch-state")
+async def post_watch_states(
+    data: dict, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)
+):
+    """Une TV dépose l'état de titres qui ont changé chez elle.
+
+    `merge` vrai : premier passage de la TV (« vu » l'emporte, rien n'est
+    défait). Les autres TV sont prévenues par l'événement `watch_state`.
+    """
+    payload = data or {}
+    raw = payload.get("states")
+    if not isinstance(raw, list):
+        raise HTTPException(status_code=422, detail="« states » doit être une liste")
+    device = str(user.get("device_name") or payload.get("device") or "ArrMada")
+    changed, rejected = await watch_sync.store(db, raw, bool(payload.get("merge")), device)
+    cursor = changed[-1]["updated_at"].isoformat() if changed else ""
+    if changed:
+        await event_bus.publish(
+            event_type="watch_state",
+            data={"changed": len(changed), "device": device, "cursor": cursor},
+        )
+    return {"status": "ok", "changed": len(changed), "rejected": rejected, "cursor": cursor}
+
+
+# ── Vu / reprise dans la web app, « Lire sur la TV » (add-on 1.19.0) ──
+@router.get("/watch-summary")
+async def get_watch_summary(db: AsyncSession = Depends(get_db)):
+    """Badges vu / en cours et page Reprendre de la web app.
+
+    Tiré des états partagés par les TV (`watch_states`), rien n'est demandé
+    à Kodi : fonctionne même TV éteintes. Pas ouvert aux TV (hors périmètre).
+    """
+    return await watch_summary.load_summary(db)
+
+
+@router.post("/play-on-device")
+async def play_on_device(
+    data: dict, db: AsyncSession = Depends(get_db), user: dict = Depends(require_admin)
+):
+    """Demande à UNE TV appairée de lancer un film ou un épisode de SA médiathèque.
+
+    Corps : {device_id, media_type, id (TMDB d'un film / TVDB d'une série),
+    season, episode, title, resume}. Publie l'événement `play_request` ; la
+    TV visée le reçoit dans les 5 s. `online` faux : la TV ne s'est pas
+    manifestée récemment (éteinte ?), la demande expirera au bout de 2 min.
+    """
+    payload = data or {}
+    try:
+        device_id = int(payload.get("device_id"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail="« device_id » manquant") from None
+    device = await db.get(Device, device_id)
+    if device is None or device.kind != "tv":
+        raise HTTPException(status_code=404, detail="TV inconnue (appairée ?)")
+    now = datetime.now(UTC)
+    request = watch_summary.play_request(
+        {"id": device.id, "name": device.name, "room": device.room}, payload, now
+    )
+    if request is None:
+        raise HTTPException(status_code=422, detail="Titre à lire invalide")
+    await event_bus.publish(event_type="play_request", data=request)
+
+    from app.services.activity_log import log_event
+
+    code = (
+        f" S{request['season']:02d}E{request['episode']:02d}"
+        if request["media_type"] == "episode"
+        else ""
+    )
+    await log_event(
+        category="playback",
+        action="play_on_device",
+        source="arrmada",
+        media_type=request["media_type"],
+        tmdb_id=int(request["id"]) if request["id_type"] == "tmdb" else None,
+        title=f"{request['title']}{code}" or None,
+        device=device.name,
+    )
+    return {
+        "status": "sent",
+        "device": device.name,
+        "online": watch_summary.is_online(device.last_seen_at, now),
+        "request_id": request["request_id"],
+    }
+
+
+# ── Épisodes d'une série vus par Sonarr (manquants, à venir) ──
+@router.get("/series/{tvdb_id}/episodes")
+async def addon_series_episodes(tvdb_id: int, db: AsyncSession = Depends(get_db)):
+    """Épisodes connus de Sonarr pour une série (repérée par son n° TVDB).
+
+    L'écran Série de la TV les compare à sa médiathèque : ceux qui manquent
+    sont affichés grisés (« Manquant », « Diffusion le … »). Gardé 2 min.
+    """
+
+    async def _compute():
+        return await kodi_service.sonarr_episodes_for_addon(db, tvdb_id)
+
+    return await cache.get_or_set(f"kodi:episodes:{tvdb_id}", _compute, ttl_seconds=120)
+
+
+@router.get("/addon-status")
+async def addon_status(db: AsyncSession = Depends(get_db)):
+    """Get active downloads queue and dashboard stats for Kodi add-on."""
+    return await kodi_service.get_addon_dashboard_status(db)
+
+
+@router.get("/dashboard")
+async def addon_dashboard(db: AsyncSession = Depends(get_db)):
+    """Get complete stack health, disk space, services, and activity history for Kodi UI."""
+    return await kodi_service.get_addon_full_dashboard(db)
+
+
+# ── Kodi Media Discovery & Releases ───────────────────────────
+@router.get("/media/lookup")
+async def addon_media_lookup(q: str, type: str = "all", db: AsyncSession = Depends(get_db)):
+    """Lookup movies and series for Kodi UI."""
+    return await kodi_service.lookup_media_for_addon(db, q, type)
+
+
+@router.get("/media/recommendations")
+async def addon_media_recommendations(db: AsyncSession = Depends(get_db)):
+    """Get trending and recommended movies/series for Kodi."""
+    return await kodi_service.get_recommendations_for_addon(db)
+
+
+@router.get("/media/options")
+async def addon_media_options(type: str = "movie", db: AsyncSession = Depends(get_db)):
+    """Get quality profiles and root folders for media type."""
+    return await kodi_service.get_media_options_for_addon(db, type)
+
+
+@router.post("/media/add")
+async def addon_media_add(data: dict, db: AsyncSession = Depends(get_db)):
+    """Add a movie or series to Radarr/Sonarr from Kodi."""
+    return await kodi_service.add_media_for_addon(db, data)
+
+
+@router.get("/media/{type}/{id}/releases")
+async def addon_media_releases(
+    type: str, id: int, season: int | None = None, db: AsyncSession = Depends(get_db)
+):
+    """List available releases (Usenet & Torrent) for interactive picking.
+
+    Série : ``season`` (facultatif) ; par défaut la première saison.
+    """
+    return await kodi_service.list_releases_for_addon(db, type, id, season)
+
+
+@router.post("/media/{type}/{id}/grab")
+async def addon_media_grab(type: str, id: int, data: dict, db: AsyncSession = Depends(get_db)):
+    """Grab a selected release and send to SABnzbd / Torrent client."""
+    data["type"] = type
+    data["arr_id"] = id
+    return await kodi_service.grab_release_for_addon(db, data)
+
+
+# ── Kodi Queue Control ───────────────────────────────────────
+@router.post("/downloads/{type}/{id}/remove")
+async def addon_queue_remove(
+    type: str, id: int, data: dict | None = None, db: AsyncSession = Depends(get_db)
+):
+    """Cancel / remove download from Kodi."""
+    payload = data or {}
+    return await kodi_service.remove_queue_item_for_addon(
+        db,
+        type,
+        id,
+        remove_from_client=payload.get("remove_from_client", True),
+        blocklist=payload.get("blocklist", False),
+    )
+
+
+@router.post("/downloads/{type}/{id}/resume")
+async def addon_queue_resume(type: str, id: int, db: AsyncSession = Depends(get_db)):
+    """Resume / unpause download from Kodi."""
+    return await kodi_service.resume_queue_item_for_addon(db, type, id)
+
+
+@router.post("/downloads/{type}/{id}/pause")
+async def addon_queue_pause(type: str, id: int, db: AsyncSession = Depends(get_db)):
+    """Pause download from Kodi."""
+    return await kodi_service.pause_queue_item_for_addon(db, type, id)
+
+
+# ── Kodi Maintenance & Cleanup ────────────────────────────────
+@router.post("/maintenance/clean-orphans")
+async def addon_clean_orphans(db: AsyncSession = Depends(get_db)):
+    """Trigger clean of empty directories and orphan non-media files."""
+    return await kodi_service.clean_orphans_for_addon(db)
+
+
+# ── Kodi Widgets ──────────────────────────────────────────────
+@router.get("/widgets/recent")
+async def addon_widgets_recent(db: AsyncSession = Depends(get_db)):
+    """Return recently added items for Kodi home screen widgets."""
+    return await kodi_service.get_recent_media_for_addon(db)

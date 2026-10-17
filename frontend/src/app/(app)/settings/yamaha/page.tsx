@@ -4,7 +4,9 @@
  * Paramètres → Ampli Yamaha.
  * ----------------------------------------------------------------
  * La télécommande a déménagé dans le Salon (/remote) : ici on ne fait
- * QUE configurer. Corrections : IP personnelle codée en dur retirée,
+ * QUE configurer — les amplis, et les profils audio par pièce (Salon /
+ * Salle de cinéma) appliqués par les boutons « Préréglage » du Salon.
+ * Corrections : IP personnelle codée en dur retirée,
  * `DeviceRow` partagé avec Kodi (au lieu d'un copier-coller), suppression
  * confirmée, édition sans doublon, tous les amplis détectés sélectionnables
  * (avant : seul le premier pré-remplissait le formulaire).
@@ -25,6 +27,7 @@ import { DeviceRow } from "@/components/settings/device-row";
 import { useStickyValue } from "@/components/settings/use-sticky-value";
 import { DiscoveryResults, type DiscoveredDevice } from "@/components/settings/discovery-results";
 import { FormField } from "@/components/settings/form-field";
+import { RoomProfilesPanel } from "@/components/settings/room-profiles";
 import {
     useAddYamaha,
     useDeleteYamaha,
@@ -89,7 +92,7 @@ export default function YamahaSettingsPage() {
                     </span>
                     <div className="relative z-[2] min-w-0 flex-1">
                         <p className="text-sm font-semibold">La télécommande est dans le Salon</p>
-                        <p className="text-xs text-muted-foreground">Marche/veille, volume, sourdine et entrées, à côté du lecteur Kodi.</p>
+                        <p className="text-xs text-muted-foreground">Marche/veille, volume, entrées et préréglages Salon / Cinéma, à côté du lecteur Kodi.</p>
                     </div>
                     <ArrowRight className="relative z-[2] h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-foreground" />
                 </SpotlightCard>
@@ -143,6 +146,9 @@ export default function YamahaSettingsPage() {
                     </motion.div>
                 )}
             </Panel>
+
+            {/* ── Profils audio par pièce ─────────────────────── */}
+            <RoomProfilesPanel hasAmp={(instances ?? []).some((y) => y.is_enabled)} />
 
             {/* ── Ajouter ─────────────────────────────────────── */}
             <Panel

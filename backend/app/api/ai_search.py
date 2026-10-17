@@ -11,8 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
 from app.config import settings
-from app.services.media_aggregator import fetch_all_media
-from app.utils.cache import cache
+from app.services import media_aggregator
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -105,12 +104,9 @@ def _apply_filters(media: list[dict], filters: dict[str, Any]) -> list[dict]:
     if genres:
         genre_lower = [g.lower() for g in genres]
         results = [
-            m for m in results
-            if any(
-                gl in g.lower()
-                for g in (m.get("genres") or [])
-                for gl in genre_lower
-            )
+            m
+            for m in results
+            if any(gl in g.lower() for g in (m.get("genres") or []) for gl in genre_lower)
         ]
 
     # Title keywords
@@ -118,8 +114,7 @@ def _apply_filters(media: list[dict], filters: dict[str, Any]) -> list[dict]:
     if title_kw:
         kw_lower = [k.lower() for k in title_kw]
         results = [
-            m for m in results
-            if any(kw in (m.get("title") or "").lower() for kw in kw_lower)
+            m for m in results if any(kw in (m.get("title") or "").lower() for kw in kw_lower)
         ]
 
     # Quality keywords
@@ -127,8 +122,7 @@ def _apply_filters(media: list[dict], filters: dict[str, Any]) -> list[dict]:
     if quality_kw:
         kw_lower = [k.lower() for k in quality_kw]
         results = [
-            m for m in results
-            if any(kw in (m.get("quality") or "").lower() for kw in kw_lower)
+            m for m in results if any(kw in (m.get("quality") or "").lower() for kw in kw_lower)
         ]
 
     # Has file filter
@@ -188,10 +182,7 @@ async def ai_search(
         return {"error": filters["error"], "items": [], "filters": filters, "ai_available": True}
 
     # 2. Fetch full media library (cached)
-    async def _fetch():
-        return await fetch_all_media(db)
-
-    media = list(await cache.get_or_set("media:all", _fetch, ttl_seconds=300))
+    media = await media_aggregator.cached_library(db)
 
     # 3. Apply filters
     results = _apply_filters(media, filters)

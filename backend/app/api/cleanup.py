@@ -53,12 +53,18 @@ async def _scan_cleanup_opportunities(db: AsyncSession) -> dict[str, Any]:
 
                         movie_file = m.get("movieFile", {})
                         size = movie_file.get("size", 0)
-                        quality_name = movie_file.get("quality", {}).get("quality", {}).get("name", "Unknown")
+                        quality_name = (
+                            movie_file.get("quality", {}).get("quality", {}).get("name", "Unknown")
+                        )
                         year = m.get("year", 0)
 
                         images = m.get("images", [])
                         poster = next(
-                            (img.get("remoteUrl") for img in images if img.get("coverType") == "poster" and img.get("remoteUrl")),
+                            (
+                                img.get("remoteUrl")
+                                for img in images
+                                if img.get("coverType") == "poster" and img.get("remoteUrl")
+                            ),
                             None,
                         )
 
@@ -78,27 +84,33 @@ async def _scan_cleanup_opportunities(db: AsyncSession) -> dict[str, Any]:
 
                         # 1. Unmonitored but has file (forgotten media)
                         if not m.get("monitored") and m.get("hasFile"):
-                            unmonitored_with_files.append({
-                                **base_item,
-                                "reason": "unmonitored",
-                                "suggestion": "Ce film n'est plus surveillé mais occupe de l'espace",
-                            })
+                            unmonitored_with_files.append(
+                                {
+                                    **base_item,
+                                    "reason": "unmonitored",
+                                    "suggestion": "Ce film n'est plus surveillé mais occupe de l'espace",
+                                }
+                            )
 
                         # 2. Old low-quality files (SD or DVD, added > 2 years ago)
                         if quality_name in ("SDTV", "DVD", "DVDR") and year and year < 2020:
-                            old_low_quality.append({
-                                **base_item,
-                                "reason": "low_quality",
-                                "suggestion": f"Qualité {quality_name} — upgrade recommandé",
-                            })
+                            old_low_quality.append(
+                                {
+                                    **base_item,
+                                    "reason": "low_quality",
+                                    "suggestion": f"Qualité {quality_name} — upgrade recommandé",
+                                }
+                            )
 
                         # 3. Very large files (> 50GB, likely Remux)
                         if size > 50 * 1024 * 1024 * 1024:
-                            large_files.append({
-                                **base_item,
-                                "reason": "oversized",
-                                "suggestion": f"Fichier volumineux ({format_bytes(size)}) — vérifier si Remux nécessaire",
-                            })
+                            large_files.append(
+                                {
+                                    **base_item,
+                                    "reason": "oversized",
+                                    "suggestion": f"Fichier volumineux ({format_bytes(size)}) — vérifier si Remux nécessaire",
+                                }
+                            )
                 finally:
                     await client.close()
 
@@ -115,7 +127,11 @@ async def _scan_cleanup_opportunities(db: AsyncSession) -> dict[str, Any]:
 
                         images = s.get("images", [])
                         poster = next(
-                            (img.get("remoteUrl") for img in images if img.get("coverType") == "poster" and img.get("remoteUrl")),
+                            (
+                                img.get("remoteUrl")
+                                for img in images
+                                if img.get("coverType") == "poster" and img.get("remoteUrl")
+                            ),
                             None,
                         )
 
@@ -137,30 +153,38 @@ async def _scan_cleanup_opportunities(db: AsyncSession) -> dict[str, Any]:
 
                         # 1. Unmonitored with files
                         if not s.get("monitored") and have_eps > 0:
-                            unmonitored_with_files.append({
-                                **base_item,
-                                "reason": "unmonitored",
-                                "suggestion": f"Série non surveillée — {have_eps} épisodes occupent {format_bytes(size)}",
-                            })
+                            unmonitored_with_files.append(
+                                {
+                                    **base_item,
+                                    "reason": "unmonitored",
+                                    "suggestion": f"Série non surveillée — {have_eps} épisodes occupent {format_bytes(size)}",
+                                }
+                            )
 
                         # 2. Ended series with incomplete collection (not worth keeping partial)
                         if status == "ended" and have_eps > 0 and total_eps > 0:
-                            completion = round(have_eps / total_eps * 100, 1) if total_eps > 0 else 0
+                            completion = (
+                                round(have_eps / total_eps * 100, 1) if total_eps > 0 else 0
+                            )
                             if 0 < completion < 50:
-                                ended_series_incomplete.append({
-                                    **base_item,
-                                    "reason": "incomplete_ended",
-                                    "completion_percent": completion,
-                                    "suggestion": f"Série terminée, seulement {completion}% complète ({have_eps}/{total_eps} épisodes)",
-                                })
+                                ended_series_incomplete.append(
+                                    {
+                                        **base_item,
+                                        "reason": "incomplete_ended",
+                                        "completion_percent": completion,
+                                        "suggestion": f"Série terminée, seulement {completion}% complète ({have_eps}/{total_eps} épisodes)",
+                                    }
+                                )
 
                         # 3. Large series
                         if size > 100 * 1024 * 1024 * 1024:
-                            large_files.append({
-                                **base_item,
-                                "reason": "oversized",
-                                "suggestion": f"Série volumineuse ({format_bytes(size)}) — {have_eps} épisodes",
-                            })
+                            large_files.append(
+                                {
+                                    **base_item,
+                                    "reason": "oversized",
+                                    "suggestion": f"Série volumineuse ({format_bytes(size)}) — {have_eps} épisodes",
+                                }
+                            )
                 finally:
                     await client.close()
 
@@ -172,9 +196,8 @@ async def _scan_cleanup_opportunities(db: AsyncSession) -> dict[str, Any]:
         lst.sort(key=lambda x: x.get("size_bytes", 0), reverse=True)
 
     # Calculate totals
-    total_reclaimable = (
-        sum(i["size_bytes"] for i in unmonitored_with_files)
-        + sum(i["size_bytes"] for i in ended_series_incomplete)
+    total_reclaimable = sum(i["size_bytes"] for i in unmonitored_with_files) + sum(
+        i["size_bytes"] for i in ended_series_incomplete
     )
 
     return {

@@ -1,4 +1,7 @@
 [tool.pytest.ini_options]
+# Ajoute backend/ au PYTHONPATH : sans ça, la commande `pytest` (utilisée par
+# la CI) ne trouve pas le paquet `app` — seul `python -m pytest` fonctionnait.
+pythonpath = ["."]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
@@ -21,10 +24,33 @@ select = [
     "UP",   # pyupgrade
     "SIM",  # flake8-simplify
 ]
-ignore = ["E501"]  # line too long — handled by formatter
+ignore = [
+    "E501",  # line too long — handled by formatter
+    # SQLAlchemy : `Service.is_enabled == True` construit une clause SQL
+    # (WHERE is_enabled = 1). La « correction » proposée (`is True`) casserait
+    # silencieusement la requête → règle désactivée plutôt qu'un noqa par ligne.
+    "E712",
+]
+
+[tool.ruff.lint.flake8-bugbear]
+# Idiome FastAPI : `db = Depends(get_db)` / `q = Query(...)` dans la signature
+# est LA façon officielle de déclarer une dépendance. B008 le prend pour un
+# appel de fonction exécuté une seule fois au chargement → faux positif.
+# On déclare ces appels comme « immuables » plutôt que de couper B008 partout.
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "fastapi.Path",
+    "fastapi.Body",
+    "fastapi.Header",
+    "fastapi.Cookie",
+    "fastapi.File",
+    "fastapi.Form",
+    "fastapi.Security",
+]
 
 [tool.ruff.lint.isort]
-known-first-party = ["app"]
+known-first-party = ["app", "tests"]
 
 [tool.coverage.run]
 source = ["app"]

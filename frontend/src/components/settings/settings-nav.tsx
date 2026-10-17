@@ -56,7 +56,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
         label: "Kodi",
         short: "Kodi",
         icon: MonitorPlay,
-        description: "Tes lecteurs Kodi : connexion, scans de bibliothèque et cohérence avec Radarr.",
+        description: "Tes TV appairées et tes lecteurs Kodi : pièce et ampli, scans de bibliothèque, cohérence avec Radarr.",
     },
     {
         href: "/settings/cast",
@@ -70,7 +70,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
         label: "Ampli Yamaha",
         short: "Yamaha",
         icon: Speaker,
-        description: "Ton ampli home cinéma MusicCast, piloté depuis le Salon.",
+        description: "Ton ampli home cinéma MusicCast et ses profils audio Salon / Cinéma, pilotés depuis le Salon.",
     },
 ];
 

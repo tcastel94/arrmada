@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
 
 from sqlalchemy import Boolean, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
@@ -26,7 +25,7 @@ class CastDevice(Base):
     name: Mapped[str] = mapped_column(String(120))
     ip: Mapped[str] = mapped_column(String(64))
     port: Mapped[int] = mapped_column(Integer, default=8009)
-    model: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(120), nullable=True)
     # Cast groups & video-capable devices (screens / Google TV) can play video;
     # audio-only speakers cannot.
     video_capable: Mapped[bool] = mapped_column(Boolean, default=True)

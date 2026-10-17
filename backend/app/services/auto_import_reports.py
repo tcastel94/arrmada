@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import os
 import json
+import os
 from datetime import datetime
 from typing import Any
 
@@ -19,7 +19,7 @@ def get_reports() -> list[dict[str, Any]]:
     if not os.path.exists(REPORTS_FILE):
         return []
     try:
-        with open(REPORTS_FILE, "r", encoding="utf-8") as f:
+        with open(REPORTS_FILE, encoding="utf-8") as f:
             data = json.load(f)
             if isinstance(data, list):
                 return data
@@ -35,10 +35,11 @@ def add_report(
     imported_count: int,
     failed_count: int,
     items: list[dict[str, Any]],
+    skipped_count: int = 0,
 ) -> None:
     """Save a new execution report, keeping only the 10 most recent ones."""
     reports = get_reports()
-    
+
     # Create new report
     new_report = {
         "timestamp": datetime.now().isoformat(),
@@ -46,17 +47,18 @@ def add_report(
         "scanned_count": scanned_count,
         "imported_count": imported_count,
         "failed_count": failed_count,
+        "skipped_count": skipped_count,
         "items": items,
     }
-    
+
     reports.append(new_report)
-    
+
     # Keep only last 10
     reports = reports[-10:]
-    
+
     # Ensure directory exists
     os.makedirs(os.path.dirname(REPORTS_FILE), exist_ok=True)
-    
+
     try:
         with open(REPORTS_FILE, "w", encoding="utf-8") as f:
             json.dump(reports, f, indent=2, ensure_ascii=False)

@@ -9,6 +9,9 @@
  *   le bouton change d'état tout de suite (sensation « télécommande
  *   physique »), puis l'état réel est relu ; en cas de refus, on revient
  *   en arrière et on affiche une erreur.
+ * - Profils audio par pièce (Salon / Salle de cinéma) : lecture,
+ *   enregistrement (fichier JSON côté backend) et application d'un
+ *   préréglage sur l'ampli.
  */
 import { useQuery, useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api-client";
@@ -47,7 +50,22 @@ export function useYamahaState(enabled = true, serviceId?: number) {
     });
 }
 
-export type YamahaAction = "volume" | "volume_step" | "mute" | "power" | "input";
+export type YamahaAction =
+    | "volume"
+    | "volume_step"
+    | "mute"
+    | "power"
+    | "input"
+    /** Programme DSP (id YXC : "straight", "sci-fi", "7ch_stereo"…). */
+    | "sound_program"
+    /** Rehaussement des dialogues (0-5) : remonte les voix vers l'écran. */
+    | "dialog_lift"
+    /** Niveau des dialogues (0-3) : renforce leur intelligibilité. */
+    | "dialog_level"
+    | "enhancer"
+    | "extra_bass"
+    /** DRC adaptatif = « mode nuit » (compression de la dynamique). */
+    | "adaptive_drc";
 
 export interface YamahaControlVars {
     action: YamahaAction;
@@ -67,6 +85,8 @@ function applyOptimistic(device: YamahaDevice, vars: YamahaControlVars): YamahaD
             return { ...device, mute: Boolean(vars.value) };
         case "input":
             return { ...device, input: String(vars.value) };
+        case "sound_program":
+            return { ...device, sound_program: String(vars.value) };
         case "volume": {
             const v = Math.max(0, Math.min(max, Number(vars.value) || 0));
             return { ...device, volume: v, volume_pct: pct(v) };
@@ -75,6 +95,8 @@ function applyOptimistic(device: YamahaDevice, vars: YamahaControlVars): YamahaD
             const v = Math.max(0, Math.min(max, (device.volume ?? 0) + (Number(vars.value) || 0)));
             return { ...device, volume: v, volume_pct: pct(v) };
         }
+        // Voix, enhancer, extra bass, DRC : l'état de l'ampli ne les remonte
+        // pas (cf. backend _zone_status), rien à prédire localement.
         default:
             return device;
     }
@@ -126,6 +148,112 @@ export function useYamahaInputs(serviceId?: number, enabled = true) {
             apiFetch(`/api/yamaha/inputs${serviceId ? `?service_id=${serviceId}` : ""}`),
         enabled,
         staleTime: 5 * 60_000,
+    });
+}
+
+/* ── Profils audio par pièce ────────────────────────────────── */
+
+/** Pièces connues du backend (clés du fichier de profils). */
+export type YamahaRoom = "salon" | "cinema";
+
+/**
+ * Réglages appliqués d'un clic par « Préréglage Salon / Cinéma ».
+ * Le programme sonore dépend du type de média en cours (film, série,
+ * musique) ; le volume est plafonné à 140 (sur 161) par le backend.
+ */
+export interface RoomProfile {
+    name: string;
+    /** Indicatif (affichage) : seul `volume_raw` est envoyé à l'ampli. */
+    volume_pct: number;
+    /** Volume brut YXC (0..max_volume, 161 sur la plupart des amplis). */
+    volume_raw: number;
+    dialog_lift: number;
+    dialog_level: number;
+    movie_sound_program: string;
+    series_sound_program: string;
+    music_sound_program: string;
+    adaptive_drc: boolean;
+    enhancer: boolean;
+    extra_bass: boolean;
+    /** Entrée à sélectionner ; null = ne pas changer de source. */
+    input?: string | null;
+}
+
+export type RoomProfiles = Record<YamahaRoom, RoomProfile>;
+
+const PROFILES_KEY = ["yamaha", "profiles"] as const;
+
+export function useYamahaProfiles() {
+    return useQuery<RoomProfiles>({
+        queryKey: PROFILES_KEY,
+        queryFn: () => apiFetch("/api/yamaha/profiles"),
+        staleTime: 5 * 60_000, // ne change que quand tu l'enregistres
+    });
+}
+
+export function useSaveYamahaProfile() {
+    const qc = useQueryClient();
+    return useMutation<
+        { status: string; room: string; profile: RoomProfile },
+        Error,
+        { room: YamahaRoom; profile: Partial<RoomProfile> }
+    >({
+        mutationFn: (body) => apiFetch("/api/yamaha/profiles", { method: "POST", body: JSON.stringify(body) }),
+        onSuccess: (res, { room }) => {
+            // Le backend renvoie le profil fusionné : on l'écrit directement
+            // dans le cache (le formulaire voit la version enregistrée sans
+            // attendre une relecture).
+            if (res?.profile) qc.setQueryData<RoomProfiles>(PROFILES_KEY, (old) => (old ? { ...old, [room]: res.profile } : old));
+            qc.invalidateQueries({ queryKey: PROFILES_KEY });
+        },
+    });
+}
+
+/** Contexte de lecture : choisit le programme films / séries / musique. */
+export interface YamahaPresetVars {
+    room: YamahaRoom;
+    /** "movie" (défaut) | "episode"/"series"/"tv" | "music"/"audio"/"track". */
+    media_type?: string;
+    audio_codec?: string;
+    /** ≤ 2 canaux au Salon → décodeur surround forcé par le backend. */
+    audio_channels?: number;
+    service_id?: number;
+}
+
+/** Ce que le backend a réellement appliqué (clés absentes = ignorées). */
+export interface YamahaPresetApplied {
+    room: string;
+    power?: "on";
+    input?: string;
+    sound_program?: string;
+    volume?: number;
+    dialog_lift?: number;
+    dialog_level?: number;
+    enhancer?: boolean;
+    extra_bass?: boolean;
+    adaptive_drc?: boolean;
+}
+
+export interface YamahaPresetResult {
+    status: string;
+    device?: string;
+    applied?: YamahaPresetApplied;
+    detail?: string;
+}
+
+export function useApplyYamahaPreset() {
+    const qc = useQueryClient();
+    return useMutation<YamahaPresetResult, Error, YamahaPresetVars>({
+        mutationFn: async (body) => {
+            const res = await apiFetch<YamahaPresetResult>("/api/yamaha/preset/apply", {
+                method: "POST",
+                body: JSON.stringify(body),
+            });
+            // Même convention que /control : 200 + {status:"error"} si l'ampli refuse.
+            if (res?.status === "error") throw new Error(res.detail || "L'ampli n'a pas accepté le préréglage");
+            return res;
+        },
+        onSettled: () => qc.invalidateQueries({ queryKey: ["yamaha", "state"] }),
     });
 }
 

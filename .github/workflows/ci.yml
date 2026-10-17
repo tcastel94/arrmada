@@ -29,8 +29,11 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Lint with ruff
+        # Version figée : chaque nouvelle version de ruff peut ajouter des
+        # règles et casser la CI sans aucun changement de code. On monte la
+        # version volontairement (et on corrige) plutôt que de la subir.
         run: |
-          pip install ruff
+          pip install ruff==0.17.0
           ruff check app/ tests/
           ruff format --check app/ tests/
 
@@ -80,11 +83,54 @@ jobs:
         env:
           NEXT_PUBLIC_API_URL: http://localhost:8420
 
+  # ── Add-on Kodi ────────────────────────────────────────────
+  # Pas de Kodi en CI : on teste la logique pure et la cohérence des fichiers
+  # (XML ↔ Python ↔ textures ↔ polices SiLVO). Le rendu se valide sur la TV.
+  kodi-addon-test:
+    name: "Kodi add-on — Tests"
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install tools
+        run: pip install pytest==8.3.4 ruff==0.17.0
+
+      - name: Lint with ruff
+        # Config : kodi-addon/ruff.toml. Seuls les modules des écrans v2,
+        # les outils et les tests sont contrôlés (l'ancien code suivra).
+        run: |
+          LIB=kodi-addon/script.arrmada/lib
+          FILES="$LIB/home_data.py $LIB/home_window.py $LIB/screens_data.py $LIB/ui_common.py"
+          FILES="$FILES $LIB/detail_window.py $LIB/downloads_window.py $LIB/salon_window.py"
+          FILES="$FILES $LIB/pairing_data.py $LIB/device.py $LIB/pair_window.py"
+          FILES="$FILES $LIB/feeds.py $LIB/catalog_data.py $LIB/listing.py $LIB/background.py"
+          FILES="$FILES $LIB/navigation.py $LIB/startup_guard.py $LIB/links_data.py $LIB/qr_window.py"
+          FILES="$FILES $LIB/migration.py $LIB/library_data.py $LIB/playback_data.py"
+          FILES="$FILES $LIB/watch_data.py $LIB/kodi_library.py $LIB/series_window.py"
+          FILES="$FILES $LIB/shell_data.py $LIB/shell_window.py $LIB/grid_window.py"
+          FILES="$FILES $LIB/apps_data.py $LIB/kodi_sources.py $LIB/apps_window.py"
+          FILES="$FILES $LIB/camera_data.py $LIB/camera_window.py"
+          FILES="$FILES $LIB/sync_data.py $LIB/watch_sync.py $LIB/upnext_data.py $LIB/upnext_window.py"
+          FILES="$FILES $LIB/player_data.py $LIB/player_window.py $LIB/chapter_data.py $LIB/skip_window.py $LIB/mkv_chapters.py"
+          FILES="$FILES $LIB/tonight_data.py $LIB/remote_data.py $LIB/crash_report.py"
+          FILES="$FILES kodi-addon/tests kodi-addon/tools"
+          ruff check $FILES
+          ruff format --check $FILES
+
+      - name: Run tests
+        run: pytest kodi-addon/tests -v
+
   # ── Docker ─────────────────────────────────────────────────
   docker-build:
     name: "Docker — Build"
     runs-on: ubuntu-latest
-    needs: [backend-lint-test, frontend-lint-build]
+    needs: [backend-lint-test, frontend-lint-build, kodi-addon-test]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:

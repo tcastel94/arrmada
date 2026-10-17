@@ -10,11 +10,7 @@ class LoginRequest(BaseModel):
 
     password: str = Field(min_length=1, description="Authentication password or PIN")
 
-    model_config = {
-        "json_schema_extra": {
-            "examples": [{"password": "my_secure_password"}]
-        }
-    }
+    model_config = {"json_schema_extra": {"examples": [{"password": "my_secure_password"}]}}
 
 
 class TokenResponse(BaseModel):

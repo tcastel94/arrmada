@@ -10,7 +10,7 @@
  * - Repliable (mémorisé), avec infobulles en mode replié.
  */
 import Link from "next/link";
-import Image from "next/image";
+import { BrandIcon } from "@/components/brand/brand-mark";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronsLeft, ChevronsRight, LogOut, Search } from "lucide-react";
@@ -129,7 +129,7 @@ export function Sidebar() {
             <Link href="/dashboard" className={cn("relative flex h-[72px] items-center gap-3 px-4", collapsed && "justify-center px-0")}>
                 <div className="border-beam relative h-10 w-10 shrink-0 rounded-xl p-[1.5px]">
                     <div className="h-full w-full overflow-hidden rounded-[10px]">
-                        <Image src="/logo-mark.png" alt="ArrMada" width={40} height={40} priority className="h-full w-full object-cover" />
+                        <BrandIcon title="ArrMada" />
                     </div>
                 </div>
                 <AnimatePresence initial={false}>

@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
 from app.database import async_session_factory
+from app.services.docker_logs import analyze_logs, get_aggregated_logs
 from app.services.file_manager import (
     docker_action,
     get_docker_containers,
@@ -19,6 +20,9 @@ from app.services.media_mover import (
     trigger_manual_import,
 )
 from app.services.unraid import DockerActionError
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter(
     prefix="/api/files",
@@ -77,12 +81,42 @@ async def run_docker_action(payload: DockerActionPayload):
     return {"result": result, "container_id": payload.container_id, "action": payload.action}
 
 
+@router.get("/docker/logs")
+async def docker_logs(
+    tail: int = Query(60, ge=10, le=300),
+    db: AsyncSession = Depends(get_db),
+):
+    """Aggregated, level-classified logs across registered-service containers."""
+    logs = await get_aggregated_logs(db, tail=tail)
+    return {"logs": logs, "count": len(logs)}
+
+
+@router.post("/docker/logs/analyze")
+async def analyze_docker_logs(
+    tail: int = Query(150, ge=20, le=400),
+    db: AsyncSession = Depends(get_db),
+):
+    """Ask the LLM to group the problems in recent logs and propose fixes."""
+    return await analyze_logs(db, tail=tail)
+
+
 # ── Media Mover ───────────────────────────────────────────────
+
 
 @router.get("/paths")
 async def nas_paths():
-    """Get NAS path mappings derived from Docker volume mounts."""
-    return await get_path_mappings()
+    """Get NAS path mappings derived from Docker volume mounts.
+
+    Unraid injoignable ou en erreur → 502 explicite (le front affiche
+    l'erreur avec un bouton « Réessayer ») plutôt qu'une 500 opaque.
+    """
+    try:
+        return await get_path_mappings()
+    except Exception as exc:
+        logger.warning("NAS path mapping failed: %s", exc)
+        raise HTTPException(
+            status_code=502, detail=f"Unraid injoignable ou en erreur : {exc}"
+        ) from exc
 
 
 @router.get("/stuck")
@@ -98,6 +132,10 @@ async def stuck_downloads(db: AsyncSession = Depends(get_db)):
 class ImportPayload(BaseModel):
     download_path: str
     media_type: str  # movie or series
+    # Opt-in: replace a file that already exists at the destination.
+    # Off by default — a mis-parsed release would otherwise destroy an
+    # unrelated episode, and *arr's recycle bin is often not configured.
+    allow_overwrite: bool = False
 
 
 @router.post("/import")
@@ -107,7 +145,12 @@ async def manual_import(payload: ImportPayload, db: AsyncSession = Depends(get_d
     This will move the files to the proper media folder, rename them,
     and trigger Bazarr for subtitles + Jellyfin library update.
     """
-    return await trigger_manual_import(db, payload.download_path, payload.media_type)
+    return await trigger_manual_import(
+        db,
+        payload.download_path,
+        payload.media_type,
+        allow_overwrite=payload.allow_overwrite,
+    )
 
 
 class BulkImportPayload(BaseModel):
@@ -120,24 +163,41 @@ async def bulk_import(
     background_tasks: BackgroundTasks,
 ):
     """Trigger manual import for multiple files in the background."""
+
     async def run_imports():
         import logging
+
         logger = logging.getLogger("app.api.files")
-        
+
         for idx, item in enumerate(payload.items):
             try:
-                logger.info("Background bulk import [%d/%d]: %s (%s)", idx + 1, len(payload.items), item.download_path, item.media_type)
+                logger.info(
+                    "Background bulk import [%d/%d]: %s (%s)",
+                    idx + 1,
+                    len(payload.items),
+                    item.download_path,
+                    item.media_type,
+                )
                 async with async_session_factory() as db:
-                    await trigger_manual_import(db, item.download_path, item.media_type)
+                    await trigger_manual_import(
+                        db,
+                        item.download_path,
+                        item.media_type,
+                        allow_overwrite=item.allow_overwrite,
+                    )
             except Exception as exc:
                 logger.error("Failed background bulk import for %s: %s", item.download_path, exc)
 
     background_tasks.add_task(run_imports)
-    return {"success": True, "message": f"Importation en arrière-plan démarrée pour {len(payload.items)} fichiers !"}
+    return {
+        "success": True,
+        "message": f"Importation en arrière-plan démarrée pour {len(payload.items)} fichiers !",
+    }
 
 
 @router.get("/auto-import/reports")
 async def get_auto_import_reports():
     """Get the 10 most recent auto-import execution reports."""
     from app.services.auto_import_reports import get_reports
+
     return get_reports()

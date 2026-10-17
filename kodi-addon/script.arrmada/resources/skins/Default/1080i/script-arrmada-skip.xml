@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ArrMada — bouton « Passer l'intro » / « Passer le récap » (1.17.0).
+
+  Repère 1920 × 1080. Ouvert par le service quand le chapitre en cours du
+  fichier s'appelle Intro, Opening, Générique, Previously on…
+  (lib/chapter_data.py). Un seul bouton, déjà sélectionné, en bas à droite :
+  OK saute au chapitre suivant ; Retour, ou rien pendant 10 s, le fait
+  disparaître. Le film continue dessous.
+  Donnée posée par lib/skip_window.py : label (« Passer l'intro »).
+-->
+<window>
+	<defaultcontrol always="true">301</defaultcontrol>
+	<animation effect="slide" start="60,0" end="0,0" time="300" tween="cubic" easing="out">WindowOpen</animation>
+	<animation effect="fade" start="0" end="100" time="250">WindowOpen</animation>
+	<animation effect="fade" start="100" end="0" time="200">WindowClose</animation>
+	<controls>
+		<control type="group" id="100">
+			<left>1484</left><top>900</top>
+			<control type="image">
+				<left>-24</left><top>-24</top><width>436</width><height>132</height>
+				<texture border="40" colordiffuse="99000000">arrmada/glow.png</texture>
+			</control>
+			<control type="button" id="301">
+				<left>0</left><top>0</top><width>388</width><height>84</height>
+				<label>$INFO[Window.Property(label)]</label>
+				<font>font13</font>
+				<textcolor>FFF5F7FA</textcolor>
+				<focusedcolor>FF0A0E16</focusedcolor>
+				<align>center</align><aligny>center</aligny>
+				<texturenofocus border="14" colordiffuse="E60A0E16">arrmada/rounded-12.png</texturenofocus>
+				<texturefocus border="14" colordiffuse="FFF5F7FA">arrmada/rounded-12.png</texturefocus>
+			</control>
+			<!-- Compte à rebours : la barre se vide en 10 s -->
+			<control type="image">
+				<left>16</left><top>72</top><width>356</width><height>6</height>
+				<texture>arrmada/progress/$INFO[Window.Property(bar)].png</texture>
+				<visible>!String.IsEmpty(Window.Property(bar))</visible>
+			</control>
+		</control>
+	</controls>
+</window>

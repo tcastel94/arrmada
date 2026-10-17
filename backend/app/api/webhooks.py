@@ -16,9 +16,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import Depends
 
 from app.database import get_db
 from app.utils.cache import cache
@@ -32,6 +31,77 @@ router = APIRouter(
     tags=["webhooks"],
     # No auth — webhooks come from internal services
 )
+
+
+def _quality_name(file: Any) -> str:
+    """Nom de la qualité d'un fichier (« Remux-2160p »…), quel que soit le format.
+
+    Les webhooks Radarr/Sonarr envoient une simple chaîne
+    (`"movieFile": {"quality": "Remux-2160p"}`), alors que l'API REST des
+    *arr renvoie un objet imbriqué (`{"quality": {"quality": {"name": …}}}`).
+    On accepte les deux : avant ce correctif, la chaîne faisait planter le
+    webhook (HTTP 500) et l'import n'était ni notifié ni publié en temps réel.
+    """
+    if not isinstance(file, dict):
+        return ""
+    quality = file.get("quality")
+    if isinstance(quality, str):
+        return quality
+    if isinstance(quality, dict):
+        inner = quality.get("quality")
+        if isinstance(inner, dict):
+            return str(inner.get("name") or "")
+        return str(quality.get("name") or "")
+    return ""
+
+
+def _episode_label(episodes: Any) -> str:
+    """« S02E10 » du premier épisode, ou "" si les numéros manquent."""
+    first = episodes[0] if isinstance(episodes, list) and episodes else None
+    if not isinstance(first, dict):
+        return ""
+    season, number = first.get("seasonNumber"), first.get("episodeNumber")
+    if isinstance(season, int) and isinstance(number, int):
+        return f"S{season:02d}E{number:02d}"
+    return ""
+
+
+def _poster_from(obj: Any) -> str:
+    """Affiche (TMDB / TheTVDB) parmi les images du webhook, sinon "".
+
+    Radarr 5 et Sonarr 4 envoient `images: [{coverType, url, remoteUrl}]`.
+    Seule une adresse complète (`remoteUrl`) sert à la TV : `url` est un
+    chemin local du *arr, inaccessible depuis Kodi.
+    """
+    for img in (obj.get("images") if isinstance(obj, dict) else None) or []:
+        if isinstance(img, dict) and (img.get("coverType") or "").lower() == "poster":
+            url = img.get("remoteUrl") or img.get("url") or ""
+            if url.startswith(("http://", "https://")):
+                return url
+    return ""
+
+
+async def _poster_from_library(db: AsyncSession, media_type: str | None, obj: Any) -> str:
+    """Affiche connue de la médiathèque ArrMada (webhook sans images).
+
+    Identifiant comme dans la médiathèque : TMDB pour un film, TVDB pour une
+    série (Sonarr) ; à défaut, le titre.
+    """
+    if not media_type or not isinstance(obj, dict):
+        return ""
+    from app.services.media_aggregator import find_artwork
+
+    ref = obj.get("tmdbId") if media_type == "movie" else obj.get("tvdbId")
+    return (await find_artwork(db, media_type, tmdb_id=ref, title=obj.get("title")))["poster"]
+
+
+def _size_bytes(payload: dict[str, Any]) -> int:
+    """Taille de la release (Grab) ou du fichier importé (Download), 0 si inconnue."""
+    for key in ("release", "movieFile", "episodeFile"):
+        part = payload.get(key)
+        if isinstance(part, dict) and isinstance(part.get("size"), int | float):
+            return int(part["size"])
+    return 0
 
 
 async def _handle_arr_webhook(
@@ -48,18 +118,13 @@ async def _handle_arr_webhook(
         title = payload["movie"].get("title", "Unknown movie")
     elif "series" in payload:
         title = payload["series"].get("title", "Unknown series")
-        if "episodes" in payload:
-            eps = payload["episodes"]
-            if eps:
-                title += f" S{eps[0].get('seasonNumber', '?'):02d}E{eps[0].get('episodeNumber', '?'):02d}"
+        label = _episode_label(payload.get("episodes"))
+        if label:
+            title += f" {label}"
     elif "message" in payload:
         title = payload["message"]
 
-    quality = ""
-    if "movieFile" in payload:
-        quality = payload["movieFile"].get("quality", {}).get("quality", {}).get("name", "")
-    elif "episodeFile" in payload:
-        quality = payload["episodeFile"].get("quality", {}).get("quality", {}).get("name", "")
+    quality = _quality_name(payload.get("movieFile") or payload.get("episodeFile"))
 
     logger.info("[Webhook] %s → %s: %s (%s)", service_type, event_type, title, quality or "n/a")
 
@@ -79,6 +144,7 @@ async def _handle_arr_webhook(
     if event_type in _wh_map:
         _cat, _act, _st = _wh_map[event_type]
         from app.services.activity_log import log_event
+
         await log_event(
             category=_cat,
             action=_act,
@@ -92,7 +158,14 @@ async def _handle_arr_webhook(
         )
 
     # Invalidate caches based on event type
-    if event_type in ("Download", "Grab", "MovieAdded", "SeriesAdd", "EpisodeFileDelete", "MovieDelete"):
+    if event_type in (
+        "Download",
+        "Grab",
+        "MovieAdded",
+        "SeriesAdd",
+        "EpisodeFileDelete",
+        "MovieDelete",
+    ):
         cache.invalidate_pattern("media:*")
         cache.invalidate_pattern("dashboard_stats")
         cache.invalidate_pattern("search:*")
@@ -121,33 +194,57 @@ async def _handle_arr_webhook(
         "MovieDelete": "media_deleted",
         "MovieFileDelete": "media_deleted",
         "Test": "webhook_test",
+        # Import bloqué (échantillon, mauvais fichier…) : à régler dans le *arr
+        "ManualInteractionRequired": "import_blocked",
     }
     sse_event_type = sse_type_map.get(event_type, f"{service_type}_{event_type.lower()}")
 
-    await event_bus.publish(sse_event_type, {
-        "service": service_type,
-        "event": event_type,
-        "title": title,
-        "quality": quality,
-        "source": payload.get("downloadClient", ""),
-    })
+    # Données enrichies pour les notifications de la TV (ADR-003, phase 3) :
+    # affiche, épisode, mise à niveau, taille.
+    episodes = payload.get("episodes")
+    first_episode = episodes[0] if isinstance(episodes, list) and episodes else {}
+    poster = _poster_from(_obj) or await _poster_from_library(db, _media_type, _obj)
+    release = payload.get("release") if isinstance(payload.get("release"), dict) else {}
+    await event_bus.publish(
+        sse_event_type,
+        {
+            "service": service_type,
+            "event": event_type,
+            "title": title,
+            "quality": quality or str(release.get("quality") or ""),
+            "source": payload.get("downloadClient", ""),
+            "media_type": _media_type or "",
+            "year": _obj.get("year"),
+            "poster": poster,
+            "episode_title": (
+                str(first_episode.get("title") or "") if isinstance(first_episode, dict) else ""
+            ),
+            "upgrade": bool(payload.get("isUpgrade")),
+            "size": _size_bytes(payload),
+        },
+    )
 
     # Also publish cache_invalidated so frontend knows to refetch
-    await event_bus.publish("cache_invalidated", {
-        "source": service_type,
-        "event": event_type,
-        "patterns": ["media", "dashboard"],
-    })
+    await event_bus.publish(
+        "cache_invalidated",
+        {
+            "source": service_type,
+            "event": event_type,
+            "patterns": ["media", "dashboard"],
+        },
+    )
 
     # Create in-app notification for important events
     if event_type == "Download":
         try:
             from app.services.notification_service import create_notification
+
             await create_notification(
                 db,
                 type="new_import",
                 title=f"{'🎬' if service_type == 'radarr' else '📺'} {title}",
-                message=f"Importé via {service_type.capitalize()}" + (f" en {quality}" if quality else ""),
+                message=f"Importé via {service_type.capitalize()}"
+                + (f" en {quality}" if quality else ""),
                 severity="info",
                 service_name=service_type,
             )
@@ -158,6 +255,7 @@ async def _handle_arr_webhook(
         if service_type in ("radarr", "sonarr"):
             try:
                 from app.services.kodi import sync_kodi
+
                 result = await sync_kodi(db)
                 cache.invalidate("kodi:watched")
                 if result.get("success"):
@@ -168,6 +266,7 @@ async def _handle_arr_webhook(
     elif event_type == "Health":
         try:
             from app.services.notification_service import create_notification
+
             await create_notification(
                 db,
                 type="health_issue",
@@ -204,12 +303,15 @@ async def bazarr_webhook(request: Request, db: AsyncSession = Depends(get_db)):
 
     cache.invalidate_pattern("media:*")
 
-    await event_bus.publish("subtitle_update", {
-        "service": "bazarr",
-        "event": event_type,
-        "title": payload.get("title", "Unknown"),
-        "language": payload.get("language", ""),
-    })
+    await event_bus.publish(
+        "subtitle_update",
+        {
+            "service": "bazarr",
+            "event": event_type,
+            "title": payload.get("title", "Unknown"),
+            "language": payload.get("language", ""),
+        },
+    )
 
     return {"status": "ok", "event": event_type, "service": "bazarr"}
 
@@ -221,11 +323,14 @@ async def sabnzbd_webhook(request: Request):
 
     cache.invalidate_pattern("downloads:*")
 
-    await event_bus.publish("download_update", {
-        "service": "sabnzbd",
-        "title": payload.get("name", "Unknown"),
-        "status": payload.get("status", "unknown"),
-    })
+    await event_bus.publish(
+        "download_update",
+        {
+            "service": "sabnzbd",
+            "title": payload.get("name", "Unknown"),
+            "status": payload.get("status", "unknown"),
+        },
+    )
 
     return {"status": "ok", "service": "sabnzbd"}
 
@@ -233,8 +338,11 @@ async def sabnzbd_webhook(request: Request):
 @router.post("/test")
 async def test_webhook(request: Request):
     """Test webhook — sends a test SSE event."""
-    await event_bus.publish("webhook_test", {
-        "message": "Webhook test successful!",
-        "clients": event_bus.client_count,
-    })
+    await event_bus.publish(
+        "webhook_test",
+        {
+            "message": "Webhook test successful!",
+            "clients": event_bus.client_count,
+        },
+    )
     return {"status": "ok", "clients": event_bus.client_count}

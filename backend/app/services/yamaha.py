@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import json
 import socket
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -38,12 +40,47 @@ def _base(url: str) -> str:
     return f"{p.scheme}://{p.netloc}"
 
 
+# Codes d'erreur YXC : l'ampli répond HTTP 200 même quand il REFUSE une
+# commande ; seul `response_code` (≠ 0) le signale.
+_YXC_ERRORS = {
+    1: "initialisation en cours",
+    2: "erreur interne",
+    3: "commande non prise en charge",
+    4: "paramètre invalide",
+    5: "impossible dans l'état actuel",
+    6: "délai dépassé",
+    99: "mise à jour du firmware en cours",
+}
+
+
+class YamahaError(RuntimeError):
+    """L'ampli a répondu mais a refusé la commande (response_code ≠ 0)."""
+
+
+# Ancien identifiant (profils déjà enregistrés) → identifiant YXC réel.
+_PROGRAM_ALIASES = {"surround_decoder": "surr_decoder"}
+
+
+def _program_id(program: str) -> str:
+    return _PROGRAM_ALIASES.get(program, program)
+
+
 async def _get(base: str, path: str, *, timeout: float = 4.0) -> dict[str, Any]:
-    """GET a YXC endpoint and return the parsed JSON (raises on transport error)."""
+    """GET a YXC endpoint and return the parsed JSON.
+
+    Raises on transport errors AND when the AVR rejects the command
+    (``response_code`` ≠ 0) : sans ça, une commande refusée (programme sonore
+    inconnu, paramètre hors plage…) était affichée comme appliquée.
+    """
     async with httpx.AsyncClient(timeout=timeout) as client:
         r = await client.get(f"{base}{YXC}{path}")
         r.raise_for_status()
-        return r.json()
+        data = r.json()
+    code = data.get("response_code", 0) if isinstance(data, dict) else 0
+    if code:
+        reason = _YXC_ERRORS.get(code, f"code {code}")
+        raise YamahaError(f"{path.split('?')[0]} : {reason}")
+    return data
 
 
 async def probe(ip_or_base: str, *, timeout: float = 1.5) -> dict[str, Any] | None:
@@ -52,7 +89,11 @@ async def probe(ip_or_base: str, *, timeout: float = 1.5) -> dict[str, Any] | No
     try:
         info = await _get(base, "/system/getDeviceInfo", timeout=timeout)
         if info.get("response_code") == 0 and info.get("model_name"):
-            return {"url": base, "model_name": info["model_name"], "device_id": info.get("device_id")}
+            return {
+                "url": base,
+                "model_name": info["model_name"],
+                "device_id": info.get("device_id"),
+            }
     except Exception:
         return None
     return None
@@ -60,19 +101,23 @@ async def probe(ip_or_base: str, *, timeout: float = 1.5) -> dict[str, Any] | No
 
 # ── Discovery ──────────────────────────────────────────────────
 
+
 def _ssdp_search(timeout: float = 3.0) -> set[str]:
     """SSDP M-SEARCH → set of candidate host IPs (best-effort; may be empty)."""
     hosts: set[str] = set()
-    msg = "\r\n".join(
-        [
-            "M-SEARCH * HTTP/1.1",
-            "HOST:239.255.255.250:1900",
-            'MAN:"ssdp:discover"',
-            "MX:2",
-            "ST:ssdp:all",
-            "",
-        ]
-    ) + "\r\n"
+    msg = (
+        "\r\n".join(
+            [
+                "M-SEARCH * HTTP/1.1",
+                "HOST:239.255.255.250:1900",
+                'MAN:"ssdp:discover"',
+                "MX:2",
+                "ST:ssdp:all",
+                "",
+            ]
+        )
+        + "\r\n"
+    )
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -84,7 +129,7 @@ def _ssdp_search(timeout: float = 3.0) -> set[str]:
         while time.monotonic() - start < timeout + 1:
             try:
                 data, addr = s.recvfrom(2048)
-            except socket.timeout:
+            except TimeoutError:
                 break
             low = data.decode(errors="ignore").lower()
             if "yamaha" in low or "mediarenderer" in low or "av_receiver" in low:
@@ -149,6 +194,7 @@ async def discover(db: AsyncSession) -> list[dict[str, Any]]:
 
 
 # ── Instances ──────────────────────────────────────────────────
+
 
 async def _enabled(db: AsyncSession) -> list[Service]:
     res = await db.execute(
@@ -237,7 +283,9 @@ async def control(
         elif action == "volume_step":
             # value = +N / -N relative step
             step = int(value)
-            await _get(base, f"/{zone}/setVolume?volume={'up' if step > 0 else 'down'}&step={abs(step)}")
+            await _get(
+                base, f"/{zone}/setVolume?volume={'up' if step > 0 else 'down'}&step={abs(step)}"
+            )
         elif action == "mute":
             enable = "true" if value else "false"
             await _get(base, f"/{zone}/setMute?enable={enable}")
@@ -248,6 +296,23 @@ async def control(
             await _get(base, f"/{zone}/setPower?power={p}")
         elif action == "input":
             await _get(base, f"/{zone}/setInput?input={value}")
+        elif action == "sound_program":
+            await _get(base, f"/{zone}/setSoundProgram?program={_program_id(str(value))}")
+        elif action == "dialog_lift":
+            val = max(0, min(5, int(value)))
+            await _get(base, f"/{zone}/setDialogueLift?value={val}")
+        elif action == "dialog_level":
+            val = max(0, min(3, int(value)))
+            await _get(base, f"/{zone}/setDialogueLevel?value={val}")
+        elif action == "enhancer":
+            enable = "true" if value else "false"
+            await _get(base, f"/{zone}/setEnhancer?enable={enable}")
+        elif action == "extra_bass":
+            enable = "true" if value else "false"
+            await _get(base, f"/{zone}/setExtraBass?enable={enable}")
+        elif action == "adaptive_drc":
+            enable = "true" if value else "false"
+            await _get(base, f"/{zone}/setAdaptiveDrc?enable={enable}")
         else:
             return {"status": "error", "detail": f"Action inconnue: {action}"}
     except Exception as exc:
@@ -255,6 +320,210 @@ async def control(
         return {"status": "error", "detail": f"{type(exc).__name__}"}
 
     return {"status": "ok", "action": action}
+
+
+# ── Room Audio Profiles & Automation ─────────────────────────
+
+DEFAULT_PROFILES = {
+    "salon": {
+        "name": "Salon",
+        "volume_pct": 40,
+        "volume_raw": 65,  # Typical YXC volume step (0..161)
+        "dialog_lift": 2,
+        "dialog_level": 2,
+        "movie_sound_program": "surr_decoder",
+        "series_sound_program": "drama",
+        "music_sound_program": "2ch_stereo",
+        "adaptive_drc": True,
+        "enhancer": True,
+        "extra_bass": False,
+        "input": None,
+    },
+    "cinema": {
+        "name": "Salle de cinéma",
+        "volume_pct": 60,
+        "volume_raw": 95,
+        "dialog_lift": 1,
+        "dialog_level": 1,
+        "movie_sound_program": "straight",
+        "series_sound_program": "spectacle",
+        "music_sound_program": "7ch_stereo",
+        "adaptive_drc": False,
+        "enhancer": False,
+        "extra_bass": True,
+        "input": None,
+    },
+}
+
+
+# Profils persistés sur disque (volume ./data monté sur /app/data, comme la
+# clé de chiffrement) : avant, ils vivaient dans le cache mémoire et
+# disparaissaient à chaque redémarrage du conteneur.
+_PROFILES_FILE = Path("data") / "yamaha_room_profiles.json"
+
+
+def _load_profiles() -> dict[str, Any]:
+    """Profils enregistrés, complétés par les valeurs par défaut."""
+    profiles = {room: dict(values) for room, values in DEFAULT_PROFILES.items()}
+    try:
+        stored = json.loads(_PROFILES_FILE.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return profiles
+    except (OSError, ValueError) as exc:
+        logger.warning("Profils Yamaha illisibles (%s) : valeurs par défaut", exc)
+        return profiles
+    for room, values in (stored or {}).items():
+        if isinstance(values, dict):
+            profiles[room] = {**profiles.get(room, {}), **values}
+    return profiles
+
+
+def _write_profiles(profiles: dict[str, Any]) -> None:
+    """Écriture atomique : fichier temporaire puis renommage (jamais de JSON tronqué)."""
+    _PROFILES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = _PROFILES_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(profiles, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(_PROFILES_FILE)
+
+
+async def get_room_profiles(db: AsyncSession) -> dict[str, Any]:
+    """Retrieve configured room sound profiles (Salon & Salle de Cinéma)."""
+    return _load_profiles()
+
+
+async def save_room_profile(
+    db: AsyncSession, room: str, profile_data: dict[str, Any]
+) -> dict[str, Any]:
+    """Save or update audio settings for a room profile."""
+    profiles = _load_profiles()
+    current = {**profiles.get(room, DEFAULT_PROFILES.get(room, {})), **profile_data}
+    profiles[room] = current
+    _write_profiles(profiles)
+    return {"status": "ok", "room": room, "profile": current}
+
+
+async def apply_preset(
+    db: AsyncSession,
+    room: str = "salon",
+    media_type: str = "movie",
+    audio_codec: str | None = None,
+    audio_channels: int | None = None,
+    service_id: int | None = None,
+) -> dict[str, Any]:
+    """Apply optimal sound parameters on the AVR for the specified room & media context."""
+    svc = await _pick(db, service_id)
+    if not svc:
+        return {"status": "error", "detail": "Aucun ampli Yamaha configuré"}
+    base = _base(svc.url)
+
+    profiles = await get_room_profiles(db)
+    room_key = "cinema" if "cinema" in room.lower() or "cinéma" in room.lower() else "salon"
+    profile = profiles.get(room_key, DEFAULT_PROFILES["salon"])
+
+    applied: dict[str, Any] = {"room": profile.get("name", room_key)}
+
+    try:
+        # 1. Power ON if standby
+        st = await _zone_status(base)
+        if st.get("power") != "on":
+            await _get(base, "/main/setPower?power=on")
+            applied["power"] = "on"
+            await asyncio.sleep(0.5)
+
+        # 2. Input switch if configured
+        target_input = profile.get("input")
+        if target_input:
+            await _get(base, f"/main/setInput?input={target_input}")
+            applied["input"] = target_input
+
+        # 3. Choose Sound Program based on media type & channels
+        program = profile.get("movie_sound_program", "straight")
+        if media_type in ("tv", "series", "episode"):
+            program = profile.get("series_sound_program", "drama")
+        elif media_type in ("music", "audio", "track"):
+            program = profile.get("music_sound_program", "2ch_stereo")
+        elif audio_channels and audio_channels <= 2 and room_key == "salon":
+            program = "surr_decoder"
+
+        # Apply Sound Program (try, gracefully fallback if not supported)
+        try:
+            program = _program_id(program)
+            await _get(base, f"/main/setSoundProgram?program={program}")
+            applied["sound_program"] = program
+        except Exception:
+            logger.debug("Sound program %s not supported on %s", program, base)
+
+        # 4. Set Volume
+        vol_raw = profile.get("volume_raw")
+        if vol_raw is not None:
+            vol_target = max(0, min(140, int(vol_raw)))  # cap at safe volume
+            await _get(base, f"/main/setVolume?volume={vol_target}")
+            applied["volume"] = vol_target
+
+        # 5. Dialogue Lift & Dialogue Level
+        dialog_lift = profile.get("dialog_lift")
+        if dialog_lift is not None:
+            try:
+                await _get(base, f"/main/setDialogueLift?value={dialog_lift}")
+                applied["dialog_lift"] = dialog_lift
+            except Exception:
+                pass
+
+        dialog_level = profile.get("dialog_level")
+        if dialog_level is not None:
+            try:
+                await _get(base, f"/main/setDialogueLevel?value={dialog_level}")
+                applied["dialog_level"] = dialog_level
+            except Exception:
+                pass
+
+        # 6. Enhancer & Extra Bass
+        if "enhancer" in profile:
+            try:
+                e_val = "true" if profile["enhancer"] else "false"
+                await _get(base, f"/main/setEnhancer?enable={e_val}")
+                applied["enhancer"] = profile["enhancer"]
+            except Exception:
+                pass
+
+        if "extra_bass" in profile:
+            try:
+                b_val = "true" if profile["extra_bass"] else "false"
+                await _get(base, f"/main/setExtraBass?enable={b_val}")
+                applied["extra_bass"] = profile["extra_bass"]
+            except Exception:
+                pass
+
+        # 7. Adaptive DRC (Night Mode)
+        if "adaptive_drc" in profile:
+            try:
+                drc_val = "true" if profile["adaptive_drc"] else "false"
+                await _get(base, f"/main/setAdaptiveDrc?enable={drc_val}")
+                applied["adaptive_drc"] = profile["adaptive_drc"]
+            except Exception:
+                pass
+
+        # Log event in activity history
+        from app.services.activity_log import log_event
+
+        await log_event(
+            category="yamaha",
+            action="apply_preset",
+            status="ok",
+            source="arrmada",
+            device=svc.name,
+            detail=f"Preset {profile.get('name')} appliqué ({applied.get('sound_program', '')})",
+            meta=applied,
+        )
+
+        return {"status": "ok", "device": svc.name, "applied": applied}
+
+    except Exception as exc:
+        logger.error("Failed to apply Yamaha sound preset %s on %s: %s", room_key, base, exc)
+        return {
+            "status": "error",
+            "detail": f"Échec de l'application du préréglage : {type(exc).__name__}",
+        }
 
 
 async def test_connection(db: AsyncSession, service_id: int) -> dict[str, Any]:

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import httpx
 
 from app.config import settings
@@ -41,9 +39,7 @@ async def send_message(text: str, parse_mode: str = "HTML") -> bool:
 async def notify_service_down(service_name: str, error: str) -> bool:
     """Send alert when a service goes offline."""
     return await send_message(
-        f"🔴 <b>Service offline</b>\n"
-        f"<code>{service_name}</code> est hors ligne\n"
-        f"Erreur: {error}"
+        f"🔴 <b>Service offline</b>\n<code>{service_name}</code> est hors ligne\nErreur: {error}"
     )
 
 
@@ -68,7 +64,4 @@ async def notify_new_media(title: str, media_type: str, year: int | None) -> boo
     """Send alert when new media is added."""
     icon = "🎬" if media_type == "movie" else "📺"
     year_str = f" ({year})" if year else ""
-    return await send_message(
-        f"{icon} <b>Nouveau média ajouté</b>\n"
-        f"<code>{title}{year_str}</code>"
-    )
+    return await send_message(f"{icon} <b>Nouveau média ajouté</b>\n<code>{title}{year_str}</code>")
