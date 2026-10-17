@@ -75,6 +75,10 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     # Artworks : toutes les images d'un titre (galerie de l'onglet Artworks)
     ("media_artwork", "gallery", "JSON"),
     ("media_artwork", "gallery_count", "INTEGER NOT NULL DEFAULT 0"),
+    # Demandes TV (ADR-005, lot 4) : import, sous-titres, de quoi « Regarder »
+    ("tv_requests", "imported_at", "TIMESTAMP WITH TIME ZONE"),
+    ("tv_requests", "subtitles", "VARCHAR(10)"),
+    ("tv_requests", "ready_info", "JSON"),
 )
 
 

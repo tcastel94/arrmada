@@ -280,6 +280,30 @@ def _due(download_id: str) -> bool:
     return False
 
 
+async def plan_for_download(
+    client: Any, download_id: str, series_id_hint: Any = None, allow_overwrite: bool = False
+) -> dict[str, Any]:
+    """Plan d'import d'UN pack bloqué, lu dans Sonarr (fichiers + épisodes de la série).
+
+    Partagé par la tâche de fond et le bouton « Débloquer » de la TV
+    (services/unstick.py) : mêmes garde-fous, tout ou rien.
+    """
+    candidates = await client.get(
+        "/manualimport",
+        params={"downloadId": download_id, "filterExistingFiles": "false"},
+    )
+    series_id = next(
+        (
+            (c.get("series") or {}).get("id")
+            for c in candidates or []
+            if (c.get("series") or {}).get("id")
+        ),
+        series_id_hint,
+    )
+    episodes = await client.get("/episode", params={"seriesId": series_id}) if series_id else []
+    return plan_pack(candidates, episodes, download_id, allow_overwrite)
+
+
 async def resolve_blocked_packs(db: Any, allow_overwrite: bool = False) -> list[dict[str, Any]]:
     """Un passage : packs bloqués de chaque Sonarr → import manuel quand c'est sûr.
 
@@ -310,24 +334,9 @@ async def resolve_blocked_packs(db: Any, allow_overwrite: bool = False) -> list[
                     "media_type": "series",
                 }
                 try:
-                    candidates = await client.get(
-                        "/manualimport",
-                        params={"downloadId": download_id, "filterExistingFiles": "false"},
+                    plan = await plan_for_download(
+                        client, download_id, info["series_id"], allow_overwrite
                     )
-                    series_id = next(
-                        (
-                            (c.get("series") or {}).get("id")
-                            for c in candidates or []
-                            if (c.get("series") or {}).get("id")
-                        ),
-                        info["series_id"],
-                    )
-                    episodes = (
-                        await client.get("/episode", params={"seriesId": series_id})
-                        if series_id
-                        else []
-                    )
-                    plan = plan_pack(candidates, episodes, download_id, allow_overwrite)
                     if not plan["ok"]:
                         _next_try[download_id] = time.monotonic() + _RETRY_AFTER_SKIP
                         logger.info(

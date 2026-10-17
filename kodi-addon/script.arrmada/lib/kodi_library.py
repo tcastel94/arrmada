@@ -174,12 +174,13 @@ def tonight_candidates() -> list:
     return candidates
 
 
-def remote_play(params: dict) -> bool:
+def remote_play(params: dict, quiet: bool = False) -> bool:
     """« Lire sur la TV » (1.19.0) : retrouve le titre demandé par la web app et le lance.
 
     Le titre est désigné par ses identifiants publics (TMDB d'un film, TVDB
     de la série + saison + épisode) : les numéros internes de Kodi diffèrent
     d'une TV à l'autre. `resume` : « 1 » reprendre, « 0 » depuis le début.
+    `quiet` : pas de bulle d'échec (« Prêt à regarder » réessaie, lot 4).
     """
     import remote_data
 
@@ -203,7 +204,8 @@ def remote_play(params: dict) -> bool:
             # que la suite soit empilée avant de rendre la main
             return play_episode(episodeid, episodes, resume=resume, wait=True)
     _log(f"« Lire sur la TV » : {label} absent de la médiathèque de cette TV", xbmc.LOGWARNING)
-    ui.notify("Lecture impossible", f"{label} n'est pas dans la médiathèque de cette TV")
+    if not quiet:
+        ui.notify("Lecture impossible", f"{label} n'est pas dans la médiathèque de cette TV")
     return False
 
 

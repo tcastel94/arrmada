@@ -208,7 +208,11 @@ def handle_search_results(query: str):
 
 
 def show_media_details_dialog(params: dict):
-    """Handle click on a poster: show detail popup and launch 3-step wizard or release picker."""
+    """Options avancées de la feuille « Télécharger » : qualité, dossier, release à la main.
+
+    Ancien assistant en 3 listes ; le chemin normal est désormais la feuille
+    (lib/download_window.py), qui prend la qualité et le dossier habituels.
+    """
     title = params.get("title", "")
     mtype = params.get("type", "movie")
     in_lib = params.get("in_library") == "1"
@@ -482,6 +486,10 @@ def main():
         # « Lire sur la TV » depuis la web app (1.19.0) : lancé par le service
         import kodi_library
         kodi_library.remote_play(params)
+    elif action == "ready":
+        # « Prêt à regarder » (ADR-005, lot 4) : ouvert par le service sur la bonne TV
+        import ready_window
+        ready_window.show(params)
     elif action == "camera":
         # Pop-up d'une caméra Eufy par-dessus le film (ouverte par le service)
         import camera_window
@@ -585,6 +593,12 @@ def main():
     elif action == "dashboard" or action == "dashboard_popup":
         show_dashboard_dialog()
     elif action == "media_details":
+        # Feuille « Télécharger » (ADR-005) : film, série, saison ou épisode
+        import download_data
+        import download_window
+        download_window.open_download(download_data.entry_from_params(params))
+    elif action == "media_advanced":
+        # « Options avancées » de la feuille : l'ancien assistant (qualité, dossier, release)
         show_media_details_dialog(params)
     elif action == "downloads":
         show_downloads_dialog()

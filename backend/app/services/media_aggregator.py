@@ -490,6 +490,10 @@ async def get_queue_items(db: AsyncSession) -> list[dict[str, Any]]:
                             "quality": item.get("quality", {}).get("quality", {}).get("name", ""),
                             # Épisodes couverts par ce téléchargement (pack de saison)
                             "episode_count": len(group) if svc.type == "sonarr" else 0,
+                            "episode_ids": [r["episodeId"] for r in group if r.get("episodeId")],
+                            "season_number": item.get("seasonNumber"),
+                            # nzo_id SABnzbd (ou hash torrent) : clé des actions par élément
+                            "download_id": item.get("downloadId") or "",
                         }
                     )
             finally:

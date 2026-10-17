@@ -52,6 +52,19 @@ export interface DownloadItem {
     clearlogo_url?: string | null;
     /** Titre propre du média (« Dune »), à côté du nom de release. */
     media_title?: string | null;
+    /** nzo_id SABnzbd (ou hash torrent) : clé des actions par élément. */
+    download_id?: string;
+    /**
+     * Lancé depuis une TV (ADR-005) : quelle TV, et s'il passe devant la file
+     * (priorité Force dans SABnzbd). null : téléchargement ordinaire.
+     */
+    tv_request?: {
+        id: number;
+        device_name: string;
+        room: string | null;
+        priority: boolean;
+        requested_at: string | null;
+    } | null;
 }
 
 export interface DownloadsResponse {

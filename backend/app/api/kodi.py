@@ -13,7 +13,15 @@ from app.api.deps import get_current_user, get_db, require_admin
 from app.models.device import Device
 from app.models.service import Service
 from app.services import kodi as kodi_service
-from app.services import kodi_crash, watch_summary, watch_sync
+from app.services import (
+    kodi_crash,
+    tv_board,
+    tv_download,
+    tv_priority,
+    unstick,
+    watch_summary,
+    watch_sync,
+)
 from app.services.encryption import decrypt_api_key, encrypt_api_key
 from app.services.fully_kiosk import kiosk
 from app.services.kodi import discover_kodi, sync_kodi
@@ -269,9 +277,11 @@ async def addon_subtitles_sync_action(data: dict, db: AsyncSession = Depends(get
 
 
 @router.post("/actions/search")
-async def addon_search_action(data: dict, db: AsyncSession = Depends(get_db)):
+async def addon_search_action(
+    data: dict, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)
+):
     """Trigger Radarr/Sonarr release search from Kodi add-on."""
-    return await kodi_service.handle_addon_search(db, data)
+    return await kodi_service.handle_addon_search(db, data, tv_priority.origin_of(user))
 
 
 @router.post("/scrobble")
@@ -483,9 +493,34 @@ async def addon_media_options(type: str = "movie", db: AsyncSession = Depends(ge
 
 
 @router.post("/media/add")
-async def addon_media_add(data: dict, db: AsyncSession = Depends(get_db)):
+async def addon_media_add(
+    data: dict, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)
+):
     """Add a movie or series to Radarr/Sonarr from Kodi."""
-    return await kodi_service.add_media_for_addon(db, data)
+    return await kodi_service.add_media_for_addon(db, data, tv_priority.origin_of(user))
+
+
+# ── Feuille « Télécharger » de la TV (services/tv_download.py) ─
+@router.get("/media/seasons")
+async def addon_media_seasons(
+    title: str = "",
+    tmdb_id: int | None = None,
+    tvdb_id: int | None = None,
+    season: int | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """Saisons d'une série et épisodes d'une saison (suivie par Sonarr ou non)."""
+    return await tv_download.get_seasons(
+        db, title=title, tmdb_id=tmdb_id, tvdb_id=tvdb_id, season=season
+    )
+
+
+@router.post("/media/download")
+async def addon_media_download(
+    data: dict, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)
+):
+    """Télécharger un film, une série, une saison ou des épisodes (« pour ce soir » ou non)."""
+    return await tv_download.start_download(db, data, tv_priority.origin_of(user))
 
 
 @router.get("/media/{type}/{id}/releases")
@@ -500,11 +535,17 @@ async def addon_media_releases(
 
 
 @router.post("/media/{type}/{id}/grab")
-async def addon_media_grab(type: str, id: int, data: dict, db: AsyncSession = Depends(get_db)):
+async def addon_media_grab(
+    type: str,
+    id: int,
+    data: dict,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
     """Grab a selected release and send to SABnzbd / Torrent client."""
     data["type"] = type
     data["arr_id"] = id
-    return await kodi_service.grab_release_for_addon(db, data)
+    return await kodi_service.grab_release_for_addon(db, data, tv_priority.origin_of(user))
 
 
 # ── Kodi Queue Control ───────────────────────────────────────
@@ -533,6 +574,83 @@ async def addon_queue_resume(type: str, id: int, db: AsyncSession = Depends(get_
 async def addon_queue_pause(type: str, id: int, db: AsyncSession = Depends(get_db)):
     """Pause download from Kodi."""
     return await kodi_service.pause_queue_item_for_addon(db, type, id)
+
+
+# ── Demandes « pour ce soir » (services/tv_priority.py) ───────
+@router.get("/tv-requests")
+async def list_tv_requests(
+    db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)
+):
+    """Demandes lancées depuis les TV : en cours, et terminées depuis moins de 12 h.
+
+    `mine` : lancée par la TV qui appelle (elle seule peut l'annuler).
+    """
+    items = await tv_priority.list_requests(db, user.get("device_id"))
+    return {"items": items, "total": len(items)}
+
+
+@router.post("/tv-requests/{request_id}/cancel")
+async def cancel_tv_request(
+    request_id: int, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)
+):
+    """Annule une demande en cours : téléchargements retirés, rien de supprimé du disque."""
+    result = await tv_priority.cancel_request(db, request_id, user)
+    if result.get("status") != "ok":
+        raise HTTPException(status_code=result.get("code", 400), detail=result["message"])
+    return result
+
+
+@router.post("/tv-requests/{request_id}/retry")
+async def retry_tv_request(
+    request_id: int, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)
+):
+    """Relance la recherche d'une demande (même portée), qui repart pour 24 h."""
+    result = await tv_priority.retry_request(db, request_id, user)
+    if result.get("status") != "ok":
+        raise HTTPException(status_code=result.get("code", 400), detail=result["message"])
+    return result
+
+
+@router.post("/queue/{download_id}/{action}")
+async def addon_queue_item_action(
+    download_id: str, action: str, db: AsyncSession = Depends(get_db)
+):
+    """pause | resume | top sur UN téléchargement SABnzbd (downloadId de la file)."""
+    if action not in ("pause", "resume", "top"):
+        raise HTTPException(status_code=404, detail="Action inconnue")
+    result = await tv_priority.queue_action(db, download_id, action)
+    if result.get("status") != "ok":
+        raise HTTPException(status_code=409, detail=result["message"])
+    return result
+
+
+# ── Écran Téléchargements de la TV (ADR-005, lot 3) ───────────
+@router.get("/downloads/board")
+async def addon_downloads_board(
+    db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)
+):
+    """Voie « Pour ce soir », reste de la file et état de SABnzbd, en un appel."""
+    return await tv_board.build_board(db, user.get("device_id"))
+
+
+@router.get("/downloads/{service_type}/{download_id}/diagnose")
+async def addon_download_diagnose(
+    service_type: str, download_id: str, db: AsyncSession = Depends(get_db)
+):
+    """Pourquoi ce téléchargement est bloqué, et ce que « Débloquer » fera."""
+    return await unstick.diagnose(db, service_type, download_id)
+
+
+@router.post("/downloads/{service_type}/{download_id}/unstick")
+async def addon_download_unstick(
+    service_type: str,
+    download_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    """Débloquer : le serveur refait le diagnostic et applique son remède."""
+    device = tv_priority.origin_of(user)["device_name"] if user.get("role") == "device" else None
+    return await unstick.unstick(db, service_type, download_id, device)
 
 
 # ── Kodi Maintenance & Cleanup ────────────────────────────────

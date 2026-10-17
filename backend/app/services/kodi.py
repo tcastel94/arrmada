@@ -887,9 +887,19 @@ async def handle_addon_sync_subtitles(db: AsyncSession, data: dict[str, Any]) ->
         return {"status": "error", "message": f"Erreur FFsubsync : {str(exc)}"}
 
 
-async def handle_addon_search(db: AsyncSession, data: dict[str, Any]) -> dict[str, Any]:
-    """Trigger Radarr/Sonarr media search from Kodi context action."""
+async def handle_addon_search(
+    db: AsyncSession, data: dict[str, Any], origin: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Trigger Radarr/Sonarr media search from Kodi context action.
+
+    Lancée depuis la TV : la demande est notée pour passer en tête de
+    SABnzbd (services/tv_priority.py), sauf `"priority": false`.
+    """
+    from app.services import tv_priority
     from app.services.activity_log import log_event
+
+    origin = origin or tv_priority.origin_of(None)
+    priority = bool(data.get("priority", True))
 
     media_type = data.get("media_type") or (
         "episode" if data.get("season") is not None else "movie"
@@ -924,6 +934,14 @@ async def handle_addon_search(db: AsyncSession, data: dict[str, Any]) -> dict[st
                 return {"status": "error", "message": f"Film '{title}' introuvable dans Radarr"}
 
             await radarr.search_movie(match["id"])
+            await tv_priority.create_request(
+                db,
+                service_type="radarr",
+                arr_id=match["id"],
+                title=match.get("title") or title,
+                origin=origin,
+                priority=priority,
+            )
             await log_event(
                 category="media",
                 action="kodi_media_search",
@@ -932,6 +950,7 @@ async def handle_addon_search(db: AsyncSession, data: dict[str, Any]) -> dict[st
                 media_type="movie",
                 title=match.get("title", title),
                 tmdb_id=match.get("tmdbId"),
+                device=origin["device_name"],
                 detail="Recherche de release Radarr déclenchée depuis Kodi",
             )
             return {
@@ -980,12 +999,25 @@ async def handle_addon_search(db: AsyncSession, data: dict[str, Any]) -> dict[st
 
                 await sonarr.search_episodes([match_ep["id"]])
                 desc = f"Recherche épisode S{int(season):02d}E{int(episode):02d}"
+                scope = {"scope": "episode", "episode_ids": [match_ep["id"]]}
             elif season is not None:
                 await sonarr.search_season(series_id, int(season))
                 desc = f"Recherche saison {int(season)}"
+                scope = {"scope": "season", "season": int(season)}
             else:
                 await sonarr.search_series(series_id)
                 desc = "Recherche série complète"
+                scope = {"scope": "series"}
+
+            await tv_priority.create_request(
+                db,
+                service_type="sonarr",
+                arr_id=series_id,
+                title=match_series.get("title") or title,
+                origin=origin,
+                priority=priority,
+                **scope,
+            )
 
             await log_event(
                 category="media",
@@ -994,6 +1026,7 @@ async def handle_addon_search(db: AsyncSession, data: dict[str, Any]) -> dict[st
                 source="kodi",
                 media_type="series",
                 title=match_series.get("title", title),
+                device=origin["device_name"],
                 detail=f"{desc} déclenchée depuis Kodi",
             )
             return {
@@ -1436,15 +1469,24 @@ async def _find_series_for_addon(
     return _pick_series(results or [], title, None, tmdb_id)
 
 
-async def add_media_for_addon(db: AsyncSession, data: dict[str, Any]) -> dict[str, Any]:
+async def add_media_for_addon(
+    db: AsyncSession, data: dict[str, Any], origin: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """Ajoute un film / une série à Radarr / Sonarr depuis la TV (profil et dossier choisis).
 
     On part toujours de la fiche renvoyée par le lookup de Radarr / Sonarr
     (titre exact, année, images), comme la web app, et un titre déjà suivi
     n'est pas une erreur : on renvoie son numéro (et on relance sa
     recherche si demandé), pour que la TV enchaîne normalement.
+
+    Avec recherche immédiate, la demande est notée pour passer en tête de
+    SABnzbd (services/tv_priority.py), sauf `"priority": false`.
     """
+    from app.services import tv_priority
     from app.services.activity_log import log_event
+
+    origin = origin or tv_priority.origin_of(None)
+    priority = bool(data.get("priority", True))
 
     media_type = data.get("type", "movie")
     title = str(data.get("title") or "")
@@ -1467,6 +1509,14 @@ async def add_media_for_addon(db: AsyncSession, data: dict[str, Any]) -> dict[st
             if movie.get("id"):  # déjà dans Radarr : rien à ajouter
                 if search_now:
                     await radarr.search_movie(movie["id"])
+                    await tv_priority.create_request(
+                        db,
+                        service_type="radarr",
+                        arr_id=movie["id"],
+                        title=movie.get("title") or title,
+                        origin=origin,
+                        priority=priority,
+                    )
                 return {
                     "status": "ok",
                     "arr_id": movie["id"],
@@ -1487,6 +1537,16 @@ async def add_media_for_addon(db: AsyncSession, data: dict[str, Any]) -> dict[st
             }
             res = await radarr.add_movie(payload)
             arr_id = res.get("id")
+            if search_now and arr_id:
+                await tv_priority.create_request(
+                    db,
+                    service_type="radarr",
+                    arr_id=arr_id,
+                    title=payload["title"],
+                    origin=origin,
+                    priority=priority,
+                    added=True,
+                )
 
             await log_event(
                 category="media",
@@ -1496,6 +1556,7 @@ async def add_media_for_addon(db: AsyncSession, data: dict[str, Any]) -> dict[st
                 media_type="movie",
                 title=payload["title"],
                 tmdb_id=movie["tmdbId"],
+                device=origin["device_name"],
                 detail=f"Ajouté via Kodi (Search={search_now})",
             )
             return {"status": "ok", "arr_id": arr_id, "title": payload["title"], "type": "movie"}
@@ -1520,6 +1581,14 @@ async def add_media_for_addon(db: AsyncSession, data: dict[str, Any]) -> dict[st
             if series.get("id"):  # déjà suivie par Sonarr : rien à ajouter
                 if search_now:
                     await sonarr.search_series(series["id"])
+                    await tv_priority.create_request(
+                        db,
+                        service_type="sonarr",
+                        arr_id=series["id"],
+                        title=series.get("title") or title,
+                        origin=origin,
+                        priority=priority,
+                    )
                 return {
                     "status": "ok",
                     "arr_id": series["id"],
@@ -1541,6 +1610,16 @@ async def add_media_for_addon(db: AsyncSession, data: dict[str, Any]) -> dict[st
             }
             res = await sonarr.add_series(payload)
             arr_id = res.get("id")
+            if search_now and arr_id:
+                await tv_priority.create_request(
+                    db,
+                    service_type="sonarr",
+                    arr_id=arr_id,
+                    title=payload["title"],
+                    origin=origin,
+                    priority=priority,
+                    added=True,
+                )
 
             await log_event(
                 category="media",
@@ -1549,6 +1628,7 @@ async def add_media_for_addon(db: AsyncSession, data: dict[str, Any]) -> dict[st
                 source="kodi",
                 media_type="series",
                 title=payload["title"],
+                device=origin["device_name"],
                 detail=f"Ajouté via Kodi (TVDB {series['tvdbId']}, Search={search_now})",
             )
             return {"status": "ok", "arr_id": arr_id, "title": payload["title"], "type": "series"}
@@ -1670,9 +1750,19 @@ async def list_releases_for_addon(
         await client.close()
 
 
-async def grab_release_for_addon(db: AsyncSession, data: dict[str, Any]) -> dict[str, Any]:
-    """Send grab release order to Radarr/Sonarr (SABnzbd / Torrent)."""
+async def grab_release_for_addon(
+    db: AsyncSession, data: dict[str, Any], origin: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Send grab release order to Radarr/Sonarr (SABnzbd / Torrent).
+
+    La release choisie sur la TV passe en tête de SABnzbd
+    (services/tv_priority.py), sauf `"priority": false`. `season` (facultatif)
+    limite la demande à cette saison.
+    """
+    from app.services import tv_priority
     from app.services.activity_log import log_event
+
+    origin = origin or tv_priority.origin_of(None)
 
     media_type = data.get("type", "movie")
     arr_id = data.get("arr_id")
@@ -1687,6 +1777,26 @@ async def grab_release_for_addon(db: AsyncSession, data: dict[str, Any]) -> dict
 
     try:
         await client.grab_release(guid, indexer_id)
+        season = _int_or_none(data.get("season"))
+        if media_type == "movie":
+            scope: dict[str, Any] = {"scope": "movie"}
+        elif season is not None:
+            scope = {"scope": "season", "season": season}
+        else:
+            scope = {"scope": "series"}
+        if _int_or_none(arr_id):
+            await tv_priority.create_request(
+                db,
+                service_type="radarr" if media_type == "movie" else "sonarr",
+                arr_id=int(arr_id),
+                title=media_title or release_title,
+                origin=origin,
+                release_title=data.get("release_title"),
+                priority=bool(data.get("priority", True)),
+                **scope,
+            )
+            # Le *arr a déjà remis la release au client : priorité posée tout de suite
+            tv_priority.kick(delay=2)
         await log_event(
             category="download",
             action="kodi_grab",
@@ -1696,6 +1806,7 @@ async def grab_release_for_addon(db: AsyncSession, data: dict[str, Any]) -> dict
             media_id=arr_id,
             title=media_title or release_title,
             subtitle=release_title,
+            device=origin["device_name"],
             detail="Release saisie manuellement depuis Kodi",
         )
         return {"status": "ok", "message": f"Téléchargement lancé pour {release_title}"}

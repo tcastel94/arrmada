@@ -234,6 +234,21 @@ async def _handle_arr_webhook(
         },
     )
 
+    # Demande lancée depuis la TV : priorité SABnzbd posée dans la seconde
+    if event_type == "Grab" and service_type in ("radarr", "sonarr"):
+        from app.services import tv_priority
+
+        await tv_priority.on_grab(service_type, payload)
+
+    # Demande TV importée : sous-titres tout de suite, puis « Prêt à regarder » (lot 4)
+    if event_type == "Download" and service_type in ("radarr", "sonarr"):
+        from app.services import tv_subtitles
+
+        try:
+            await tv_subtitles.on_import(service_type, payload)
+        except Exception as exc:  # jamais au point de faire échouer le webhook
+            logger.warning("[Webhook] suivi de la demande TV impossible : %s", exc)
+
     # Create in-app notification for important events
     if event_type == "Download":
         try:

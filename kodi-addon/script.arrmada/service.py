@@ -65,6 +65,7 @@ import shell_data
 import startup_guard
 import sync_data
 import threading
+import toast
 import ui_common
 import urllib.parse
 import upnext_data
@@ -603,7 +604,7 @@ def main():
                         should_scan = False
 
                         for title in finished:
-                            show_notification("ArrMada", f"📥 Téléchargement terminé : {title}", is_error=False, time_ms=6000)
+                            show_notification("ArrMada", f"Téléchargement terminé : {title}", is_error=False, time_ms=6000)
                             should_scan = True
 
                         # 2. Check new import events from activity log
@@ -612,7 +613,7 @@ def main():
                             if ev_id and ev_id not in seen_event_ids:
                                 seen_event_ids.add(ev_id)
                                 ev_title = ev.get("title") or "Nouveau média"
-                                show_notification("ArrMada", f"📥 Importé sur le NAS : {ev_title}", is_error=False, time_ms=5000)
+                                show_notification("ArrMada", f"Importé sur le NAS : {ev_title}", is_error=False, time_ms=5000)
                                 should_scan = True
 
                         # 3. Trigger Kodi Video Library auto-scan if any new media was added
@@ -623,6 +624,12 @@ def main():
                         seen_downloads = current_downloads
             except Exception as exc:
                 xbmc.log(f"[ArrMada] Service notification error: {exc}", level=xbmc.LOGDEBUG)
+
+        # 4. Bulles ArrMada en attente (bas droite des écrans ArrMada, 1.24.1)
+        try:
+            toast.tick()
+        except Exception as exc:  # jamais au point de faire tomber le service
+            _log(f"bulles : {exc}", xbmc.LOGWARNING)
 
         if monitor.waitForAbort(1):
             break

@@ -24,6 +24,8 @@ Actions (aucune n'est destructrice, ADR-003 décision 1) :
   Bande-annonce      add-on YouTube (films : Sonarr n'en connaît pas)
   Meilleure version  recherche Radarr/Sonarr
   Sous-titres        recherche Bazarr (films)
+  Télécharger        feuille « Télécharger » (ADR-005) : une saison, un épisode,
+                     toute la série, ou le film s'il n'a pas de fichier
 """
 
 from __future__ import annotations
@@ -48,6 +50,7 @@ BTN_TRAILER = 502
 BTN_UPGRADE = 503
 BTN_SUBTITLES = 504
 BTN_PHONE = 505  # phase 3 : page du titre dans la web app (QR code)
+BTN_DOWNLOAD = 506  # feuille « Télécharger » (ADR-005) : série, ou film sans fichier
 BADGES = 520
 CAST = 600
 SEASONS = 610
@@ -187,6 +190,7 @@ class DetailWindow(xbmcgui.WindowXML):
         self.setProperty("overview", model["overview"])
         self.setProperty("crew", model["crew"])
         self.setProperty("status", model["status"])
+        self.setProperty("can_download", "1" if model.get("can_download") else "")
         self.setProperty("file", "[CR]".join(model["file_lines"]) or "Aucun fichier pour l'instant")
         self.setProperty("subtitles", model["subtitles"])
         self._trailer = model["trailer"]
@@ -253,6 +257,7 @@ class DetailWindow(xbmcgui.WindowXML):
                     BTN_UPGRADE,
                     BTN_SUBTITLES,
                     BTN_PHONE,
+                    BTN_DOWNLOAD,
                 ):
                     self.setFocusId(SEASONS)
             except RuntimeError:
@@ -275,6 +280,8 @@ class DetailWindow(xbmcgui.WindowXML):
             ui.run_in_background(ui.search_subtitles, dict(entry))
         elif controlId == BTN_PHONE:
             self._show_on_phone(entry)
+        elif controlId == BTN_DOWNLOAD:
+            self._open_download(entry)
         elif controlId == CAST:
             item = self.getControl(CAST).getSelectedItem()
             if item:
@@ -309,6 +316,25 @@ class DetailWindow(xbmcgui.WindowXML):
         else:
             kodi_library.set_watched("movie", self._movieid, op == "seen")
             ui.run_in_background(self._load_kodi_state)
+
+    def _open_download(self, entry: dict) -> None:
+        """Feuille « Télécharger » du titre (déjà suivi : saisons et épisodes de Sonarr)."""
+        import download_window
+
+        download_window.open_download(
+            {
+                "kind": "movie" if entry.get("kind", "movie") == "movie" else "series",
+                "title": entry.get("title") or "",
+                "year": entry.get("year") or "",
+                "tmdb_id": entry.get("tmdb_id") or None,
+                "tvdb_id": entry.get("tvdb_id") or None,
+                "arr_id": entry.get("arr_id") or None,
+                "in_library": True,
+                "overview": self.getProperty("overview"),
+                "poster": self.getProperty("poster"),
+                "fanart": self.getProperty("fanart"),
+            }
+        )
 
     @staticmethod
     def _show_on_phone(entry: dict) -> None:

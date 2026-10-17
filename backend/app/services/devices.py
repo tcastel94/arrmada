@@ -100,13 +100,15 @@ def is_lan_request(client_host: str | None, forwarded_for: str | None) -> bool:
 # sous-titres, file en lecture seule + pause/reprise, ampli, notifications
 # (lecture et « marquer lu »), recommandations, flux temps réel (SSE).
 # Aucune suppression, aucun nettoyage, aucune configuration (ADR-003, décision 1).
+# Seule exception, bornée : annuler SA propre demande « pour ce soir » tant
+# qu'elle est en cours (téléchargement retiré du client, médiathèque intacte).
 
 _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
     (method, re.compile(pattern))
     for method, pattern in (
         ("GET", r"/api/devices/me"),
         ("GET", r"/api/kodi/(dashboard|addon-status|widgets/recent|now-playing|watched-status)"),
-        ("GET", r"/api/kodi/media/(lookup|recommendations|options)"),
+        ("GET", r"/api/kodi/media/(lookup|recommendations|options|seasons)"),
         ("GET", r"/api/kodi/media/(movie|series|tv)/\d+/releases"),
         ("POST", r"/api/kodi/(scrobble|sync)"),
         # Fin du journal d'une session de Kodi arrêtée net (taille bornée, rien d'exécuté)
@@ -116,9 +118,19 @@ _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         ("POST", r"/api/kodi/watch-state"),
         ("GET", r"/api/kodi/series/\d+/episodes"),  # épisodes Sonarr (manquants)
         ("POST", r"/api/kodi/actions/(search|subtitles|subtitles/sync)"),
-        ("POST", r"/api/kodi/media/add"),
+        ("POST", r"/api/kodi/media/(add|download)"),
         ("POST", r"/api/kodi/media/(movie|series|tv)/\d+/grab"),
         ("POST", r"/api/kodi/downloads/(radarr|sonarr)/\d+/(pause|resume)"),
+        # Demandes « pour ce soir » : liste, annulation de SA demande (vérifié
+        # côté serveur), pause / reprise / tête de file d'UN téléchargement
+        ("GET", r"/api/kodi/tv-requests"),
+        ("POST", r"/api/kodi/tv-requests/\d+/(cancel|retry)"),
+        ("POST", r"/api/kodi/queue/[A-Za-z0-9_.\-]+/(pause|resume|top)"),
+        # Écran Téléchargements (lot 3) : tableau, diagnostic, « Débloquer »
+        # (import sans écrasement ou autre release ; médiathèque jamais touchée)
+        ("GET", r"/api/kodi/downloads/board"),
+        ("GET", r"/api/kodi/downloads/(radarr|sonarr)/[A-Za-z0-9_.\-]+/diagnose"),
+        ("POST", r"/api/kodi/downloads/(radarr|sonarr)/[A-Za-z0-9_.\-]+/unstick"),
         ("GET", r"/api/media(/.*)?"),
         ("GET", r"/api/downloads"),
         ("GET", r"/api/calendar(/.*)?"),
