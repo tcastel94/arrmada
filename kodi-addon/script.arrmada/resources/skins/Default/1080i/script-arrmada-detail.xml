@@ -154,6 +154,20 @@
 				<animation effect="zoom" start="100" end="107" time="160" tween="cubic" easing="out" center="auto">Focus</animation>
 				<animation effect="zoom" start="107" end="100" time="160" tween="cubic" easing="out" center="auto">UnFocus</animation>
 			</control>
+			<!-- ADR-005 : feuille « Télécharger » (série, ou film sans fichier) -->
+			<control type="button" id="506">
+				<width>250</width><height>64</height>
+				<label>Télécharger</label>
+				<font>font13</font>
+				<textcolor>D9F5F7FA</textcolor>
+				<focusedcolor>FF0A0E16</focusedcolor>
+				<align>center</align><aligny>center</aligny>
+				<texturenofocus border="14" colordiffuse="1AFFFFFF">arrmada/rounded-12.png</texturenofocus>
+				<texturefocus border="14" colordiffuse="FF4A9EFF">arrmada/rounded-12.png</texturefocus>
+				<visible>String.IsEqual(Window.Property(can_download),1)</visible>
+				<animation effect="zoom" start="100" end="107" time="160" tween="cubic" easing="out" center="auto">Focus</animation>
+				<animation effect="zoom" start="107" end="100" time="160" tween="cubic" easing="out" center="auto">UnFocus</animation>
+			</control>
 			<control type="button" id="502">
 				<width>230</width><height>64</height>
 				<label>Bande-annonce</label>
@@ -177,6 +191,8 @@
 				<align>center</align><aligny>center</aligny>
 				<texturenofocus border="14" colordiffuse="1AFFFFFF">arrmada/rounded-12.png</texturenofocus>
 				<texturefocus border="14" colordiffuse="FF4A9EFF">arrmada/rounded-12.png</texturefocus>
+				<!-- Film sans fichier : « Télécharger » le remplace -->
+				<visible>!String.IsEqual(Window.Property(kind),movie) | String.IsEmpty(Window.Property(can_download))</visible>
 				<animation effect="zoom" start="100" end="107" time="160" tween="cubic" easing="out" center="auto">Focus</animation>
 				<animation effect="zoom" start="107" end="100" time="160" tween="cubic" easing="out" center="auto">UnFocus</animation>
 			</control>
@@ -189,7 +205,7 @@
 				<align>center</align><aligny>center</aligny>
 				<texturenofocus border="14" colordiffuse="1AFFFFFF">arrmada/rounded-12.png</texturenofocus>
 				<texturefocus border="14" colordiffuse="FF4A9EFF">arrmada/rounded-12.png</texturefocus>
-				<visible>String.IsEqual(Window.Property(kind),movie)</visible>
+				<visible>String.IsEqual(Window.Property(kind),movie) + String.IsEmpty(Window.Property(can_download))</visible>
 				<animation effect="zoom" start="100" end="107" time="160" tween="cubic" easing="out" center="auto">Focus</animation>
 				<animation effect="zoom" start="107" end="100" time="160" tween="cubic" easing="out" center="auto">UnFocus</animation>
 			</control>

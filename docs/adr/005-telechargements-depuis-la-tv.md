@@ -58,7 +58,7 @@ Contraintes relevées dans le code (add-on 1.21.1) :
 | Lot | Contenu | État |
 |---|---|---|
 | 1 | Serveur : client SABnzbd par élément, table `tv_requests`, gardien, routes TV | ✅ |
-| 2 | TV : feuille « Télécharger » (série / saison / épisode, « Pour ce soir »), ajout Sonarr `monitor: none` | à faire |
+| 2 | TV : feuille « Télécharger » (série / saison / épisode, « Pour ce soir »), ajout Sonarr `monitor: none` | ✅ appli 1.22.0 |
 | 3 | TV : écran Téléchargements refait (voie « Pour ce soir », actions par élément, Débloquer) | à faire |
 | 4 | Bazarr à l'import, notification « Prêt à regarder » sur la bonne TV, badge TV dans la web app | à faire |
 
@@ -69,6 +69,28 @@ Contraintes relevées dans le code (add-on 1.21.1) :
 | `GET /api/kodi/tv-requests` | Demandes en cours + terminées depuis 12 h (`mine` = lancée par cette TV) |
 | `POST /api/kodi/tv-requests/{id}/cancel` | Annule SA demande en cours (403 pour une autre TV) |
 | `POST /api/kodi/queue/{download_id}/pause\|resume\|top` | Un seul téléchargement SABnzbd ; `top` le place juste derrière les demandes TV |
+
+Lot 2 :
+
+| Route | Rôle |
+|---|---|
+| `GET /api/kodi/media/seasons?title=&tmdb_id=&tvdb_id=&season=` | Saisons d'une série et épisodes d'une saison : Sonarr si suivie, sinon TMDB (titres en français) |
+| `POST /api/kodi/media/download` | `{type, title, tmdb_id, tvdb_id, arr_id, scope, season, episodes[], priority}` ; répond en quelques secondes, la recherche part en arrière-plan |
+
+Comment le lot 2 applique les décisions :
+
+- **Qualité et dossier** : ceux le plus utilisés dans la médiathèque Radarr /
+  Sonarr (« comme d'habitude »), à défaut le premier profil et le premier
+  dossier. L'ancien assistant reste derrière « Options avancées ».
+- **Saison ou épisode d'une série nouvelle** : ajout avec `monitor: none` et
+  toutes les saisons non surveillées, puis le serveur attend que Sonarr ait
+  chargé les épisodes (90 s au plus) et ne surveille que ceux demandés.
+- **Usenet d'abord** (« Pour ce soir ») : parmi les releases que le *arr
+  accepte (`approved`, ni retenues ni refusées), la mieux classée par lui
+  (`releaseWeight`) qui soit Usenet ; pack complet pour une saison. Aucune :
+  recherche automatique classique du *arr.
+- Film déjà présent avec son fichier : réponse « déjà sur le NAS », rien n'est
+  lancé (la « Meilleure version » reste dans la fiche).
 
 `GET /api/downloads` donne en plus `download_id`, `episode_ids`, `season_number`
 et `tv_request` (TV d'origine, prioritaire ou non) pour chaque téléchargement.

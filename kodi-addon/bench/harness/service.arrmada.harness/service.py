@@ -73,6 +73,92 @@ def leave_shell(name=None):
     wait(2.0)
 
 
+def sheet_open():
+    return xbmc.getCondVisibility("Window.IsVisible(script-arrmada-download.xml)")
+
+
+def open_sheet(**params):
+    query = urllib.parse.urlencode({"action": "media_details", **params})
+    xbmc.executebuiltin(f"RunPlugin(plugin://script.arrmada/?{query})")
+    for _ in range(20):
+        if sheet_open():
+            break
+        wait(0.3)
+    wait(2.5)  # saisons chargées en arrière-plan
+
+
+def downloads_received():
+    return json.loads(urllib.request.urlopen(f"{MOCK}/__downloads").read())
+
+
+def download_sheet():
+    """ADR-005, lot 2 : feuille « Télécharger » (série : saison, épisode ; film)."""
+    bear = {
+        "type": "series", "title": "The Bear", "tmdb_id": "136315", "in_library": "0",
+        "year": "2022", "poster_url": f"{MOCK}/img/poster-3.jpg",
+        "overview": "Un jeune chef étoilé revient à Chicago reprendre la sandwicherie "
+        "familiale après la mort de son frère. Brigade à reconstruire, dettes, et une "
+        "cuisine à transformer.",
+    }  # fmt: skip
+    open_sheet(**bear)
+    log(f"feuille série : ouverte={sheet_open()} focus={focus()}")
+    shot("dl-01-serie-une-saison")
+    press("Down")  # pastilles des saisons
+    press("Right")
+    press("Select")  # saison 2
+    wait(1.5)
+    shot("dl-02-saison-2")
+    press("Up")
+    press("Right")  # « Un épisode »
+    press("Select")
+    wait(1.0)
+    log(f"portée épisode : focus={focus()}")
+    shot("dl-02b-portee-episode")
+    press("Down", 3)
+    press("Select")  # S02E04 coché
+    wait(0.6)
+    shot("dl-03-episode-coche")
+    press("Right")  # « Pour ce soir »
+    wait(0.6)
+    shot("dl-04-pour-ce-soir")
+    press("Select")  # désactivé
+    wait(0.6)
+    shot("dl-05-file-normale")
+    press("Select")  # réactivé
+    press("Down")  # bouton Télécharger
+    wait(0.6)
+    shot("dl-06-bouton-telecharger")
+    press("Select")
+    wait(1.5)
+    shot("dl-07-envoye")
+    log(f"feuille série fermée après envoi : {not sheet_open()} ; reçu : {downloads_received()}")
+
+    open_sheet(type="movie", title="Past Lives", tmdb_id="666277", in_library="0", year="2023",
+               poster_url=f"{MOCK}/img/poster-5.jpg",
+               overview="Nora et Hae Sung, amis d'enfance à Séoul, se retrouvent vingt ans plus "
+               "tard à New York.")  # fmt: skip
+    shot("dl-08-film")
+    press("Select")
+    wait(1.5)
+    shot("dl-09-film-envoye")
+    log(f"feuille film fermée après envoi : {not sheet_open()} ; reçu : {downloads_received()}")
+
+
+if os.environ.get("BENCH_ONLY") == "download":
+    # Kodi tout juste installé : « Activer cet add-on ? » au premier démarrage
+    for _ in range(6):
+        if not xbmc.getCondVisibility("Window.IsActive(yesnodialog)"):
+            break
+        press("Back", 1, 1.0)
+    if shell_open():
+        leave_shell()
+    download_sheet()
+    xbmc.executebuiltin("Quit")
+    while not MONITOR.abortRequested():
+        wait(1)
+    raise SystemExit
+
+
 # ── 0a. ADR-004 phase 4.2 : Kodi démarre sur l'accueil ArrMada ─────────────
 log(f"démarrage : accueil ArrMada {'ouvert' if shell_open() else 'NON OUVERT'}")
 shot("00a-demarrage-sur-arrmada")
@@ -1328,5 +1414,9 @@ log(f"titre de l'erreur : {xbmc.getInfoLabel('Window.Property(error_title)')}")
 press("Back")
 wait(1.5)
 
+# ── ADR-005 : feuille « Télécharger » ──────────────────────────────────────
+download_sheet()
+
 log("terminé")
+
 xbmc.executebuiltin("Quit")

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### "Télécharger" sheet on the TV: movie, whole series, one season or one episode (Kodi add-on 1.22.0, lot 2 of ADR-005)
+
+#### Added
+- **TV "Télécharger" sheet** (`script-arrmada-download.xml`, `lib/download_window.py`, logic in `lib/download_data.py`): opens on OK on a title not in the library (search, "Pour toi", Découvrir) and from the new **Télécharger** button of the media sheet (series, or movie without a file). Series: *Toute la série* / *Une saison* / *Un épisode*, seasons as chips ("3/10 sur le NAS"), episodes to tick (several allowed; already on the NAS or air date shown). Movie: one button. **Pour ce soir** switch, on by default. The button says exactly what leaves ("Télécharger S02E04"). Replaces the old 3-list wizard (quality, folder, mode), still reachable through **Options avancées**
+- `POST /api/kodi/media/download`: adds the title if needed with the **quality profile and root folder used most in the library**, records the TV request, answers within seconds; the search runs in the background. Season / episode of a new series: added with `monitor: none` and no season monitored, then the server waits for Sonarr to load the episodes and monitors **only** what was asked (Sonarr no longer downloads the whole series behind your back). "Pour ce soir": the best-ranked release the *arr approves that is **Usenet** is grabbed (full season pack for a season), else the *arr's own automatic search. Movie already on the NAS: "déjà sur le NAS", nothing launched
+- `GET /api/kodi/media/seasons`: seasons of a series and episodes of one season, from Sonarr when followed, else from TMDB (French titles)
+- Both routes allowed for TV tokens
+- Bench: `BENCH_ONLY=download kodi-addon/bench/run.sh` (≈ 1 min, real Kodi 20): series sheet, season change, episode ticked, switch on / off, sent payload checked on the mock server, movie sheet
+- Tests: server 19 (usenet first within approved releases, season pack only for a season, library defaults, default season, new movie, no priority, torrents only, already on the NAS, new series one season, one episode tonight, whole series, incomplete choices, seasons from Sonarr and from TMDB); add-on 17 (scope row, chips, episode rows, ticking, button labels, payloads, texts without missing glyphs, and the XML ↔ Python ↔ fonts ↔ textures checks for the new screen)
+
+#### Changed
+- Media sheet: for a movie without a file, **Télécharger** replaces *Meilleure version* and *Sous-titres*
+
 ### Downloads launched from the TV jump the queue (server, lot 1 of ADR-005)
 
 #### Added

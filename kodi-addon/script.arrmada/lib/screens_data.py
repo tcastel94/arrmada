@@ -348,6 +348,9 @@ def build_detail(detail: dict, kind: str) -> dict[str, Any]:
         "overview": detail.get("overview") or "Aucun synopsis.",
         "badges": badges,
         "status": status,
+        # Feuille « Télécharger » proposée : série (une saison, un épisode…)
+        # ou film sans fichier (ADR-005)
+        "can_download": (not is_movie) or not detail.get("has_file"),
         "file_lines": file_lines,
         "subtitles": subtitles,
         "crew": _crew_line(detail.get("crew") or []),

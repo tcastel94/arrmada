@@ -108,7 +108,7 @@ _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
     for method, pattern in (
         ("GET", r"/api/devices/me"),
         ("GET", r"/api/kodi/(dashboard|addon-status|widgets/recent|now-playing|watched-status)"),
-        ("GET", r"/api/kodi/media/(lookup|recommendations|options)"),
+        ("GET", r"/api/kodi/media/(lookup|recommendations|options|seasons)"),
         ("GET", r"/api/kodi/media/(movie|series|tv)/\d+/releases"),
         ("POST", r"/api/kodi/(scrobble|sync)"),
         # Fin du journal d'une session de Kodi arrêtée net (taille bornée, rien d'exécuté)
@@ -118,7 +118,7 @@ _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         ("POST", r"/api/kodi/watch-state"),
         ("GET", r"/api/kodi/series/\d+/episodes"),  # épisodes Sonarr (manquants)
         ("POST", r"/api/kodi/actions/(search|subtitles|subtitles/sync)"),
-        ("POST", r"/api/kodi/media/add"),
+        ("POST", r"/api/kodi/media/(add|download)"),
         ("POST", r"/api/kodi/media/(movie|series|tv)/\d+/grab"),
         ("POST", r"/api/kodi/downloads/(radarr|sonarr)/\d+/(pause|resume)"),
         # Demandes « pour ce soir » : liste, annulation de SA demande (vérifié

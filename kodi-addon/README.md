@@ -1057,6 +1057,32 @@ l'affiche. Les rangées et les listes du plugin portent aussi l'image
 >   et des rangées (ceux du dossier et des sites ne font que combler un
 >   manque) ; toutes les variantes restent visibles dans l'onglet Artworks.
 
+### 27. 📥 Télécharger depuis le canapé : film, série, saison ou épisode (1.22.0, ADR-005)
+
+OK sur un titre absent de la médiathèque (recherche, « Pour toi », Découvrir)
+ou bouton **Télécharger** de la fiche (série, ou film sans fichier) : une
+feuille remplace l'ancien assistant en 3 listes.
+
+- **Série** : *Toute la série* / *Une saison* / *Un épisode*. Saisons en
+  pastilles (« 3/10 sur le NAS »), épisodes à cocher, plusieurs possibles
+  (déjà là, ou date de sortie s'il n'est pas encore diffusé). Série pas encore
+  suivie : épisodes en français par TMDB.
+- **Film** : un bouton.
+- **Pour ce soir** (activé par défaut) : le serveur choisit une release
+  Usenet acceptée par Radarr / Sonarr et la fait passer devant toute la file
+  SABnzbd (priorité Force). Désactivé : file normale.
+- Le bouton dit exactement ce qui part (« Télécharger S02E04 »,
+  « Télécharger la saison 2 »).
+- Qualité et dossier : ceux le plus utilisés dans ta médiathèque, sans
+  question. **Options avancées** rouvre l'ancien assistant pour les choisir.
+- Une saison ou un épisode d'une série nouvelle : seuls eux sont surveillés,
+  Sonarr ne télécharge pas toute la série en douce.
+
+> ⚠️ Les torrents (Deluge) ne passent pas par SABnzbd : pas de priorité pour
+> eux. C'est pour ça que « Pour ce soir » préfère Usenet.
+
+Banc : `BENCH_ONLY=download kodi-addon/bench/run.sh` (≈ 1 min, 10 captures).
+
 ## 🚀 Installation dans Kodi
 
 > ✅ **NVIDIA Shield (Kodi 21, Android)** : l'installation depuis la source

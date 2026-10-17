@@ -84,6 +84,7 @@ STATE = {
     "watch_posts": [],  # dépôts reçus de la TV : {"merge", "states"}
     "presets": 0,  # POST /api/yamaha/preset/apply reçus (relus par /__presets)
     "crash_reports": [],  # POST /api/kodi/crash-report reçus (relus par /__crash_reports)
+    "downloads": [],  # POST /api/kodi/media/download reçus (relus par /__downloads)
     "amp": {"power": "on", "volume": 84, "mute": False, "input": "hdmi1", "sound_program": "surr_decoder"},
 }
 CAST = [
@@ -751,6 +752,35 @@ def make_qr(path: Path, text: str) -> None:
     img.save(path)
 
 
+BEAR_EPISODES = {
+    1: ["Système D", "Mains", "Brigade", "Chiens", "Sheridan", "Ceres", "Review", "Braciole"],
+    2: ["Bœuf", "Pâtes", "Sundae", "Honeydew", "Pop", "Poissons", "Forks", "Bolognese", "Omelette",
+        "Napkins"],
+    3: ["Demain", "Prix fixe", "Doors", "Violet", "Children", "Napkins", "Legacy", "Ice Chips"],
+}  # fmt: skip
+
+
+def seasons(base: str, query: dict) -> dict:
+    """Feuille « Télécharger » (ADR-005) : saisons de « The Bear », absente de la
+    médiathèque (épisodes par TMDB), dont la saison 3 n'est pas encore sortie en entier."""
+    chosen = int(query.get("season") or 1)
+    eps = []
+    for n, title in enumerate(BEAR_EPISODES.get(chosen, []), start=1):
+        future = chosen == 3 and n > 4
+        eps.append({
+            "id": None, "season": chosen, "number": n, "title": title,
+            "air_date": "2026-11-0%d" % (n - 3) if future else "2024-06-26",
+            "aired": not future, "has_file": False, "runtime": 30 + n,
+        })  # fmt: skip
+    return {
+        "status": "ok", "source": "tmdb", "title": "The Bear", "tvdb_id": 403245,
+        "tmdb_id": 136315, "arr_id": None, "in_library": False,
+        "seasons": [{"number": k, "episodes": len(v), "aired": len(v), "have": 0}
+                    for k, v in BEAR_EPISODES.items()],
+        "season": chosen, "episodes": eps,
+    }  # fmt: skip
+
+
 def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):  # journal sur stderr, préfixé
@@ -865,6 +895,9 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
             if path == "/__presets":  # préréglages d'ampli reçus
                 self._json({"presets": STATE["presets"]})
                 return
+            if path == "/__downloads":  # demandes « Télécharger » reçues (ADR-005)
+                self._json(STATE["downloads"])
+                return
             if path == "/__crash_reports":  # journaux de plantage reçus (1.21.1)
                 self._json({"reports": STATE["crash_reports"]})
                 return
@@ -917,6 +950,11 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
 
                 query = {k: v[0] for k, v in parse_qs(urlsplit(self.path).query).items()}
                 self._json(lookup(base, query.get("q", "")))
+            elif path == "/api/kodi/media/seasons":
+                from urllib.parse import parse_qs, urlsplit
+
+                query = {k: v[0] for k, v in parse_qs(urlsplit(self.path).query).items()}
+                self._json(seasons(base, query))
             elif path == "/api/media/facets":
                 from urllib.parse import parse_qs, urlsplit
 
@@ -1052,6 +1090,13 @@ def make_handler(base: str, images: Path, delay: float) -> type[BaseHTTPRequestH
             elif path.startswith("/api/kodi/downloads/"):
                 STATE["paused"] = path.endswith("/pause")
                 self._json({"status": "ok", "message": "ok"})
+            elif path == "/api/kodi/media/download":
+                STATE["downloads"].append(data)
+                sys.stderr.write(f"[mock] Télécharger reçu : {data}\n")
+                what = data.get("scope") or "film"
+                self._json({"status": "ok", "title": data.get("title"), "added": True,
+                            "message": f"{data.get('title')} · {what} : c'est parti"
+                            + (" (prioritaire)" if data.get("priority") else "")})  # fmt: skip
             elif path.startswith("/api/kodi/actions/"):
                 self._json({"status": "ok", "message": "Demande envoyée (banc de test)"})
             elif path == "/api/kodi/watch-state":

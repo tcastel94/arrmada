@@ -40,6 +40,7 @@ WINDOWS = {
     "upnext": ("script-arrmada-upnext.xml", "upnext_window.py"),
     "player": ("script-arrmada-player.xml", "player_window.py"),
     "skip": ("script-arrmada-skip.xml", "skip_window.py"),
+    "download": ("script-arrmada-download.xml", "download_window.py"),
 }
 
 # Noms de police présents dans TOUS les jeux de polices (« fontsets ») d'Aeon

@@ -13,7 +13,7 @@ from app.api.deps import get_current_user, get_db, require_admin
 from app.models.device import Device
 from app.models.service import Service
 from app.services import kodi as kodi_service
-from app.services import kodi_crash, tv_priority, watch_summary, watch_sync
+from app.services import kodi_crash, tv_download, tv_priority, watch_summary, watch_sync
 from app.services.encryption import decrypt_api_key, encrypt_api_key
 from app.services.fully_kiosk import kiosk
 from app.services.kodi import discover_kodi, sync_kodi
@@ -490,6 +490,29 @@ async def addon_media_add(
 ):
     """Add a movie or series to Radarr/Sonarr from Kodi."""
     return await kodi_service.add_media_for_addon(db, data, tv_priority.origin_of(user))
+
+
+# ── Feuille « Télécharger » de la TV (services/tv_download.py) ─
+@router.get("/media/seasons")
+async def addon_media_seasons(
+    title: str = "",
+    tmdb_id: int | None = None,
+    tvdb_id: int | None = None,
+    season: int | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """Saisons d'une série et épisodes d'une saison (suivie par Sonarr ou non)."""
+    return await tv_download.get_seasons(
+        db, title=title, tmdb_id=tmdb_id, tvdb_id=tvdb_id, season=season
+    )
+
+
+@router.post("/media/download")
+async def addon_media_download(
+    data: dict, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)
+):
+    """Télécharger un film, une série, une saison ou des épisodes (« pour ce soir » ou non)."""
+    return await tv_download.start_download(db, data, tv_priority.origin_of(user))
 
 
 @router.get("/media/{type}/{id}/releases")

@@ -265,6 +265,21 @@ class ArrMadaAPI:
         return cls._request("/api/kodi/media/add", method="POST", data=payload, timeout=30)
 
     @classmethod
+    def get_seasons(cls, title: str = "", tmdb_id=None, tvdb_id=None, season=None) -> dict:
+        """Saisons d'une série et épisodes d'une saison (feuille « Télécharger »)."""
+        params = {"title": title}
+        for key, value in (("tmdb_id", tmdb_id), ("tvdb_id", tvdb_id), ("season", season)):
+            if value not in (None, ""):
+                params[key] = value
+        query = urllib.parse.urlencode(params)
+        return cls._request(f"/api/kodi/media/seasons?{query}", method="GET", timeout=25)
+
+    @classmethod
+    def start_download(cls, payload: dict) -> dict:
+        """Feuille « Télécharger » : film, série, saison ou épisodes (ADR-005)."""
+        return cls._request("/api/kodi/media/download", method="POST", data=payload, timeout=30)
+
+    @classmethod
     def get_releases(cls, media_type: str, arr_id: int) -> dict:
         """Fetch candidate releases from indexers."""
         return cls._request(f"/api/kodi/media/{media_type}/{arr_id}/releases", method="GET", timeout=60)
