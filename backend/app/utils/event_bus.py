@@ -20,8 +20,9 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
-from typing import Any, AsyncGenerator
+from typing import Any
 
 from app.utils.logger import get_logger
 
@@ -31,6 +32,7 @@ logger = get_logger(__name__)
 @dataclass
 class SSEEvent:
     """A single Server-Sent Event."""
+
     type: str
     data: dict[str, Any]
     id: str | None = None
@@ -91,7 +93,7 @@ class EventBus:
         # Add to history
         self._history.append(event)
         if len(self._history) > self._max_history:
-            self._history = self._history[-self._max_history:]
+            self._history = self._history[-self._max_history :]
 
         # Distribute to all subscribers
         async with self._lock:

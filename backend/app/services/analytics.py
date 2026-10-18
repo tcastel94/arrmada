@@ -30,21 +30,15 @@ async def get_library_analytics(db: AsyncSession) -> dict[str, Any]:
         else:
             quality_counter["Inconnu"] += 1
 
-    quality_dist = [
-        {"name": k, "count": v}
-        for k, v in quality_counter.most_common(15)
-    ]
+    quality_dist = [{"name": k, "count": v} for k, v in quality_counter.most_common(15)]
 
     # ── Genre distribution ────────────────────────────────────
     genre_counter: Counter[str] = Counter()
     for m in media:
-        for g in (m.get("genres") or []):
+        for g in m.get("genres") or []:
             genre_counter[g] += 1
 
-    genre_dist = [
-        {"name": k, "count": v}
-        for k, v in genre_counter.most_common(20)
-    ]
+    genre_dist = [{"name": k, "count": v} for k, v in genre_counter.most_common(20)]
 
     # ── Year distribution ─────────────────────────────────────
     year_counter: Counter[int] = Counter()
@@ -89,10 +83,7 @@ async def get_library_analytics(db: AsyncSession) -> dict[str, Any]:
     for m in media:
         service_counter[m.get("source_service", "Unknown")] += 1
 
-    service_breakdown = [
-        {"name": k, "count": v}
-        for k, v in service_counter.most_common()
-    ]
+    service_breakdown = [{"name": k, "count": v} for k, v in service_counter.most_common()]
 
     return {
         "overview": {

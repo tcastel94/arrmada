@@ -2,23 +2,25 @@
 
 from __future__ import annotations
 
+import contextlib
+
 import httpx
-from fastapi import APIRouter, Depends, Query, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
 from app.models.service import Service
+from app.services import media_aggregator, media_detail
 from app.services.encryption import decrypt_api_key
 from app.services.radarr import RadarrClient
-from app.services.sonarr import SonarrClient
-from app.services import media_aggregator
-from app.services import media_detail
 from app.services.scraper_service import scrape_movies
+from app.services.sonarr import SonarrClient
+from app.utils.cache import cache
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
-from app.utils.cache import cache
 
 router = APIRouter(
     prefix="/api/media",
@@ -28,6 +30,7 @@ router = APIRouter(
 
 
 # ── Detail endpoints (must be before parameterized routes) ────
+
 
 @router.get("/movie/{movie_id}")
 async def get_movie_detail(
@@ -73,7 +76,9 @@ async def delete_media(
     type: str,
     id: int,
     delete_files: bool = Query(True, description="Delete media files from disk"),
-    delete_downloads: bool = Query(True, description="Delete downloads from client queue and history"),
+    delete_downloads: bool = Query(
+        True, description="Delete downloads from client queue and history"
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a movie or series from Radarr/Sonarr, optionally deleting files and downloads."""
@@ -91,6 +96,7 @@ async def delete_media(
         sab_service = res.scalars().first()
         if sab_service:
             from app.services.sabnzbd import SabnzbdClient
+
             try:
                 sab_key = decrypt_api_key(sab_service.api_key)
                 sab_client = SabnzbdClient(url=sab_service.url, api_key=sab_key)
@@ -125,33 +131,40 @@ async def delete_media(
                 records = queue_data.get("records", []) if isinstance(queue_data, dict) else []
                 for item in records:
                     match = False
-                    if type == "movie" and item.get("movieId") == id:
+                    if (
+                        type == "movie"
+                        and item.get("movieId") == id
+                        or type == "series"
+                        and item.get("seriesId") == id
+                    ):
                         match = True
-                    elif type == "series" and item.get("seriesId") == id:
-                        match = True
-                    
+
                     if match and item.get("id"):
                         q_id = item["id"]
                         # Delete from queue and remove from download client
-                        await client.delete(f"/queue/{q_id}", params={"removeFromClient": "true", "blocklist": "false"})
+                        await client.delete(
+                            f"/queue/{q_id}",
+                            params={"removeFromClient": "true", "blocklist": "false"},
+                        )
             except Exception as exc:
                 logger.error("Failed to clean queue for %s %d: %s", type, id, exc)
 
             # B. Clean SABnzbd queue & history based on Radarr/Sonarr history records
             if sab_client:
                 try:
-                    history_data = await client.get("/history", params={"movieId" if type == "movie" else "seriesId": id, "pageSize": 200})
-                    records = history_data.get("records", []) if isinstance(history_data, dict) else []
+                    history_data = await client.get(
+                        "/history",
+                        params={"movieId" if type == "movie" else "seriesId": id, "pageSize": 200},
+                    )
+                    records = (
+                        history_data.get("records", []) if isinstance(history_data, dict) else []
+                    )
                     download_ids = {r.get("downloadId") for r in records if r.get("downloadId")}
                     for dl_id in download_ids:
-                        try:
+                        with contextlib.suppress(Exception):
                             await sab_client._call("queue", {"name": "delete", "value": dl_id})
-                        except Exception:
-                            pass
-                        try:
+                        with contextlib.suppress(Exception):
                             await sab_client._call("history", {"name": "delete", "value": dl_id})
-                        except Exception:
-                            pass
                 except Exception as exc:
                     logger.error("Failed to clean SABnzbd history for %s %d: %s", type, id, exc)
 
@@ -164,13 +177,15 @@ async def delete_media(
         except Exception as exc:
             exc_str = str(exc)
             if "not found" in exc_str.lower() or "404" in exc_str or "return 1 rows" in exc_str:
-                logger.warning("%s %d already deleted or not found in service: %s", type.capitalize(), id, exc)
+                logger.warning(
+                    "%s %d already deleted or not found in service: %s", type.capitalize(), id, exc
+                )
             else:
                 raise exc
 
     except Exception as exc:
         logger.error("Failed to delete %s %d: %s", type, id, exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
         if client:
             await client.close()
@@ -181,6 +196,7 @@ async def delete_media(
     cache.invalidate("media:all")
 
     from app.services.activity_log import log_event
+
     await log_event(
         category="library",
         action="delete",
@@ -205,7 +221,6 @@ async def trigger_scrape(
     return {"status": "scraping started", "items_count": len(items)}
 
 
-
 @router.get("/facets")
 async def media_facets(db: AsyncSession = Depends(get_db)):
     """Distinct filter values across the whole library (for filter dropdowns).
@@ -214,6 +229,7 @@ async def media_facets(db: AsyncSession = Depends(get_db)):
     library, plus how many items are missing (no file) — used to populate the
     médiathèque filter bar and the "Manquants" badge without loading every page.
     """
+
     async def _fetch():
         return await media_aggregator.fetch_all_media(db)
 
@@ -257,6 +273,7 @@ async def list_media(
     db: AsyncSession = Depends(get_db),
 ):
     """Fetch unified media library with filters and pagination (cached 5min)."""
+
     # Cache the full media fetch (expensive API calls to Sonarr/Radarr)
     async def _fetch():
         return await media_aggregator.fetch_all_media(db)
@@ -314,8 +331,6 @@ async def list_media(
     }
 
 
-from pydantic import BaseModel
-
 class MoveMediaPayload(BaseModel):
     new_path: str
 
@@ -352,7 +367,7 @@ async def get_media_rootfolders(
         return await client.get("/rootfolder")
     except Exception as exc:
         logger.error("Failed to fetch root folders for %s: %s", type, exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
         if client:
             await client.close()
@@ -390,7 +405,7 @@ async def update_media_path(
             # 2. Modify path
             movie["path"] = payload.new_path
             # 3. PUT update with moveFiles=true
-            res = await client.put(f"/movie?moveFiles=true", data=movie)
+            res = await client.put("/movie?moveFiles=true", data=movie)
             logger.info("Updated movie %d path to %s and triggered move", id, payload.new_path)
             return {"success": True, "path": payload.new_path, "response": res}
         else:
@@ -400,13 +415,13 @@ async def update_media_path(
             # 2. Modify path
             series["path"] = payload.new_path
             # 3. PUT update with moveFiles=true
-            res = await client.put(f"/series?moveFiles=true", data=series)
+            res = await client.put("/series?moveFiles=true", data=series)
             logger.info("Updated series %d path to %s and triggered move", id, payload.new_path)
             return {"success": True, "path": payload.new_path, "response": res}
 
     except Exception as exc:
         logger.error("Failed to update path for %s %d: %s", type, id, exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
         if client:
             await client.close()
@@ -415,6 +430,7 @@ async def update_media_path(
 
 
 # ── Search & interactive grab (native *arr) ───────────────────
+
 
 async def _get_arr_client_for(db: AsyncSession, media_type: str, *, timeout: int = 10):
     """Resolve the enabled Radarr/Sonarr client for a media type."""
@@ -451,7 +467,9 @@ def _normalise_release(r: dict) -> dict:
         "age_days": r.get("age", 0),
         "quality": quality.get("name", "Unknown"),
         "custom_format_score": r.get("customFormatScore", 0),
-        "custom_formats": [cf.get("name", "") for cf in r.get("customFormats", []) if isinstance(cf, dict)],
+        "custom_formats": [
+            cf.get("name", "") for cf in r.get("customFormats", []) if isinstance(cf, dict)
+        ],
         "protocol": r.get("protocol", "unknown"),
         "rejected": r.get("rejected", False),
         "rejections": r.get("rejections", []) or [],
@@ -484,6 +502,7 @@ async def trigger_media_search(
         else:
             result = await client.search_series(id)
         from app.services.activity_log import log_event
+
         await log_event(
             category="library",
             action="search",
@@ -500,16 +519,19 @@ async def trigger_media_search(
         raise HTTPException(
             status_code=504,
             detail="Le service *arr a mis trop de temps à répondre au lancement de la recherche.",
-        )
+        ) from exc
     except Exception as exc:
         logger.error(
             "Failed to trigger search for %s %d: %s: %s",
-            type, id, type(exc).__name__, exc,
+            type,
+            id,
+            type(exc).__name__,
+            exc,
         )
         raise HTTPException(
             status_code=502,
             detail=f"Échec du lancement de la recherche ({type(exc).__name__}).",
-        )
+        ) from exc
     finally:
         await client.close()
 
@@ -546,16 +568,18 @@ async def trigger_episode_search(
         raise HTTPException(
             status_code=504,
             detail="Sonarr a mis trop de temps à répondre au lancement de la recherche.",
-        )
+        ) from exc
     except Exception as exc:
         logger.error(
             "Failed to trigger episode search for series %d: %s: %s",
-            id, type(exc).__name__, exc,
+            id,
+            type(exc).__name__,
+            exc,
         )
         raise HTTPException(
             status_code=502,
             detail=f"Échec du lancement de la recherche des épisodes ({type(exc).__name__}).",
-        )
+        ) from exc
     finally:
         await client.close()
 
@@ -612,7 +636,9 @@ async def list_media_releases(
     type: str,
     id: int,
     season: int | None = Query(None, description="Series only: season-pack search for this season"),
-    episode: int | None = Query(None, description="Series only: Sonarr episode id — search just this episode (fast)"),
+    episode: int | None = Query(
+        None, description="Series only: Sonarr episode id — search just this episode (fast)"
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     """Interactive search: list candidate releases sorted best-first.
@@ -656,7 +682,11 @@ async def list_media_releases(
     except httpx.TimeoutException as exc:
         logger.warning(
             "Interactive search timed out for %s %d (season=%s episode=%s): %s",
-            type, id, season, episode, type(exc).__name__,
+            type,
+            id,
+            season,
+            episode,
+            type(exc).__name__,
         )
         raise HTTPException(
             status_code=504,
@@ -665,26 +695,36 @@ async def list_media_releases(
                 "Un ou plusieurs indexeurs sont probablement lents ou hors service — "
                 "réessayez, ou désactivez les indexeurs défaillants dans Prowlarr/Sonarr."
             ),
-        )
+        ) from exc
     except httpx.HTTPStatusError as exc:
         body = (exc.response.text or "").strip()[:300]
         logger.error(
             "Indexer search failed for %s %d (season=%s episode=%s): HTTP %s %s",
-            type, id, season, episode, exc.response.status_code, body,
+            type,
+            id,
+            season,
+            episode,
+            exc.response.status_code,
+            body,
         )
         raise HTTPException(
             status_code=502,
             detail=f"Le service *arr a renvoyé une erreur {exc.response.status_code} lors de la recherche.",
-        )
+        ) from exc
     except Exception as exc:
         logger.error(
             "Failed to fetch releases for %s %d (season=%s episode=%s): %s: %s",
-            type, id, season, episode, type(exc).__name__, exc,
+            type,
+            id,
+            season,
+            episode,
+            type(exc).__name__,
+            exc,
         )
         raise HTTPException(
             status_code=502,
             detail=f"Échec de la recherche interactive ({type(exc).__name__}).",
-        )
+        ) from exc
     finally:
         await client.close()
 
@@ -699,6 +739,7 @@ async def grab_media_release(
     """Grab a specific release via the native *arr release endpoint (managed import)."""
     client = await _get_arr_client_for(db, type, timeout=60)
     from app.services.activity_log import log_event
+
     try:
         result = await client.grab_release(payload.guid, payload.indexer_id)
         await log_event(
@@ -716,15 +757,22 @@ async def grab_media_release(
     except Exception as exc:
         logger.error("Failed to grab release for %s %d: %s", type, id, exc)
         await log_event(
-            category="download", action="grab", status="ko", source="arrmada",
-            media_type=type, media_id=id, title=payload.title, detail=str(exc),
+            category="download",
+            action="grab",
+            status="ko",
+            source="arrmada",
+            media_type=type,
+            media_id=id,
+            title=payload.title,
+            detail=str(exc),
         )
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
         await client.close()
 
 
 # ── Media editing (monitored / quality profile / tags / …) ────
+
 
 @router.get("/options/{type}")
 async def get_media_edit_options(
@@ -737,16 +785,14 @@ async def get_media_edit_options(
         profiles = await client.get_quality_profiles()
         tags = await client.get_tags()
         return {
-            "quality_profiles": [
-                {"id": p.get("id"), "name": p.get("name")} for p in profiles
-            ],
+            "quality_profiles": [{"id": p.get("id"), "name": p.get("name")} for p in profiles],
             "tags": [{"id": t.get("id"), "label": t.get("label")} for t in tags],
         }
     except HTTPException:
         raise
     except Exception as exc:
         logger.error("Failed to fetch edit options for %s: %s", type, exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
         await client.close()
 
@@ -770,7 +816,7 @@ async def create_media_tag(
         raise
     except Exception as exc:
         logger.error("Failed to create tag for %s: %s", type, exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
         await client.close()
 
@@ -833,7 +879,7 @@ async def update_media(
         raise
     except Exception as exc:
         logger.error("Failed to update %s %d: %s", type, id, exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
         await client.close()
 
@@ -858,13 +904,18 @@ async def update_season_monitoring(
             {"season_number": s.get("seasonNumber"), "monitored": s.get("monitored")}
             for s in (updated.get("seasons") or [])
         ]
-        return {"status": "updated", "season": n, "monitored": payload.monitored, "seasons": seasons}
+        return {
+            "status": "updated",
+            "season": n,
+            "monitored": payload.monitored,
+            "seasons": seasons,
+        }
     except HTTPException:
         raise
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:
         logger.error("Failed to update season %d monitoring for series %d: %s", n, id, exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
         await client.close()

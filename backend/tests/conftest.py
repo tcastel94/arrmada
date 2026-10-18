@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.config import settings
 from app.database import get_db
-from app.main import app
+from app.main import app, limiter
 from app.models import Base
 
 # In-memory SQLite for tests
@@ -18,6 +18,13 @@ TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 engine = create_async_engine(TEST_DATABASE_URL, echo=False)
 TestSessionFactory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def reset_rate_limiter():
+    """The 5/min login limit is global: without a reset, tests 429 each other."""
+    limiter.reset()
+    yield
 
 
 @pytest_asyncio.fixture(autouse=True)

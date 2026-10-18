@@ -42,8 +42,7 @@ async def find_candidates(
         # Skip permanent rejections (unknown series)
         rejections = item.get("rejections", [])
         if any(
-            r.get("type") == "permanent" and "Unknown" in r.get("reason", "")
-            for r in rejections
+            r.get("type") == "permanent" and "Unknown" in r.get("reason", "") for r in rejections
         ):
             logger.debug("Skipped %s — unknown series", item_name)
             continue
@@ -99,10 +98,13 @@ async def trigger_rename(
                     series_ids.add(series["id"])
 
             for sid in series_ids:
-                await client.post("/command", data={
-                    "name": "RenameSeries",
-                    "seriesId": sid,
-                })
+                await client.post(
+                    "/command",
+                    data={
+                        "name": "RenameSeries",
+                        "seriesId": sid,
+                    },
+                )
                 logger.info("Triggered RenameSeries for series %d", sid)
         else:
             movie_ids = set()
@@ -112,10 +114,13 @@ async def trigger_rename(
                     movie_ids.add(movie["id"])
 
             for mid in movie_ids:
-                await client.post("/command", data={
-                    "name": "RenameMovie",
-                    "movieId": mid,
-                })
+                await client.post(
+                    "/command",
+                    data={
+                        "name": "RenameMovie",
+                        "movieId": mid,
+                    },
+                )
                 logger.info("Triggered RenameMovie for movie %d", mid)
     except Exception as exc:
         logger.warning("Rename trigger failed: %s", exc)

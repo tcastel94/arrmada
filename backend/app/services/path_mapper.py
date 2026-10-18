@@ -63,11 +63,13 @@ async def get_path_mappings() -> dict[str, Any]:
         mounts = []
         for m in c.get("mounts", []):
             if isinstance(m, dict):
-                mounts.append({
-                    "host": m.get("Source", ""),
-                    "container": m.get("Destination", ""),
-                    "rw": m.get("RW", False),
-                })
+                mounts.append(
+                    {
+                        "host": m.get("Source", ""),
+                        "container": m.get("Destination", ""),
+                        "rw": m.get("RW", False),
+                    }
+                )
         service_mounts[svc_type] = mounts
 
     # Derive key paths
@@ -92,9 +94,10 @@ async def get_path_mappings() -> dict[str, Any]:
 
     if not series_host:
         for m in service_mounts.get("sonarr", []):
-            if m["container"] in ("/tv", "/media"):
-                if "seriesTV" in m["host"] or "series" in m["host"].lower():
-                    series_host = m["host"]
+            if m["container"] in ("/tv", "/media") and (
+                "seriesTV" in m["host"] or "series" in m["host"].lower()
+            ):
+                series_host = m["host"]
 
     return {
         "service_mounts": service_mounts,

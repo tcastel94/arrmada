@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.services.arr_client import ArrBaseClient, HealthStatus
+from app.services.arr_client import ArrBaseClient
 
 
 class TestArrBaseClient:

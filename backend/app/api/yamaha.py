@@ -74,9 +74,7 @@ async def add_setting(data: dict, db: AsyncSession = Depends(get_db)):
     if not url:
         return {"status": "error", "detail": "url requise"}
 
-    res = await db.execute(
-        select(Service).where(Service.type == "yamaha", Service.url == url)
-    )
+    res = await db.execute(select(Service).where(Service.type == "yamaha", Service.url == url))
     existing = res.scalars().first()
     if existing:
         existing.name = data.get("name", existing.name)
@@ -110,7 +108,9 @@ async def update_setting(service_id: int, data: dict, db: AsyncSession = Depends
     url = _base(data.get("url") or "")
     if url and url != svc.url:
         dup = await db.execute(
-            select(Service).where(Service.type == "yamaha", Service.url == url, Service.id != service_id)
+            select(Service).where(
+                Service.type == "yamaha", Service.url == url, Service.id != service_id
+            )
         )
         if dup.scalars().first():
             raise HTTPException(status_code=409, detail="Un autre ampli utilise déjà cette adresse")

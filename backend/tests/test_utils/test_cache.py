@@ -38,7 +38,7 @@ async def test_cache_expires():
         call_count += 1
         return call_count
 
-    result1 = await cache.get_or_set("key", factory, ttl_seconds=0)
+    await cache.get_or_set("key", factory, ttl_seconds=0)
     await asyncio.sleep(0.01)
     result2 = await cache.get_or_set("key", factory, ttl_seconds=0)
 

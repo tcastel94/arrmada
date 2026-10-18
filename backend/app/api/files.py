@@ -79,6 +79,7 @@ async def run_docker_action(payload: DockerActionPayload):
 
 # ── Media Mover ───────────────────────────────────────────────
 
+
 @router.get("/paths")
 async def nas_paths():
     """Get NAS path mappings derived from Docker volume mounts."""
@@ -120,24 +121,36 @@ async def bulk_import(
     background_tasks: BackgroundTasks,
 ):
     """Trigger manual import for multiple files in the background."""
+
     async def run_imports():
         import logging
+
         logger = logging.getLogger("app.api.files")
-        
+
         for idx, item in enumerate(payload.items):
             try:
-                logger.info("Background bulk import [%d/%d]: %s (%s)", idx + 1, len(payload.items), item.download_path, item.media_type)
+                logger.info(
+                    "Background bulk import [%d/%d]: %s (%s)",
+                    idx + 1,
+                    len(payload.items),
+                    item.download_path,
+                    item.media_type,
+                )
                 async with async_session_factory() as db:
                     await trigger_manual_import(db, item.download_path, item.media_type)
             except Exception as exc:
                 logger.error("Failed background bulk import for %s: %s", item.download_path, exc)
 
     background_tasks.add_task(run_imports)
-    return {"success": True, "message": f"Importation en arrière-plan démarrée pour {len(payload.items)} fichiers !"}
+    return {
+        "success": True,
+        "message": f"Importation en arrière-plan démarrée pour {len(payload.items)} fichiers !",
+    }
 
 
 @router.get("/auto-import/reports")
 async def get_auto_import_reports():
     """Get the 10 most recent auto-import execution reports."""
     from app.services.auto_import_reports import get_reports
+
     return get_reports()

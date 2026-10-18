@@ -8,7 +8,7 @@ with a configurable TTL (default 24 hours).
 import json
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 
@@ -42,7 +42,7 @@ class TrashGuidesCache:
         self.cache_dir = cache_dir
         self.ttl_seconds = ttl_hours * 3600
         self._data: dict[str, list[dict[str, Any]]] = {}
-        self._last_sync: Optional[float] = None
+        self._last_sync: float | None = None
 
         # Ensure cache directory exists
         self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -100,14 +100,14 @@ class TrashGuidesCache:
         key = f"{service}_qs"
         return self._data.get(key, [])
 
-    def get_cf_by_id(self, trash_id: str, service: str = "sonarr") -> Optional[dict[str, Any]]:
+    def get_cf_by_id(self, trash_id: str, service: str = "sonarr") -> dict[str, Any] | None:
         """Find a Custom Format by its trash_id."""
         for cf in self.get_custom_formats(service):
             if cf.get("trash_id") == trash_id:
                 return cf
         return None
 
-    def get_cf_by_name(self, name: str, service: str = "sonarr") -> Optional[dict[str, Any]]:
+    def get_cf_by_name(self, name: str, service: str = "sonarr") -> dict[str, Any] | None:
         """Find a Custom Format by name (case-insensitive)."""
         name_lower = name.lower()
         for cf in self.get_custom_formats(service):
@@ -119,7 +119,8 @@ class TrashGuidesCache:
         """Search Custom Formats by name substring."""
         query_lower = query.lower()
         return [
-            cf for cf in self.get_custom_formats(service)
+            cf
+            for cf in self.get_custom_formats(service)
             if query_lower in cf.get("name", "").lower()
         ]
 
@@ -131,7 +132,7 @@ class TrashGuidesCache:
         return (time.time() - self._last_sync) > self.ttl_seconds
 
     @property
-    def cache_age_hours(self) -> Optional[float]:
+    def cache_age_hours(self) -> float | None:
         """Age of cache in hours, or None if never synced."""
         if self._last_sync is None:
             return None
@@ -141,9 +142,9 @@ class TrashGuidesCache:
     def status(self) -> dict[str, Any]:
         """Current cache status summary."""
         return {
-            "last_sync": time.strftime(
-                "%Y-%m-%dT%H:%M:%SZ", time.gmtime(self._last_sync)
-            ) if self._last_sync else None,
+            "last_sync": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(self._last_sync))
+            if self._last_sync
+            else None,
             "sonarr_cf_count": len(self._data.get("sonarr_cf", [])),
             "radarr_cf_count": len(self._data.get("radarr_cf", [])),
             "sonarr_qp_count": len(self._data.get("sonarr_qp", [])),
@@ -227,7 +228,7 @@ class TrashGuidesCache:
 
 
 # ── Singleton instance ────────────────────────────────────────
-_cache: Optional[TrashGuidesCache] = None
+_cache: TrashGuidesCache | None = None
 
 
 def get_trash_cache() -> TrashGuidesCache:

@@ -13,11 +13,11 @@ scheduler = AsyncIOScheduler()
 
 def start_scheduler() -> None:
     """Start the scheduler with all registered jobs."""
-    from app.tasks.health_check_task import register as register_health_check
-    from app.tasks.trash_sync_task import register as register_trash_sync
-    from app.tasks.request_sync_task import register as register_request_sync
     from app.tasks.auto_import_task import register as register_auto_import
+    from app.tasks.health_check_task import register as register_health_check
     from app.tasks.kodi_playback_task import register as register_kodi_playback
+    from app.tasks.request_sync_task import register as register_request_sync
+    from app.tasks.trash_sync_task import register as register_trash_sync
 
     register_health_check(scheduler)
     register_trash_sync(scheduler)

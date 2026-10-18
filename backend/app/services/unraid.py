@@ -127,14 +127,16 @@ class UnraidClient:
             name = names[0].lstrip("/") if names else "unknown"
             state_raw = (c.get("state") or "").upper()
 
-            containers.append({
-                "name": name,
-                "status": _normalize_state(state_raw),
-                "image": c.get("image", ""),
-                "id": (c.get("id") or "")[:12],
-                "status_text": c.get("status", ""),
-                "state_raw": state_raw,
-            })
+            containers.append(
+                {
+                    "name": name,
+                    "status": _normalize_state(state_raw),
+                    "image": c.get("image", ""),
+                    "id": (c.get("id") or "")[:12],
+                    "status_text": c.get("status", ""),
+                    "state_raw": state_raw,
+                }
+            )
         return containers
 
     async def docker_action(self, container_id: str, action: str) -> str:
