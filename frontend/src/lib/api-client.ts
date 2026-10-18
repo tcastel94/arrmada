@@ -26,6 +26,29 @@ export function isAuthenticated(): boolean {
 }
 
 /**
+ * Images servies par ArrMada lui-même (fichiers des dossiers des médias :
+ * disc.png, clearlogo.png…) : le serveur renvoie une adresse RELATIVE
+ * (« /api/artwork/local/… »), on la complète avec l'adresse de l'API — comme
+ * un lien relatif dans une page web. Le reste de la réponse est inchangé.
+ */
+const LOCAL_IMAGE_PREFIX = "/api/artwork/local/";
+
+export function absoluteMediaUrls<T>(data: T): T {
+    if (typeof data === "string") {
+        return (data.startsWith(LOCAL_IMAGE_PREFIX) ? `${API_URL}${data}` : data) as T;
+    }
+    if (Array.isArray(data)) return data.map((item) => absoluteMediaUrls(item)) as T;
+    if (data && typeof data === "object") {
+        const out: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
+            out[key] = absoluteMediaUrls(value);
+        }
+        return out as T;
+    }
+    return data;
+}
+
+/**
  * Base fetch wrapper for the ArrMada backend API.
  * Automatically adds auth headers and handles errors.
  */
@@ -68,7 +91,7 @@ export async function apiFetch<T>(
         throw new Error(errorBody.detail || `HTTP ${response.status}`);
     }
 
-    return response.json();
+    return absoluteMediaUrls(await response.json()) as T;
 }
 
 /** Login with password */

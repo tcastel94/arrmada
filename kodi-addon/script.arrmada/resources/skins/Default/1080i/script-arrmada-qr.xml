@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ArrMada — fenêtre « QR code vers le téléphone » (phase 3, ADR-003 § 7).
+
+  Remplie par lib/qr_window.py, via la propriété « state » :
+    loading  QR code demandé au serveur
+    ready    QR code + adresse ; bouton « Ouvrir sur la TV » (951) sur Android
+    error    QR code indisponible (serveur injoignable…)
+  Retour ou « Fermer » (952) : revenir à l'écran précédent.
+  S'affiche par-dessus l'écran en cours (dialogue), fond assombri.
+-->
+<window type="dialog">
+	<defaultcontrol always="false">952</defaultcontrol>
+	<animation effect="fade" start="0" end="100" time="250" tween="sine" easing="out">WindowOpen</animation>
+	<animation effect="fade" start="100" end="0" time="200">WindowClose</animation>
+	<controls>
+		<!-- Fond assombri : l'écran d'origine reste deviné derrière -->
+		<control type="image">
+			<left>0</left><top>0</top><width>1920</width><height>1080</height>
+			<texture colordiffuse="E60A0E16">arrmada/white.png</texture>
+		</control>
+
+		<control type="group">
+			<left>280</left><top>200</top>
+			<animation effect="zoom" start="94" end="100" time="350" tween="cubic" easing="out" center="680,340">WindowOpen</animation>
+			<!-- Panneau -->
+			<control type="image">
+				<width>1360</width><height>680</height>
+				<texture border="26" colordiffuse="FF121826">arrmada/rounded-24.png</texture>
+			</control>
+			<control type="image">
+				<width>1360</width><height>680</height>
+				<texture border="26" colordiffuse="334A9EFF">arrmada/ring-24.png</texture>
+			</control>
+
+			<!-- ═══════════════ QR code (à gauche) ═══════════════ -->
+			<control type="group">
+				<left>64</left><top>100</top>
+				<control type="image">
+					<left>-40</left><top>-40</top><width>520</width><height>520</height>
+					<texture border="56" colordiffuse="664A9EFF">arrmada/glow.png</texture>
+					<visible>String.IsEqual(Window.Property(state),ready)</visible>
+					<animation effect="fade" start="100" end="40" time="2400" tween="sine" pulse="true" condition="true">Conditional</animation>
+				</control>
+				<control type="image">
+					<width>440</width><height>440</height>
+					<texture border="26">arrmada/rounded-24.png</texture>
+					<visible>String.IsEqual(Window.Property(state),ready)</visible>
+				</control>
+				<control type="image">
+					<left>20</left><top>20</top><width>400</width><height>400</height>
+					<aspectratio>keep</aspectratio>
+					<fadetime>200</fadetime>
+					<texture background="true">$INFO[Window.Property(qr)]</texture>
+					<visible>String.IsEqual(Window.Property(state),ready)</visible>
+					<animation effect="fade" start="0" end="100" time="300">Visible</animation>
+				</control>
+				<!-- Chargement / erreur : même emplacement que le QR code -->
+				<control type="image">
+					<width>440</width><height>440</height>
+					<texture border="26" colordiffuse="14FFFFFF">arrmada/rounded-24.png</texture>
+					<visible>!String.IsEqual(Window.Property(state),ready)</visible>
+				</control>
+				<control type="label">
+					<left>20</left><top>180</top><width>400</width><height>80</height>
+					<font>font13</font>
+					<textcolor>B3DCE3EE</textcolor>
+					<align>center</align><aligny>center</aligny>
+					<label>Préparation du QR code…</label>
+					<visible>String.IsEqual(Window.Property(state),loading)</visible>
+					<animation effect="fade" start="100" end="45" time="900" tween="sine" pulse="true" condition="true">Conditional</animation>
+				</control>
+				<control type="textbox">
+					<left>32</left><top>150</top><width>376</width><height>140</height>
+					<font>font12</font>
+					<textcolor>FFFCA5A5</textcolor>
+					<align>center</align>
+					<label>QR code indisponible[CR]$INFO[Window.Property(error)]</label>
+					<visible>String.IsEqual(Window.Property(state),error)</visible>
+				</control>
+			</control>
+
+			<!-- ═══════════════ Texte (à droite) ═══════════════ -->
+			<control type="label">
+				<left>580</left><top>92</top><width>720</width><height>64</height>
+				<font>font15_bold</font>
+				<textcolor>FFF5F7FA</textcolor>
+				<aligny>center</aligny>
+				<label>$INFO[Window.Property(title)]</label>
+			</control>
+			<control type="textbox">
+				<left>580</left><top>176</top><width>720</width><height>150</height>
+				<font>font13</font>
+				<textcolor>D9DCE3EE</textcolor>
+				<label>$INFO[Window.Property(text)]</label>
+			</control>
+			<control type="label">
+				<left>580</left><top>344</top><width>720</width><height>40</height>
+				<font>font12</font>
+				<textcolor>FF8CC4FF</textcolor>
+				<aligny>center</aligny>
+				<label>Vise le QR code avec l'appareil photo de ton téléphone</label>
+				<visible>String.IsEqual(Window.Property(state),ready)</visible>
+			</control>
+			<control type="label">
+				<left>580</left><top>388</top><width>720</width><height>40</height>
+				<font>font10</font>
+				<textcolor>99C9D3E0</textcolor>
+				<aligny>center</aligny>
+				<label>$INFO[Window.Property(url)]</label>
+				<visible>String.IsEqual(Window.Property(state),ready)</visible>
+			</control>
+
+			<!-- ═══════════════ Boutons ═══════════════ -->
+			<control type="grouplist" id="950">
+				<left>580</left><top>520</top><width>720</width><height>64</height>
+				<orientation>horizontal</orientation>
+				<itemgap>16</itemgap>
+				<control type="button" id="951">
+					<width>320</width><height>64</height>
+					<label>Ouvrir sur la TV</label>
+					<font>font13</font>
+					<textcolor>FF8CC4FF</textcolor>
+					<focusedcolor>FF0A0E16</focusedcolor>
+					<align>center</align><aligny>center</aligny>
+					<texturenofocus border="14" colordiffuse="334A9EFF">arrmada/rounded-12.png</texturenofocus>
+					<texturefocus border="14" colordiffuse="FF4A9EFF">arrmada/rounded-12.png</texturefocus>
+					<!-- Android seulement : le navigateur de la TV ouvre l'adresse -->
+					<visible>String.IsEqual(Window.Property(can_open),1)</visible>
+					<animation effect="zoom" start="100" end="107" time="160" tween="cubic" easing="out" center="auto">Focus</animation>
+					<animation effect="zoom" start="107" end="100" time="160" tween="cubic" easing="out" center="auto">UnFocus</animation>
+				</control>
+				<control type="button" id="952">
+					<width>220</width><height>64</height>
+					<label>Fermer</label>
+					<font>font13</font>
+					<textcolor>D9F5F7FA</textcolor>
+					<focusedcolor>FF0A0E16</focusedcolor>
+					<align>center</align><aligny>center</aligny>
+					<texturenofocus border="14" colordiffuse="1AFFFFFF">arrmada/rounded-12.png</texturenofocus>
+					<texturefocus border="14" colordiffuse="FF4A9EFF">arrmada/rounded-12.png</texturefocus>
+					<animation effect="zoom" start="100" end="107" time="160" tween="cubic" easing="out" center="auto">Focus</animation>
+					<animation effect="zoom" start="107" end="100" time="160" tween="cubic" easing="out" center="auto">UnFocus</animation>
+				</control>
+			</control>
+		</control>
+	</controls>
+</window>

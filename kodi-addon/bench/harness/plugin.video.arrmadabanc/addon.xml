@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- Faux add-on vidéo du banc (ADR-004, phase 4.3) : dossiers, page suivante,
+     vidéos « jouables » résolues vers le petit clip muet du banc. -->
+<addon id="plugin.video.arrmadabanc" name="Banc TV" version="1.0.0" provider-name="test">
+    <requires><import addon="xbmc.python" version="3.0.0"/></requires>
+    <extension point="xbmc.python.pluginsource" library="default.py">
+        <provides>video</provides>
+    </extension>
+    <extension point="xbmc.addon.metadata">
+        <summary lang="en_GB">Chaînes et replays de test du banc ArrMada</summary>
+        <description lang="en_GB">Faux add-on vidéo : il remplace YouTube ou un add-on d'IPTV sur le banc.</description>
+        <platform>all</platform>
+        <assets><icon>icon.png</icon></assets>
+    </extension>
+</addon>

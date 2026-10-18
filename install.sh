@@ -50,6 +50,10 @@ ARRMADA_IMAGE="${ARRMADA_IMAGE:-ghcr.io/tcastel94/arrmada:latest}"
 
 # Ports publiés sur l'hôte (ceux des applis = leurs ports par défaut).
 readonly PORT_ARRMADA=3420
+# Ancien port de l'API d'ArrMada : l'add-on Kodi des TV s'y connecte (il
+# convertit même :3420 en :8420). Publié s'il est libre, vers le même 3420.
+readonly PORT_ARRMADA_TV=8420
+PUBLISH_TV_PORT=true
 readonly PORT_SONARR=8989
 readonly PORT_RADARR=7878
 readonly PORT_PROWLARR=9696
@@ -438,6 +442,11 @@ check_ports() {
         stack_owns "$app" && continue
         port="$(app_port "$app")"
         if port_busy "$port"; then busy+=("${app}:${port}"); fi
+        # Port des TV : utile mais pas indispensable → avertissement seulement
+        if [ "$app" = arrmada ] && port_busy "$PORT_ARRMADA_TV"; then
+            PUBLISH_TV_PORT=false
+            warn "Port ${PORT_ARRMADA_TV} occupé : non publié. L'add-on Kodi des TV devra pointer sur :${PORT_ARRMADA} (sans conversion vers ${PORT_ARRMADA_TV})."
+        fi
     done
     if [ ${#busy[@]} -gt 0 ]; then
         die "Port(s) déjà utilisé(s) par un autre programme : ${busy[*]}. Libère-les ou retire l'appli (--no-usenet, --torrent none…)." "$E_PORTS"
@@ -781,6 +790,7 @@ EOF
     init: true
     ports:
       - "${PORT_ARRMADA}:3420"
+$($PUBLISH_TV_PORT && echo "      - \"${PORT_ARRMADA_TV}:3420\"   # add-on Kodi des TV")
     volumes:
       - ./data:/app/data
       - ${CONFIG_ROOT}:/appdata:ro      # lecture des clés API des autres applis

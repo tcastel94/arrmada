@@ -9,6 +9,8 @@
  *   premier était utilisé), placeholders génériques.
  * - Maintenance : scan (succès ET échecs signalés), nettoyage confirmé,
  *   cohérence Radarr ↔ Kodi avec jauge, liste complète et liens.
+ * - Appareils (TV) : appairage par code / QR code, pièce et ampli par TV.
+ * - Dépôt Kodi : adresse à saisir sur la TV pour les mises à jour automatiques.
  */
 import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -36,6 +38,9 @@ import { Shimmer, TableSkeleton } from "@/components/shared/loading-skeleton";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { RingGauge } from "@/components/fx/ring-gauge";
 import { DeviceRow } from "@/components/settings/device-row";
+import { CamerasPanel } from "@/components/settings/cameras-panel";
+import { DevicesPanel } from "@/components/settings/devices-panel";
+import { KodiRepoPanel } from "@/components/settings/kodi-repo-panel";
 import { useStickyValue } from "@/components/settings/use-sticky-value";
 import { DiscoveryResults, type DiscoveredDevice } from "@/components/settings/discovery-results";
 import { KodiForm } from "@/components/settings/kodi-form";
@@ -91,6 +96,15 @@ export default function KodiSettingsPage() {
 
     return (
         <>
+            {/* ── TV appairées (accès propre à chaque appareil) ── */}
+            <DevicesPanel />
+
+            {/* ── Caméras Eufy : pop-up sur la TV pendant un film ── */}
+            <CamerasPanel />
+
+            {/* ── Dépôt Kodi : mises à jour automatiques de l'add-on ── */}
+            <KodiRepoPanel />
+
             {/* ── Lecteurs configurés ─────────────────────────── */}
             <Panel
                 title="Lecteurs Kodi"

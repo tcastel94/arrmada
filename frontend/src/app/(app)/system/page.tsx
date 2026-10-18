@@ -3,7 +3,8 @@
 /**
  * Serveur & Docker (/system) — deux onglets synchronisés à l'URL :
  *  - ?tab=resources : RAM, CPU, charge, disques (rafraîchis en direct) ;
- *  - ?tab=docker    : conteneurs Unraid (ex-page /docker).
+ *  - ?tab=docker    : conteneurs Unraid (ex-page /docker), puis leurs
+ *                    journaux en direct et le diagnostic IA de ces journaux.
  * Le héros résume l'essentiel : RAM, CPU, disques en alerte et
  * conteneurs en marche.
  */
@@ -18,6 +19,7 @@ import { useDockerContainers } from "@/hooks/use-docker";
 import { useUrlState } from "@/hooks/use-url-state";
 import { ResourcesPanel, useCpuPercent } from "@/components/system/resources-panel";
 import { DockerPanel } from "@/components/system/docker-panel";
+import { DockerLogsSection } from "@/components/system/docker-logs";
 
 type SystemTab = "resources" | "docker";
 
@@ -101,8 +103,11 @@ export default function SystemPage() {
                     <TabsContent value="resources" className="mt-5">
                         <ResourcesPanel />
                     </TabsContent>
-                    <TabsContent value="docker" className="mt-5">
+                    {/* Radix ne monte que l'onglet actif : les journaux ne sont donc
+                        interrogés (toutes les 10 s) que pendant que tu les regardes. */}
+                    <TabsContent value="docker" className="mt-5 space-y-6">
                         <DockerPanel />
+                        <DockerLogsSection />
                     </TabsContent>
                 </Tabs>
             </PageContainer>

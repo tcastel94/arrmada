@@ -273,6 +273,7 @@ export function SearchTab({
                                         subtitle={`${it.year ?? "—"} · ${it.type === "movie" ? "Film" : "Série"}`}
                                         posterUrl={it.poster_url}
                                         type={it.type}
+                                        // Fiche détaillée (TMDB si l'ID est connu) ; le « + » ajoute sans l'ouvrir.
                                         onClick={() => onPreview(it)}
                                         badges={<PosterBadge tone={it.type === "series" ? "violet" : "primary"}>{it.type === "series" ? "Série" : "Film"}</PosterBadge>}
                                         corner={<AddButton state={stateOf(it.key)} onAdd={() => add(it)} title={it.title} />}

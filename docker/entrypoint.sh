@@ -41,7 +41,17 @@ if [ "$(id -u)" = "0" ]; then
     # Volume monté depuis l'hôte : il garde le propriétaire de l'hôte
     # (souvent root). On le rend à l'utilisateur applicatif.
     chown -R "$PUID:$PGID" "$DATA_DIR"
-    RUN_AS=(setpriv --reuid="$PUID" --regid="$PGID" --clear-groups --)
+    # Socket Docker monté (analyse des logs des conteneurs) : il appartient
+    # à root:<groupe docker de l'hôte>, en 0660. On ajoute CE groupe (par son
+    # numéro, il n'existe pas dans l'image) à l'utilisateur applicatif, sinon
+    # « permission denied » une fois les droits root abandonnés.
+    GROUPS_OPT=(--clear-groups)
+    if [ -S /var/run/docker.sock ]; then
+        SOCK_GID="$(stat -c %g /var/run/docker.sock)"
+        GROUPS_OPT=(--groups "$SOCK_GID")
+        log "Socket Docker détecté : groupe $SOCK_GID ajouté"
+    fi
+    RUN_AS=(setpriv --reuid="$PUID" --regid="$PGID" "${GROUPS_OPT[@]}" --)
     log "Utilisateur applicatif : UID=$PUID GID=$PGID"
 else
     log "Conteneur lancé sans root (UID=$(id -u)) : PUID/PGID ignorés"

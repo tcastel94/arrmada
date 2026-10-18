@@ -38,8 +38,33 @@ export interface DownloadItem {
     detail: string; // message d'état (ex : pourquoi l'import attend)
     indexer: string;
     quality: string;
-    /** Affiche du média — pas encore renvoyée par le backend (optionnelle). */
+    /**
+     * Épisodes couverts par ce téléchargement (pack de saison). Sonarr compte
+     * une ligne par épisode : le serveur les regroupe en une seule carte.
+     */
+    episode_count?: number;
+    /**
+     * Affiche, fond et logo du film / de la série suivi, ajoutés par le
+     * serveur depuis la médiathèque (absents si le titre n'y est pas).
+     */
     poster_url?: string | null;
+    fanart_url?: string | null;
+    clearlogo_url?: string | null;
+    /** Titre propre du média (« Dune »), à côté du nom de release. */
+    media_title?: string | null;
+    /** nzo_id SABnzbd (ou hash torrent) : clé des actions par élément. */
+    download_id?: string;
+    /**
+     * Lancé depuis une TV (ADR-005) : quelle TV, et s'il passe devant la file
+     * (priorité Force dans SABnzbd). null : téléchargement ordinaire.
+     */
+    tv_request?: {
+        id: number;
+        device_name: string;
+        room: string | null;
+        priority: boolean;
+        requested_at: string | null;
+    } | null;
 }
 
 export interface DownloadsResponse {

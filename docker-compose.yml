@@ -13,6 +13,8 @@
 #
 # Synology (DSM 7.2+) : Container Manager → Projet → Créer → colle ce fichier.
 # Base PostgreSQL au lieu de SQLite : voir docker-compose.postgres.yml.
+# Réglages propres à TA machine : docker-compose.override.yml (non versionné,
+# fusionné automatiquement par docker compose — voir docs/deploy-unraid.md).
 
 name: arrmada
 
@@ -23,7 +25,11 @@ services:
     restart: unless-stopped
     init: true                 # mini-init Docker : signaux + processus zombies
     ports:
-      - "3420:3420"            # interface + API : le SEUL port à ouvrir
+      - "3420:3420"            # interface + API : le seul port nécessaire
+      # Ancien port de l'API, redirigé vers le même service : TV Kodi déjà
+      # configurées (http://<serveur>:8420), source du dépôt Kodi et webhooks
+      # *arr existants continuent de marcher. Supprimable sinon.
+      - "8420:3420"
     volumes:
       - ./data:/app/data       # base SQLite, clés de chiffrement, mot de passe haché
       # Optionnel, LECTURE SEULE : dossier des configs de tes autres applis.
@@ -32,8 +38,15 @@ services:
       #   Unraid   : /mnt/user/appdata:/appdata:ro
       #   Synology : /volume1/docker:/appdata:ro
       # - /chemin/de/tes/configs:/appdata:ro
-      # Optionnel : accès aux fichiers médias (nettoyage, doublons…).
+      # Optionnel : accès aux fichiers médias (nettoyage, doublons, artworks
+      # des dossiers, auto-import…).
       # - /chemin/vers/medias:/mnt/user:rw
+      # Optionnel : logs des conteneurs pour l'analyse IA. ⚠️ Le socket Docker
+      # donne le contrôle de tous les conteneurs de la machine.
+      # - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Optionnel : add-on Kodi d'un clone Git, à la place de celui de l'image
+      # (nouvelle version proposée aux TV après un simple git pull).
+      # - ./kodi-addon:/app/kodi-addon:ro
     environment:
       - TZ=${TZ:-Europe/Paris}
       # Propriétaire des fichiers créés dans ./data (commande `id` sur l'hôte).
@@ -41,7 +54,57 @@ services:
       - PUID=${PUID:-1000}
       - PGID=${PGID:-1000}
       # ── Optionnel (vide = désactivé) ──
+      # ⚠️ Une variable du .env n'arrive dans le conteneur QUE si elle est
+      # listée ici (docker compose ne s'en sert sinon que pour ce fichier).
+      # Détail de chaque variable : .env.example.
       - TMDB_API_KEY=${TMDB_API_KEY:-}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+      # TV Kodi : adresse de la web app pour le QR code d'appairage
+      - PUBLIC_WEB_URL=${PUBLIC_WEB_URL:-}
+      # IA : Ollama local (prioritaire) ou OpenRouter
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - AI_MODEL=${AI_MODEL:-google/gemini-2.0-flash-001}
+      - OLLAMA_URL=${OLLAMA_URL:-}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-}
+      - UNRAID_URL=${UNRAID_URL:-}
+      - UNRAID_API_KEY=${UNRAID_API_KEY:-}
+      # Caméras Eufy (pop-up sur la TV) : adresse de eufy-security-ws
+      - EUFY_WS_URL=${EUFY_WS_URL:-}
+      - EUFY_DETECTIONS=${EUFY_DETECTIONS:-person}
+      # Artworks : fanart.tv, images des dossiers des médias, tâche périodique
+      - FANART_API_KEY=${FANART_API_KEY:-}
+      - FANART_CLIENT_KEY=${FANART_CLIENT_KEY:-}
+      - ARTWORK_LOCAL_ENABLED=${ARTWORK_LOCAL_ENABLED:-true}
+      - ARTWORK_AUTO_ENABLED=${ARTWORK_AUTO_ENABLED:-true}
+      - ARTWORK_AUTO_INTERVAL_HOURS=${ARTWORK_AUTO_INTERVAL_HOURS:-24}
+      # Auto-import (téléchargements terminés non importés, packs bloqués)
+      - AUTO_IMPORT_ENABLED=${AUTO_IMPORT_ENABLED:-true}
+      - AUTO_IMPORT_INTERVAL_MINUTES=${AUTO_IMPORT_INTERVAL_MINUTES:-5}
+      - AUTO_IMPORT_ALLOW_OVERWRITE=${AUTO_IMPORT_ALLOW_OVERWRITE:-false}
+      - AUTO_IMPORT_BLOCKED_PACKS=${AUTO_IMPORT_BLOCKED_PACKS:-true}
+      - ARR_DOWNLOADS_PATH=${ARR_DOWNLOADS_PATH:-/media/downloads/complete}
+
+  # ── Caméras Eufy (optionnel) ────────────────────────────────
+  # Pont vers le cloud Eufy : publie les détections sur le réseau local
+  # (ws://<IP>:${EUFY_WS_PORT}). Démarré seulement à la demande :
+  #   docker compose --profile eufy up -d eufy-security-ws
+  # Compte Eufy SECONDAIRE (invité par le compte principal), sans 2FA.
+  # Réseau « host » : le conteneur écoute DIRECTEMENT sur un port de la
+  # machine (pas de correspondance de ports possible). Défaut 8424 (3000, le
+  # défaut du pont, est souvent déjà pris). Vérifier qu'il est libre :
+  #   ss -ltn | grep -w 8424
+  eufy-security-ws:
+    image: bropat/eufy-security-ws:latest
+    container_name: eufy-security-ws
+    profiles: ["eufy"]
+    restart: unless-stopped
+    network_mode: host  # liaison directe avec la HomeBase (P2P)
+    environment:
+      - USERNAME=${EUFY_USERNAME:-}
+      - PASSWORD=${EUFY_PASSWORD:-}
+      - COUNTRY=${EUFY_COUNTRY:-FR}
+      - TRUSTED_DEVICE_NAME=arrmada
+      - PORT=${EUFY_WS_PORT:-8424}
+    volumes:
+      - ./data/eufy:/data

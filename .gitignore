@@ -17,11 +17,13 @@ out/
 .turbo/
 
 # Environment — NEVER commit these
+# `.env.*` couvre aussi les copies (.env.bak-unraid, .env.old…) : une
+# sauvegarde de .env contient les mêmes secrets que l'original.
 .env
-.env.local
-.env.*.local
-.env.production
-.env.development
+.env.*
+!.env.example
+*.bak
+*.bak-*
 
 # Data & Database
 data/
@@ -55,3 +57,12 @@ htmlcov/
 
 # Réglages propres à un hôte (PostgreSQL, montages, PUID…) — voir docs/deploy-unraid.md
 docker-compose.override.yml
+
+# Copies de .env : mêmes secrets que l'original
+.env.*
+!.env.example
+*.bak
+*.bak-*
+
+# Builds versionnés de l'add-on Kodi (régénérés par kodi-addon/build_zip.py)
+kodi-addon/script.arrmada-*.zip

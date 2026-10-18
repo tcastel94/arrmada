@@ -9,7 +9,7 @@
  *   cloche avec aperçu des notifications dans un popover.
  */
 import Link from "next/link";
-import Image from "next/image";
+import { BrandIcon } from "@/components/brand/brand-mark";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -78,7 +78,7 @@ export function Header({ title }: HeaderProps) {
                 {/* Logo (mobile uniquement — la sidebar l'affiche sur desktop) */}
                 <Link href="/dashboard" className="mr-1 shrink-0 lg:hidden" aria-label="Accueil">
                     <div className="h-8 w-8 overflow-hidden rounded-lg ring-1 ring-primary/30 shadow-[0_0_16px_-4px_hsl(var(--primary)/0.7)]">
-                        <Image src="/logo-mark.png" alt="" width={32} height={32} className="h-full w-full object-cover" />
+                        <BrandIcon />
                     </div>
                 </Link>
 

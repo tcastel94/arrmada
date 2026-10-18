@@ -59,6 +59,7 @@ import { useSetupStatus } from "@/hooks/use-setup";
 import { plural, percent } from "@/lib/format";
 import { fadeUp, stagger } from "@/lib/motion";
 import { cn } from "@/lib/utils";
+import { BrandIcon } from "@/components/brand/brand-mark";
 
 /* ── Ligne de configuration ─────────────────────────────────── */
 
@@ -425,8 +426,9 @@ export default function SettingsGeneralPage() {
             <motion.div variants={fadeUp}>
                 <SpotlightCard interactive={false} className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
                     <div className="relative z-[2] flex items-center gap-3">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src="/logo-mark.png" alt="" className="h-11 w-11 rounded-xl ring-1 ring-primary/30 shadow-[0_0_20px_-4px_hsl(var(--primary)/0.7)]" />
+                        <div className="h-11 w-11 shrink-0 overflow-hidden rounded-xl ring-1 ring-primary/30 shadow-[0_0_20px_-4px_hsl(var(--primary)/0.7)]">
+                            <BrandIcon />
+                        </div>
                         <div>
                             <p className="font-semibold">
                                 Arr<span className="text-gradient">Mada</span>

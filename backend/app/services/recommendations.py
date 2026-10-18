@@ -5,13 +5,9 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.service import Service
-from app.services.encryption import decrypt_api_key
 from app.services.media_aggregator import fetch_all_media
-from app.services.radarr import RadarrClient
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -26,7 +22,7 @@ async def get_recommendations(db: AsyncSession) -> dict[str, Any]:
     existing_titles = set()
     for m in media:
         existing_titles.add(m.get("title", "").lower())
-        for g in (m.get("genres") or []):
+        for g in m.get("genres") or []:
             genre_counter[g] += 1
 
     top_genres = [g for g, _ in genre_counter.most_common(5)]

@@ -42,6 +42,9 @@ _SCRYPT_MAXMEM = 64 * 1024 * 1024
 
 _jwt_secret: str | None = None
 
+# Dernière clé d'API acceptée : (état du mot de passe, empreinte SHA-256 de la clé)
+_api_key_ok: tuple[str, bytes] | None = None
+
 
 def _data_dir() -> Path:
     path = Path(settings.DATA_DIR)
@@ -159,4 +162,31 @@ def verify_password(password: str) -> bool:
     legacy = _legacy_env_password()
     if legacy:
         return hmac.compare_digest(password.encode("utf-8"), legacy.encode("utf-8"))
+    return False
+
+
+def _password_state() -> str:
+    """Identifies the current password: changes whenever it is changed."""
+    pw_file = _password_file()
+    if pw_file.exists():
+        return pw_file.read_text(encoding="utf-8").strip()
+    return f"env:{_legacy_env_password() or ''}"
+
+
+def verify_api_key(key: str) -> bool:
+    """``X-Api-Key`` / ``?apikey=`` check (Kodi add-on, scripts): the admin password.
+
+    Same rule as :func:`verify_password`, but the add-on sends the key with
+    EVERY request and scrypt costs ~50 ms: the last accepted key is kept in
+    memory (as a SHA-256 fingerprint), until the password changes.
+    """
+    global _api_key_ok
+    state = _password_state()
+    fingerprint = hashlib.sha256(key.encode("utf-8")).digest()
+    cached = _api_key_ok
+    if cached and cached[0] == state and hmac.compare_digest(cached[1], fingerprint):
+        return True
+    if verify_password(key):
+        _api_key_ok = (state, fingerprint)
+        return True
     return False

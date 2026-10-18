@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 class MediaRequestCreate(BaseModel):
     """Create a new media request."""
+
     tmdb_id: int | None = None
     title: str = Field(min_length=1, max_length=500)
     type: str = Field(pattern=r"^(movie|series|music|book)$")
@@ -20,6 +21,7 @@ class MediaRequestCreate(BaseModel):
 
 class MediaRequestResponse(BaseModel):
     """Media request response."""
+
     id: int
     tmdb_id: int | None = None
     title: str

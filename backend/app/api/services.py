@@ -209,7 +209,11 @@ async def global_health(
 ) -> list[ServiceHealthResponse]:
     """Run health checks on all enabled services (*arr only by default)."""
     results = await health_checker.check_all_services(db)
-    return [ServiceHealthResponse(**r) for r in results if _in_category(r.get("service_type", ""), category)]
+    return [
+        ServiceHealthResponse(**r)
+        for r in results
+        if _in_category(r.get("service_type", ""), category)
+    ]
 
 
 # ── Health history for a service ──────────────────────────────

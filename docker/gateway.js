@@ -5,8 +5,9 @@
  * aucune dépendance :
  *
  *     navigateur ──► :3420 (cette passerelle)
- *                      ├─ /api/*  ──► FastAPI   127.0.0.1:8420
- *                      └─ le reste ─► Next.js   127.0.0.1:3421
+ *                      ├─ /api/*   ──► FastAPI   127.0.0.1:8420
+ *                      ├─ /kodi/*  ──► FastAPI   (dépôt de l'add-on Kodi)
+ *                      └─ le reste ──► Next.js   127.0.0.1:3421
  *
  * Pourquoi pas les « rewrites » intégrés de Next.js ? Leur proxy :
  *   - coupe toute requête au bout de 30 s (flux temps réel SSE compris) ;
@@ -42,8 +43,13 @@ const HOP_BY_HOP = new Set([
 
 const agent = new http.Agent({ keepAlive: true, maxSockets: 256 });
 
+// Préfixes servis par FastAPI ; tout le reste est l'interface Next.js.
+const API_PREFIXES = ["/api", "/kodi"];
+
 function isApi(url) {
-    return url === "/api" || url.startsWith("/api/") || url.startsWith("/api?");
+    return API_PREFIXES.some(
+        (p) => url === p || url.startsWith(`${p}/`) || url.startsWith(`${p}?`),
+    );
 }
 
 function forwardHeaders(req) {

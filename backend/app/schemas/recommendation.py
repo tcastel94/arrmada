@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 class RecommendationResponse(BaseModel):
     """Recommendation response."""
+
     id: int
     tmdb_id: int | None = None
     title: str

@@ -33,56 +33,65 @@ async def detect_duplicates(db: AsyncSession) -> dict[str, Any]:
     duplicates: list[dict[str, Any]] = []
     upgrade_opportunities: list[dict[str, Any]] = []
 
-    for key, items in title_groups.items():
+    for items in title_groups.values():
         if len(items) < 2:
             continue
 
         # Check if they're from different services (cross-service dupe)
-        services = set(m["source_service"] for m in items)
+        services = {m["source_service"] for m in items}
 
         if len(services) > 1:
             # Cross-service duplicate
             total_size = sum(m.get("size_bytes") or 0 for m in items)
-            duplicates.append({
-                "title": items[0]["title"],
-                "type": items[0]["type"],
-                "year": items[0].get("year"),
-                "copies": len(items),
-                "services": list(services),
-                "total_size_bytes": total_size,
-                "total_size_human": format_bytes(total_size),
-                "items": [
-                    {
-                        "source": m["source_service"],
-                        "quality": str(m.get("quality", "?")),
-                        "size_human": format_bytes(m.get("size_bytes", 0)),
-                        "has_file": m.get("has_file", False),
-                    }
-                    for m in items
-                ],
-                "reason": "cross_service",
-            })
+            duplicates.append(
+                {
+                    "title": items[0]["title"],
+                    "type": items[0]["type"],
+                    "year": items[0].get("year"),
+                    "copies": len(items),
+                    "services": list(services),
+                    "total_size_bytes": total_size,
+                    "total_size_human": format_bytes(total_size),
+                    "items": [
+                        {
+                            "source": m["source_service"],
+                            "quality": str(m.get("quality", "?")),
+                            "size_human": format_bytes(m.get("size_bytes", 0)),
+                            "has_file": m.get("has_file", False),
+                        }
+                        for m in items
+                    ],
+                    "reason": "cross_service",
+                }
+            )
         else:
             # Same service, possibly different qualities
             qualities = [str(m.get("quality", "")) for m in items]
             if len(set(qualities)) > 1:
-                upgrade_opportunities.append({
-                    "title": items[0]["title"],
-                    "type": items[0]["type"],
-                    "year": items[0].get("year"),
-                    "service": list(services)[0],
-                    "qualities": qualities,
-                    "reason": "quality_variants",
-                })
+                upgrade_opportunities.append(
+                    {
+                        "title": items[0]["title"],
+                        "type": items[0]["type"],
+                        "year": items[0].get("year"),
+                        "service": list(services)[0],
+                        "qualities": qualities,
+                        "reason": "quality_variants",
+                    }
+                )
 
     # Sort by total size descending (most impactful first)
     duplicates.sort(key=lambda d: d.get("total_size_bytes", 0), reverse=True)
 
     wasted_bytes = sum(
-        d["total_size_bytes"] - min(
+        d["total_size_bytes"]
+        - min(
             (item.get("size_bytes") or 0)
-            for item in [m for m in media if normalize_title(m["title"]) == normalize_title(d["title"])]
-        ) if d["total_size_bytes"] > 0 else 0
+            for item in [
+                m for m in media if normalize_title(m["title"]) == normalize_title(d["title"])
+            ]
+        )
+        if d["total_size_bytes"] > 0
+        else 0
         for d in duplicates
     )
 

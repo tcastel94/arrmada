@@ -18,7 +18,7 @@
  *  - le bouton final mène à la connexion et s'appelle « Se connecter ».
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Image from "next/image";
+import { BrandIcon } from "@/components/brand/brand-mark";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, type Variants } from "framer-motion";
 import {
@@ -457,7 +457,7 @@ function BrandMark() {
                 />
                 <div className="border-beam relative h-16 w-16 rounded-2xl p-[2px] sm:h-20 sm:w-20">
                     <div className="h-full w-full overflow-hidden rounded-[14px] sm:rounded-[18px]">
-                        <Image src="/logo-mark.png" alt="ArrMada" width={80} height={80} priority className="h-full w-full object-cover" />
+                        <BrandIcon title="ArrMada" />
                     </div>
                 </div>
             </div>

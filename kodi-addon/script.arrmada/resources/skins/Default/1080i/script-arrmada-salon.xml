@@ -1,0 +1,588 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ArrMada — écran « Salon » (phase 2, ADR-003 § 3) : lecture en cours + ampli.
+
+  - Lecture en cours : lue DIRECTEMENT dans Kodi (infolabels Player.* /
+    VideoPlayer.*), sans réseau : toujours à jour, même hors ligne.
+  - Ampli Yamaha : état rafraîchi toutes les 3 s par lib/salon_window.py
+    (backend /api/yamaha/*), commandes volume / muet / marche, préréglages.
+  Navigation : lecture (800) → ampli (820) ↓ préréglages (830) ; Retour ferme.
+  Pièce sans ampli (bureau, 1.19.1) : propriété no_amp = 1, commandes de
+  l'ampli et préréglages masqués, seul le message reste.
+-->
+<window>
+	<defaultcontrol always="false">822</defaultcontrol>
+	<backgroundcolor>FF0A0E16</backgroundcolor>
+	<animation effect="fade" start="0" end="100" time="300" tween="sine" easing="out">WindowOpen</animation>
+	<animation effect="fade" start="100" end="0" time="200">WindowClose</animation>
+	<controls>
+		<control type="image">
+			<left>0</left><top>0</top><width>1920</width><height>1080</height>
+			<texture colordiffuse="FF0A0E16">arrmada/white.png</texture>
+		</control>
+		<!-- Fond : fanart du média en cours de lecture, très atténué -->
+		<control type="image">
+			<left>0</left><top>0</top><width>1920</width><height>1080</height>
+			<aspectratio>scale</aspectratio>
+			<fadetime>600</fadetime>
+			<texture background="true" colordiffuse="40FFFFFF">$INFO[Player.Art(fanart)]</texture>
+			<animation effect="zoom" start="100" end="110" time="26000" tween="sine" easing="inout" pulse="true" condition="true" center="960,540">Conditional</animation>
+		</control>
+		<control type="image">
+			<left>0</left><top>300</top><width>1920</width><height>780</height>
+			<texture colordiffuse="FF0A0E16">arrmada/grad-v.png</texture>
+		</control>
+		<control type="image">
+			<left>960</left><top>-460</top><width>1400</width><height>1000</height>
+			<texture colordiffuse="404A9EFF">arrmada/blob.png</texture>
+			<animation effect="fade" start="100" end="45" time="5000" tween="sine" pulse="true" condition="true">Conditional</animation>
+		</control>
+
+		<!-- En-tête -->
+		<control type="group">
+			<animation effect="slide" start="0,-40" end="0,0" time="450" tween="cubic" easing="out">WindowOpen</animation>
+			<control type="label">
+				<left>96</left><top>48</top><width>1000</width><height>76</height>
+				<font>font48_bold</font>
+				<textcolor>FFF5F7FA</textcolor>
+				<aligny>center</aligny>
+				<label>Salon</label>
+			</control>
+			<control type="label">
+				<left>96</left><top>122</top><width>1200</width><height>40</height>
+				<font>font13</font>
+				<textcolor>B3DCE3EE</textcolor>
+				<aligny>center</aligny>
+				<label>Pièce de cet appareil : $INFO[Window.Property(room_name)]</label>
+			</control>
+			<control type="label">
+				<left>1560</left><top>48</top><width>264</width><height>48</height>
+				<font>font16</font>
+				<textcolor>FFF5F7FA</textcolor>
+				<align>right</align><aligny>center</aligny>
+				<label>$INFO[System.Time]</label>
+			</control>
+		</control>
+
+		<!-- ═══════════════ LECTURE EN COURS (Kodi local) ═══════════════ -->
+		<control type="group">
+			<animation effect="slide" start="-70,0" end="0,0" time="550" delay="80" tween="cubic" easing="out">WindowOpen</animation>
+			<animation effect="fade" start="0" end="100" time="450" delay="80">WindowOpen</animation>
+			<control type="image">
+				<left>96</left><top>196</top><width>840</width><height>780</height>
+				<texture border="26" colordiffuse="14FFFFFF">arrmada/rounded-24.png</texture>
+			</control>
+			<control type="image">
+				<left>96</left><top>196</top><width>840</width><height>780</height>
+				<texture border="26" colordiffuse="1FFFFFFF">arrmada/ring-24.png</texture>
+			</control>
+			<control type="label">
+				<left>132</left><top>222</top><width>700</width><height>36</height>
+				<font>font12_title</font>
+				<textcolor>FF9CCBFF</textcolor>
+				<aligny>center</aligny>
+				<label>Lecture en cours</label>
+			</control>
+			<control type="group">
+				<visible>Player.HasMedia</visible>
+				<animation effect="fade" time="300">VisibleChange</animation>
+				<control type="image">
+					<left>132</left><top>278</top><width>260</width><height>390</height>
+					<texture border="26" colordiffuse="FF1A2233">arrmada/rounded-24.png</texture>
+				</control>
+				<control type="image">
+					<left>132</left><top>278</top><width>260</width><height>390</height>
+					<aspectratio>scale</aspectratio>
+					<texture background="true" diffuse="arrmada/poster-mask.png">$INFO[Player.Art(poster)]</texture>
+				</control>
+				<control type="image">
+					<left>132</left><top>278</top><width>260</width><height>390</height>
+					<aspectratio>scale</aspectratio>
+					<texture background="true" diffuse="arrmada/poster-mask.png">$INFO[Player.Art(tvshow.poster)]</texture>
+					<visible>String.IsEmpty(Player.Art(poster))</visible>
+				</control>
+				<!-- Simple fichier sans affiche : le logo ArrMada en filigrane (ses
+				     3 calques partagent le même canevas, superposés comme à l'intro) -->
+				<control type="group">
+					<left>182</left><top>394</top>
+					<visible>String.IsEmpty(Player.Art(poster)) + String.IsEmpty(Player.Art(tvshow.poster))</visible>
+					<control type="image">
+						<width>160</width><height>160</height>
+						<texture colordiffuse="40FFFFFF">arrmada/brand-leg-left.png</texture>
+					</control>
+					<control type="image">
+						<width>160</width><height>160</height>
+						<texture colordiffuse="40FFFFFF">arrmada/brand-leg-right.png</texture>
+					</control>
+					<control type="image">
+						<width>160</width><height>160</height>
+						<texture colordiffuse="994A9EFF">arrmada/brand-play.png</texture>
+					</control>
+				</control>
+				<control type="textbox">
+					<left>424</left><top>282</top><width>480</width><height>108</height>
+					<font>font15_bold</font>
+					<textcolor>FFF5F7FA</textcolor>
+					<label>$INFO[VideoPlayer.TVShowTitle,,[CR]]$INFO[VideoPlayer.Title]</label>
+				</control>
+				<!-- Année · définition · audio. Deux variantes : sans année (simple
+				     fichier vidéo), la ligne ne doit pas commencer par « · ». -->
+				<control type="label">
+					<left>424</left><top>396</top><width>480</width><height>32</height>
+					<font>font12</font>
+					<textcolor>FF9CCBFF</textcolor>
+					<aligny>center</aligny>
+					<label>$INFO[VideoPlayer.Year]$INFO[VideoPlayer.VideoResolution, · ,p]$INFO[VideoPlayer.AudioCodec, · ,]$INFO[VideoPlayer.AudioChannels, ,ch]</label>
+					<visible>!String.IsEmpty(VideoPlayer.Year)</visible>
+				</control>
+				<control type="label">
+					<left>424</left><top>396</top><width>480</width><height>32</height>
+					<font>font12</font>
+					<textcolor>FF9CCBFF</textcolor>
+					<aligny>center</aligny>
+					<label>$INFO[VideoPlayer.VideoResolution,,p]$INFO[VideoPlayer.AudioCodec, · ,]$INFO[VideoPlayer.AudioChannels, ,ch]</label>
+					<visible>String.IsEmpty(VideoPlayer.Year)</visible>
+				</control>
+				<control type="label">
+					<left>424</left><top>520</top><width>480</width><height>52</height>
+					<font>font16</font>
+					<textcolor>FFF5F7FA</textcolor>
+					<aligny>center</aligny>
+					<label>$INFO[Player.Time]$INFO[Player.Duration,[COLOR 80C9D3E0] / ,[/COLOR]]</label>
+				</control>
+				<!-- Pastille « En pause » à droite du temps écoulé -->
+				<control type="group">
+					<left>764</left><top>528</top>
+					<visible>Player.Paused</visible>
+					<control type="image">
+						<width>140</width><height>36</height>
+						<texture border="14" colordiffuse="33FBBF24">arrmada/rounded-12.png</texture>
+					</control>
+					<control type="label">
+						<width>140</width><height>36</height>
+						<font>font10</font>
+						<textcolor>FFFCD34D</textcolor>
+						<align>center</align><aligny>center</aligny>
+						<label>En pause</label>
+					</control>
+				</control>
+				<control type="progress" id="851">
+					<left>424</left><top>584</top><width>480</width><height>10</height>
+					<texturebg border="6,0,6,0" colordiffuse="1FFFFFFF">arrmada/bar.png</texturebg>
+					<midtexture border="6,0,6,0" colordiffuse="FF4A9EFF">arrmada/bar.png</midtexture>
+					<info>Player.Progress</info>
+				</control>
+				<control type="label">
+					<left>424</left><top>606</top><width>480</width><height>30</height>
+					<font>font10</font>
+					<textcolor>99C9D3E0</textcolor>
+					<aligny>center</aligny>
+					<label>$INFO[Player.FinishTime,Fin vers ,]</label>
+				</control>
+			</control>
+			<control type="group">
+				<visible>!Player.HasMedia</visible>
+				<control type="label">
+					<left>132</left><top>360</top><width>770</width><height>60</height>
+					<font>font15_bold</font>
+					<textcolor>B3F5F7FA</textcolor>
+					<aligny>center</aligny>
+					<label>Rien en lecture sur cet appareil.</label>
+				</control>
+				<control type="textbox">
+					<left>132</left><top>430</top><width>770</width><height>140</height>
+					<font>font12</font>
+					<textcolor>99C9D3E0</textcolor>
+					<label>Lance un film depuis sa fiche (« Lire ») : le préréglage audio de cette pièce s'applique tout seul sur l'ampli.</label>
+					<visible>!String.IsEqual(Window.Property(no_amp),1)</visible>
+				</control>
+				<control type="textbox">
+					<left>132</left><top>430</top><width>770</width><height>140</height>
+					<font>font12</font>
+					<textcolor>99C9D3E0</textcolor>
+					<label>Lance un film depuis sa fiche (« Lire ») : il démarre ici, le son passe par la TV.</label>
+					<visible>String.IsEqual(Window.Property(no_amp),1)</visible>
+				</control>
+			</control>
+			<control type="grouplist" id="800">
+				<left>132</left><top>700</top><width>780</width><height>60</height>
+				<orientation>horizontal</orientation>
+				<itemgap>14</itemgap>
+				<onright>820</onright>
+				<visible>Player.HasMedia</visible>
+				<control type="button" id="801">
+					<width>150</width><height>60</height>
+					<label>− 30 s</label>
+					<font>font12</font>
+					<textcolor>D9F5F7FA</textcolor>
+					<focusedcolor>FF0A0E16</focusedcolor>
+					<align>center</align><aligny>center</aligny>
+					<texturenofocus border="14" colordiffuse="1AFFFFFF">arrmada/rounded-12.png</texturenofocus>
+					<texturefocus border="14" colordiffuse="FF4A9EFF">arrmada/rounded-12.png</texturefocus>
+					<animation effect="zoom" start="100" end="107" time="160" tween="cubic" easing="out" center="auto">Focus</animation>
+					<animation effect="zoom" start="107" end="100" time="160" tween="cubic" easing="out" center="auto">UnFocus</animation>
+				</control>
+				<control type="button" id="802">
+					<width>260</width><height>60</height>
+					<label>Lecture / Pause</label>
+					<font>font12</font>
+					<textcolor>FF8CC4FF</textcolor>
+					<focusedcolor>FF0A0E16</focusedcolor>
+					<align>center</align><aligny>center</aligny>
+					<texturenofocus border="14" colordiffuse="334A9EFF">arrmada/rounded-12.png</texturenofocus>
+					<texturefocus border="14" colordiffuse="FF4A9EFF">arrmada/rounded-12.png</texturefocus>
+					<animation effect="zoom" start="100" end="107" time="160" tween="cubic" easing="out" center="auto">Focus</animation>
+					<animation effect="zoom" start="107" end="100" time="160" tween="cubic" easing="out" center="auto">UnFocus</animation>
+				</control>
+				<control type="button" id="803">
+					<width>150</width><height>60</height>
+					<label>+ 30 s</label>
+					<font>font12</font>
+					<textcolor>D9F5F7FA</textcolor>
+					<focusedcolor>FF0A0E16</focusedcolor>
+					<align>center</align><aligny>center</aligny>
+					<texturenofocus border="14" colordiffuse="1AFFFFFF">arrmada/rounded-12.png</texturenofocus>
+					<texturefocus border="14" colordiffuse="FF4A9EFF">arrmada/rounded-12.png</texturefocus>
+					<animation effect="zoom" start="100" end="107" time="160" tween="cubic" easing="out" center="auto">Focus</animation>
+					<animation effect="zoom" start="107" end="100" time="160" tween="cubic" easing="out" center="auto">UnFocus</animation>
+				</control>
+				<control type="button" id="804">
+					<width>150</width><height>60</height>
+					<label>Stop</label>
+					<font>font12</font>
+					<textcolor>D9F5F7FA</textcolor>
+					<focusedcolor>FF0A0E16</focusedcolor>
+					<align>center</align><aligny>center</aligny>
+					<texturenofocus border="14" colordiffuse="1AFFFFFF">arrmada/rounded-12.png</texturenofocus>
+					<texturefocus border="14" colordiffuse="FF4A9EFF">arrmada/rounded-12.png</texturefocus>
+					<animation effect="zoom" start="100" end="107" time="160" tween="cubic" easing="out" center="auto">Focus</animation>
+					<animation effect="zoom" start="107" end="100" time="160" tween="cubic" easing="out" center="auto">UnFocus</animation>
+				</control>
+			</control>
+		</control>
+
+		<!-- ═══════════════ AMPLI YAMAHA ═══════════════ -->
+		<control type="group">
+			<animation effect="slide" start="70,0" end="0,0" time="550" delay="140" tween="cubic" easing="out">WindowOpen</animation>
+			<animation effect="fade" start="0" end="100" time="450" delay="140">WindowOpen</animation>
+			<control type="image">
+				<left>984</left><top>196</top><width>840</width><height>780</height>
+				<texture border="26" colordiffuse="14FFFFFF">arrmada/rounded-24.png</texture>
+			</control>
+			<control type="image">
+				<left>984</left><top>196</top><width>840</width><height>780</height>
+				<texture border="26" colordiffuse="1FFFFFFF">arrmada/ring-24.png</texture>
+			</control>
+			<control type="label">
+				<left>1020</left><top>222</top><width>700</width><height>36</height>
+				<font>font12_title</font>
+				<textcolor>FF9CCBFF</textcolor>
+				<aligny>center</aligny>
+				<label>$INFO[Window.Property(amp_name)]</label>
+			</control>
+			<control type="group">
+				<left>1600</left><top>220</top>
+				<visible>!String.IsEqual(Window.Property(no_amp),1)</visible>
+				<control type="image">
+					<left>0</left><top>0</top><width>190</width><height>38</height>
+					<texture border="14" colordiffuse="3334D399">arrmada/rounded-12.png</texture>
+					<visible>String.IsEqual(Window.Property(amp_on),1)</visible>
+				</control>
+				<control type="image">
+					<left>0</left><top>0</top><width>190</width><height>38</height>
+					<texture border="14" colordiffuse="1FFFFFFF">arrmada/rounded-12.png</texture>
+					<visible>!String.IsEqual(Window.Property(amp_on),1)</visible>
+				</control>
+				<control type="label">
+					<left>0</left><top>0</top><width>190</width><height>38</height>
+					<font>font10</font>
+					<textcolor>FFF5F7FA</textcolor>
+					<align>center</align><aligny>center</aligny>
+					<label>$INFO[Window.Property(amp_power)]</label>
+				</control>
+			</control>
+			<control type="group">
+				<visible>String.IsEqual(Window.Property(amp_configured),1)</visible>
+				<control type="label">
+					<left>1020</left><top>276</top><width>400</width><height>110</height>
+					<font>font65</font>
+					<textcolor>FFF5F7FA</textcolor>
+					<aligny>center</aligny>
+					<label>$INFO[Window.Property(amp_volume)]</label>
+				</control>
+				<control type="label">
+					<left>1340</left><top>300</top><width>440</width><height>60</height>
+					<font>font13</font>
+					<textcolor>99C9D3E0</textcolor>
+					<align>right</align><aligny>center</aligny>
+					<label>$INFO[Window.Property(amp_db)]</label>
+				</control>
+				<control type="group">
+					<left>1590</left><top>300</top>
+					<visible>String.IsEqual(Window.Property(amp_mute),1)</visible>
+					<animation effect="fade" start="100" end="50" time="800" tween="sine" pulse="true" condition="true">Conditional</animation>
+					<control type="image">
+						<left>0</left><top>-48</top><width>190</width><height>38</height>
+						<texture border="14" colordiffuse="40F87171">arrmada/rounded-12.png</texture>
+					</control>
+					<control type="label">
+						<left>0</left><top>-48</top><width>190</width><height>38</height>
+						<font>font10</font>
+						<textcolor>FFFCA5A5</textcolor>
+						<align>center</align><aligny>center</aligny>
+						<label>Muet</label>
+					</control>
+				</control>
+				<control type="image">
+					<left>1020</left><top>396</top><width>766</width><height>14</height>
+					<texture>arrmada/progress/$INFO[Window.Property(amp_volume_bar)].png</texture>
+				</control>
+				<control type="label">
+					<left>1020</left><top>432</top><width>766</width><height>36</height>
+					<font>font12</font>
+					<textcolor>E6F5F7FA</textcolor>
+					<aligny>center</aligny>
+					<label>Entrée : $INFO[Window.Property(amp_input)]</label>
+				</control>
+				<control type="label">
+					<left>1020</left><top>470</top><width>766</width><height>36</height>
+					<font>font12</font>
+					<textcolor>E6F5F7FA</textcolor>
+					<aligny>center</aligny>
+					<label>Programme : $INFO[Window.Property(amp_program)]</label>
+				</control>
+			</control>
+			<control type="label">
+				<left>1020</left><top>290</top><width>766</width><height>200</height>
+				<font>font13</font>
+				<textcolor>B3F5F7FA</textcolor>
+				<aligny>center</aligny>
+				<label>$INFO[Window.Property(amp_message)]</label>
+				<visible>!String.IsEmpty(Window.Property(amp_message))</visible>
+			</control>
+			<control type="grouplist" id="820">
+				<left>1020</left><top>540</top><width>780</width><height>60</height>
+				<visible>!String.IsEqual(Window.Property(no_amp),1)</visible>
+				<orientation>horizontal</orientation>
+				<itemgap>14</itemgap>
+				<onleft>800</onleft>
+				<ondown>830</ondown>
+				<control type="button" id="821">
+					<width>150</width><height>60</height>
+					<label>Vol −</label>
+					<font>font12</font>
+					<textcolor>D9F5F7FA</textcolor>
+					<focusedcolor>FF0A0E16</focusedcolor>
+					<align>center</align><aligny>center</aligny>
+					<texturenofocus border="14" colordiffuse="1AFFFFFF">arrmada/rounded-12.png</texturenofocus>
+					<texturefocus border="14" colordiffuse="FF4A9EFF">arrmada/rounded-12.png</texturefocus>
+					<animation effect="zoom" start="100" end="107" time="160" tween="cubic" easing="out" center="auto">Focus</animation>
+					<animation effect="zoom" start="107" end="100" time="160" tween="cubic" easing="out" center="auto">UnFocus</animation>
+				</control>
+				<control type="button" id="822">
+					<width>150</width><height>60</height>
+					<label>Vol +</label>
+					<font>font12</font>
+					<textcolor>FF8CC4FF</textcolor>
+					<focusedcolor>FF0A0E16</focusedcolor>
+					<align>center</align><aligny>center</aligny>
+					<texturenofocus border="14" colordiffuse="334A9EFF">arrmada/rounded-12.png</texturenofocus>
+					<texturefocus border="14" colordiffuse="FF4A9EFF">arrmada/rounded-12.png</texturefocus>
+					<animation effect="zoom" start="100" end="107" time="160" tween="cubic" easing="out" center="auto">Focus</animation>
+					<animation effect="zoom" start="107" end="100" time="160" tween="cubic" easing="out" center="auto">UnFocus</animation>
+				</control>
+				<control type="button" id="823">
+					<width>160</width><height>60</height>
+					<label>Muet</label>
+					<font>font12</font>
+					<textcolor>D9F5F7FA</textcolor>
+					<focusedcolor>FF0A0E16</focusedcolor>
+					<align>center</align><aligny>center</aligny>
+					<texturenofocus border="14" colordiffuse="1AFFFFFF">arrmada/rounded-12.png</texturenofocus>
+					<texturefocus border="14" colordiffuse="FF4A9EFF">arrmada/rounded-12.png</texturefocus>
+					<animation effect="zoom" start="100" end="107" time="160" tween="cubic" easing="out" center="auto">Focus</animation>
+					<animation effect="zoom" start="107" end="100" time="160" tween="cubic" easing="out" center="auto">UnFocus</animation>
+				</control>
+				<control type="button" id="824">
+					<width>260</width><height>60</height>
+					<label>Marche / Veille</label>
+					<font>font12</font>
+					<textcolor>D9F5F7FA</textcolor>
+					<focusedcolor>FF0A0E16</focusedcolor>
+					<align>center</align><aligny>center</aligny>
+					<texturenofocus border="14" colordiffuse="1AFFFFFF">arrmada/rounded-12.png</texturenofocus>
+					<texturefocus border="14" colordiffuse="FF4A9EFF">arrmada/rounded-12.png</texturefocus>
+					<animation effect="zoom" start="100" end="107" time="160" tween="cubic" easing="out" center="auto">Focus</animation>
+					<animation effect="zoom" start="107" end="100" time="160" tween="cubic" easing="out" center="auto">UnFocus</animation>
+				</control>
+			</control>
+			<control type="label">
+				<left>1020</left><top>636</top><width>700</width><height>36</height>
+				<font>font12_title</font>
+				<textcolor>FF9CCBFF</textcolor>
+				<aligny>center</aligny>
+				<label>Préréglages audio</label>
+				<visible>!String.IsEqual(Window.Property(no_amp),1)</visible>
+			</control>
+			<control type="list" id="830">
+				<left>1004</left><top>680</top><width>800</width><height>170</height>
+				<visible>!String.IsEqual(Window.Property(no_amp),1)</visible>
+				<orientation>horizontal</orientation>
+				<onup>820</onup>
+				<onleft>800</onleft>
+				<itemlayout width="390" height="160">
+
+					<control type="image">
+						<left>8</left><top>8</top><width>356</width><height>132</height>
+						<texture border="26" colordiffuse="14FFFFFF">arrmada/rounded-24.png</texture>
+					</control>
+
+					<control type="label">
+						<left>34</left><top>24</top><width>310</width><height>44</height>
+						<font>font14_title</font>
+						<textcolor>FFF5F7FA</textcolor>
+						<aligny>center</aligny>
+						<label>$INFO[ListItem.Label]</label>
+					</control>
+					<control type="label">
+						<left>34</left><top>70</top><width>310</width><height>30</height>
+						<font>font10</font>
+						<textcolor>99C9D3E0</textcolor>
+						<aligny>center</aligny>
+						<label>Appliquer le préréglage</label>
+					</control>
+					<control type="group">
+						<left>34</left><top>102</top>
+						<visible>String.IsEqual(ListItem.Property(current),1)</visible>
+						<control type="image">
+							<left>0</left><top>8</top><width>10</width><height>10</height>
+							<texture colordiffuse="FF34D399">arrmada/circle.png</texture>
+						</control>
+						<control type="label">
+							<left>18</left><top>0</top><width>280</width><height>26</height>
+							<font>font10</font>
+							<textcolor>FF6EE7B7</textcolor>
+							<aligny>center</aligny>
+							<label>Pièce de cet appareil</label>
+						</control>
+					</control>
+				</itemlayout>
+				<focusedlayout width="390" height="160">
+					<control type="group">
+						<animation effect="zoom" start="100" end="105" time="200" tween="cubic" easing="out" center="186,74">Focus</animation>
+					<control type="image">
+						<left>-24</left><top>-24</top><width>420</width><height>196</height>
+						<texture border="56" colordiffuse="804A9EFF">arrmada/glow.png</texture>
+						<visible>Control.HasFocus(830)</visible>
+					</control>
+					<control type="image">
+						<left>8</left><top>8</top><width>356</width><height>132</height>
+						<texture border="26" colordiffuse="14FFFFFF">arrmada/rounded-24.png</texture>
+						<visible>!Control.HasFocus(830)</visible>
+					</control>
+					<control type="image">
+						<left>8</left><top>8</top><width>356</width><height>132</height>
+						<texture border="26" colordiffuse="FF16203A">arrmada/rounded-24.png</texture>
+						<visible>Control.HasFocus(830)</visible>
+					</control>
+					<control type="image">
+						<left>8</left><top>8</top><width>356</width><height>132</height>
+						<texture border="26" colordiffuse="FF4A9EFF">arrmada/ring-24.png</texture>
+						<visible>Control.HasFocus(830)</visible>
+					</control>
+					<control type="label">
+						<left>34</left><top>24</top><width>310</width><height>44</height>
+						<font>font14_title</font>
+						<textcolor>FFF5F7FA</textcolor>
+						<aligny>center</aligny>
+						<label>$INFO[ListItem.Label]</label>
+					</control>
+					<control type="label">
+						<left>34</left><top>70</top><width>310</width><height>30</height>
+						<font>font10</font>
+						<textcolor>FF9CCBFF</textcolor>
+						<aligny>center</aligny>
+						<label>Appliquer le préréglage</label>
+					</control>
+					<control type="group">
+						<left>34</left><top>102</top>
+						<visible>String.IsEqual(ListItem.Property(current),1)</visible>
+						<control type="image">
+							<left>0</left><top>8</top><width>10</width><height>10</height>
+							<texture colordiffuse="FF34D399">arrmada/circle.png</texture>
+						</control>
+						<control type="label">
+							<left>18</left><top>0</top><width>280</width><height>26</height>
+							<font>font10</font>
+							<textcolor>FF6EE7B7</textcolor>
+							<aligny>center</aligny>
+							<label>Pièce de cet appareil</label>
+						</control>
+					</control>
+					</control>
+				</focusedlayout>
+			</control>
+		</control>
+		<control type="label">
+			<left>1224</left><top>1012</top><width>600</width><height>30</height>
+			<font>font10</font>
+			<textcolor>66C9D3E0</textcolor>
+			<align>right</align><aligny>center</aligny>
+			<label>Retour : accueil</label>
+		</control>
+		<!-- toast:begin · bulle ArrMada, bloc posé par tools/toast_xml.py (ne pas modifier ici) -->
+		<control type="group">
+			<left>1236</left><top>912</top>
+			<visible>!String.IsEmpty(Window(Home).Property(arrmada.toast))</visible>
+			<animation effect="slide" start="0,48" end="0,0" time="320" tween="cubic" easing="out">Visible</animation>
+			<animation effect="fade" start="0" end="100" time="320">Visible</animation>
+			<animation effect="fade" start="100" end="0" time="240">Hidden</animation>
+			<control type="image">
+				<left>-20</left><top>-20</top><width>684</width><height>164</height>
+				<texture border="56" colordiffuse="664A9EFF">arrmada/glow.png</texture>
+			</control>
+			<control type="image">
+				<width>644</width><height>124</height>
+				<texture border="26" colordiffuse="F7121826">arrmada/rounded-24.png</texture>
+			</control>
+			<control type="image">
+				<width>644</width><height>124</height>
+				<texture border="26" colordiffuse="804A9EFF">arrmada/ring-24.png</texture>
+				<visible>String.IsEmpty(Window(Home).Property(arrmada.toast.error))</visible>
+			</control>
+			<control type="image">
+				<width>644</width><height>124</height>
+				<texture border="26" colordiffuse="99F87171">arrmada/ring-24.png</texture>
+				<visible>!String.IsEmpty(Window(Home).Property(arrmada.toast.error))</visible>
+			</control>
+			<control type="image">
+				<left>18</left><top>14</top><width>64</width><height>96</height>
+				<aspectratio>keep</aspectratio>
+				<texture background="true">$INFO[Window(Home).Property(arrmada.toast.icon)]</texture>
+			</control>
+			<control type="label">
+				<left>100</left><top>14</top><width>524</width><height>36</height>
+				<font>font13</font>
+				<textcolor>FF8CC4FF</textcolor>
+				<aligny>center</aligny>
+				<label>$INFO[Window(Home).Property(arrmada.toast.heading)]</label>
+				<visible>String.IsEmpty(Window(Home).Property(arrmada.toast.error))</visible>
+			</control>
+			<control type="label">
+				<left>100</left><top>14</top><width>524</width><height>36</height>
+				<font>font13</font>
+				<textcolor>FFFCA5A5</textcolor>
+				<aligny>center</aligny>
+				<label>$INFO[Window(Home).Property(arrmada.toast.heading)]</label>
+				<visible>!String.IsEmpty(Window(Home).Property(arrmada.toast.error))</visible>
+			</control>
+			<control type="textbox">
+				<left>100</left><top>52</top><width>524</width><height>62</height>
+				<font>font12</font>
+				<textcolor>D9F5F7FA</textcolor>
+				<label>$INFO[Window(Home).Property(arrmada.toast.message)]</label>
+			</control>
+		</control>
+		<!-- toast:end -->
+	</controls>
+</window>

@@ -5,7 +5,7 @@
 /* ════════════════════════════════════════════════════════════════
    ArrMada — Design system "Neon Armada"
    ----------------------------------------------------------------
-   Thème sombre unique (le logo néon cyan est pensé pour un fond nuit).
+   Thème sombre unique (le logo et ses halos sont pensés pour un fond nuit).
    Toutes les couleurs passent par des variables CSS HSL : un composant
    ne doit JAMAIS coder une couleur de fond/bordure en dur, il utilise
    ces tokens (bg-card, border-border, text-primary…) ou les utilitaires

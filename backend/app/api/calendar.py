@@ -61,7 +61,9 @@ def _parse_day(value: str, field: str) -> date:
     try:
         return date.fromisoformat(value.strip()[:10])
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=f"Date « {field} » invalide : {value!r}") from exc
+        raise HTTPException(
+            status_code=422, detail=f"Date « {field} » invalide : {value!r}"
+        ) from exc
 
 
 def _resolve_window(start: str | None, end: str | None, days: int) -> tuple[str, str]:
@@ -90,7 +92,9 @@ def _resolve_window(start: str | None, end: str | None, days: int) -> tuple[str,
     return d_start.isoformat(), d_end.isoformat()
 
 
-def _pick_radarr_release(movie: dict[str, Any], start: str, end: str) -> tuple[str | None, str | None]:
+def _pick_radarr_release(
+    movie: dict[str, Any], start: str, end: str
+) -> tuple[str | None, str | None]:
     """Choisit la date de sortie à afficher pour un film.
 
     Radarr renvoie un film dès qu'UNE de ses dates tombe dans la fenêtre.
@@ -144,29 +148,35 @@ async def _fetch_calendar_data(
                         series_title = series.get("title") or "Série inconnue"
                         images = series.get("images", [])
                         poster = next(
-                            (img.get("remoteUrl") for img in images if img.get("coverType") == "poster" and img.get("remoteUrl")),
+                            (
+                                img.get("remoteUrl")
+                                for img in images
+                                if img.get("coverType") == "poster" and img.get("remoteUrl")
+                            ),
                             None,
                         )
-                        entries.append({
-                            "id": f"sonarr-{ep.get('id')}",
-                            "title": series_title,
-                            "subtitle": ep.get("title", ""),
-                            "type": "episode",
-                            "season": ep.get("seasonNumber"),
-                            "episode": ep.get("episodeNumber"),
-                            "label": f"S{ep.get('seasonNumber') or 0:02d}E{ep.get('episodeNumber') or 0:02d}",
-                            # airDateUtc = date + heure de diffusion en UTC :
-                            # le frontend la convertit en heure locale.
-                            "air_date": ep.get("airDateUtc") or ep.get("airDate"),
-                            "has_file": ep.get("hasFile", False),
-                            "monitored": ep.get("monitored", False),
-                            "poster_url": poster,
-                            "overview": ep.get("overview", ""),
-                            "service": svc.name,
-                            "service_type": "sonarr",
-                            "series_id": ep.get("seriesId"),
-                            "network": series.get("network"),
-                        })
+                        entries.append(
+                            {
+                                "id": f"sonarr-{ep.get('id')}",
+                                "title": series_title,
+                                "subtitle": ep.get("title", ""),
+                                "type": "episode",
+                                "season": ep.get("seasonNumber"),
+                                "episode": ep.get("episodeNumber"),
+                                "label": f"S{ep.get('seasonNumber') or 0:02d}E{ep.get('episodeNumber') or 0:02d}",
+                                # airDateUtc = date + heure de diffusion en UTC :
+                                # le frontend la convertit en heure locale.
+                                "air_date": ep.get("airDateUtc") or ep.get("airDate"),
+                                "has_file": ep.get("hasFile", False),
+                                "monitored": ep.get("monitored", False),
+                                "poster_url": poster,
+                                "overview": ep.get("overview", ""),
+                                "service": svc.name,
+                                "service_type": "sonarr",
+                                "series_id": ep.get("seriesId"),
+                                "network": series.get("network"),
+                            }
+                        )
                 finally:
                     await client.close()
 
@@ -180,30 +190,36 @@ async def _fetch_calendar_data(
                     for movie in movies or []:
                         images = movie.get("images", [])
                         poster = next(
-                            (img.get("remoteUrl") for img in images if img.get("coverType") == "poster" and img.get("remoteUrl")),
+                            (
+                                img.get("remoteUrl")
+                                for img in images
+                                if img.get("coverType") == "poster" and img.get("remoteUrl")
+                            ),
                             None,
                         )
                         release_date, release_type = _pick_radarr_release(movie, start, end)
-                        entries.append({
-                            "id": f"radarr-{movie.get('id')}",
-                            "title": movie.get("title", "Film inconnu"),
-                            "subtitle": "",
-                            "type": "movie",
-                            "season": None,
-                            "episode": None,
-                            "label": str(movie.get("year", "")),
-                            "air_date": release_date,
-                            # digital | physical | cinema → badge côté frontend
-                            "release_type": release_type,
-                            "has_file": movie.get("hasFile", False),
-                            "monitored": movie.get("monitored", False),
-                            "poster_url": poster,
-                            "overview": movie.get("overview", ""),
-                            "service": svc.name,
-                            "service_type": "radarr",
-                            "movie_id": movie.get("id"),
-                            "genres": movie.get("genres", []),
-                        })
+                        entries.append(
+                            {
+                                "id": f"radarr-{movie.get('id')}",
+                                "title": movie.get("title", "Film inconnu"),
+                                "subtitle": "",
+                                "type": "movie",
+                                "season": None,
+                                "episode": None,
+                                "label": str(movie.get("year", "")),
+                                "air_date": release_date,
+                                # digital | physical | cinema → badge côté frontend
+                                "release_type": release_type,
+                                "has_file": movie.get("hasFile", False),
+                                "monitored": movie.get("monitored", False),
+                                "poster_url": poster,
+                                "overview": movie.get("overview", ""),
+                                "service": svc.name,
+                                "service_type": "radarr",
+                                "movie_id": movie.get("id"),
+                                "genres": movie.get("genres", []),
+                            }
+                        )
                 finally:
                     await client.close()
 
@@ -220,7 +236,9 @@ async def _fetch_calendar_data(
 async def get_calendar(
     start: str | None = Query(None, description="Date de début YYYY-MM-DD (optionnelle)"),
     end: str | None = Query(None, description="Date de fin YYYY-MM-DD (optionnelle)"),
-    days: int = Query(30, ge=1, le=90, description="Nombre de jours si start/end ne sont pas tous deux fournis"),
+    days: int = Query(
+        30, ge=1, le=90, description="Nombre de jours si start/end ne sont pas tous deux fournis"
+    ),
     unmonitored: bool = Query(False, description="Inclure les épisodes / films non surveillés"),
     db: AsyncSession = Depends(get_db),
 ):

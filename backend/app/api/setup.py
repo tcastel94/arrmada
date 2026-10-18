@@ -4,8 +4,6 @@ These endpoints are partially accessible WITHOUT authentication
 to allow initial setup of the application.
 """
 
-from typing import Optional
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
@@ -60,9 +58,7 @@ class ServiceSetupItem(BaseModel):
 class SetupComplete(BaseModel):
     """Payload to finalize setup."""
 
-    services: list[ServiceSetupItem] = Field(
-        description="Services to configure during setup"
-    )
+    services: list[ServiceSetupItem] = Field(description="Services to configure during setup")
 
 
 class SetupResult(BaseModel):
@@ -106,7 +102,7 @@ async def setup_status(db: AsyncSession = Depends(get_db)) -> SetupStatus:
     "This endpoint does NOT require authentication (for first setup).",
 )
 async def discover(
-    hosts: Optional[list[str]] = None,
+    hosts: list[str] | None = None,
 ) -> list[DiscoveredService]:
     """Scan the network for *arr services."""
     discovered = await discover_services(

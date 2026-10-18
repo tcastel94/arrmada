@@ -19,7 +19,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, get_db
 from app.services import media_aggregator
 from app.services.activity_log import log_event, query_events, to_dict
-from app.utils.cache import cache
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -99,14 +98,15 @@ def _episode_code(value: str | None) -> str | None:
 
 def _dedupe_imports(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     persisted = [
-        it for it in items
+        it
+        for it in items
         if it.get("action") == "imported" and not str(it.get("id", "")).startswith("arr-")
     ]
     if not persisted:
         return items
 
-    used: set[str] = set()      # une ligne persistée n'absorbe qu'un seul doublon
-    dropped: set[str] = set()   # ids des lignes *arr retirées
+    used: set[str] = set()  # une ligne persistée n'absorbe qu'un seul doublon
+    dropped: set[str] = set()  # ids des lignes *arr retirées
     for arr in items:
         if arr.get("action") != "downloadFolderImported":
             continue
@@ -141,7 +141,9 @@ def _dedupe_imports(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 @router.get("/timeline")
 async def timeline(
-    categories: str | None = Query(None, description="Comma list: download,subtitle,playback,library,telegram,system"),
+    categories: str | None = Query(
+        None, description="Comma list: download,subtitle,playback,library,telegram,system"
+    ),
     statuses: str | None = Query(None, description="Comma list: ok,ko,info"),
     source: str | None = Query(None),
     media_type: str | None = Query(None),
@@ -195,11 +197,7 @@ async def timeline(
 
     # 3. Enrich (title/poster) from the media library
     try:
-        media = list(
-            await cache.get_or_set(
-                "media:all", lambda: media_aggregator.fetch_all_media(db), ttl_seconds=300
-            )
-        )
+        media = await media_aggregator.cached_library(db)
         by_key = {(m["type"], str(m["external_id"])): m for m in media}
         by_tmdb = {m["tmdb_id"]: m for m in media if m.get("tmdb_id")}
         for it in items:

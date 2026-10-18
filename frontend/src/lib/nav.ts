@@ -15,6 +15,7 @@
 import {
     LayoutDashboard,
     Film,
+    History,
     Download,
     Search,
     BarChart3,
@@ -81,6 +82,14 @@ export const NAV_GROUPS: NavGroup[] = [
                 description: "Films et séries de ta collection",
                 shortcut: "m",
                 keywords: ["films", "séries", "library", "bibliothèque"],
+            },
+            {
+                href: "/media/continue",
+                label: "Reprendre",
+                icon: History,
+                description: "Films et épisodes commencés sur tes TV",
+                shortcut: "e",
+                keywords: ["en cours", "reprise", "continuer", "vu", "kodi", "tv"],
             },
             {
                 href: "/media/missing",

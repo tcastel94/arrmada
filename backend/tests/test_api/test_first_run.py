@@ -97,3 +97,24 @@ class TestLegacyEnvPassword:
         assert auth_store.password_source() == "env"
         assert auth_store.verify_password("my-old-env-pass")
         assert not auth_store.verify_password("nope")
+
+
+class TestApiKey:
+    """X-Api-Key (Kodi add-on, scripts) = the admin password, wherever it lives."""
+
+    async def test_follows_a_password_change(
+        self, client: AsyncClient, admin_password: str
+    ) -> None:
+        url = "/api/kodi/addon-status"
+        assert (await client.get(url, headers={"X-Api-Key": admin_password})).status_code == 200
+        auth_store.set_password("brand-new-password")
+        # The memoised old key must not survive the change.
+        assert (await client.get(url, headers={"X-Api-Key": admin_password})).status_code == 401
+        new = await client.get(url, headers={"X-Api-Key": "brand-new-password"})
+        assert new.status_code == 200
+
+    async def test_placeholder_secret_is_not_a_key(self, client: AsyncClient, monkeypatch) -> None:
+        auth_store.clear_password()
+        monkeypatch.setattr(auth_store.settings, "ARRMADA_AUTH_SECRET", "changeme")
+        resp = await client.get("/api/kodi/addon-status", headers={"X-Api-Key": "changeme"})
+        assert resp.status_code == 401

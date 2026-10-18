@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="script.arrmada" name="ArrMada" version="1.25.0" provider-name="Jeff - TCastel">
+    <requires>
+        <import addon="xbmc.python" version="3.0.0" />
+    </requires>
+
+    <!-- Point d'entrée principal Vidéo (Navigation & Découverte Overseerr) -->
+    <extension point="xbmc.python.pluginsource" library="default.py">
+        <provides>video</provides>
+    </extension>
+
+
+    <!-- Service en tâche de fond (Scrobbler & Notifications OSD) -->
+    <extension point="xbmc.service" library="service.py" start="startup" />
+
+    <!-- Menu contextuel unifié et actions directes (médiathèque Kodi). Masqué
+         dans les listes de l'appli : elles ont leur propre appui long. -->
+    <extension point="kodi.context.item">
+        <menu id="kodi.core.main">
+            <item library="context_menu.py">
+                <label>30000</label>
+                <visible>[!String.IsEmpty(ListItem.Title) | !String.IsEmpty(ListItem.Label)] + !String.StartsWith(Container.FolderPath,plugin://script.arrmada)</visible>
+            </item>
+            <item library="context_subtitles.py">
+                <label>30001</label>
+                <visible>[!String.IsEmpty(ListItem.Title) | !String.IsEmpty(ListItem.Label)] + !String.StartsWith(Container.FolderPath,plugin://script.arrmada)</visible>
+            </item>
+            <item library="context_sync_subtitles.py">
+                <label>30003</label>
+                <visible>[!String.IsEmpty(ListItem.Title) | !String.IsEmpty(ListItem.Label)] + !String.StartsWith(Container.FolderPath,plugin://script.arrmada)</visible>
+            </item>
+            <item library="context_search.py">
+                <label>30002</label>
+                <visible>[!String.IsEmpty(ListItem.Title) | !String.IsEmpty(ListItem.Label)] + !String.StartsWith(Container.FolderPath,plugin://script.arrmada)</visible>
+            </item>
+        </menu>
+    </extension>
+
+    <!-- Métadonnées de l'add-on -->
+    <extension point="xbmc.addon.metadata">
+        <summary lang="en_GB">ArrMada integration for Kodi</summary>
+        <summary lang="fr_FR">Intégration ArrMada pour Kodi</summary>
+        <description lang="en_GB">Unified management for your *arr stack directly in Kodi: one-click Bazarr subtitle search, subtitle FFsubsync, Radarr/Sonarr release upgrades, live playback scrobbler and real-time TV download notifications.</description>
+        <description lang="fr_FR">Gestion unifiée de votre stack *arr directement dans Kodi : recherche de sous-titres Bazarr en 1 clic, re-synchronisation FFsubsync, re-recherche de releases Radarr/Sonarr, scrobbling temps réel et notifications de téléchargement sur votre TV.</description>
+        <platform>all</platform>
+        <license>MIT</license>
+        <source>https://github.com/tcastel94/arrmada</source>
+        <assets>
+            <icon>resources/icon.png</icon>
+            <fanart>resources/fanart.jpg</fanart>
+        </assets>
+    </extension>
+</addon>

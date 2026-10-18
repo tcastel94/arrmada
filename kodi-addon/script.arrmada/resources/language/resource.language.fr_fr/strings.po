@@ -1,0 +1,193 @@
+# Kodi Media Center language file
+# Addon Name: ArrMada
+# Addon id: script.arrmada
+msgid ""
+msgstr ""
+"Project-Id-Version: ArrMada Kodi Addon\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: \n"
+"PO-Revision-Date: \n"
+"Last-Translator: ArrMada Team\n"
+"Language-Team: French\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: fr_FR\n"
+
+# Context Menu
+msgctxt "#30000"
+msgid "ArrMada: Quick Actions..."
+msgstr "🏴‍☠️ ArrMada (Actions rapides)..."
+
+msgctxt "#30001"
+msgid "ArrMada: Download Subtitles (Bazarr)"
+msgstr "ArrMada : Télécharger sous-titres (Bazarr)"
+
+
+msgctxt "#30002"
+msgid "ArrMada: Search / Upgrade Release"
+msgstr "ArrMada : Re-chercher / Upgrader release"
+
+msgctxt "#30003"
+msgid "ArrMada: Re-sync Subtitles (FFsubsync)"
+msgstr "ArrMada : Re-synchroniser sous-titres (FFsubsync)"
+
+
+# Settings General
+msgctxt "#30100"
+msgid "General"
+msgstr "Général"
+
+msgctxt "#30101"
+msgid "Connection"
+msgstr "Connexion"
+
+msgctxt "#30102"
+msgid "ArrMada Server URL"
+msgstr "URL du serveur ArrMada"
+
+msgctxt "#30103"
+msgid "Example: http://192.168.2.3:3420"
+msgstr "Exemple : http://192.168.2.3:8420 (Port backend)"
+
+msgctxt "#30104"
+msgid "API Key / Auth Secret"
+msgstr "Clé API / Mot de passe ArrMada"
+
+msgctxt "#30105"
+msgid "Password or API key configured in ArrMada"
+msgstr "Mot de passe ou clé API configuré dans ArrMada"
+
+msgctxt "#30106"
+msgid "Kodi Device Name"
+msgstr "Nom de cet appareil Kodi"
+
+# Settings Features
+msgctxt "#30120"
+msgid "Features"
+msgstr "Fonctionnalités"
+
+msgctxt "#30121"
+msgid "Automation & Notifications"
+msgstr "Automatisation et Notifications"
+
+msgctxt "#30122"
+msgid "Subtitle Language"
+msgstr "Langue des sous-titres"
+
+msgctxt "#30123"
+msgid "Preferred language for automatic subtitle download"
+msgstr "Langue préférée pour la recherche automatique Bazarr"
+
+msgctxt "#30124"
+msgid "Enable Playback Scrobbling"
+msgstr "Activer le scrobbling de lecture"
+
+msgctxt "#30125"
+msgid "Send playback progress and watched status to ArrMada"
+msgstr "Remonter la progression et les visionnages vers ArrMada"
+
+msgctxt "#30126"
+msgid "Enable TV Notifications"
+msgstr "Activer les notifications TV"
+
+msgctxt "#30127"
+msgid "Show OSD notification when downloads complete"
+msgstr "Afficher une alerte TV lors de la fin d'un téléchargement"
+
+msgctxt "#30128"
+msgid "Notification check interval (seconds)"
+msgstr "Intervalle de vérification des alertes (secondes)"
+
+# UI & Actions
+msgctxt "#30200"
+msgid "Active Downloads"
+msgstr "Téléchargements en cours"
+
+msgctxt "#30201"
+msgid "Trigger Kodi Library Scan"
+msgstr "Lancer le scan de la médiathèque Kodi"
+
+msgctxt "#30202"
+msgid "Clean Kodi Video Library"
+msgstr "Nettoyer la médiathèque Kodi (Clean)"
+
+msgctxt "#30203"
+msgid "Settings"
+msgstr "Paramètres"
+
+msgctxt "#30204"
+msgid "No active downloads"
+msgstr "Aucun téléchargement actif"
+
+msgctxt "#30205"
+msgid "ArrMada is unreachable. Check your settings."
+msgstr "ArrMada est injoignable. Vérifiez vos réglages."
+
+msgctxt "#30132"
+msgid "Notifications during playback (otherwise: summary when it stops)"
+msgstr "Notifications pendant la lecture (sinon : résumé à l'arrêt)"
+
+msgctxt "#30140"
+msgid "Advanced"
+msgstr "Avancé"
+
+msgctxt "#30141"
+msgid "Safe mode (no list cache, no live server events)"
+msgstr "Mode minimal (ni cache des listes, ni événements du serveur)"
+
+msgctxt "#30206"
+msgid "Trigger release search for '%s'?"
+msgstr "Lancer la recherche d'une meilleure release pour '%s' ?"
+
+msgctxt "#30207"
+msgid "Subtitles requested"
+msgstr "Recherche sous-titres demandée"
+
+msgctxt "#30208"
+msgid "Release search triggered"
+msgstr "Recherche de release lancée"
+
+msgctxt "#30130"
+msgid "Auto Audio Switcher"
+msgstr "Auto Audio Switcher (Sélection intelligente)"
+
+msgctxt "#30131"
+msgid "Room Profile"
+msgstr "Profil de la pièce (Cinéma Atmos / Salon DTS)"
+
+msgctxt "#30133"
+msgid "Camera alerts (pop-up with the picture during a film)"
+msgstr "Alertes des caméras (pop-up avec la photo pendant un film)"
+
+msgctxt "#30150"
+msgid "Interface"
+msgstr "Interface"
+
+msgctxt "#30151"
+msgid "Start on ArrMada and come back to it (replaces Kodi's home screen)"
+msgstr "Démarrer sur ArrMada et y revenir (remplace l'accueil de Kodi)"
+
+msgctxt "#30160"
+msgid "Playback"
+msgstr "Lecture"
+
+msgctxt "#30161"
+msgid "Share watched and resume points between TVs (through the server)"
+msgstr "Partager vu et reprise entre les TV (via le serveur)"
+
+msgctxt "#30162"
+msgid "\"Next episode\" card (seconds before the end, 0: never)"
+msgstr "Encart « Épisode suivant » (secondes avant la fin, 0 : jamais)"
+
+msgctxt "#30163"
+msgid "ArrMada panel: long press OK during playback"
+msgstr "Panneau ArrMada : appui long sur OK pendant la lecture"
+
+msgctxt "#30164"
+msgid "\"Skip intro\" button (files with named chapters)"
+msgstr "Bouton « Passer l'intro » (fichiers aux chapitres nommés)"
+
+msgctxt "#30165"
+msgid "Automatic subtitles: foreign audio without subtitles in your language → Bazarr"
+msgstr "Sous-titres automatiques : VO sans sous-titres dans ta langue → Bazarr"

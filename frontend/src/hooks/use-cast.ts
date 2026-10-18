@@ -37,11 +37,18 @@ export function useDeleteCastDevice() {
     });
 }
 
+/** Film : tmdb_id. Épisode : tvdb_id de la série + numéros de saison et d'épisode. */
+export type CastPlayBody = {
+    device_id: number;
+    media_id?: string;
+    title?: string;
+} & ({ tmdb_id: number } | { tvdb_id: number; season: number; episode: number });
+
 export function useCastPlay() {
     return useMutation<
         { status: string; detail?: string; player_state?: string },
         Error,
-        { tmdb_id: number; device_id: number; media_id?: string; title?: string }
+        CastPlayBody
     >({
         mutationFn: (body) => apiFetch("/api/cast/play", { method: "POST", body: JSON.stringify(body) }),
     });
@@ -91,8 +98,19 @@ export function useSetJellyfin() {
     });
 }
 
+/** Marqueurs d'épisode (intro / générique) : serveur assez récent et plugin qui les calcule. */
+export interface JellyfinSegmentsSupport {
+    supported: boolean;
+    providers: string[];
+    checked: boolean;
+}
+
 export function useTestJellyfin() {
-    return useMutation<{ ok: boolean; server?: string; version?: string; detail?: string }, Error, void>({
+    return useMutation<
+        { ok: boolean; server?: string; version?: string; detail?: string; segments?: JellyfinSegmentsSupport },
+        Error,
+        void
+    >({
         mutationFn: () => apiFetch("/api/cast/jellyfin/test"),
     });
 }

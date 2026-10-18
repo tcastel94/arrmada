@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from app.services.trash_guides import get_trash_cache
 from app.services.notification_service import create_notification_standalone
+from app.services.trash_guides import get_trash_cache
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -21,9 +21,9 @@ async def _run_trash_sync() -> None:
     cache = get_trash_cache()
 
     try:
-        results = await cache.sync(force=False)  # Respects TTL
+        await cache.sync(force=False)  # Respects TTL
 
-        # If cache was fresh, results may be empty/minimal
+        # If cache was fresh, the sync is a no-op
         sonarr_cfs = len(cache.get_custom_formats("sonarr"))
         radarr_cfs = len(cache.get_custom_formats("radarr"))
 

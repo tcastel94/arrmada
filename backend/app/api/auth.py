@@ -1,7 +1,6 @@
 """Auth endpoints and JWT utilities."""
 
-
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from jose import JWTError, jwt
@@ -22,9 +21,7 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 # ── JWT helpers ───────────────────────────────────────────────
 def create_access_token(expires_delta: "timedelta | None" = None) -> str:
     """Create a signed JWT token."""
-    expire = datetime.now(timezone.utc) + (
-        expires_delta or timedelta(hours=settings.JWT_EXPIRATION_HOURS)
-    )
+    expire = datetime.now(UTC) + (expires_delta or timedelta(hours=settings.JWT_EXPIRATION_HOURS))
     payload = {"sub": "arrmada_user", "exp": expire}
     return jwt.encode(
         payload,

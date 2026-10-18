@@ -3,24 +3,31 @@
 /**
  * Enrichissement des médias avec des infos venant d'AUTRES services :
  *  - Bazarr : sous-titres français présents / manquants
- *  - Kodi   : vu / en cours de lecture (films uniquement, clé = ID TMDB)
- * Ces deux cartes couvrent toute la bibliothèque et sont mises en cache
+ *  - TV     : vu / en cours, partagés par les TV appairées (appli Kodi 1.19) :
+ *             films (clé TMDB) ET séries (clé TVDB = `tmdb_id` d'une série) ;
+ *             repli sur l'ancienne lecture directe d'un Kodi (films seulement)
+ * Ces cartes couvrent toute la bibliothèque et sont mises en cache 30 s à
  * 1 min : on les télécharge une fois, puis chaque carte poster les consulte.
  */
 import { useCallback } from "react";
 import type { MediaItem } from "@/hooks/use-media";
 import { useSubtitleStatus } from "@/hooks/use-subtitles";
 import { useKodiWatchedStatus } from "@/hooks/use-kodi";
+import { useWatchSummary } from "@/hooks/use-watch";
 
 /** État des sous-titres FR d'un média (undefined = inconnu / Bazarr absent). */
 export type SubState = "present" | "missing" | undefined;
 
-/** État de lecture Kodi (undefined = inconnu ou série). */
-export type WatchState = { watched: boolean; progress: number | null } | undefined;
+/**
+ * État de lecture (undefined = inconnu). `episodes` : épisodes vus d'une
+ * série (badge « 12 ép. vus » tant qu'elle n'est pas finie).
+ */
+export type WatchState = { watched: boolean; progress: number | null; episodes?: number } | undefined;
 
 export function useLibraryEnrichment() {
     const { data: subStatus } = useSubtitleStatus("fr");
     const { data: kodiWatched } = useKodiWatchedStatus();
+    const { data: shared } = useWatchSummary();
 
     const subStateFor = useCallback(
         (item: MediaItem): SubState => {
@@ -37,8 +44,21 @@ export function useLibraryEnrichment() {
 
     const watchStateFor = useCallback(
         (item: MediaItem): WatchState => {
-            if (!kodiWatched || item.type !== "movie" || !item.tmdb_id) return undefined;
-            const entry = kodiWatched[String(item.tmdb_id)];
+            if (!item.tmdb_id) return undefined;
+            const key = String(item.tmdb_id);
+            // 1. Vu partagé par les TV (films et séries)
+            if (item.type === "series") {
+                const series = shared?.series[key];
+                if (!series || (!series.watched_episodes && !series.in_progress)) return undefined;
+                const have = item.episodes_have ?? 0;
+                const done = have > 0 && series.watched_episodes >= have;
+                return { watched: done, progress: null, episodes: done ? undefined : series.watched_episodes };
+            }
+            const movie = shared?.movies[key];
+            if (movie) return { watched: movie.watched, progress: movie.watched ? null : movie.progress };
+            // 2. Repli : lecture directe d'un Kodi configuré (films seulement)
+            if (!kodiWatched) return undefined;
+            const entry = kodiWatched[key];
             if (!entry) return undefined;
             const progress =
                 entry.resume_position > 0 && entry.resume_total > 0
@@ -46,7 +66,7 @@ export function useLibraryEnrichment() {
                     : null;
             return { watched: entry.playcount > 0, progress };
         },
-        [kodiWatched],
+        [kodiWatched, shared],
     );
 
     return {
@@ -54,7 +74,7 @@ export function useLibraryEnrichment() {
         watchStateFor,
         /** Bazarr répond : le filtre « ST FR » a un sens. */
         subtitlesAvailable: !!subStatus?.available,
-        /** Kodi répond : le filtre « Vu » a un sens. */
-        kodiAvailable: !!kodiWatched,
+        /** Vu partagé ou Kodi lisible : le filtre « Vu » a un sens. */
+        kodiAvailable: !!kodiWatched || !!shared,
     };
 }

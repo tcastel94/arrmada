@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel
 
 
 class MediaItemResponse(BaseModel):
     """Media item response."""
+
     id: int
     external_id: str
     tmdb_id: int | None = None

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<settings>
+    <category label="30100">
+        <setting id="server_url" type="text" label="30102" default="http://192.168.2.3:8420" />
+        <!-- Ancien mot de passe admin : plus saisi sur la TV depuis la 1.8 (phase 3).
+             Gardé caché pour que lib/migration.py le lise une fois, puis l'efface. -->
+        <setting id="api_key" type="text" label="30104" default="" option="hidden" visible="false" />
+        <setting id="device_name" type="text" label="30106" default="Kodi Salon" />
+    </category>
+    <category label="30120">
+        <setting id="sub_language" type="labelenum" label="30122" values="fr|en|es|de|it" default="fr" />
+        <setting id="enable_scrobble" type="bool" label="30124" default="true" />
+        <setting id="enable_notifications" type="bool" label="30126" default="true" />
+        <setting id="notify_during_playback" type="bool" label="30132" default="false" />
+        <!-- Caméras Eufy (via le serveur) : pop-up pendant un film, bulle sinon -->
+        <setting id="camera_alerts" type="bool" label="30133" default="true" />
+        <setting id="check_interval" type="number" label="30128" default="30" />
+        <setting id="auto_audio_switch" type="bool" label="30130" default="true" />
+        <setting id="room_profile" type="labelenum" label="30131" values="cinema|salon" default="cinema" />
+    </category>
+    <!-- ADR-004 (1.12) : ArrMada remplace l'accueil de Kodi. Décoché : Kodi
+         démarre sur son accueil habituel (SiLVO). -->
+    <category label="30150">
+        <setting id="shell_mode" type="bool" label="30151" default="true" />
+    </category>
+    <!-- ADR-004 (1.15) : vu / reprise partagés entre les TV, encart « Épisode
+         suivant » (secondes avant la fin d'un épisode ; 0 : jamais). -->
+    <category label="30160">
+        <setting id="watch_sync" type="bool" label="30161" default="true" />
+        <setting id="upnext_seconds" type="labelenum" label="30162" values="0|10|20|30|45|60" default="20" />
+        <!-- 1.16 : appui long sur OK pendant la lecture → panneau ArrMada
+             (fichier de touches userdata/keymaps/arrmada.xml, retiré si décoché) -->
+        <setting id="player_panel" type="bool" label="30163" default="true" />
+        <!-- 1.17 : bouton « Passer l'intro » (chapitres nommés) et sous-titres
+             cherchés tout seuls quand le film est en VO sans sous-titres -->
+        <setting id="skip_intro" type="bool" label="30164" default="true" />
+        <setting id="auto_subtitles" type="bool" label="30165" default="true" />
+    </category>
+    <!-- Coché automatiquement si Kodi se ferme 2 fois de suite au démarrage
+         (lib/startup_guard.py) ; à décocher pour revenir au fonctionnement normal. -->
+    <category label="30140">
+        <setting id="safe_mode" type="bool" label="30141" default="false" />
+    </category>
+</settings>

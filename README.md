@@ -2,7 +2,7 @@
   <img src="docs/banner.png" alt="ArrMada Banner" width="100%"/>
 </p>
 
-<h1 align="center">🏴‍☠️ ArrMada</h1>
+<h1 align="center">ArrMada</h1>
 
 <p align="center">
   <strong>The unified dashboard for your *arr media stack</strong>
@@ -86,6 +86,17 @@ Live SABnzbd / Deluge queue with per-item actions (retry, blocklist, remove) and
 
 ### 🔔 Real-time
 Server-Sent Events keep every page fresh and raise toasts on imports, grabs and service outages; a floating mini-player follows Kodi playback across pages.
+
+### 🛋️ Home cinema
+- **Kodi add-on** (`kodi-addon/`): scrobbling, add-on dashboard, home-screen widgets, search & add from the couch, subtitle download / audio sync, release upgrade — see [`kodi-addon/README.md`](kodi-addon/README.md)
+- **Shared watched state**: what the TVs watched or started shows in the library ("Vu", "⏵ 27 %", "8 ép."), a **Reprendre** page lists what is in progress, and **"Sur la TV"** starts a film or the next episode on the paired TV of your choice — see [`kodi-addon/README.md` § 24](kodi-addon/README.md)
+- **Paired TVs per room** (Salon / Cinéma / Bureau): each TV drives only its own room's amplifier, the office has none; an unpaired TV opens the pairing screen by itself on the ArrMada home — see [`kodi-addon/README.md` § 7 and § 25](kodi-addon/README.md)
+- **Yamaha room profiles** (Salon / Cinéma): sound program, dialogue lift, DRC… applied automatically when a movie starts on Kodi
+- **Ambient screen** (`/ecran`): a tablet under the TV shows the start and expected end time of what is playing, the amp, downloads and tonight's releases, dimmed during the film (Fully Kiosk brightness control) — read-only paired device, see [`kodi-addon/README.md` § 15](kodi-addon/README.md)
+- **Technical badges** (4K, HDR / Dolby Vision, Atmos, 7.1…), studio / network logos and trailers on media sheets
+
+### 🐳 Docker logs & AI diagnosis
+Aggregated, level-classified logs of every service container (System → Docker, requires `/var/run/docker.sock:ro`), and a one-click AI analysis (local Ollama or OpenRouter) that groups problems with their cause and fix.
 
 ### 🛡️ Security First
 - Admin password created in the setup wizard, stored as a scrypt hash (no default password)
@@ -209,14 +220,18 @@ type the password once in the UI. Keys and passwords never reach the browser.
 ## 🏗️ Architecture
 
 ```
-┌──────────────────── conteneur arrmada ────────────────────┐
-│                                                           │
-│  :3420  gateway.js ──┬── /api/* ──► FastAPI   127.0.0.1:8420 │
-│  (seul port exposé)  └── reste  ──► Next.js   127.0.0.1:3421 │
-│                                                           │
-│  /app/data : SQLite · clé Fernet · secret JWT · hash admin │
-└───────────────────────────────────────────────────────────┘
+┌───────────────────── conteneur arrmada ─────────────────────┐
+│                                                             │
+│  :3420  gateway.js ──┬── /api/*  ──► FastAPI   127.0.0.1:8420 │
+│                      ├── /kodi/* ──► FastAPI (dépôt Kodi)    │
+│                      └── reste   ──► Next.js   127.0.0.1:3421 │
+│                                                             │
+│  /app/data : SQLite · clé Fernet · secret JWT · hash admin   │
+└─────────────────────────────────────────────────────────────┘
 ```
+
+Host port 3420 is the only one needed. The compose also publishes the legacy
+port 8420 → 3420 (same gateway) so Kodi TVs configured on `:8420` keep working.
 
 The gateway is a ~100-line dependency-free Node proxy: it streams Server-Sent Events
 without buffering, has no 30 s timeout, and forwards the client IP (login rate limiting).

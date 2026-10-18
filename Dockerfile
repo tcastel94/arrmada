@@ -57,6 +57,10 @@ COPY backend/ ./
 COPY --from=web-build /src/.next/standalone ./web/
 COPY --from=web-build /src/.next/static ./web/.next/static
 COPY --from=web-build /src/public ./web/public
+# Add-on Kodi, servi aux TV en dépôt (/kodi/repo) : embarqué pour que le
+# dépôt marche sans clone Git. Un montage ./kodi-addon:/app/kodi-addon:ro
+# le remplace (nouvelle version proposée aux TV après un simple git pull).
+COPY kodi-addon/script.arrmada ./kodi-addon/script.arrmada
 # Passerelle, démarrage, outils d'admin
 COPY docker/gateway.js ./docker/gateway.js
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh

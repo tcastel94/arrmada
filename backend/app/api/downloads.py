@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
 from app.models.service import Service
-from app.services import media_aggregator
+from app.services import media_aggregator, tv_priority
 from app.services.encryption import decrypt_api_key
 from app.services.radarr import RadarrClient
 from app.services.sonarr import SonarrClient
@@ -28,10 +28,13 @@ router = APIRouter(
 async def list_downloads(db: AsyncSession = Depends(get_db)):
     """Fetch combined download queue from all Sonarr/Radarr services."""
     items = await media_aggregator.get_queue_items(db)
+    # « tv_request » : lancé depuis quelle TV, prioritaire ou non (services/tv_priority.py)
+    await tv_priority.annotate_queue(db, items)
     return {"items": items, "total": len(items)}
 
 
 # ── Queue actions ─────────────────────────────────────────────
+
 
 async def _get_arr_client_for_service(db: AsyncSession, service_type: str, *, timeout: int = 30):
     """Resolve the enabled Radarr/Sonarr client for a queue item's service type."""
@@ -79,7 +82,7 @@ async def remove_queue_item(
         raise
     except Exception as exc:
         logger.error("Failed to remove queue item %d (%s): %s", id, type, exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
         await client.close()
 
@@ -115,6 +118,6 @@ async def retry_queue_item(
         raise
     except Exception as exc:
         logger.error("Failed to retry queue item %d (%s): %s", id, type, exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
         await client.close()

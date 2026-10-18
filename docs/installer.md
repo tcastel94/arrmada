@@ -44,7 +44,9 @@ S'y ajoutent :
    (`sonarr`, `radarr`…) est **laissé tel quel**. ArrMada le câblera comme les
    autres.
 2. **Ports.** Le script s'arrête si un port est pris par un autre programme
-   (code retour 5).
+   (code retour 5). Exception : le port 8420, utilisé par l'add-on Kodi des
+   TV, est publié en plus du 3420 seulement s'il est libre (simple
+   avertissement sinon).
 3. **Arborescence TRaSH Guides.** Tout se trouve sous un seul point de montage
    `/data`, pour que les imports se fassent par **hardlink**, instantanés et
    sans doublon d'espace disque :

@@ -1,0 +1,24 @@
+# Lint des modules de l'add-on Kodi vérifiés en CI (job « Kodi add-on — Tests »).
+# Seuls les nouveaux modules (écrans v2, outils, tests) sont contrôlés : l'ancien
+# code de l'add-on sera repris au fil des phases de l'ADR-003.
+line-length = 100
+# Kodi 19+ embarque Python 3.8 minimum : pas de syntaxe plus récente.
+target-version = "py38"
+
+[lint]
+select = ["E", "F", "W", "I", "B"]
+
+[lint.isort]
+known-first-party = [
+    "home_data", "home_window", "screens_data", "ui_common", "api", "make_textures",
+    "device", "pairing_data", "pair_window",
+    "feeds", "catalog_data", "listing", "background", "navigation", "kodi_helper",
+    "startup_guard", "links_data", "qr_window", "migration", "library_data", "playback_data",
+    "watch_data", "kodi_library", "series_window", "shell_data", "shell_window", "grid_window",
+    "make_shell_xml", "apps_data", "kodi_sources", "apps_window", "camera_data",
+    "camera_window", "sync_data", "watch_sync", "upnext_data", "upnext_window",
+    "player_data", "player_window", "chapter_data", "skip_window", "mkv_chapters",
+    "tonight_data", "remote_data", "download_data", "download_window",
+    "board_data", "unstick_window", "make_downloads_xml", "ready_data", "ready_window",
+    "toast_data", "toast", "toast_xml",
+]

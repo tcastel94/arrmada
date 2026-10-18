@@ -85,6 +85,12 @@ class SabnzbdClient(ArrBaseClient):
             "slots_count": len(queue.get("slots", [])),
         }
 
+    async def get_slots(self) -> list[dict[str, Any]]:
+        """Éléments de la file, dans l'ordre de SABnzbd (nzo_id, priority, index…)."""
+        queue = await self.get_queue()
+        slots = queue.get("slots") if isinstance(queue, dict) else None
+        return [s for s in slots or [] if isinstance(s, dict) and s.get("nzo_id")]
+
     # ── Controls ──────────────────────────────────────────────
     async def pause(self) -> Any:
         """Pause downloads."""
@@ -93,3 +99,26 @@ class SabnzbdClient(ArrBaseClient):
     async def resume(self) -> Any:
         """Resume downloads."""
         return await self._call("resume")
+
+    # ── Un seul élément de la file (nzo_id) ───────────────────
+    # Sonarr / Radarr donnent ce nzo_id comme « downloadId » d'un
+    # téléchargement envoyé à SABnzbd : c'est le lien entre les deux.
+
+    async def set_priority(self, nzo_id: str, priority: int) -> Any:
+        """Priorité d'un élément : 2 Force, 1 High, 0 Normal, -1 Low.
+
+        « Force » télécharge même quand la file est en pause.
+        """
+        return await self._call("queue", {"name": "priority", "value": nzo_id, "value2": priority})
+
+    async def move_to(self, nzo_id: str, position: int) -> Any:
+        """Place un élément à une position de la file (0 = en tête)."""
+        return await self._call("switch", {"value": nzo_id, "value2": position})
+
+    async def pause_item(self, nzo_id: str) -> Any:
+        """Met en pause un seul élément (le reste de la file continue)."""
+        return await self._call("queue", {"name": "pause", "value": nzo_id})
+
+    async def resume_item(self, nzo_id: str) -> Any:
+        """Reprend un seul élément mis en pause."""
+        return await self._call("queue", {"name": "resume", "value": nzo_id})

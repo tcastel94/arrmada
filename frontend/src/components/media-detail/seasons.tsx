@@ -12,11 +12,13 @@
  * - Recherche par épisode / des manquants d'une saison, avec indicateur
  *   « Recherche… » en direct (file de commandes Sonarr).
  * - Code couleur : vert = présent, ambre = manquant, bleu ciel = à venir.
+ * - Épisode présent : bouton « Caster » (Chromecast via Jellyfin), si
+ *   Jellyfin est configuré. Une seule boîte de choix pour toute la série.
  */
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
-import { CalendarClock, ChevronRight, ChevronsDown, ChevronsUp, CircleAlert, CircleCheck, EyeOff, Layers, Loader2, Search } from "lucide-react";
+import { CalendarClock, Cast, ChevronRight, ChevronsDown, ChevronsUp, CircleAlert, CircleCheck, EyeOff, Layers, Loader2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -25,6 +27,8 @@ import { SpotlightCard } from "@/components/fx/spotlight-card";
 import { GradientProgress } from "@/components/fx/gradient-progress";
 import { StatusDot } from "@/components/fx/status-dot";
 import { EmptyState } from "@/components/shared/empty-state";
+import { CastDialog } from "@/components/cast-button";
+import { useJellyfinConfig } from "@/hooks/use-cast";
 import { useUpdateSeasonMonitoring, type EpisodeDetail, type MediaDetail, type SeasonDetail } from "@/hooks/use-media";
 import { useSearchEpisodes, useSeriesSearchActivity } from "@/hooks/use-media-actions";
 import { EASE_OUT, fadeUp, stagger } from "@/lib/motion";
@@ -63,6 +67,11 @@ export function SeasonsSection({ media }: { media: MediaDetail }) {
     const { data: activity } = useSeriesSearchActivity(seriesId, true, { boost: boostTick > 0 });
     const searchingEpIds = useMemo(() => new Set(activity?.episode_ids ?? []), [activity]);
     const activeSeasons = useMemo(() => new Set(activity?.seasons ?? []), [activity]);
+
+    // Cast d'un épisode : seulement si Jellyfin est configuré (il fait le transcodage)
+    const { data: jellyfin } = useJellyfinConfig();
+    const canCast = !!jellyfin?.configured && !!media.tvdb_id;
+    const [castEp, setCastEp] = useState<EpisodeDetail | null>(null);
 
     const searchEpisodes = useSearchEpisodes();
     const seasonMonitor = useUpdateSeasonMonitoring();
@@ -152,10 +161,29 @@ export function SeasonsSection({ media }: { media: MediaDetail }) {
                             onSearchEpisode={(ep) => launch([ep.id], { episode: ep })}
                             onToggleMonitor={(v) => toggleMonitor(season.season_number, v)}
                             monitorPending={seasonMonitor.isPending && seasonMonitor.variables?.season === season.season_number}
+                            onCastEpisode={canCast ? setCastEp : undefined}
                         />
                     </motion.div>
                 ))}
             </motion.div>
+
+            {canCast && (
+                <CastDialog
+                    open={castEp !== null}
+                    onOpenChange={(open) => !open && setCastEp(null)}
+                    episode={
+                        castEp
+                            ? { tvdbId: media.tvdb_id as number, season: castEp.season_number, episode: castEp.episode_number }
+                            : undefined
+                    }
+                    mediaId={String(media.id)}
+                    title={
+                        castEp
+                            ? `${media.title} · ${episodeCode(castEp.season_number, castEp.episode_number)}${castEp.title ? ` · ${castEp.title}` : ""}`
+                            : media.title
+                    }
+                />
+            )}
         </div>
     );
 }
@@ -172,6 +200,8 @@ interface SeasonCardProps {
     onSearchEpisode: (ep: EpisodeDetail) => void;
     onToggleMonitor: (monitored: boolean) => void;
     monitorPending: boolean;
+    /** Absent : pas de Cast (Jellyfin non configuré ou série sans TVDB). */
+    onCastEpisode?: (ep: EpisodeDetail) => void;
 }
 
 function SeasonCard({
@@ -186,6 +216,7 @@ function SeasonCard({
     onSearchEpisode,
     onToggleMonitor,
     monitorPending,
+    onCastEpisode,
 }: SeasonCardProps) {
     const n = season.season_number;
     const stats = seasonStats(season);
@@ -295,6 +326,7 @@ function SeasonCard({
                                     searching={searchingEpIds.has(ep.id)}
                                     launching={launchingEps.has(ep.id)}
                                     onSearch={() => onSearchEpisode(ep)}
+                                    onCast={onCastEpisode && ep.file ? () => onCastEpisode(ep) : undefined}
                                 />
                             ))}
                         </ul>
@@ -316,11 +348,13 @@ function EpisodeRow({
     searching,
     launching,
     onSearch,
+    onCast,
 }: {
     ep: EpisodeDetail;
     searching: boolean;
     launching: boolean;
     onSearch: () => void;
+    onCast?: () => void;
 }) {
     const state = episodeState(ep);
     const meta = STATE_META[state];
@@ -348,6 +382,18 @@ function EpisodeRow({
                 <Badge variant="outline" className="hidden shrink-0 text-[10px] sm:inline-flex">
                     {ep.file.quality}
                 </Badge>
+            )}
+            {onCast && (
+                <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    className="shrink-0 text-muted-foreground hover:text-sky-300"
+                    aria-label={`Caster l'épisode ${code}`}
+                    title="Caster sur un appareil"
+                    onClick={onCast}
+                >
+                    <Cast />
+                </Button>
             )}
             {state === "upcoming" && (
                 <Badge variant="secondary" className="shrink-0 text-[10px] text-sky-300">

@@ -7,8 +7,8 @@ session so it is independent of the request's transaction.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,15 +26,15 @@ async def log_event(
     action: str,
     status: str = "ok",
     source: str = "arrmada",
-    media_type: Optional[str] = None,
-    media_id: Optional[str | int] = None,
-    tmdb_id: Optional[int] = None,
-    title: Optional[str] = None,
-    subtitle: Optional[str] = None,
-    detail: Optional[str] = None,
-    duration_ms: Optional[int] = None,
-    device: Optional[str] = None,
-    meta: Optional[dict[str, Any]] = None,
+    media_type: str | None = None,
+    media_id: str | int | None = None,
+    tmdb_id: int | None = None,
+    title: str | None = None,
+    subtitle: str | None = None,
+    detail: str | None = None,
+    duration_ms: int | None = None,
+    device: str | None = None,
+    meta: dict[str, Any] | None = None,
 ) -> None:
     """Insert one audit event. Swallows all errors."""
     try:
@@ -65,7 +65,7 @@ def to_dict(e: ActivityEvent) -> dict[str, Any]:
     """Serialise a persisted event to the timeline item shape."""
     ts = e.ts
     if ts and ts.tzinfo is None:
-        ts = ts.replace(tzinfo=timezone.utc)
+        ts = ts.replace(tzinfo=UTC)
     return {
         "id": f"ev-{e.id}",
         "ts": int(ts.timestamp()) if ts else 0,
@@ -88,13 +88,13 @@ def to_dict(e: ActivityEvent) -> dict[str, Any]:
 async def query_events(
     db: AsyncSession,
     *,
-    categories: Optional[list[str]] = None,
-    statuses: Optional[list[str]] = None,
-    media_type: Optional[str] = None,
-    media_id: Optional[str] = None,
-    tmdb_id: Optional[int] = None,
-    search: Optional[str] = None,
-    since_ts: Optional[int] = None,
+    categories: list[str] | None = None,
+    statuses: list[str] | None = None,
+    media_type: str | None = None,
+    media_id: str | None = None,
+    tmdb_id: int | None = None,
+    search: str | None = None,
+    since_ts: int | None = None,
     limit: int = 200,
 ) -> list[ActivityEvent]:
     """Fetch persisted events matching the given filters (newest first)."""
@@ -112,7 +112,7 @@ async def query_events(
     if search:
         stmt = stmt.where(ActivityEvent.title.ilike(f"%{search}%"))
     if since_ts:
-        stmt = stmt.where(ActivityEvent.ts >= datetime.fromtimestamp(since_ts, tz=timezone.utc))
+        stmt = stmt.where(ActivityEvent.ts >= datetime.fromtimestamp(since_ts, tz=UTC))
     stmt = stmt.order_by(ActivityEvent.ts.desc()).limit(limit)
     res = await db.execute(stmt)
     return list(res.scalars().all())

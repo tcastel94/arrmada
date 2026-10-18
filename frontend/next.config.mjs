@@ -27,7 +27,10 @@ const nextConfig = {
     async rewrites() {
         if (process.env.NODE_ENV === "production") return [];
         const backend = process.env.ARRMADA_DEV_API_URL || "http://127.0.0.1:8000";
-        return [{ source: "/api/:path*", destination: `${backend}/api/:path*` }];
+        return [
+            { source: "/api/:path*", destination: `${backend}/api/:path*` },
+            { source: "/kodi/:path*", destination: `${backend}/kodi/:path*` },
+        ];
     },
     async redirects() {
         return [

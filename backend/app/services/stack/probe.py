@@ -26,7 +26,7 @@ from typing import Any
 
 import httpx
 
-from app.services.jellyfin import auth_headers as jellyfin_auth
+from app.services.jellyfin import auth_header as jellyfin_auth
 from app.services.stack.configs import FoundConfig
 from app.utils.logger import get_logger
 

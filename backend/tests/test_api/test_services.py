@@ -44,9 +44,7 @@ class TestAuth:
 class TestServicesCRUD:
     """Test services CRUD operations."""
 
-    async def test_create_service(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_create_service(self, client: AsyncClient, auth_headers: dict) -> None:
         resp = await client.post(
             "/api/services",
             json={
@@ -63,9 +61,7 @@ class TestServicesCRUD:
         assert data["type"] == "sonarr"
         assert data["url"] == "http://localhost:8989"
 
-    async def test_list_services(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_list_services(self, client: AsyncClient, auth_headers: dict) -> None:
         # Create two services
         for name in ["Sonarr", "Radarr"]:
             await client.post(
@@ -84,9 +80,7 @@ class TestServicesCRUD:
         data = resp.json()
         assert len(data) >= 2
 
-    async def test_update_service(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_update_service(self, client: AsyncClient, auth_headers: dict) -> None:
         # Create
         create_resp = await client.post(
             "/api/services",
@@ -109,9 +103,7 @@ class TestServicesCRUD:
         assert resp.status_code == 200
         assert resp.json()["name"] == "New Name"
 
-    async def test_delete_service(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_delete_service(self, client: AsyncClient, auth_headers: dict) -> None:
         # Create
         create_resp = await client.post(
             "/api/services",
@@ -126,19 +118,13 @@ class TestServicesCRUD:
         service_id = create_resp.json()["id"]
 
         # Delete
-        resp = await client.delete(
-            f"/api/services/{service_id}", headers=auth_headers
-        )
+        resp = await client.delete(f"/api/services/{service_id}", headers=auth_headers)
         assert resp.status_code == 204
 
         # Verify gone
-        resp = await client.get(
-            f"/api/services/{service_id}", headers=auth_headers
-        )
+        resp = await client.get(f"/api/services/{service_id}", headers=auth_headers)
         assert resp.status_code == 404
 
-    async def test_get_nonexistent_service(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_get_nonexistent_service(self, client: AsyncClient, auth_headers: dict) -> None:
         resp = await client.get("/api/services/9999", headers=auth_headers)
         assert resp.status_code == 404

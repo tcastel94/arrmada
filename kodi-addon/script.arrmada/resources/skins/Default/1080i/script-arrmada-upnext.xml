@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ArrMada — encart « Épisode suivant » à la fin d'un épisode (ADR-004, 4.4).
+
+  Repère 1920 × 1080. Données posées par lib/upnext_window.py :
+    show (série), line (« S01E05 · Titre »), thumb (vignette de l'épisode),
+    countdown (« Dans 18 s »), bar (barre du compte à rebours, qui se vide).
+  Carte en bas à droite (la pop-up des caméras est en haut à gauche : les
+  deux peuvent cohabiter). Le film continue dessous.
+  Boutons : 301 Lancer maintenant, 302 Annuler. Retour : l'encart disparaît,
+  l'épisode suivant démarre quand même à la fin.
+-->
+<window>
+	<defaultcontrol always="true">301</defaultcontrol>
+	<animation effect="slide" start="0,320" end="0,0" time="450" tween="cubic" easing="out">WindowOpen</animation>
+	<animation effect="fade" start="0" end="100" time="300">WindowOpen</animation>
+	<animation effect="fade" start="100" end="0" time="250">WindowClose</animation>
+	<controls>
+		<control type="group" id="100">
+			<left>1232</left><top>760</top>
+			<!-- Ombre portée + carte -->
+			<control type="image">
+				<left>-36</left><top>-36</top><width>712</width><height>344</height>
+				<texture border="56" colordiffuse="99000000">arrmada/glow.png</texture>
+			</control>
+			<control type="image">
+				<left>0</left><top>0</top><width>640</width><height>272</height>
+				<texture border="26" colordiffuse="F20A0E16">arrmada/rounded-24.png</texture>
+			</control>
+			<!-- Vignette de l'épisode suivant (16:9) -->
+			<control type="image">
+				<left>24</left><top>24</top><width>256</width><height>144</height>
+				<texture border="14" colordiffuse="FF1A2233">arrmada/rounded-12.png</texture>
+			</control>
+			<control type="image">
+				<left>24</left><top>24</top><width>256</width><height>144</height>
+				<aspectratio>scale</aspectratio>
+				<fadetime>200</fadetime>
+				<texture background="true">$INFO[Window.Property(thumb)]</texture>
+				<visible>!String.IsEmpty(Window.Property(thumb))</visible>
+			</control>
+			<!-- « ÉPISODE SUIVANT » + compte à rebours -->
+			<control type="label">
+				<left>304</left><top>20</top><width>180</width><height>30</height>
+				<font>font10</font>
+				<textcolor>FF4A9EFF</textcolor>
+				<aligny>center</aligny>
+				<label>ÉPISODE SUIVANT</label>
+			</control>
+			<control type="label">
+				<left>484</left><top>20</top><width>132</width><height>30</height>
+				<font>font10</font>
+				<textcolor>FFF5F7FA</textcolor>
+				<align>right</align><aligny>center</aligny>
+				<label>$INFO[Window.Property(countdown)]</label>
+			</control>
+			<control type="label">
+				<left>304</left><top>52</top><width>312</width><height>32</height>
+				<font>font12</font>
+				<textcolor>B3C9D3E0</textcolor>
+				<aligny>center</aligny>
+				<label>$INFO[Window.Property(show)]</label>
+			</control>
+			<control type="textbox">
+				<left>304</left><top>88</top><width>312</width><height>80</height>
+				<font>font13</font>
+				<textcolor>FFF5F7FA</textcolor>
+				<label>$INFO[Window.Property(line)]</label>
+			</control>
+			<!-- Boutons -->
+			<control type="grouplist" id="300">
+				<left>24</left><top>188</top><width>592</width><height>56</height>
+				<orientation>horizontal</orientation>
+				<itemgap>16</itemgap>
+				<control type="button" id="301">
+					<width>300</width><height>56</height>
+					<label>Lancer maintenant</label>
+					<font>font12</font>
+					<textcolor>FF8CC4FF</textcolor>
+					<focusedcolor>FF0A0E16</focusedcolor>
+					<align>center</align><aligny>center</aligny>
+					<texturenofocus border="14" colordiffuse="334A9EFF">arrmada/rounded-12.png</texturenofocus>
+					<texturefocus border="14" colordiffuse="FF4A9EFF">arrmada/rounded-12.png</texturefocus>
+				</control>
+				<control type="button" id="302">
+					<width>180</width><height>56</height>
+					<label>Annuler</label>
+					<font>font12</font>
+					<textcolor>D9F5F7FA</textcolor>
+					<focusedcolor>FF0A0E16</focusedcolor>
+					<align>center</align><aligny>center</aligny>
+					<texturenofocus border="14" colordiffuse="1AFFFFFF">arrmada/rounded-12.png</texturenofocus>
+					<texturefocus border="14" colordiffuse="FF4A9EFF">arrmada/rounded-12.png</texturefocus>
+				</control>
+			</control>
+			<!-- Compte à rebours : la barre se vide jusqu'à la fin de l'épisode -->
+			<control type="image">
+				<left>24</left><top>254</top><width>592</width><height>6</height>
+				<texture>arrmada/progress/$INFO[Window.Property(bar)].png</texture>
+				<visible>!String.IsEmpty(Window.Property(bar))</visible>
+			</control>
+		</control>
+	</controls>
+</window>

@@ -21,6 +21,7 @@ user types in the UI).
 from __future__ import annotations
 
 import base64
+import contextlib
 import hashlib
 import hmac
 import json
@@ -392,10 +393,8 @@ def parse_jellyfin_db(path: Path, root: Path) -> FoundConfig | None:
     for parent in [path.parent, *path.parents][:4]:
         network = parent / "network.xml"
         if network.is_file():
-            try:
+            with contextlib.suppress(ET.ParseError, OSError):
                 port = _int(ET.parse(network).getroot().findtext("InternalHttpPort"), 8096)
-            except (ET.ParseError, OSError):
-                pass
             break
     found = FoundConfig(
         type="jellyfin",

@@ -24,7 +24,9 @@ services:
     # Construit depuis les sources tant que l'image GHCR n'est pas publique
     build: .
     volumes:
-      - /mnt/user:/mnt/user:rw              # nettoyage / doublons / fichiers
+      - /mnt/user:/mnt/user:rw              # nettoyage / doublons / artworks / auto-import
+      - /var/run/docker.sock:/var/run/docker.sock:ro   # analyse IA des logs Docker
+      - ./kodi-addon:/app/kodi-addon:ro     # dépôt Kodi à jour dès le git pull
     environment:
       - PUID=99                             # nobody:users (convention Unraid)
       - PGID=100
@@ -87,10 +89,17 @@ git pull origin main
 - **Paramètres → Mot de passe administrateur** : redéfinis-le. Il est alors
   stocké haché dans `data/.admin_password`, et tu peux retirer
   `ARRMADA_AUTH_SECRET` du `.env` et de l'override.
-- Webhooks Sonarr/Radarr/Bazarr : remplace le port `8420` par `3420`
-  (`http://<unraid>:3420/api/webhooks/sonarr`).
+- TV Kodi, source du dépôt Kodi (`http://<unraid>:8420/kodi/repo/`) et
+  webhooks Sonarr/Radarr/Bazarr : **rien à changer**. Le port `8420` reste
+  publié et mène au même service que le `3420`.
+- Clé de l'add-on Kodi (réglage `api_key` des TV non appairées) : c'est le
+  mot de passe admin. Si tu le changes dans les Paramètres, mets-la à jour
+  sur ces TV (les TV appairées utilisent leur propre jeton, non concerné).
 - `CORS_ORIGINS`, `NEXT_PUBLIC_API_URL` et `BACKEND_PORT` du `.env` ne
-  servent plus : tu peux les supprimer.
+  servent plus : tu peux les supprimer. `PUBLIC_WEB_URL`, les clés Eufy,
+  fanart.tv, Ollama… sont toujours lues depuis le `.env`.
+- Caméras Eufy : `docker compose --profile eufy up -d eufy-security-ws`,
+  comme avant (même dossier `data/eufy`).
 
 ## Retour arrière
 
