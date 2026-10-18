@@ -29,9 +29,14 @@ class RadarrClient(ArrBaseClient):
         """Add a new movie to Radarr."""
         return await self.post("/movie", data=data)
 
-    async def delete_movie(self, movie_id: int, delete_files: bool = False) -> None:
-        """Delete a movie from Radarr."""
-        url = f"/movie/{movie_id}?deleteFiles={str(delete_files).lower()}"
+    async def delete_movie(
+        self, movie_id: int, delete_files: bool = False, add_exclusion: bool = False
+    ) -> None:
+        """Delete a movie from Radarr, optionally adding it to the import-list exclusions."""
+        url = (
+            f"/movie/{movie_id}?deleteFiles={str(delete_files).lower()}"
+            f"&addImportExclusion={str(add_exclusion).lower()}"
+        )
         resp = await self.client.delete(f"{self.API_PREFIX}{url}")
         resp.raise_for_status()
 
@@ -48,7 +53,9 @@ class RadarrClient(ArrBaseClient):
     # ── Queue ─────────────────────────────────────────────────
     async def get_queue(self) -> dict[str, Any]:
         """Fetch the download queue."""
-        return await self.get("/queue", params={"pageSize": 50})
+        # Toute la file : un pack de saison y compte une ligne PAR ÉPISODE,
+        # 50 lignes ne suffisent pas (la fin de la file disparaissait)
+        return await self.get("/queue", params={"pageSize": 1000})
 
     # ── Disk Space ────────────────────────────────────────────
     async def get_disk_space(self) -> list[dict[str, Any]]:
@@ -97,8 +104,7 @@ class RadarrClient(ArrBaseClient):
     ) -> None:
         """Remove a queue item, optionally from the download client and/or blocklisting it."""
         params = (
-            f"removeFromClient={str(remove_from_client).lower()}"
-            f"&blocklist={str(blocklist).lower()}"
+            f"removeFromClient={str(remove_from_client).lower()}&blocklist={str(blocklist).lower()}"
         )
         url = f"{self.API_PREFIX}/queue/{queue_id}?{params}"
         resp = await self.client.delete(url)

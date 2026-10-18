@@ -2,22 +2,20 @@
 
 from __future__ import annotations
 
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel
-from fastapi import APIRouter, Depends, HTTPException, status, Response, BackgroundTasks, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user, get_db
 from app.models.service import Service
 from app.services.encryption import decrypt_api_key
 from app.services.radarr import RadarrClient
+from app.services.request_service import create_request, delete_request, list_requests
 from app.services.sonarr import SonarrClient
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
-
-from app.api.deps import get_current_user, get_db
-from app.services.request_service import create_request, list_requests, delete_request
-
 
 router = APIRouter(
     prefix="/api/requests",
@@ -81,20 +79,29 @@ async def lookup_media(
             raw = await client.lookup_movie(q)
             for item in raw[:15]:
                 images = item.get("images", [])
-                poster = next((img["remoteUrl"] for img in images if img.get("coverType") == "poster" and img.get("remoteUrl")), None)
+                poster = next(
+                    (
+                        img["remoteUrl"]
+                        for img in images
+                        if img.get("coverType") == "poster" and img.get("remoteUrl")
+                    ),
+                    None,
+                )
                 # Radarr sets a non-zero ``id`` when the movie is already added.
                 arr_id = item.get("id") or 0
-                results.append({
-                    "title": item.get("title"),
-                    "year": item.get("year"),
-                    "tmdb_id": item.get("tmdbId"),
-                    "tvdb_id": None,
-                    "overview": item.get("overview"),
-                    "poster_url": poster,
-                    "type": "movie",
-                    "in_library": arr_id > 0,
-                    "arr_id": arr_id or None,
-                })
+                results.append(
+                    {
+                        "title": item.get("title"),
+                        "year": item.get("year"),
+                        "tmdb_id": item.get("tmdbId"),
+                        "tvdb_id": None,
+                        "overview": item.get("overview"),
+                        "poster_url": poster,
+                        "type": "movie",
+                        "in_library": arr_id > 0,
+                        "arr_id": arr_id or None,
+                    }
+                )
         except Exception as exc:
             logger.error("Radarr lookup failed: %s", exc)
         finally:
@@ -105,21 +112,30 @@ async def lookup_media(
             raw = await client.lookup_series(q)
             for item in raw[:15]:
                 images = item.get("images", [])
-                poster = next((img["remoteUrl"] for img in images if img.get("coverType") == "poster" and img.get("remoteUrl")), None)
+                poster = next(
+                    (
+                        img["remoteUrl"]
+                        for img in images
+                        if img.get("coverType") == "poster" and img.get("remoteUrl")
+                    ),
+                    None,
+                )
                 arr_id = item.get("id") or 0
-                results.append({
-                    "title": item.get("title"),
-                    "year": item.get("year"),
-                    # IDs distincts : Sonarr est indexé sur TVDB, mais renvoie
-                    # aussi l'ID TMDB (v4) quand il le connaît.
-                    "tmdb_id": item.get("tmdbId") or None,
-                    "tvdb_id": item.get("tvdbId"),
-                    "overview": item.get("overview"),
-                    "poster_url": poster,
-                    "type": "series",
-                    "in_library": arr_id > 0,
-                    "arr_id": arr_id or None,
-                })
+                results.append(
+                    {
+                        "title": item.get("title"),
+                        "year": item.get("year"),
+                        # IDs distincts : Sonarr est indexé sur TVDB, mais renvoie
+                        # aussi l'ID TMDB (v4) quand il le connaît.
+                        "tmdb_id": item.get("tmdbId") or None,
+                        "tvdb_id": item.get("tvdbId"),
+                        "overview": item.get("overview"),
+                        "poster_url": poster,
+                        "type": "series",
+                        "in_library": arr_id > 0,
+                        "arr_id": arr_id or None,
+                    }
+                )
         except Exception as exc:
             logger.error("Sonarr lookup failed: %s", exc)
         finally:

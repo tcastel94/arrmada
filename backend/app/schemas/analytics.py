@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 class AnalyticsSnapshotResponse(BaseModel):
     """Analytics snapshot response."""
+
     id: int
     date: dt.date
     total_movies: int
@@ -25,6 +26,7 @@ class AnalyticsSnapshotResponse(BaseModel):
 
 class AnalyticsSummary(BaseModel):
     """Aggregated analytics summary."""
+
     total_movies: int = 0
     total_series: int = 0
     total_albums: int = 0

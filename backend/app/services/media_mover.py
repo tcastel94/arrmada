@@ -14,22 +14,44 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models.service import Service
 from app.services.encryption import decrypt_api_key
-from app.services.import_helpers import build_import_payload, find_candidates, trigger_rename
+from app.services.import_helpers import (
+    build_import_payload,
+    filter_safe_candidates,
+    find_candidates,
+    trigger_rename,
+)
 from app.services.path_mapper import get_path_mappings  # noqa: F401 — re-export
 from app.services.radarr import RadarrClient
-from app.services.sonarr import SonarrClient
 from app.services.sabnzbd import SabnzbdClient
+from app.services.sonarr import SonarrClient
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 # Words stripped from titles by Sonarr/Radarr's cleanTitle algorithm
-_ARTICLES = frozenset({
-    "of", "the", "and", "a", "an", "in", "on", "at", "to", "for",
-    "le", "la", "les", "de", "du", "des",
-})
+_ARTICLES = frozenset(
+    {
+        "of",
+        "the",
+        "and",
+        "a",
+        "an",
+        "in",
+        "on",
+        "at",
+        "to",
+        "for",
+        "le",
+        "la",
+        "les",
+        "de",
+        "du",
+        "des",
+    }
+)
 
 
 # get_path_mappings is now imported from path_mapper.py and re-exported
@@ -109,7 +131,10 @@ async def get_stuck_downloads(db: AsyncSession) -> list[dict[str, Any]]:
 
             # Also get Radarr's import history — sourceTitle matches NZB names
             try:
-                hist = await radarr.get("/history", params={"pageSize": 500, "sortKey": "date", "sortDirection": "descending"})
+                hist = await radarr.get(
+                    "/history",
+                    params={"pageSize": 500, "sortKey": "date", "sortDirection": "descending"},
+                )
                 for record in hist.get("records", []):
                     if record.get("eventType") in ("downloadFolderImported", "grabbed"):
                         source = record.get("sourceTitle", "")
@@ -134,7 +159,10 @@ async def get_stuck_downloads(db: AsyncSession) -> list[dict[str, Any]]:
         try:
             # Get Sonarr import history
             try:
-                hist = await sonarr.get("/history", params={"pageSize": 500, "sortKey": "date", "sortDirection": "descending"})
+                hist = await sonarr.get(
+                    "/history",
+                    params={"pageSize": 500, "sortKey": "date", "sortDirection": "descending"},
+                )
                 for record in hist.get("records", []):
                     if record.get("eventType") in ("downloadFolderImported", "grabbed"):
                         source = record.get("sourceTitle", "")
@@ -171,17 +199,26 @@ async def get_stuck_downloads(db: AsyncSession) -> list[dict[str, Any]]:
 
                     # Only fetch episode files for series that MIGHT match
                     # a download name (avoid N+1 API calls)
-                    clean_stripped = "".join(
-                        w for w in clean.split() if w not in _ARTICLES
-                    ).lower() if clean else ""
-                    title_stripped = "".join(
-                        w for w in title.lower().replace(" ", ".").split(".")
-                        if w not in _ARTICLES
-                    ).lower() if title else ""
+                    clean_stripped = (
+                        "".join(w for w in clean.split() if w not in _ARTICLES).lower()
+                        if clean
+                        else ""
+                    )
+                    title_stripped = (
+                        "".join(
+                            w
+                            for w in title.lower().replace(" ", ".").split(".")
+                            if w not in _ARTICLES
+                        ).lower()
+                        if title
+                        else ""
+                    )
 
                     is_relevant = any(
-                        clean_stripped in p or title_stripped in p
-                        or p in clean_stripped or p in title_stripped
+                        clean_stripped in p
+                        or title_stripped in p
+                        or p in clean_stripped
+                        or p in title_stripped
                         for p in download_prefixes
                     )
                     if not is_relevant:
@@ -199,7 +236,9 @@ async def get_stuck_downloads(db: AsyncSession) -> list[dict[str, Any]]:
                                 # Also add the filename minus extension
                                 filename = rel_path.rsplit("/", 1)[-1]
                                 if filename:
-                                    name_no_ext = filename.rsplit(".", 1)[0] if "." in filename else filename
+                                    name_no_ext = (
+                                        filename.rsplit(".", 1)[0] if "." in filename else filename
+                                    )
                                     sonarr_imported.add(name_no_ext.lower())
                     except Exception:
                         pass
@@ -213,7 +252,9 @@ async def get_stuck_downloads(db: AsyncSession) -> list[dict[str, Any]]:
     all_imported = radarr_imported | sonarr_imported
     logger.info(
         "Duplicate check: %d Radarr imported, %d Sonarr imported, %d total known",
-        len(radarr_imported), len(sonarr_imported), len(all_imported),
+        len(radarr_imported),
+        len(sonarr_imported),
+        len(all_imported),
     )
 
     # ── 5. Filter: only truly stuck downloads ─────────────────
@@ -258,19 +299,22 @@ async def get_stuck_downloads(db: AsyncSession) -> list[dict[str, Any]]:
         elif category in ("sonarr", "tv", "series"):
             media_type = "series"
 
-        stuck.append({
-            "nzo_id": slot.get("nzo_id", ""),
-            "name": name,
-            "category": category,
-            "media_type": media_type,
-            "size_human": slot.get("size", "0 B"),
-            "storage_path": final_path,
-            "completed": slot.get("completed"),
-        })
+        stuck.append(
+            {
+                "nzo_id": slot.get("nzo_id", ""),
+                "name": name,
+                "category": category,
+                "media_type": media_type,
+                "size_human": slot.get("size", "0 B"),
+                "storage_path": final_path,
+                "completed": slot.get("completed"),
+            }
+        )
 
     logger.info(
         "Stuck downloads: %d completed, %d truly orphaned after duplicate check",
-        len(completed), len(stuck),
+        len(completed),
+        len(stuck),
     )
     return stuck
 
@@ -279,8 +323,13 @@ async def trigger_manual_import(
     db: AsyncSession,
     download_path: str,
     media_type: str,
+    allow_overwrite: bool = False,
 ) -> dict[str, Any]:
     """Import a stuck download into the media library.
+
+    ``allow_overwrite`` must stay False for the scheduled job: candidates
+    whose destination already holds a file are skipped rather than
+    replaced.  Only an explicit user action should pass True.
 
     Strategy (3-phase):
     ───────────────────────────────────────────────────────────
@@ -320,41 +369,82 @@ async def trigger_manual_import(
 
     try:
         # ── Build a match_name from the download path ────────
-        path_parts = download_path.rstrip("/").split("/")
         match_name = ""
-        scan_folder = "/data"
+        # Path as seen *inside* the *arr container.  It must sit on the
+        # same mount as the library, otherwise every import degrades from
+        # a hardlink to a full copy (EXDEV across Docker bind mounts).
+        scan_folder = settings.ARR_DOWNLOADS_PATH
 
-        for i, part in enumerate(path_parts):
-            if part in ("sonarr", "radarr", "data", "complete"):
-                if i + 1 < len(path_parts):
-                    match_name = path_parts[i + 1].lower()
-                    scan_folder = "/".join(path_parts[: i + 1])
-                    break
+        # The download client reports its own view ("/data/sonarr/X",
+        # "/downloads/complete/sonarr/X").  Only the release name is
+        # reusable — the folder must be rebuilt from ARR_DOWNLOADS_PATH,
+        # which is the path valid inside Sonarr/Radarr.
+        _ROOTS = ("data", "downloads", "complete")
+        _LABELS = ("sonarr", "radarr")
+        stripped = download_path.rstrip("/")
+        if stripped.startswith(settings.ARR_DOWNLOADS_PATH):
+            stripped = stripped[len(settings.ARR_DOWNLOADS_PATH) :]
+        rest = [p for p in stripped.split("/") if p]
+        while rest and rest[0].lower() in _ROOTS:
+            rest.pop(0)
+        if rest and rest[0].lower() in _LABELS:
+            scan_folder = f"{settings.ARR_DOWNLOADS_PATH}/{rest.pop(0).lower()}"
 
-        if not match_name:
-            match_name = path_parts[-1].lower() if path_parts[-1] else path_parts[-2].lower()
+        if rest:
+            match_name = rest[0].lower()
 
         # Remove file extension for matching
-        if "." in match_name and match_name.rsplit(".", 1)[-1] in ("mkv", "mp4", "avi", "srt", "nfo"):
+        if "." in match_name and match_name.rsplit(".", 1)[-1] in (
+            "mkv",
+            "mp4",
+            "avi",
+            "srt",
+            "nfo",
+        ):
             match_name = match_name.rsplit(".", 1)[0]
 
         logger.info(
             "Manual import [%s]: match_name='%s' scan_folder='%s'",
-            target_service, match_name, scan_folder,
+            target_service,
+            match_name,
+            scan_folder,
         )
 
-        # ── PHASE 1: ManualImport from /data ─────────────────
+        # ── PHASE 1: ManualImport from the downloads folder ──
         matched = await find_candidates(client, scan_folder, match_name)
-        if not matched and scan_folder != "/data":
-            matched = await find_candidates(client, "/data", match_name)
+        for fallback in (settings.ARR_DOWNLOADS_PATH, "/data"):
+            if matched or fallback == scan_folder:
+                continue
+            matched = await find_candidates(client, fallback, match_name)
+
+        found = len(matched)
+        matched = filter_safe_candidates(matched, target_service, allow_overwrite)
+
+        if found and not matched:
+            # Candidates existed but every one was unsafe.  Phase 2 would
+            # only rescan the library for the same files, so stop here and
+            # tell the caller this is a deliberate skip, not a failure —
+            # otherwise the scheduled job retries it forever.
+            return {
+                "success": False,
+                "skipped": True,
+                "service": target_service,
+                "error": (
+                    f"{found} fichier(s) écarté(s) : rejet *arr ou destination "
+                    f"déjà pourvue (import automatique sans écrasement)"
+                ),
+            }
 
         if matched:
             files_payload = build_import_payload(matched, target_service)
-            command = await client.post("/command", data={
-                "name": "ManualImport",
-                "files": files_payload,
-                "importMode": "move",
-            })
+            command = await client.post(
+                "/command",
+                data={
+                    "name": "ManualImport",
+                    "files": files_payload,
+                    "importMode": "move",
+                },
+            )
             logger.info(
                 "Phase 1 OK: ManualImport of %d file(s) from /data",
                 len(files_payload),
@@ -368,9 +458,7 @@ async def trigger_manual_import(
                 "service": target_service,
                 "command_id": command.get("id"),
                 "files_count": len(files_payload),
-                "message": (
-                    f"{len(files_payload)} fichier(s) importé(s) et renommage lancé"
-                ),
+                "message": (f"{len(files_payload)} fichier(s) importé(s) et renommage lancé"),
             }
 
         # ── PHASE 2: Check in the library folder ─────────────
@@ -396,7 +484,12 @@ async def trigger_manual_import(
                 if download_clean in clean or clean in download_clean:
                     library_path = s.get("path")
                     series_id = s.get("id")
-                    logger.info("Matched series: %s (id=%d, path=%s)", s.get("title"), series_id, library_path)
+                    logger.info(
+                        "Matched series: %s (id=%d, path=%s)",
+                        s.get("title"),
+                        series_id,
+                        library_path,
+                    )
                     break
 
             if library_path and series_id:
@@ -406,26 +499,30 @@ async def trigger_manual_import(
                 # Season X/ folders is via the Rename API.
                 logger.info(
                     "Phase 2: checking rename for seriesId=%d ('%s')",
-                    series_id, match_name,
+                    series_id,
+                    match_name,
                 )
                 renames = await client.get("/rename", params={"seriesId": series_id})
                 if isinstance(renames, list) and renames:
                     matching_renames = [
-                        r for r in renames
-                        if match_name in (r.get("existingPath") or "").lower()
+                        r for r in renames if match_name in (r.get("existingPath") or "").lower()
                     ]
                     if matching_renames:
                         file_ids = [r.get("episodeFileId") for r in matching_renames]
                         logger.info(
                             "Phase 2 (rename): %d file(s) to rename for series %d: %s",
-                            len(file_ids), series_id,
+                            len(file_ids),
+                            series_id,
                             [(r.get("existingPath"), r.get("newPath")) for r in matching_renames],
                         )
-                        command = await client.post("/command", data={
-                            "name": "RenameSeries",
-                            "seriesId": series_id,
-                            "files": file_ids,
-                        })
+                        command = await client.post(
+                            "/command",
+                            data={
+                                "name": "RenameSeries",
+                                "seriesId": series_id,
+                                "files": file_ids,
+                            },
+                        )
                         return {
                             "success": True,
                             "service": target_service,
@@ -462,25 +559,33 @@ async def trigger_manual_import(
                         c_path = (c.get("path") or "").lower()
                         if match_name in c_path:
                             rejections = c.get("rejections", [])
-                            permanent = any(
-                                r.get("type") == "permanent"
-                                for r in rejections
-                            )
+                            permanent = any(r.get("type") == "permanent" for r in rejections)
                             if not permanent:
                                 matched_lib.append(c)
                                 logger.info(
-                                    "Phase 2: matched candidate %s", c_path,
+                                    "Phase 2: matched candidate %s",
+                                    c_path,
                                 )
+
+                    matched_lib = filter_safe_candidates(
+                        matched_lib,
+                        target_service,
+                        allow_overwrite,
+                    )
 
                     if matched_lib:
                         files_payload = build_import_payload(
-                            matched_lib, target_service,
+                            matched_lib,
+                            target_service,
                         )
-                        command = await client.post("/command", data={
-                            "name": "ManualImport",
-                            "files": files_payload,
-                            "importMode": "move",
-                        })
+                        command = await client.post(
+                            "/command",
+                            data={
+                                "name": "ManualImport",
+                                "files": files_payload,
+                                "importMode": "move",
+                            },
+                        )
                         logger.info(
                             "Phase 2 OK: ManualImport of %d file(s) from library",
                             len(files_payload),
@@ -491,8 +596,7 @@ async def trigger_manual_import(
                             "command_id": command.get("id"),
                             "files_count": len(files_payload),
                             "message": (
-                                f"{len(files_payload)} fichier(s) importé(s) "
-                                f"depuis la bibliothèque"
+                                f"{len(files_payload)} fichier(s) importé(s) depuis la bibliothèque"
                             ),
                         }
 
@@ -507,10 +611,13 @@ async def trigger_manual_import(
                 if download_key in clean or clean in download_key:
                     movie_id = m.get("id")
                     # Trigger rename
-                    command = await client.post("/command", data={
-                        "name": "RenameMovie",
-                        "movieId": movie_id,
-                    })
+                    command = await client.post(
+                        "/command",
+                        data={
+                            "name": "RenameMovie",
+                            "movieId": movie_id,
+                        },
+                    )
                     return {
                         "success": True,
                         "service": "radarr",
@@ -537,5 +644,3 @@ async def trigger_manual_import(
 
 # _find_candidates, _build_import_payload, and _trigger_rename
 # have been extracted to import_helpers.py
-
-

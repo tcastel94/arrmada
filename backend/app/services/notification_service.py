@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import select, func, update, delete
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.notification import Notification
@@ -82,11 +82,7 @@ async def get_unread_count(db: AsyncSession) -> int:
 
 async def mark_as_read(db: AsyncSession, notification_id: int) -> bool:
     """Mark a single notification as read."""
-    stmt = (
-        update(Notification)
-        .where(Notification.id == notification_id)
-        .values(is_read=True)
-    )
+    stmt = update(Notification).where(Notification.id == notification_id).values(is_read=True)
     result = await db.execute(stmt)
     return result.rowcount > 0
 
@@ -105,12 +101,7 @@ async def mark_all_as_read(db: AsyncSession) -> int:
 async def delete_old_notifications(db: AsyncSession, keep: int = 200) -> int:
     """Delete notifications beyond the most recent `keep`. Returns count deleted."""
     # Get the ID threshold
-    subq = (
-        select(Notification.id)
-        .order_by(Notification.created_at.desc())
-        .offset(keep)
-        .limit(1)
-    )
+    subq = select(Notification.id).order_by(Notification.created_at.desc()).offset(keep).limit(1)
     result = await db.execute(subq)
     threshold_id = result.scalar()
 

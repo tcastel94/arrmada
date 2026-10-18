@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api-client";
+import type { YamahaPresetResult } from "@/hooks/use-yamaha";
 
 /* ── Watched / resume status (library badges) ──────────────── */
 
@@ -26,12 +27,33 @@ export function useKodiWatchedStatus(enabled = true) {
 
 /* ── Play on Kodi ──────────────────────────────────────────── */
 
+/**
+ * Pièce où l'on regarde. Le backend lance la lecture sur Kodi PUIS applique
+ * à l'ampli Yamaha le préréglage de cette pièce (volume, programme sonore,
+ * dialogues…). Sans précision, il choisit « salon ».
+ */
+export type KodiRoom = "salon" | "cinema";
+
+/** Réponse de POST /api/kodi/play. */
+export interface KodiPlayResult {
+    /** "ok", "not_found" (film absent de la bibliothèque Kodi) ou "error". */
+    status: string;
+    detail?: string;
+    /** Nom de l'instance Kodi qui a lancé la lecture. */
+    kodi?: string;
+    movieid?: number;
+    /** Pièce effectivement utilisée pour le préréglage de l'ampli. */
+    room?: string;
+    /**
+     * Résultat du réglage de l'ampli (null si l'appel a échoué en interne,
+     * absent sur un backend plus ancien). `status: "error"` + `detail` quand
+     * aucun ampli n'est configuré ou qu'il n'a pas répondu.
+     */
+    avr?: YamahaPresetResult | null;
+}
+
 export function useKodiPlay() {
-    return useMutation<
-        { status: string; detail?: string; kodi?: string; movieid?: number },
-        Error,
-        { tmdb_id: number; service_id?: number }
-    >({
+    return useMutation<KodiPlayResult, Error, { tmdb_id: number; service_id?: number; room?: KodiRoom }>({
         mutationFn: (body) =>
             apiFetch("/api/kodi/play", { method: "POST", body: JSON.stringify(body) }),
     });

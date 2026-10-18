@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import JSON, Index, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
@@ -25,23 +25,33 @@ class ActivityEvent(Base):
     ts: Mapped[datetime] = mapped_column(default=func.now(), index=True)
 
     # Taxonomy
-    category: Mapped[str] = mapped_column(String(32), index=True)  # download|subtitle|playback|library|telegram|system
-    action: Mapped[str] = mapped_column(String(48))               # kodi_play|sub_download|sub_sync|search|grab|delete|add|…
+    category: Mapped[str] = mapped_column(
+        String(32), index=True
+    )  # download|subtitle|playback|library|telegram|system
+    action: Mapped[str] = mapped_column(
+        String(48)
+    )  # kodi_play|sub_download|sub_sync|search|grab|delete|add|…
     status: Mapped[str] = mapped_column(String(16), default="ok")  # ok|ko|info
-    source: Mapped[str] = mapped_column(String(32), default="arrmada")  # arrmada|kodi|radarr|sonarr|bazarr|telegram
+    source: Mapped[str] = mapped_column(
+        String(32), default="arrmada"
+    )  # arrmada|kodi|radarr|sonarr|bazarr|telegram
 
     # Media reference (for grouping by média)
-    media_type: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)  # movie|series
-    media_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)     # radarr/sonarr id (external_id)
-    tmdb_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    title: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)
-    subtitle: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)   # episode label / provider / language
+    media_type: Mapped[str | None] = mapped_column(String(16), nullable=True)  # movie|series
+    media_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )  # radarr/sonarr id (external_id)
+    tmdb_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    title: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    subtitle: Mapped[str | None] = mapped_column(
+        String(300), nullable=True
+    )  # episode label / provider / language
 
     # Details
-    detail: Mapped[Optional[str]] = mapped_column(Text, nullable=True)             # KO reason, free text
-    duration_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    device: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)      # Kodi/AVR name
-    meta: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    detail: Mapped[str | None] = mapped_column(Text, nullable=True)  # KO reason, free text
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    device: Mapped[str | None] = mapped_column(String(120), nullable=True)  # Kodi/AVR name
+    meta: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     __table_args__ = (
         Index("ix_activity_media", "media_type", "media_id"),

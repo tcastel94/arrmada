@@ -10,7 +10,7 @@
  *    (avant : redirection vers l'assistant d'installation, ce qui
  *    renvoyait un utilisateur DÉJÀ configuré dans le wizard → erreur 409).
  */
-import Image from "next/image";
+import { BrandIcon } from "@/components/brand/brand-mark";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
@@ -91,7 +91,7 @@ function Splash({ children }: { children: React.ReactNode }) {
                 <div className="absolute inset-0 -m-8 animate-pulse-glow rounded-full bg-primary/30 blur-3xl" />
                 <div className="border-beam relative h-24 w-24 rounded-3xl p-[2px]">
                     <div className="h-full w-full overflow-hidden rounded-[22px]">
-                        <Image src="/logo-mark.png" alt="ArrMada" width={96} height={96} priority className="h-full w-full object-cover" />
+                        <BrandIcon title="ArrMada" animated />
                     </div>
                 </div>
             </motion.div>

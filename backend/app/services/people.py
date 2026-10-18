@@ -38,7 +38,8 @@ async def _radarr_library_map(db: AsyncSession) -> dict[int, dict[str, Any]]:
     """Return {tmdbId: {"radarr_id", "has_file", "title"}} for the whole
     Radarr library, so we can tell which of an actor's movies are owned."""
     stmt = select(Service).where(
-        Service.is_enabled == True, Service.type == "radarr"  # noqa: E712
+        Service.is_enabled == True,
+        Service.type == "radarr",  # noqa: E712
     )
     result = await db.execute(stmt)
     svc = result.scalars().first()
@@ -66,9 +67,7 @@ async def _radarr_library_map(db: AsyncSession) -> dict[int, dict[str, Any]]:
     return out
 
 
-async def get_person_filmography(
-    db: AsyncSession, person_id: int
-) -> dict[str, Any]:
+async def get_person_filmography(db: AsyncSession, person_id: int) -> dict[str, Any]:
     """Fetch a TMDB person's movie filmography split by library ownership."""
     if not settings.TMDB_API_KEY:
         return {"error": "TMDB non configuré", "person": None, "in_library": [], "discover": []}
@@ -99,7 +98,7 @@ async def get_person_filmography(
         "place_of_birth": pdata.get("place_of_birth"),
     }
 
-    cast = (credits_resp.json().get("cast", []) if credits_resp.status_code == 200 else [])
+    cast = credits_resp.json().get("cast", []) if credits_resp.status_code == 200 else []
 
     lib = await _radarr_library_map(db)
 
@@ -124,16 +123,18 @@ async def get_person_filmography(
         }
         owned = lib.get(int(tid))
         if owned:
-            in_library.append({
-                **base,
-                "radarr_id": owned["radarr_id"],
-                "has_file": owned["has_file"],
-            })
+            in_library.append(
+                {
+                    **base,
+                    "radarr_id": owned["radarr_id"],
+                    "has_file": owned["has_file"],
+                }
+            )
         else:
             discover.append(base)
 
     # In-library first, newest first; discover ranked by popularity.
-    in_library.sort(key=lambda x: (x["year"] or 0), reverse=True)
+    in_library.sort(key=lambda x: x["year"] or 0, reverse=True)
     discover.sort(key=lambda x: x["popularity"], reverse=True)
 
     return {

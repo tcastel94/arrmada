@@ -29,9 +29,14 @@ class SonarrClient(ArrBaseClient):
         """Add a new series to Sonarr."""
         return await self.post("/series", data=data)
 
-    async def delete_series(self, series_id: int, delete_files: bool = False) -> None:
-        """Delete a series from Sonarr."""
-        url = f"/series/{series_id}?deleteFiles={str(delete_files).lower()}"
+    async def delete_series(
+        self, series_id: int, delete_files: bool = False, add_exclusion: bool = False
+    ) -> None:
+        """Delete a series from Sonarr, optionally adding it to the import-list exclusions."""
+        url = (
+            f"/series/{series_id}?deleteFiles={str(delete_files).lower()}"
+            f"&addImportListExclusion={str(add_exclusion).lower()}"
+        )
         resp = await self.client.delete(f"{self.API_PREFIX}{url}")
         resp.raise_for_status()
 
@@ -46,7 +51,9 @@ class SonarrClient(ArrBaseClient):
         return await self.get("/rootfolder")
 
     # ── Calendar ──────────────────────────────────────────────
-    async def get_calendar(self, start: str | None = None, end: str | None = None) -> list[dict[str, Any]]:
+    async def get_calendar(
+        self, start: str | None = None, end: str | None = None
+    ) -> list[dict[str, Any]]:
         """Fetch upcoming episodes."""
         params: dict[str, str] = {}
         if start:
@@ -58,7 +65,9 @@ class SonarrClient(ArrBaseClient):
     # ── Queue ─────────────────────────────────────────────────
     async def get_queue(self) -> dict[str, Any]:
         """Fetch the download queue."""
-        return await self.get("/queue", params={"pageSize": 50})
+        # Toute la file : un pack de saison y compte une ligne PAR ÉPISODE,
+        # 50 lignes ne suffisent pas (la fin de la file disparaissait)
+        return await self.get("/queue", params={"pageSize": 1000})
 
     # ── Disk Space ────────────────────────────────────────────
     async def get_disk_space(self) -> list[dict[str, Any]]:
@@ -158,8 +167,7 @@ class SonarrClient(ArrBaseClient):
     ) -> None:
         """Remove a queue item, optionally from the download client and/or blocklisting it."""
         params = (
-            f"removeFromClient={str(remove_from_client).lower()}"
-            f"&blocklist={str(blocklist).lower()}"
+            f"removeFromClient={str(remove_from_client).lower()}&blocklist={str(blocklist).lower()}"
         )
         url = f"{self.API_PREFIX}/queue/{queue_id}?{params}"
         resp = await self.client.delete(url)

@@ -23,7 +23,8 @@ export type SSEEventType =
   | "subtitle_update"
   | "cache_invalidated"
   | "notification"
-  | "webhook_test";
+  | "webhook_test"
+  | "watch_state";
 
 /**
  * Hook to connect to the SSE event stream and auto-invalidate React Query caches.
@@ -73,6 +74,8 @@ export function useSSE(options?: {
       subtitle_update: [["media"]],
       cache_invalidated: [["media"], ["dashboard"], ["search"]],
       notification: [["notifications"]],
+      // Une TV a vu / repris un titre : badges et page Reprendre (appli Kodi 1.19)
+      watch_state: [["kodi", "watch-summary"]],
     };
 
     // Listen for all event types
@@ -80,7 +83,7 @@ export function useSSE(options?: {
       "connected", "service_status", "download_grab", "download_update",
       "new_import", "media_renamed", "media_deleted", "health_alert",
       "health_restored", "subtitle_update", "cache_invalidated",
-      "notification", "webhook_test",
+      "notification", "webhook_test", "watch_state",
     ];
 
     for (const eventType of eventTypes) {

@@ -10,8 +10,8 @@ from app.api.deps import get_current_user, get_db
 from app.services.notification_service import (
     get_notifications,
     get_unread_count,
-    mark_as_read,
     mark_all_as_read,
+    mark_as_read,
 )
 
 router = APIRouter(

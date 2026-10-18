@@ -18,6 +18,10 @@ class BazarrClient(ArrBaseClient):
     API_PREFIX: str = "/api"
     STATUS_ENDPOINT: str = "/system/status"
 
+    def __init__(self, url: str, api_key: str, *, timeout: int = 60) -> None:
+        """Initialize BazarrClient with a higher default timeout (60s) for slow subtitle downloads."""
+        super().__init__(url, api_key, timeout=timeout)
+
     # Override to use Bazarr-specific auth header
     @property
     def client(self):
@@ -33,9 +37,7 @@ class BazarrClient(ArrBaseClient):
         return self._client
 
     # ── Raw helpers (Bazarr writes use query params, not a JSON body) ──
-    async def _request_params(
-        self, method: str, endpoint: str, params: dict[str, Any]
-    ) -> Any:
+    async def _request_params(self, method: str, endpoint: str, params: dict[str, Any]) -> Any:
         """Perform an arbitrary request passing all data as query params.
 
         Bazarr's mutating endpoints (subtitle download/delete, provider
@@ -46,9 +48,7 @@ class BazarrClient(ArrBaseClient):
         url = f"{self.API_PREFIX}{endpoint}"
         # Bazarr expects booleans as the literal strings "True"/"False".
         norm = {
-            k: (str(v) if isinstance(v, bool) else v)
-            for k, v in params.items()
-            if v is not None
+            k: (str(v) if isinstance(v, bool) else v) for k, v in params.items() if v is not None
         }
         resp = await self.client.request(method, url, params=norm)
         resp.raise_for_status()
@@ -81,15 +81,11 @@ class BazarrClient(ArrBaseClient):
     # ── Wanted ────────────────────────────────────────────────
     async def get_wanted_series(self, length: int = -1) -> dict[str, Any]:
         """Fetch series episodes with wanted (missing) subtitles."""
-        return await self.get(
-            "/episodes/wanted", params={"start": 0, "length": length}
-        )
+        return await self.get("/episodes/wanted", params={"start": 0, "length": length})
 
     async def get_wanted_movies(self, length: int = -1) -> dict[str, Any]:
         """Fetch movies with wanted (missing) subtitles."""
-        return await self.get(
-            "/movies/wanted", params={"start": 0, "length": length}
-        )
+        return await self.get("/movies/wanted", params={"start": 0, "length": length})
 
     # ── Disk scan (re-index a movie's subtitles) ──────────────
     async def scan_movie_disk(self, radarr_id: int) -> Any:

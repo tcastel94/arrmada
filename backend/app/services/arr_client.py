@@ -16,6 +16,7 @@ logger = get_logger(__name__)
 @dataclass
 class HealthStatus:
     """Result of a health check."""
+
     status: str  # online, offline, degraded
     latency_ms: int | None = None
     version: str | None = None

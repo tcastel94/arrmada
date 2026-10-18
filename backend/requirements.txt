@@ -14,6 +14,9 @@ pydantic-settings==2.7.1
 
 # HTTP client
 httpx==0.28.1
+# Client WebSocket (caméras Eufy via eufy-security-ws) ; déjà tiré par
+# uvicorn[standard], épinglé ici car importé directement
+websockets==17.2
 
 # Auth
 python-jose[cryptography]==3.3.0
@@ -33,6 +36,9 @@ scikit-learn==1.6.1
 
 # Rate limiting
 slowapi==0.1.9
+
+# QR codes (appairage des TV, PNG sans dépendance)
+segno==1.6.6
 
 # Testing
 pytest==8.3.4

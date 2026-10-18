@@ -170,6 +170,11 @@ export const DownloadCard = forwardRef<HTMLLIElement, DownloadCardProps>(functio
                                     {status.label}
                                 </span>
                                 <ClientBadge client={item.download_client} protocol={item.protocol} />
+                                {(item.episode_count ?? 0) > 1 && (
+                                    <span className="rounded-md bg-primary/10 px-1.5 py-px text-[10px] font-semibold text-primary ring-1 ring-inset ring-primary/20">
+                                        {item.episode_count} épisodes
+                                    </span>
+                                )}
                                 {item.quality && (
                                     <span className="rounded-md bg-white/[0.05] px-1.5 py-px text-[10px] font-semibold text-foreground/80 ring-1 ring-inset ring-white/[0.08]">
                                         {item.quality}
