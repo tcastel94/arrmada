@@ -23,6 +23,7 @@ Le script produit :
 - Web app : `frontend/src/app/{icon.png, apple-icon.png, favicon.ico}`, `frontend/public/{logo-mark.png, logo-mark-192.png, logo-full.png, og-image.png}`.
 - README : `docs/banner.png`.
 - Add-on Kodi : `resources/icon.png` (carrée, sans transparence, comme le demande Kodi) et `resources/fanart.jpg`.
+- Appli Android : `android/app/src/main/res/drawable/{ic_logo, ic_launcher_foreground, ic_launcher_background}.xml` (logo et icône adaptative, en vectoriel) et `drawable-xhdpi/banner.png` (tuile du lanceur Android TV).
 - Intro de l'appli Kodi : les calques `resources/skins/Default/media/arrmada/brand-*.png` (les deux jambes du « A », le bouton lecture, le nom et l'accroche).
 
 Dans la web app, le logo est dessiné en SVG par le composant `frontend/src/components/brand/brand-mark.tsx`, qui reprend les mêmes tracés. Si le logo change, il faut modifier les deux fichiers.

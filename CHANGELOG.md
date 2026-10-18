@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Android app: phone, tablet and Android TV (APK 1.0.0)
+
+#### Added
+- **Android app** (`android/`, ADR-006): a minimal native app (Kotlin, WebView, 3 AndroidX libraries) that opens the ArrMada web app of your server. Updating the server updates the app; the APK only changes for its own behaviour
+- **Connection screen**: server address checked before it is saved (answers within 5 s, and is really ArrMada: catches the API port 8420 typed instead of the web port), clear French error per case (unknown name, timeout, HTTPS certificate, HTTP error), "Enregistrer sans tester" escape hatch
+- **Back key**: closes the open dialog / menu / select first (Escape sent to the page), then previous page, then an app menu (*Recharger*, *Changer de serveur*, *Quitter*); the remote's Menu key opens the same menu
+- **Android TV**: listed in the TV launcher with its 320×180 banner; arrows move a visible blue focus ring to the nearest clickable element (spatial navigation, components that handle their own arrows are left alone), OK clicks, OK on a field opens the on-screen keyboard; layout width 960 / 1280 (default) / 1600 px to read from the couch
+- Native "Serveur ArrMada injoignable" screen (network error, 502/503/504) with *Réessayer* / *Changer de serveur*; links to other sites open in the device browser; trailers go full screen; a crashed WebView engine rebuilds the screen instead of closing the app
+- Network: local HTTP allowed, user-installed CA trusted (homelab reverse proxy), invalid certificates always refused
+- `android/build-apk.sh`: unit tests + APK + signature check, `--init-keystore` (release key kept out of the repo, in `~/.arrmada/`), `--install <ip>` over adb; versionCode = git commit count
+- CI `android.yml`: injected scripts tested in Chromium (20 checks), Kotlin unit tests, APK uploaded as an artifact (release-signed when the `ARRMADA_KEYSTORE_*` secrets exist, debug otherwise)
+- `branding/export.py` also generates the Android vector icon (adaptive, themed) and the TV banner from the logo SVG
+
 ### Jellyfin: "Passer l'intro" without chapters, cast episodes (Kodi add-on 1.25.0)
 
 #### Added
