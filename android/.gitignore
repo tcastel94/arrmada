@@ -1,0 +1,17 @@
+# Sorties de build Gradle
+.gradle/
+build/
+app/build/
+# APK produits par build-apk.sh
+dist/
+# Chemin du SDK propre à chaque machine
+local.properties
+# Fichiers d'Android Studio
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+# Ne JAMAIS committer une clé de signature
+*.jks
+*.keystore

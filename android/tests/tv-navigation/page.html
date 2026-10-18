@@ -1,0 +1,22 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ArrMada test</title>
+<style>body{margin:0;font:16px sans-serif} nav{position:fixed;left:0;top:0;width:150px} nav a{display:block;height:40px;margin:8px}
+main{margin-left:180px;padding:20px} .grid{display:grid;grid-template-columns:repeat(3,120px);gap:16px} .grid button{height:80px}
+#far{margin-top:2000px}</style></head><body>
+<nav><a href="#a" id="n0">Accueil</a><a href="#b" id="n1">Films</a><a href="#c" id="n2">Séries</a></nav>
+<main>
+<div class="grid">
+<button id="g00">00</button><button id="g01">01</button><button id="g02">02</button>
+<button id="g10">10</button><button id="g11">11</button><button id="g12">12</button>
+<button id="g20">20</button><button id="g21">21</button><button id="g22">22</button>
+</div>
+<div style="height:20px"></div>
+<input id="field" type="text" value="abc" style="width:300px">
+<div id="card" role="button" tabindex="0" style="width:200px;height:60px;margin-top:20px">card</div>
+<div id="widget" tabindex="0" style="width:200px;height:40px;margin-top:20px">widget</div>
+<div tabindex="-1" style="width:400px;height:100px">conteneur tabindex -1</div>
+<button id="far">tout en bas</button>
+</main>
+<script>
+window.clicked=[]; document.getElementById('card').addEventListener('click',()=>clicked.push('card'));
+document.getElementById('widget').addEventListener('keydown',e=>{ if(e.key==='ArrowDown'){e.preventDefault(); clicked.push('widget-down');} });
+</script></body></html>

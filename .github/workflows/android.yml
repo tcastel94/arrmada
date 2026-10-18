@@ -1,0 +1,109 @@
+name: ArrMada Android
+
+# ────────────────────────────────────────────────────────────────
+# Compile l'APK Android (téléphone, tablette, Android TV) à chaque
+# changement dans android/, et le publie comme « artifact » GitHub :
+# onglet Actions > ce workflow > dernier run > section Artifacts.
+#
+# Signature : si les secrets ARRMADA_KEYSTORE_* existent (voir
+# android/README.md), l'APK est signé avec la clé release et peut
+# mettre à jour l'appli installée. Sinon on produit un APK de test
+# (clé de debug jetable : à désinstaller avant chaque nouvelle version).
+# ────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    branches: [main, android/apk]
+    paths:
+      - "android/**"
+      - ".github/workflows/android.yml"
+  pull_request:
+    paths:
+      - "android/**"
+      - ".github/workflows/android.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Scripts injectés dans la web app (navigation TV, touche Retour) ──
+  tv-navigation:
+    name: "Android — Navigation TV (Chromium)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Playwright + Chromium
+        # Installé à part (pas de package.json dans android/) : seul ce test s'en sert.
+        run: |
+          npm install --no-save --prefix "$RUNNER_TEMP/pw" playwright@1.56.1
+          "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install --with-deps chromium
+
+      - name: Run tests
+        run: NODE_PATH="$RUNNER_TEMP/pw/node_modules" node android/tests/tv-navigation/run.cjs
+
+  # ── Tests Kotlin + APK ──────────────────────────────────────────
+  build-apk:
+    name: "Android — Tests & APK"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Historique complet : le numéro de version interne de l'APK est
+          # le nombre de commits, il doit toujours augmenter.
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # Cache Gradle + vérification de l'intégrité de gradle-wrapper.jar.
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Signing key (optional secret)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ARRMADA_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/arrmada-release.jks"
+            echo "ARRMADA_KEYSTORE=$RUNNER_TEMP/arrmada-release.jks" >> "$GITHUB_ENV"
+            echo "BUILD_TYPE=release" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Pas de secret ARRMADA_KEYSTORE_BASE64 : APK de test (debug) produit. Voir android/README.md, « Signature »."
+            echo "BUILD_TYPE=debug" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build APK (unit tests included)
+        env:
+          ARRMADA_KEYSTORE_PASSWORD: ${{ secrets.ARRMADA_KEYSTORE_PASSWORD }}
+          ARRMADA_KEY_ALIAS: ${{ secrets.ARRMADA_KEY_ALIAS }}
+          ARRMADA_KEY_PASSWORD: ${{ secrets.ARRMADA_KEY_PASSWORD }}
+        run: ./build-apk.sh "--$BUILD_TYPE"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: arrmada-android-${{ env.BUILD_TYPE }}
+          path: |
+            android/dist/*.apk
+            android/dist/*.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload test report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-test-report
+          path: android/app/build/reports/
+          if-no-files-found: ignore

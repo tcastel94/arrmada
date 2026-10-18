@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- …et sur TV, pour ne pas étirer le formulaire sur toute la largeur. -->
+<resources>
+    <dimen name="setup_side_padding">220dp</dimen>
+</resources>

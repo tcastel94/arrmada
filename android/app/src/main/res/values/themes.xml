@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Thème sombre unique (fond nuit, accent #4A9EFF). On part du thème « Material »
+  intégré à Android : pas de bibliothèque de thème à embarquer.
+-->
+<resources>
+    <style name="Theme.ArrMada" parent="android:Theme.Material.NoActionBar">
+        <item name="android:colorPrimary">@color/accent</item>
+        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:colorControlActivated">@color/accent</item>
+        <item name="android:windowBackground">@color/night</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:textColorPrimary">@color/text</item>
+        <item name="android:textColorSecondary">@color/muted</item>
+        <item name="android:alertDialogTheme">@style/Theme.ArrMada.Dialog</item>
+    </style>
+
+    <style name="Theme.ArrMada.Dialog" parent="android:Theme.Material.Dialog.Alert">
+        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:colorBackground">@color/card</item>
+        <item name="android:textColorPrimary">@color/text</item>
+    </style>
+
+    <!-- Bouton principal : fond bleu ; liseré blanc quand il a le focus (TV). -->
+    <style name="ArrMada.Button" parent="android:Widget.Material.Button">
+        <item name="android:background">@drawable/btn_primary</item>
+        <item name="android:textColor">@color/night</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:minHeight">52dp</item>
+        <item name="android:paddingStart">24dp</item>
+        <item name="android:paddingEnd">24dp</item>
+        <item name="android:stateListAnimator">@null</item>
+    </style>
+
+    <!-- Bouton secondaire : contour ; liseré bleu épais quand il a le focus. -->
+    <style name="ArrMada.Button.Secondary">
+        <item name="android:background">@drawable/btn_secondary</item>
+        <item name="android:textColor">@color/text</item>
+    </style>
+
+    <style name="ArrMada.Radio" parent="android:Widget.Material.CompoundButton.RadioButton">
+        <item name="android:background">@drawable/focus_bg</item>
+        <item name="android:buttonTint">@color/accent</item>
+        <item name="android:textColor">@color/text</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:padding">12dp</item>
+        <item name="android:minHeight">48dp</item>
+    </style>
+
+    <style name="ArrMada.Title">
+        <item name="android:textColor">@color/text</item>
+        <item name="android:textSize">24sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="ArrMada.Body">
+        <item name="android:textColor">@color/muted</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:lineSpacingMultiplier">1.2</item>
+    </style>
+</resources>

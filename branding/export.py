@@ -18,6 +18,9 @@ Fichiers produits (à committer) :
   kodi-addon/script.arrmada/resources/{icon.png, fanart.jpg}
   kodi-addon/script.arrmada/resources/skins/Default/media/arrmada/brand-*.png
     (calques de l'intro Kodi : jambes du A, lecture, nom, accroche)
+  android/app/src/main/res/drawable/{ic_logo, ic_launcher_foreground,
+    ic_launcher_background}.xml (logo et icône de l'appli Android, en vectoriel)
+  android/app/src/main/res/drawable-xhdpi/banner.png (tuile du lanceur Android TV)
 """
 
 from __future__ import annotations
@@ -39,6 +42,7 @@ FRONT_APP = ROOT / "frontend" / "src" / "app"
 FRONT_PUBLIC = ROOT / "frontend" / "public"
 KODI_RES = ROOT / "kodi-addon" / "script.arrmada" / "resources"
 KODI_MEDIA = KODI_RES / "skins" / "Default" / "media" / "arrmada"
+ANDROID_RES = ROOT / "android" / "app" / "src" / "main" / "res"
 
 BG = (10, 14, 22)  # #0A0E16, fond de la web app et de l'appli Kodi
 ACCENT = (74, 158, 255)  # #4A9EFF
@@ -232,6 +236,105 @@ def kodi_intro_layers(tmp: Path) -> list[Path]:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Appli Android : icône vectorielle (nette à toutes les densités) + bannière TV
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def android_vector(viewport: int, scale: float, tx: float, ty: float) -> str:
+    """Logo au format VectorDrawable d'Android, mêmes tracés que le SVG source.
+
+    Le dégradé du « A » va de (11, 9) à (53, 54) : la boîte du tracé, comme
+    le x1=0 y1=0 x2=1 y2=1 du SVG (calé sur la boîte de l'objet).
+    """
+    a_path, play_path = mark_paths()
+    return f"""<?xml version="1.0" encoding="utf-8"?>
+<!-- Généré par branding/export.py depuis arrmada-mark.svg : ne pas modifier à la main. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="{viewport}dp"
+    android:height="{viewport}dp"
+    android:viewportWidth="{viewport}"
+    android:viewportHeight="{viewport}">
+    <group
+        android:scaleX="{scale}"
+        android:scaleY="{scale}"
+        android:translateX="{tx}"
+        android:translateY="{ty}">
+        <path
+            android:pathData="{a_path}"
+            android:strokeWidth="9"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round">
+            <aapt:attr name="android:strokeColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="11"
+                    android:startY="9"
+                    android:endX="53"
+                    android:endY="54">
+                    <item android:offset="0" android:color="#FF4A9EFF" />
+                    <item android:offset="1" android:color="#FF22E0EE" />
+                </gradient>
+            </aapt:attr>
+        </path>
+        <path
+            android:fillColor="#FFEAF6FF"
+            android:pathData="{play_path}" />
+    </group>
+</vector>
+"""
+
+
+def android_background() -> str:
+    """Fond de l'icône adaptative : le dégradé nuit de la tuile (icon_svg)."""
+    return """<?xml version="1.0" encoding="utf-8"?>
+<!-- Généré par branding/export.py : ne pas modifier à la main. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="24"
+                android:centerY="0"
+                android:gradientRadius="135">
+                <item android:offset="0" android:color="#FF17223A" />
+                <item android:offset="0.6" android:color="#FF0B111D" />
+                <item android:offset="1" android:color="#FF080B12" />
+            </gradient>
+        </aapt:attr>
+    </path>
+</vector>
+"""
+
+
+def android_assets(big_icon: Path) -> list[Path]:
+    drawable = ANDROID_RES / "drawable"
+    drawable.mkdir(parents=True, exist_ok=True)
+    files = {
+        # Logo seul, 64 dp (écran de connexion, écran d'erreur)
+        drawable / "ic_logo.xml": android_vector(64, 1, 0, 0),
+        # Icône adaptative : canevas 108 dp dont seul le disque central de
+        # 66 dp est garanti visible (le lanceur découpe le reste). Logo réduit
+        # à 80 % et centré : ses extrémités arrondies restent dans le disque.
+        drawable / "ic_launcher_foreground.xml": android_vector(108, 0.8, 28.4, 28.8),
+        drawable / "ic_launcher_background.xml": android_background(),
+    }
+    for path, content in files.items():
+        path.write_text(content, encoding="utf-8")
+
+    # Bannière Android TV : 320×180 dp, livrée en xhdpi (×2), celle de la Shield.
+    banner = ANDROID_RES / "drawable-xhdpi" / "banner.png"
+    banner.parent.mkdir(parents=True, exist_ok=True)
+    compose((640, 360), big_icon, 118, 70).save(banner, optimize=True)
+    return [*files, banner]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 
 
 def main() -> None:
@@ -265,6 +368,9 @@ def main() -> None:
         compose((1920, 1080), big, 280, 168).save(KODI_RES / "fanart.jpg", quality=90, optimize=True)
         intro = kodi_intro_layers(Path(tmp))
 
+        # Appli Android (téléphone, tablette, TV)
+        android = android_assets(big)
+
     for path in (
         rounded,
         square,
@@ -279,6 +385,7 @@ def main() -> None:
         KODI_RES / "icon.png",
         KODI_RES / "fanart.jpg",
         *intro,
+        *android,
     ):
         print(f"  + {path.relative_to(ROOT)}")
     print("OK : images de la marque régénérées")

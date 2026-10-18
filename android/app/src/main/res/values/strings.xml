@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Textes de l'appli. Apostrophes typographiques (’) : l'apostrophe droite
+     doit être échappée dans ce fichier, la typographique non. -->
+<resources>
+    <string name="app_name">ArrMada</string>
+
+    <!-- Écran de connexion -->
+    <string name="setup_title">Connexion au serveur ArrMada</string>
+    <string name="setup_help">Adresse de l’interface web ArrMada, la même que dans ton navigateur. Exemple : http://192.168.1.10:3000</string>
+    <string name="setup_hint">http://192.168.1.10:3000</string>
+    <string name="setup_save">Tester et enregistrer</string>
+    <string name="setup_save_anyway">Enregistrer sans tester</string>
+    <string name="setup_testing">Test de %1$s…</string>
+    <string name="setup_invalid">Adresse invalide. Exemple : http://192.168.1.10:3000</string>
+    <string name="setup_version">ArrMada Android %1$s</string>
+    <string name="tv_width_label">Taille de l’interface sur la TV</string>
+    <string name="tv_width_large">Grande (lisible de loin)</string>
+    <string name="tv_width_normal">Normale</string>
+    <string name="tv_width_compact">Compacte (plus de contenu à l’écran)</string>
+
+    <!-- Résultats du test de connexion -->
+    <string name="probe_not_arrmada">Ce serveur répond, mais ce n’est pas l’interface ArrMada. Vérifie le port : celui de l’interface web, pas celui de l’API.</string>
+    <string name="probe_http_error">Le serveur a répondu avec l’erreur HTTP %1$s.</string>
+    <string name="probe_unknown_host">Nom inconnu sur le réseau : %1$s. Essaie avec l’adresse IP du serveur.</string>
+    <string name="probe_timeout">Pas de réponse en 5 secondes. Vérifie l’IP, le port, et que l’appareil est sur le même réseau (ou le VPN).</string>
+    <string name="probe_ssl">Certificat HTTPS refusé. Si ton reverse proxy utilise une autorité maison, installe-la dans les paramètres de sécurité d’Android.</string>
+    <string name="probe_unreachable">Connexion impossible : %1$s</string>
+
+    <!-- Écran principal -->
+    <string name="error_title">Serveur ArrMada injoignable</string>
+    <string name="error_detail">%1$s\n%2$s</string>
+    <string name="error_http">Le serveur répond « %1$d » : il est peut-être en train de redémarrer.</string>
+    <string name="error_ssl">Certificat HTTPS refusé par Android.</string>
+    <string name="retry">Réessayer</string>
+    <string name="change_server">Changer de serveur</string>
+    <string name="no_browser">Aucun navigateur sur cet appareil pour ouvrir ce lien.</string>
+
+    <!-- Menu (touche Retour sur la première page, ou touche Menu de la télécommande) -->
+    <string name="menu_reload">Recharger la page</string>
+    <string name="menu_change_server">Changer de serveur</string>
+    <string name="menu_quit">Quitter ArrMada</string>
+    <string name="cancel">Annuler</string>
+</resources>
