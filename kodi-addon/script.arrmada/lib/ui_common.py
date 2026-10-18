@@ -55,7 +55,10 @@ def fmt_ms(value: int) -> str:
 
 
 def notify(title: str, message: str, ms: int = 3500) -> None:
-    xbmcgui.Dialog().notification(title, message, ADDON.getAddonInfo("icon"), ms)
+    """Bulle : en bas à droite sur un écran ArrMada, bulle Kodi ailleurs (lib/toast.py)."""
+    import toast
+
+    toast.post(title, message, ms=ms)
 
 
 def platform_name() -> str:

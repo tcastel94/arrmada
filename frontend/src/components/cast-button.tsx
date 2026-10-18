@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Cast (Chromecast / Google Cast) d'un film via Jellyfin.
+ * Cast (Chromecast / Google Cast) d'un film ou d'un épisode via Jellyfin.
  * ----------------------------------------------------------------
  * - `CastDialog` : la boîte de choix d'appareil, contrôlable de l'extérieur
  *   (utilisée par le bouton « Lire » scindé de la fiche média).
@@ -36,8 +36,17 @@ import {
     type CastDevice,
 } from "@/hooks/use-cast";
 
+/** Épisode à caster : TVDB de la série + numéros (Jellyfin retrouve le fichier). */
+export interface CastEpisode {
+    tvdbId: number;
+    season: number;
+    episode: number;
+}
+
 interface CastTarget {
-    tmdbId: number;
+    /** Film (TMDB). Ignoré quand `episode` est donné. */
+    tmdbId?: number;
+    episode?: CastEpisode;
     mediaId?: string;
     title?: string;
 }
@@ -46,6 +55,7 @@ export function CastDialog({
     open,
     onOpenChange,
     tmdbId,
+    episode,
     mediaId,
     title,
 }: CastTarget & { open: boolean; onOpenChange: (open: boolean) => void }) {
@@ -61,9 +71,16 @@ export function CastDialog({
     const audio = (devices ?? []).filter((d) => !d.video_capable);
 
     const castTo = (d: CastDevice) => {
+        // Épisode : la série (TVDB) et les numéros ; film : son TMDB
+        const target = episode
+            ? { tvdb_id: episode.tvdbId, season: episode.season, episode: episode.episode }
+            : tmdbId
+              ? { tmdb_id: tmdbId }
+              : null;
+        if (!target) return;
         setPendingId(d.id);
         play.mutate(
-            { tmdb_id: tmdbId, device_id: d.id, media_id: mediaId, title },
+            { ...target, device_id: d.id, media_id: mediaId, title },
             {
                 onSuccess: (r) => {
                     if (r.status === "casting") {
@@ -118,6 +135,7 @@ export function CastDialog({
                         Caster sur un appareil
                     </DialogTitle>
                     <DialogDescription>
+                        {title && <span className="block truncate font-medium text-foreground">{title}</span>}
                         La lecture passe par Jellyfin (transcodage à la volée) pour rester compatible Chromecast.
                     </DialogDescription>
                 </DialogHeader>

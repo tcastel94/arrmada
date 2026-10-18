@@ -33,9 +33,10 @@ def get_setting_int(key: str, default: int = 30) -> int:
 
 
 def show_notification(title: str, message: str, is_error: bool = False, time_ms: int = 4000):
-    """Display an OSD notification in Kodi."""
-    icon = xbmcgui.NOTIFICATION_ERROR if is_error else ICON_PATH
-    xbmcgui.Dialog().notification(title, message, icon, time_ms)
+    """Bulle : en bas à droite sur un écran ArrMada, bulle Kodi ailleurs (lib/toast.py)."""
+    import toast
+
+    toast.post(title, message, ms=time_ms, error=is_error)
 
 
 def confirm_dialog(heading: str, message: str) -> bool:

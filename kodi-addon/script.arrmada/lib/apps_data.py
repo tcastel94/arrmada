@@ -51,7 +51,7 @@ EMPTY: Dict[str, str] = {
     "video": "Aucun add-on vidéo dans Kodi (YouTube, IPTV…).",
     "live": "Aucune chaîne : la TV en direct de Kodi n'est pas configurée (IPTV Simple…).",
     "music": "Aucun add-on ni dossier musical dans Kodi.",
-    "folders": "Aucun dossier déclaré dans Kodi (Vidéos → Fichiers → Ajouter des vidéos).",
+    "folders": "Aucun dossier déclaré dans Kodi (Vidéos › Fichiers › Ajouter des vidéos).",
     "favourites": "Aucun favori Kodi.",
     "android": "Aucune appli Android trouvée.",
     "browse": "Dossier vide.",

@@ -265,6 +265,61 @@ class ArrMadaAPI:
         return cls._request("/api/kodi/media/add", method="POST", data=payload, timeout=30)
 
     @classmethod
+    def get_seasons(cls, title: str = "", tmdb_id=None, tvdb_id=None, season=None) -> dict:
+        """Saisons d'une série et épisodes d'une saison (feuille « Télécharger »)."""
+        params = {"title": title}
+        for key, value in (("tmdb_id", tmdb_id), ("tvdb_id", tvdb_id), ("season", season)):
+            if value not in (None, ""):
+                params[key] = value
+        query = urllib.parse.urlencode(params)
+        return cls._request(f"/api/kodi/media/seasons?{query}", method="GET", timeout=25)
+
+    @classmethod
+    def get_segments(cls, tvdb_id, season, episode) -> dict:
+        """Intro / récap / générique d'un épisode, repérés par Jellyfin (1.25.0)."""
+        query = urllib.parse.urlencode({"tvdb_id": tvdb_id, "season": season, "episode": episode})
+        return cls._request(f"/api/kodi/segments?{query}", method="GET", timeout=15)
+
+    @classmethod
+    def start_download(cls, payload: dict) -> dict:
+        """Feuille « Télécharger » : film, série, saison ou épisodes (ADR-005)."""
+        return cls._request("/api/kodi/media/download", method="POST", data=payload, timeout=30)
+
+    # ── Écran Téléchargements (ADR-005, lot 3) ──────────────────────────────
+    @classmethod
+    def get_board(cls) -> dict:
+        """Voie « Pour ce soir », reste de la file et état de SABnzbd, en un appel."""
+        return cls._request("/api/kodi/downloads/board", method="GET", timeout=15)
+
+    @classmethod
+    def queue_action(cls, download_id: str, action: str) -> dict:
+        """pause | resume | top sur UN téléchargement SABnzbd."""
+        quoted = urllib.parse.quote(download_id, safe="")
+        return cls._request(f"/api/kodi/queue/{quoted}/{action}", method="POST", data={}, timeout=15)
+
+    @classmethod
+    def cancel_request(cls, request_id: int) -> dict:
+        """Annule SA demande « pour ce soir » (médiathèque jamais touchée)."""
+        return cls._request(f"/api/kodi/tv-requests/{int(request_id)}/cancel", method="POST", data={}, timeout=20)
+
+    @classmethod
+    def retry_request(cls, request_id: int) -> dict:
+        """Relance la recherche d'une demande (même portée)."""
+        return cls._request(f"/api/kodi/tv-requests/{int(request_id)}/retry", method="POST", data={}, timeout=20)
+
+    @classmethod
+    def diagnose_download(cls, service_type: str, download_id: str) -> dict:
+        """Pourquoi ce téléchargement est bloqué, et ce que « Débloquer » fera."""
+        quoted = urllib.parse.quote(download_id, safe="")
+        return cls._request(f"/api/kodi/downloads/{service_type}/{quoted}/diagnose", method="GET", timeout=20)
+
+    @classmethod
+    def unstick_download(cls, service_type: str, download_id: str) -> dict:
+        """Débloquer : le serveur refait le diagnostic et applique le remède."""
+        quoted = urllib.parse.quote(download_id, safe="")
+        return cls._request(f"/api/kodi/downloads/{service_type}/{quoted}/unstick", method="POST", data={}, timeout=40)
+
+    @classmethod
     def get_releases(cls, media_type: str, arr_id: int) -> dict:
         """Fetch candidate releases from indexers."""
         return cls._request(f"/api/kodi/media/{media_type}/{arr_id}/releases", method="GET", timeout=60)

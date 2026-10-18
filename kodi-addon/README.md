@@ -61,18 +61,59 @@ télécommande. Phase 0 : **Accueil**. Phase 2 : **Fiche média**,
 - Actions : **Lire** (médiathèque Kodi de l'appareil + préréglage Yamaha de la pièce), **Bande-annonce** (films, add-on YouTube requis), **Meilleure version** (recherche Radarr/Sonarr), **Sous-titres** (recherche Bazarr, films).
 - L'écran s'affiche tout de suite avec ce que l'Accueil connaît déjà (titre, affiche, fanart), puis se complète en arrière-plan (environ 0,5 s).
 
-**Téléchargements**
-- Toute la file Radarr/Sonarr : barre de progression, pourcentage, temps restant, **débit estimé** (calculé entre deux rafraîchissements), taille, statut coloré (*En cours*, *En pause*, *En attente*, *Import en attente*, *Erreur*) et la raison d'une erreur d'import.
-- Rafraîchi toutes les 5 s, sans clignotement : seules les valeurs changent, la sélection reste en place.
-- OK sur une ligne : ouvre la fiche du titre (et affiche le détail d'une erreur).
-- Boutons **Tout mettre en pause** / **Tout reprendre**.
+**Téléchargements** (refait en 1.23.0, ADR-005 lot 3)
+- **Pour ce soir** : une carte par demande lancée depuis une TV, avec l'heure
+  à laquelle ce sera prêt (« Prêt vers 20:58 », fin du téléchargement + 2 min
+  d'import), les étapes *Trouvé → Téléchargement → Import → Prêt*, la TV qui
+  l'a lancée, et l'erreur si c'est bloqué. Les demandes terminées restent 12 h
+  (« Prêt à regarder »). Sans demande : un rappel du mode d'emploi.
+- **File d'attente** : le reste de la file Radarr/Sonarr (affiche, barre,
+  pourcentage, temps restant, **débit estimé**, statut coloré).
+- **OK = menu d'actions**, rappelé en bas de l'élément sélectionné
+  (« OK : En tête · Pause · Fiche ») :
+  - ligne Usenet : *Passer en tête* (juste derrière les demandes TV),
+    *Mettre en pause* / *Reprendre* (cet élément seul) ;
+  - ligne ou carte bloquée : **Débloquer** (voir plus bas) ;
+  - carte : *Annuler ma demande* (seulement la TV qui l'a lancée, rien n'est
+    effacé de la médiathèque), *Relancer la recherche* (introuvable) ;
+  - partout : *Fiche du titre*.
+- **Pause sauf ce soir** / **Tout reprendre** : pause de tout SABnzbd ; les
+  demandes TV (priorité Force) continuent pendant la pause.
+- **Débloquer** : le serveur fait un diagnostic (point vert : ce qui va, rouge :
+  ce qui bloque, bleu : ce que le bouton va faire) et propose UNE action :
+  pack de saison refusé par Sonarr → import épisode par épisode ; téléchargé
+  mais pas importé → import des fichiers reconnus ; échec → cette version en
+  liste noire et recherche d'une autre. Jamais d'écrasement ni d'effacement.
+- Rafraîchi toutes les 5 s en un seul appel, sans clignotement.
+- Serveur plus ancien (pas de tableau) : la file seule, comme avant.
 
-> ⚠️ **La pause porte sur toute la file SABnzbd**, pas sur un seul titre :
-> c'est ce que fait le serveur aujourd'hui (pause/reprise globales). Les
-> lignes passent à « En pause » avec un délai d'environ une minute, le temps
-> que Radarr/Sonarr relisent SABnzbd. Une pause titre par titre demandera
-> une évolution du backend. Aucune suppression n'est possible depuis la TV
-> (décision 1 de l'ADR-003).
+> ⚠️ Les torrents (Deluge) n'ont ni *Passer en tête* ni *Pause* : seul
+> SABnzbd sait le faire. *Débloquer* et *Fiche* restent possibles.
+
+**Prêt à regarder** (1.24.0, ADR-005 lot 4)
+- Dès qu'un titre lancé depuis la TV est importé, le serveur cherche ses
+  sous-titres (français, sinon anglais) ; la carte affiche l'étape
+  *Sous-titres*.
+- Puis **la TV qui l'a demandé** (et elle seule) affiche une pop-up en bas à
+  droite : affiche, qualité, sous-titres trouvés, **Regarder** / *Plus tard*
+  (fermeture seule au bout d'une minute). Pendant un film : la pop-up attend
+  la fin de la lecture.
+- *Regarder* lance le titre depuis la médiathèque de la TV (reprise, ampli de
+  la pièce). Fichier tout juste arrivé : la médiathèque de la TV est mise à
+  jour et la lecture réessayée pendant ~30 s.
+- Banc : `BENCH_ONLY=ready kodi-addon/bench/run.sh` (≈ 1 min).
+
+**Bulles** (1.24.1)
+- Sur un écran ArrMada, les notifications (import, téléchargement lancé,
+  caméra, résultat d'une action…) s'affichent **en bas à droite**, dans le
+  style de l'appli : le menu du haut reste visible et utilisable. Elles ne
+  prennent jamais la main sur la télécommande et s'enchaînent sans se
+  chevaucher.
+- Ailleurs (écrans de Kodi, film en cours), c'est la bulle habituelle de Kodi.
+- Emojis retirés des messages (la police de la TV les affichait en carré),
+  et des menus « Options avancées » / menu contextuel (1.24.2) ; les flèches
+  de chemin deviennent « › ». Un test refuse tout nouvel emoji dans l'appli.
+- Banc : `BENCH_ONLY=toast kodi-addon/bench/run.sh` (≈ 1 min).
 
 **Salon** (bouton *Salon* de l'Accueil, ou en raccourci pendant un film)
 - **Lecture en cours** sur cet appareil : affiche, titre, définition et audio, temps écoulé / durée, heure de fin, pastille *En pause*. Boutons *− 30 s*, *Lecture / Pause*, *+ 30 s*, *Stop*. Ces infos viennent de Kodi lui-même : elles restent à jour même serveur coupé.
@@ -805,6 +846,22 @@ sans attendre les 20 dernières secondes.
 > autres formats (MP4…) gardent l'information de Kodi : le bouton n'y
 > apparaît qu'après un saut dans le fichier.
 
+**Sans chapitres nommés : marqueurs de Jellyfin** (1.25.0). Au début d'un
+épisode de la médiathèque, l'add-on demande au serveur ArrMada où sont
+l'intro, le récap et le générique de fin ; le serveur retrouve l'épisode dans
+Jellyfin (TVDB de la série + saison + épisode) et lit ses marqueurs (« media
+segments », Jellyfin 10.10 ou plus). Même bouton, même encart qu'avec les
+chapitres, qui restent prioritaires. Il faut, côté Jellyfin :
+1. la série dans une bibliothèque Jellyfin (mêmes fichiers que Sonarr) ;
+2. un plugin qui calcule les marqueurs : **Intro Skipper** (dépôt
+   `https://intro-skipper.org/manifest.json`, Tableau de bord → Extensions →
+   Dépôts), ou *Chapter Segments Provider* (marqueurs tirés des chapitres) ;
+3. l'analyse faite : tâche planifiée *Media segment scan* (ou celle du
+   plugin), longue la première fois (lance-la la nuit).
+Web app → *Paramètres → Cast & Jellyfin → Tester la connexion* indique si
+le serveur et un plugin de marqueurs sont prêts. Pas de Jellyfin, pas de
+plugin ou épisode pas encore analysé : rien ne change (aucune devinette).
+
 **Sous-titres automatiques** : 8 s après le début d'un film ou d'un épisode
 de la médiathèque, si l'audio est dans une autre langue que la tienne
 (réglage *Langue des sous-titres*, `fr` par défaut) **et** qu'aucune piste
@@ -1057,6 +1114,32 @@ l'affiche. Les rangées et les listes du plugin portent aussi l'image
 >   et des rangées (ceux du dossier et des sites ne font que combler un
 >   manque) ; toutes les variantes restent visibles dans l'onglet Artworks.
 
+### 27. 📥 Télécharger depuis le canapé : film, série, saison ou épisode (1.22.0, ADR-005)
+
+OK sur un titre absent de la médiathèque (recherche, « Pour toi », Découvrir)
+ou bouton **Télécharger** de la fiche (série, ou film sans fichier) : une
+feuille remplace l'ancien assistant en 3 listes.
+
+- **Série** : *Toute la série* / *Une saison* / *Un épisode*. Saisons en
+  pastilles (« 3/10 sur le NAS »), épisodes à cocher, plusieurs possibles
+  (déjà là, ou date de sortie s'il n'est pas encore diffusé). Série pas encore
+  suivie : épisodes en français par TMDB.
+- **Film** : un bouton.
+- **Pour ce soir** (activé par défaut) : le serveur choisit une release
+  Usenet acceptée par Radarr / Sonarr et la fait passer devant toute la file
+  SABnzbd (priorité Force). Désactivé : file normale.
+- Le bouton dit exactement ce qui part (« Télécharger S02E04 »,
+  « Télécharger la saison 2 »).
+- Qualité et dossier : ceux le plus utilisés dans ta médiathèque, sans
+  question. **Options avancées** rouvre l'ancien assistant pour les choisir.
+- Une saison ou un épisode d'une série nouvelle : seuls eux sont surveillés,
+  Sonarr ne télécharge pas toute la série en douce.
+
+> ⚠️ Les torrents (Deluge) ne passent pas par SABnzbd : pas de priorité pour
+> eux. C'est pour ça que « Pour ce soir » préfère Usenet.
+
+Banc : `BENCH_ONLY=download kodi-addon/bench/run.sh` (≈ 1 min, 10 captures).
+
 ## 🚀 Installation dans Kodi
 
 > ✅ **NVIDIA Shield (Kodi 21, Android)** : l'installation depuis la source
@@ -1142,7 +1225,7 @@ Copiez le dossier `script.arrmada/` dans le dossier des extensions de Kodi :
 | Vu / reprise partagés entre les TV : règles pures / travail du service | `script.arrmada/lib/sync_data.py` / `script.arrmada/lib/watch_sync.py` (serveur : `backend/app/services/watch_sync.py`) |
 | Encart « Épisode suivant » : logique pure / fenêtre | `script.arrmada/lib/upnext_data.py` / `script.arrmada/lib/upnext_window.py` |
 | Panneau pendant le film (pistes, Bazarr, ampli, fichier de touches) : logique pure / fenêtre | `script.arrmada/lib/player_data.py` / `script.arrmada/lib/player_window.py` |
-| « Passer l'intro » (chapitres nommés) : logique pure / bouton | `script.arrmada/lib/chapter_data.py` / `script.arrmada/lib/skip_window.py` |
+| « Passer l'intro » (chapitres nommés, marqueurs Jellyfin) : logique pure / bouton | `script.arrmada/lib/chapter_data.py` / `script.arrmada/lib/skip_window.py` |
 | Dépôt Kodi servi par le backend | `backend/app/services/kodi_repo.py`, `backend/app/api/kodi_repo.py` |
 | Textures (coins arrondis, halo, dégradés, barres de progression) | générées par `python3 kodi-addon/tools/make_textures.py` |
 | Tests (sans Kodi, lancés en CI) | `pytest kodi-addon/tests` |

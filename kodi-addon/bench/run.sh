@@ -20,6 +20,12 @@
 #   RECORD=1 kodi-addon/bench/run.sh   # + vidéo $BENCH_DIR/demo.mp4 (ffmpeg requis)
 #   BENCH_DIR=/tmp/bench kodi-addon/bench/run.sh
 #
+# BENCH_ONLY=download : seulement la feuille « Télécharger » (ADR-005), ~1 min.
+# BENCH_ONLY=board    : seulement l'écran Téléchargements (ADR-005, lot 3), ~1 min.
+# BENCH_ONLY=ready    : seulement la pop-up « Prêt à regarder » (lot 4), ~1 min.
+# BENCH_ONLY=toast    : seulement les bulles (ArrMada en bas à droite / Kodi), ~1 min.
+# BENCH_ONLY=segments : « Passer l'intro » / générique d'après les marqueurs Jellyfin, ~1 min.
+#
 # Variables : RECORD=1 (vidéo), RES=1280x720 (taille de l'écran virtuel en
 # mode vidéo : plus petit = plus fluide en rendu logiciel), PACE=1.5 (ralentit
 # le parcours du harnais pour mieux voir les animations).

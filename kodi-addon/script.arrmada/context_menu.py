@@ -25,13 +25,13 @@ def main():
         label += f" Saison {info['season']}"
 
     options = [
-        ("💬 Télécharger sous-titres (Bazarr)", "download_sub"),
-        ("⏱️ Re-synchroniser sous-titres (FFsubsync)", "sync_sub"),
-        ("🔄 Re-chercher / Upgrader release (Radarr/Sonarr)", "search_release"),
-        ("📊 Tableau de bord & Santé de la Stack", "dashboard"),
+        ("Télécharger sous-titres (Bazarr)", "download_sub"),
+        ("Re-synchroniser sous-titres (FFsubsync)", "sync_sub"),
+        ("Re-chercher / Upgrader release (Radarr/Sonarr)", "search_release"),
+        ("Tableau de bord & Santé de la Stack", "dashboard"),
     ]
 
-    choice = xbmcgui.Dialog().select(f"🏴‍☠️ ArrMada : {label}", [opt[0] for opt in options])
+    choice = xbmcgui.Dialog().select(f"ArrMada : {label}", [opt[0] for opt in options])
     if choice < 0:
         return
 

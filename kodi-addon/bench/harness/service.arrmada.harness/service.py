@@ -73,6 +73,344 @@ def leave_shell(name=None):
     wait(2.0)
 
 
+def sheet_open():
+    return xbmc.getCondVisibility("Window.IsVisible(script-arrmada-download.xml)")
+
+
+def open_sheet(**params):
+    query = urllib.parse.urlencode({"action": "media_details", **params})
+    xbmc.executebuiltin(f"RunPlugin(plugin://script.arrmada/?{query})")
+    for _ in range(20):
+        if sheet_open():
+            break
+        wait(0.3)
+    wait(2.5)  # saisons chargées en arrière-plan
+
+
+def downloads_received():
+    return json.loads(urllib.request.urlopen(f"{MOCK}/__downloads").read())
+
+
+def download_sheet():
+    """ADR-005, lot 2 : feuille « Télécharger » (série : saison, épisode ; film)."""
+    bear = {
+        "type": "series", "title": "The Bear", "tmdb_id": "136315", "in_library": "0",
+        "year": "2022", "poster_url": f"{MOCK}/img/poster-3.jpg",
+        "overview": "Un jeune chef étoilé revient à Chicago reprendre la sandwicherie "
+        "familiale après la mort de son frère. Brigade à reconstruire, dettes, et une "
+        "cuisine à transformer.",
+    }  # fmt: skip
+    open_sheet(**bear)
+    log(f"feuille série : ouverte={sheet_open()} focus={focus()}")
+    shot("dl-01-serie-une-saison")
+    press("Down")  # pastilles des saisons
+    press("Right")
+    press("Select")  # saison 2
+    wait(1.5)
+    shot("dl-02-saison-2")
+    press("Up")
+    press("Right")  # « Un épisode »
+    press("Select")
+    wait(1.0)
+    log(f"portée épisode : focus={focus()}")
+    shot("dl-02b-portee-episode")
+    press("Down", 3)
+    press("Select")  # S02E04 coché
+    wait(0.6)
+    shot("dl-03-episode-coche")
+    press("Right")  # « Pour ce soir »
+    wait(0.6)
+    shot("dl-04-pour-ce-soir")
+    press("Select")  # désactivé
+    wait(0.6)
+    shot("dl-05-file-normale")
+    press("Select")  # réactivé
+    press("Down")  # bouton Télécharger
+    wait(0.6)
+    shot("dl-06-bouton-telecharger")
+    press("Select")
+    wait(1.5)
+    shot("dl-07-envoye")
+    log(f"feuille série fermée après envoi : {not sheet_open()} ; reçu : {downloads_received()}")
+
+    open_sheet(type="movie", title="Past Lives", tmdb_id="666277", in_library="0", year="2023",
+               poster_url=f"{MOCK}/img/poster-5.jpg",
+               overview="Nora et Hae Sung, amis d'enfance à Séoul, se retrouvent vingt ans plus "
+               "tard à New York.")  # fmt: skip
+    shot("dl-08-film")
+    press("Select")
+    wait(1.5)
+    shot("dl-09-film-envoye")
+    log(f"feuille film fermée après envoi : {not sheet_open()} ; reçu : {downloads_received()}")
+
+
+def downloads_screen():
+    """ADR-005, lot 3 : écran Téléchargements (Pour ce soir, file, Débloquer, actions)."""
+    run_plugin("queue")
+    for _ in range(20):
+        if xbmc.getCondVisibility("Window.IsVisible(script-arrmada-downloads.xml)"):
+            break
+        wait(0.3)
+    wait(3.0)
+    log(f"écran Téléchargements : focus={focus()}")
+    shot("dl-10-ecran-telechargements")
+    press("Right")  # carte « Sous-titres en cours » (Severance)
+    wait(0.8)
+    shot("dl-10b-carte-sous-titres")
+    press("Right")  # carte bloquée (The Bear)
+    wait(0.8)
+    shot("dl-11-carte-bloquee")
+    press("Select")  # menu de la carte
+    wait(1.0)
+    shot("dl-12-menu-carte")
+    press("Select")  # « Débloquer »
+    wait(2.0)
+    shot("dl-13-debloquer")
+    press("Select")  # bouton « Importer » (focus posé dessus)
+    wait(1.5)
+    shot("dl-14-debloque")
+    press("Down")  # file
+    wait(0.8)
+    shot("dl-15-file")
+    press("Select")
+    wait(1.0)
+    shot("dl-16-menu-ligne")
+    press("Select")  # « Passer en tête »
+    wait(1.5)
+    actions = json.loads(urllib.request.urlopen(f"{MOCK}/__actions").read())
+    log(f"actions reçues par le serveur : {actions}")
+    press("Back")
+    wait(1.0)
+
+
+def ready_open():
+    return xbmc.getCondVisibility("Window.IsVisible(script-arrmada-ready.xml)")
+
+
+def emit_ready(**fields):
+    """Ce que publie le serveur quand une demande TV est importée et sous-titrée (lot 4)."""
+    fields.setdefault("at", datetime.now(timezone.utc).isoformat())
+    query = urllib.parse.urlencode(dict(fields, type="tv_ready"))
+    urllib.request.urlopen(f"{MOCK}/__emit?{query}").read()
+
+
+def ready_popup():
+    """ADR-005, lot 4 : « Prêt à regarder » sur la TV qui a demandé, et elle seule."""
+    me = 0
+    for _ in range(40):  # appairage automatique (migration) au démarrage
+        me = device_id_now()
+        if me:
+            break
+        wait(0.5)
+    film = {"title": "Le Comte de Monte-Cristo", "media_type": "movie", "id_type": "tmdb",
+            "id": 1084736, "quality": "Bluray-1080p", "subtitles": "fr",
+            "poster": f"{MOCK}/img/poster-2.jpg"}  # fmt: skip
+    emit_ready(device_id=me + 100, **film)  # lancé depuis une autre TV
+    wait(8)
+    log(f"annonce pour une autre TV : pop-up {'OUVERTE' if ready_open() else 'absente'}")
+    emit_ready(device_id=me, **film)
+    for _ in range(30):
+        if ready_open():
+            break
+        wait(0.5)
+    wait(1.2)
+    log(f"annonce pour cette TV ({me}) : pop-up {'ouverte' if ready_open() else 'ABSENTE'}")
+    shot("dl-20-pret-a-regarder")
+    press("Select")  # « Regarder »
+    wait(1.0)
+    shot("dl-21-mise-a-jour-mediatheque")
+    playing = False
+    for _ in range(90):
+        wait(0.5)
+        if xbmc.Player().isPlayingVideo():
+            playing = True
+            break
+    log(f"« Regarder » : lecture {'lancée' if playing else 'NON LANCÉE'}")
+    wait(2.0)
+    shot("dl-22-lecture")
+    xbmc.Player().stop()
+    wait(2.0)
+
+
+def device_id_now():
+    path = xbmcvfs.translatePath("special://profile/addon_data/script.arrmada/device.json")
+    try:
+        with open(path, encoding="utf-8") as handle:
+            return int(json.load(handle).get("id") or 0)
+    except (OSError, ValueError, TypeError):
+        return 0
+
+
+def emit_import(**fields):
+    """Ce que publie le serveur à l'import d'un fichier (webhook Radarr/Sonarr)."""
+    query = urllib.parse.urlencode(dict(fields, type="new_import", event="Download"))
+    urllib.request.urlopen(f"{MOCK}/__emit?{query}").read()
+
+
+def toast_shown():
+    return xbmc.getInfoLabel("Window(Home).Property(arrmada.toast)") == "1"
+
+
+def toasts():
+    """1.24.1 : bulle ArrMada en bas à droite sur un écran ArrMada (menu du haut
+    visible), bulle Kodi ailleurs ; jamais d'emoji en carré."""
+    for _ in range(40):  # l'accueil ArrMada s'ouvre au démarrage
+        if shell_open():
+            break
+        wait(0.5)
+    wait(3.0)
+    emit_import(title="📥 Game of Thrones", episode_title="S03E09 · Les Pluies de Castamere",
+                quality="WEBDL-1080p", poster=f"{MOCK}/img/poster-3.jpg")  # fmt: skip
+    for _ in range(30):
+        if toast_shown():
+            break
+        wait(0.5)
+    wait(0.8)
+    log(f"accueil ArrMada : bulle ArrMada {'affichée' if toast_shown() else 'ABSENTE'}")
+    log(f"bulle Kodi pendant ce temps : {xbmc.getCondVisibility('Window.IsActive(notification)')}")
+    log(f"titre : {xbmc.getInfoLabel('Window(Home).Property(arrmada.toast.heading)')}"
+        f" · {xbmc.getInfoLabel('Window(Home).Property(arrmada.toast.message)')}")  # fmt: skip
+    shot("toast-1-accueil-arrmada")
+    for _ in range(20):  # 7 s d'affichage puis effacée
+        if not toast_shown():
+            break
+        wait(0.5)
+    log(f"bulle ArrMada effacée à l'échéance : {not toast_shown()}")
+    leave_shell()
+    emit_import(title="Dune : Deuxième partie", quality="Bluray-2160p",
+                poster=f"{MOCK}/img/poster-2.jpg")  # fmt: skip
+    kodi_bubble = False
+    for _ in range(30):
+        kodi_bubble = xbmc.getCondVisibility("Window.IsActive(notification)")
+        if kodi_bubble:
+            break
+        wait(0.5)
+    log(f"écran Kodi : bulle Kodi {'affichée' if kodi_bubble else 'ABSENTE'},"
+        f" bulle ArrMada {'AFFICHÉE' if toast_shown() else 'absente'}")  # fmt: skip
+    shot("toast-2-ecran-kodi")
+
+
+def jellyfin_markers():
+    """1.25.0 : « Passer l'intro » et encart du générique d'après les marqueurs
+    Jellyfin, sur un épisode SANS chapitres (clip de 90 s)."""
+
+    def call(method, params=None):
+        request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params or {}}
+        return json.loads(xbmc.executeJSONRPC(json.dumps(request))).get("result") or {}
+
+    def position():
+        t = call("Player.GetProperties", {"playerid": 1, "properties": ["time"]}).get("time") or {}
+        return t.get("minutes", 0) * 60 + t.get("seconds", 0)
+
+    def wait_prop(name, seconds):
+        for _ in range(int(seconds * 2)):
+            wait(0.5)
+            if xbmc.getInfoLabel(f"Window(Home).Property({name})") == "1":
+                return True
+        return False
+
+    call("VideoLibrary.Scan")
+    wait(2.0)
+    for _ in range(60):
+        if not xbmc.getCondVisibility("Library.IsScanningVideo"):
+            break
+        wait(1.0)
+    shows = call("VideoLibrary.GetTVShows").get("tvshows") or []
+    eps = call("VideoLibrary.GetEpisodes", {"tvshowid": shows[0]["tvshowid"],
+                                            "properties": ["season", "episode"]})  # fmt: skip
+    byk = {(e["season"], e["episode"]): e["episodeid"] for e in eps.get("episodes") or []}
+    call("Player.Open", {"item": {"episodeid": byk[(1, 3)]}, "options": {"resume": False}})
+    opened = wait_prop("arrmada.skip_open", 25.0)  # intro de 5 à 25 s
+    wait(0.8)
+    label = xbmc.getInfoLabel("Control.GetLabel(301)")
+    log(f"marqueurs : bouton {'« ' + label + ' »' if opened else 'ABSENT'} à {position()} s")
+    shot("seg-1-passer-intro")
+    press("Select")
+    wait(2.0)
+    log(f"après « Passer l'intro » : {position()} s (fin du marqueur : 25 s)")
+    # Générique 50-80 s : encart « Épisode suivant » bien avant les 20 dernières s
+    call("Player.Seek", {"playerid": 1, "value": {"time": {
+        "hours": 0, "minutes": 0, "seconds": 52, "milliseconds": 0}}})  # fmt: skip
+    opened = wait_prop("arrmada.upnext_open", 8.0)
+    wait(1.0)
+    log(f"générique Jellyfin : encart {'ouvert' if opened else 'ABSENT'} à {position()} s")
+    shot("seg-2-generique-encart")
+    press("Back")
+    xbmc.Player().stop()
+    wait(1.5)
+    asked = json.loads(urllib.request.urlopen(f"{MOCK}/__segments").read())
+    log(f"marqueurs demandés au serveur : {asked}")
+
+
+if os.environ.get("BENCH_ONLY") == "segments":
+    for _ in range(6):
+        if not xbmc.getCondVisibility("Window.IsActive(yesnodialog)"):
+            break
+        press("Back", 1, 1.0)
+    if shell_open():
+        leave_shell()
+    jellyfin_markers()
+    xbmc.executebuiltin("Quit")
+    while not MONITOR.abortRequested():
+        wait(1)
+    raise SystemExit
+
+
+if os.environ.get("BENCH_ONLY") == "toast":
+    for _ in range(6):
+        if not xbmc.getCondVisibility("Window.IsActive(yesnodialog)"):
+            break
+        press("Back", 1, 1.0)
+    toasts()
+    xbmc.executebuiltin("Quit")
+    while not MONITOR.abortRequested():
+        wait(1)
+    raise SystemExit
+
+
+if os.environ.get("BENCH_ONLY") == "ready":
+    for _ in range(6):
+        if not xbmc.getCondVisibility("Window.IsActive(yesnodialog)"):
+            break
+        press("Back", 1, 1.0)
+    if shell_open():
+        leave_shell()
+    ready_popup()
+    xbmc.executebuiltin("Quit")
+    while not MONITOR.abortRequested():
+        wait(1)
+    raise SystemExit
+
+
+if os.environ.get("BENCH_ONLY") == "board":
+    for _ in range(6):
+        if not xbmc.getCondVisibility("Window.IsActive(yesnodialog)"):
+            break
+        press("Back", 1, 1.0)
+    if shell_open():
+        leave_shell()
+    downloads_screen()
+    xbmc.executebuiltin("Quit")
+    while not MONITOR.abortRequested():
+        wait(1)
+    raise SystemExit
+
+
+if os.environ.get("BENCH_ONLY") == "download":
+    # Kodi tout juste installé : « Activer cet add-on ? » au premier démarrage
+    for _ in range(6):
+        if not xbmc.getCondVisibility("Window.IsActive(yesnodialog)"):
+            break
+        press("Back", 1, 1.0)
+    if shell_open():
+        leave_shell()
+    download_sheet()
+    xbmc.executebuiltin("Quit")
+    while not MONITOR.abortRequested():
+        wait(1)
+    raise SystemExit
+
+
 # ── 0a. ADR-004 phase 4.2 : Kodi démarre sur l'accueil ArrMada ─────────────
 log(f"démarrage : accueil ArrMada {'ouvert' if shell_open() else 'NON OUVERT'}")
 shot("00a-demarrage-sur-arrmada")
@@ -1328,5 +1666,11 @@ log(f"titre de l'erreur : {xbmc.getInfoLabel('Window.Property(error_title)')}")
 press("Back")
 wait(1.5)
 
+# ── ADR-005 : feuille « Télécharger » ──────────────────────────────────────
+download_sheet()
+downloads_screen()
+ready_popup()
+
 log("terminé")
+
 xbmc.executebuiltin("Quit")

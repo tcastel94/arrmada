@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
 from app.models.service import Service
-from app.services import media_aggregator
+from app.services import media_aggregator, tv_priority
 from app.services.encryption import decrypt_api_key
 from app.services.radarr import RadarrClient
 from app.services.sonarr import SonarrClient
@@ -28,6 +28,8 @@ router = APIRouter(
 async def list_downloads(db: AsyncSession = Depends(get_db)):
     """Fetch combined download queue from all Sonarr/Radarr services."""
     items = await media_aggregator.get_queue_items(db)
+    # « tv_request » : lancé depuis quelle TV, prioritaire ou non (services/tv_priority.py)
+    await tv_priority.annotate_queue(db, items)
     return {"items": items, "total": len(items)}
 
 

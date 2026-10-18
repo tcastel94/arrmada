@@ -114,7 +114,7 @@ class SalonWindow(xbmcgui.WindowXML):
             model = screens_data.build_salon(state, self._profiles)
             message = ""
             if not model["configured"]:
-                message = "Aucun ampli Yamaha configuré dans ArrMada (Réglages → Yamaha)."
+                message = "Aucun ampli Yamaha configuré dans ArrMada (Réglages › Yamaha)."
             elif not model["online"]:
                 message = "L'ampli ne répond pas (débranché ou hors réseau ?)."
         try:

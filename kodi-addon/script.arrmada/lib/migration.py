@@ -82,7 +82,7 @@ def run() -> str:
         _forget_password()
         _log(f"mot de passe refusé ({confirmed.get('message')}) : effacé", xbmc.LOGWARNING)
         ui.notify(
-            "Appairage nécessaire", "Accueil ArrMada → Réglages → « Appairer cette TV »", 10000
+            "Appairage nécessaire", "Accueil ArrMada › Réglages › « Appairer cette TV »", 10000
         )
         return "refused"
     if outcome == "retry":

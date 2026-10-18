@@ -72,3 +72,51 @@ def test_skip_offer_at_jumps_to_next_chapter():
     assert cd.skip_offer_at(CHAPTERS, 40, set(), "a.mkv") is None  # « Episode »
     assert cd.credits_at(CHAPTERS, 75, True) and not cd.credits_at(CHAPTERS, 75, False)
     assert not cd.credits_at(CHAPTERS, 40, True)
+
+
+# ── Marqueurs de Jellyfin (1.25.0) ──────────────────────────────────────────
+
+RESPONSE = {
+    "status": "ok",
+    "found": True,
+    "segments": [
+        {"kind": "credits", "start": 2580, "end": 2640},
+        {"kind": "intro", "start": 95, "end": 152},
+        {"kind": "commercial", "start": 0, "end": 30},  # inconnu de la TV
+        {"kind": "recap", "start": "x", "end": 10},  # illisible
+        {"kind": "recap", "start": 20, "end": 20},  # vide
+    ],
+}
+
+
+def test_parse_segments_keeps_what_the_tv_knows():
+    assert cd.parse_segments(RESPONSE) == [
+        {"kind": "intro", "start": 95.0, "end": 152.0},
+        {"kind": "credits", "start": 2580.0, "end": 2640.0},
+    ]
+    # Pas de Jellyfin, serveur ancien (404 → message), réponse illisible : rien
+    assert cd.parse_segments({"status": "unavailable", "segments": []}) == []
+    assert cd.parse_segments({"status": "error", "message": "HTTP 404"}) == []
+    assert cd.parse_segments(None) == []
+
+
+def test_segment_offer_jumps_to_the_end_of_the_intro():
+    segments = cd.parse_segments(RESPONSE)
+    offer = cd.segment_offer_at(segments, 100, set(), "e.mkv")
+    assert offer == {
+        "action": "skip", "kind": "intro", "label": "Passer l'intro",
+        "chapter": "1001", "to": "152.0", "until": "152.0",
+    }  # fmt: skip
+    assert cd.segment_offer_at(segments, 100, {("e.mkv", 1001)}, "e.mkv") is None  # déjà fait
+    assert cd.segment_offer_at(segments, 151, set(), "e.mkv") is None  # presque fini
+    assert cd.segment_offer_at(segments, 60, set(), "e.mkv") is None  # avant l'intro
+    assert cd.segment_offer_at(segments, 2600, set(), "e.mkv") is None  # générique : encart
+    assert cd.segment_offer_at([], 100, set(), "e.mkv") is None
+
+
+def test_segment_credits_open_up_next():
+    segments = cd.parse_segments(RESPONSE)
+    assert cd.segment_credits_at(segments, 2600)
+    assert not cd.segment_credits_at(segments, 2000)
+    assert not cd.segment_credits_at(segments, 2650)  # scène après le générique
+    assert not cd.segment_credits_at([], 2600)

@@ -37,18 +37,28 @@ async def delete_device(device_id: int, db: AsyncSession = Depends(get_db)):
 
 @router.post("/play")
 async def play(data: dict, db: AsyncSession = Depends(get_db)):
-    """Cast a movie (by TMDB id) to a device via a Jellyfin transcoded stream."""
+    """Cast a movie (TMDB id) or an episode (series TVDB id + season + episode)
+    to a device via a Jellyfin transcoded stream."""
     tmdb_id = data.get("tmdb_id")
+    tvdb_id, season, episode = data.get("tvdb_id"), data.get("season"), data.get("episode")
     device_id = data.get("device_id")
-    if not tmdb_id or not device_id:
-        return {"status": "error", "detail": "tmdb_id et device_id requis"}
-
-    stream = await jellyfin_service.build_movie_stream(db, int(tmdb_id))
-    if not stream:
+    is_episode = not tmdb_id and tvdb_id and season is not None and episode is not None
+    if not device_id or not (tmdb_id or is_episode):
         return {
             "status": "error",
-            "detail": "Film introuvable dans Jellyfin (ou Jellyfin non configuré).",
+            "detail": "device_id et tmdb_id (film) ou tvdb_id + season + episode requis",
         }
+
+    if is_episode:
+        stream = await jellyfin_service.build_episode_stream(
+            db, int(tvdb_id), int(season), int(episode)
+        )
+        missing = "Épisode introuvable dans Jellyfin (ou Jellyfin non configuré)."
+    else:
+        stream = await jellyfin_service.build_movie_stream(db, int(tmdb_id))
+        missing = "Film introuvable dans Jellyfin (ou Jellyfin non configuré)."
+    if not stream:
+        return {"status": "error", "detail": missing}
 
     result = await cast_service.cast_stream(
         db,
@@ -65,9 +75,9 @@ async def play(data: dict, db: AsyncSession = Depends(get_db)):
         action="cast_play",
         status="ok" if ok else "ko",
         source="arrmada",
-        media_type="movie",
+        media_type="episode" if is_episode else "movie",
         media_id=data.get("media_id"),
-        tmdb_id=int(tmdb_id),
+        tmdb_id=None if is_episode else int(tmdb_id),
         title=stream.get("title") or data.get("title"),
         device=dev.name if dev else None,
         detail=None if ok else result.get("detail"),

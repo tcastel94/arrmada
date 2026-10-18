@@ -1,0 +1,603 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ArrMada — feuille « Télécharger » (ADR-005, lot 2).
+
+  Remplie par lib/download_window.py (logique : lib/download_data.py).
+  À gauche le titre (affiche, synopsis) ; à droite la feuille :
+    810  portée d'une série : Toute la série / Une saison / Un épisode
+    830  saisons (pastilles, OK = choisir)
+    840  épisodes (OK = cocher ; actif seulement pour « Un épisode »)
+    820  Pour ce soir (prioritaire) : interrupteur, activé par défaut
+    821  Télécharger : le libellé dit exactement ce qui part
+    822  Options avancées : l'ancien assistant (qualité, dossier, release)
+  Film : seuls 820 / 821 / 822 sont là.
+
+  Navigation : listes à gauche ↔ actions à droite. Les cas qui dépendent de la
+  portée (une rangée masquée) sont redirigés dans le Python (onAction).
+-->
+<window>
+	<defaultcontrol always="false">821</defaultcontrol>
+	<backgroundcolor>FF0A0E16</backgroundcolor>
+	<animation effect="fade" start="0" end="100" time="300" tween="sine" easing="out">WindowOpen</animation>
+	<animation effect="fade" start="100" end="0" time="200">WindowClose</animation>
+	<controls>
+		<!-- ═══════════════ Fond ═══════════════ -->
+		<control type="image">
+			<left>0</left><top>0</top><width>1920</width><height>1080</height>
+			<texture colordiffuse="FF0A0E16">arrmada/white.png</texture>
+		</control>
+		<control type="image">
+			<left>0</left><top>0</top><width>1920</width><height>1080</height>
+			<aspectratio>scale</aspectratio>
+			<fadetime>400</fadetime>
+			<texture background="true" colordiffuse="66FFFFFF">$INFO[Window.Property(fanart)]</texture>
+			<animation effect="zoom" start="100" end="108" time="30000" tween="sine" easing="inout" center="auto" pulse="true" condition="true">Conditional</animation>
+		</control>
+		<control type="image">
+			<left>0</left><top>0</top><width>1920</width><height>1080</height>
+			<texture colordiffuse="FF0A0E16">arrmada/grad-h.png</texture>
+		</control>
+		<control type="image">
+			<left>0</left><top>0</top><width>1920</width><height>1080</height>
+			<texture flipy="true" colordiffuse="B30A0E16">arrmada/grad-v.png</texture>
+		</control>
+		<control type="image">
+			<left>1100</left><top>-420</top><width>1300</width><height>960</height>
+			<texture colordiffuse="404A9EFF">arrmada/blob.png</texture>
+			<animation effect="fade" start="100" end="45" time="5000" tween="sine" pulse="true" condition="true">Conditional</animation>
+		</control>
+
+		<!-- ═══════════════ Colonne gauche : le titre ═══════════════ -->
+		<control type="group">
+			<animation effect="slide" start="-60,0" end="0,0" time="500" tween="cubic" easing="out">WindowOpen</animation>
+			<control type="label">
+				<left>96</left><top>64</top><width>700</width><height>40</height>
+				<font>font12</font>
+				<textcolor>FF22D3EE</textcolor>
+				<aligny>center</aligny>
+				<label>Télécharger</label>
+			</control>
+			<control type="image">
+				<left>96</left><top>130</top><width>220</width><height>330</height>
+				<aspectratio>scale</aspectratio>
+				<fadetime>200</fadetime>
+				<texture background="true">$INFO[Window.Property(poster)]</texture>
+				<visible>!String.IsEmpty(Window.Property(poster))</visible>
+			</control>
+			<control type="label">
+				<left>344</left><top>130</top><width>460</width><height>140</height>
+				<font>font30_title</font>
+				<textcolor>FFF5F7FA</textcolor>
+				<wrapmultiline>true</wrapmultiline>
+				<label>$INFO[Window.Property(title)]</label>
+			</control>
+			<control type="label">
+				<left>344</left><top>282</top><width>460</width><height>36</height>
+				<font>font12</font>
+				<textcolor>B3DCE3EE</textcolor>
+				<aligny>center</aligny>
+				<label>$INFO[Window.Property(meta)]</label>
+			</control>
+			<control type="image">
+				<left>344</left><top>334</top><width>330</width><height>40</height>
+				<texture border="14" colordiffuse="3322D3EE">arrmada/rounded-12.png</texture>
+				<visible>String.IsEqual(Window.Property(in_library),1)</visible>
+			</control>
+			<control type="image">
+				<left>344</left><top>334</top><width>330</width><height>40</height>
+				<texture border="14" colordiffuse="1FFFFFFF">arrmada/rounded-12.png</texture>
+				<visible>!String.IsEqual(Window.Property(in_library),1)</visible>
+			</control>
+			<control type="label">
+				<left>344</left><top>334</top><width>330</width><height>40</height>
+				<font>font10</font>
+				<textcolor>FFF5F7FA</textcolor>
+				<align>center</align><aligny>center</aligny>
+				<label>$INFO[Window.Property(library_label)]</label>
+			</control>
+			<control type="textbox">
+				<left>96</left><top>500</top><width>708</width><height>420</height>
+				<font>font13</font>
+				<textcolor>D9DCE3EE</textcolor>
+				<autoscroll delay="6000" time="3000" repeat="8000">true</autoscroll>
+				<label>$INFO[Window.Property(overview)]</label>
+			</control>
+		</control>
+
+		<!-- ═══════════════ Feuille (à droite) ═══════════════ -->
+		<control type="group">
+			<left>860</left><top>96</top>
+			<animation effect="slide" start="80,0" end="0,0" time="500" tween="cubic" easing="out">WindowOpen</animation>
+			<animation effect="fade" start="0" end="100" time="400">WindowOpen</animation>
+			<control type="image">
+				<width>964</width><height>888</height>
+				<texture border="26" colordiffuse="F2121826">arrmada/rounded-24.png</texture>
+			</control>
+			<control type="image">
+				<width>964</width><height>888</height>
+				<texture border="26" colordiffuse="334A9EFF">arrmada/ring-24.png</texture>
+			</control>
+			<control type="label">
+				<left>48</left><top>28</top><width>800</width><height>56</height>
+				<font>font15_bold</font>
+				<textcolor>FFF5F7FA</textcolor>
+				<aligny>center</aligny>
+				<label>$INFO[Window.Property(sheet_title)]</label>
+			</control>
+			<control type="image">
+				<left>880</left><top>38</top><width>36</width><height>36</height>
+				<texture colordiffuse="FF4A9EFF">arrmada/spinner.png</texture>
+				<visible>!String.IsEmpty(Window.Property(loading))</visible>
+				<animation effect="rotate" end="-360" center="auto" time="900" loop="true" condition="true">Conditional</animation>
+			</control>
+			<control type="label">
+				<left>48</left><top>84</top><width>868</width><height>36</height>
+				<font>font12</font>
+				<textcolor>99C9D3E0</textcolor>
+				<aligny>center</aligny>
+				<label>$INFO[Window.Property(summary)]</label>
+			</control>
+
+			<!-- Film : ce qui va se passer -->
+			<control type="textbox">
+				<left>48</left><top>160</top><width>520</width><height>400</height>
+				<font>font13</font>
+				<textcolor>D9DCE3EE</textcolor>
+				<label>$INFO[Window.Property(movie_text)]</label>
+				<visible>String.IsEqual(Window.Property(kind),movie)</visible>
+			</control>
+
+			<!-- Portée : Toute la série / Une saison / Un épisode -->
+			<control type="list" id="810">
+				<left>48</left><top>140</top><width>870</width><height>120</height>
+				<orientation>horizontal</orientation>
+				<ondown>830</ondown>
+				<onright>820</onright>
+				<scrolltime tween="cubic" easing="out">200</scrolltime>
+				<visible>String.IsEqual(Window.Property(kind),series)</visible>
+				<itemlayout width="290" height="120">
+					<control type="image">
+						<width>274</width><height>120</height>
+						<texture border="14" colordiffuse="14FFFFFF">arrmada/rounded-12.png</texture>
+						<visible>String.IsEmpty(ListItem.Property(selected))</visible>
+					</control>
+					<control type="image">
+						<width>274</width><height>120</height>
+						<texture border="14" colordiffuse="404A9EFF">arrmada/rounded-12.png</texture>
+						<visible>!String.IsEmpty(ListItem.Property(selected))</visible>
+					</control>
+					<control type="label">
+						<left>24</left><top>20</top><width>236</width><height>44</height>
+						<font>font13</font>
+						<textcolor>FFF5F7FA</textcolor>
+						<aligny>center</aligny>
+						<label>$INFO[ListItem.Label]</label>
+					</control>
+					<control type="label">
+						<left>24</left><top>66</top><width>236</width><height>32</height>
+						<font>font10</font>
+						<textcolor>99C9D3E0</textcolor>
+						<aligny>center</aligny>
+						<label>$INFO[ListItem.Label2]</label>
+					</control>
+				</itemlayout>
+				<focusedlayout width="290" height="120">
+					<control type="image">
+						<width>274</width><height>120</height>
+						<texture border="14" colordiffuse="FF4A9EFF">arrmada/rounded-12.png</texture>
+						<visible>Control.HasFocus(810)</visible>
+					</control>
+					<control type="image">
+						<width>274</width><height>120</height>
+						<texture border="14" colordiffuse="14FFFFFF">arrmada/rounded-12.png</texture>
+						<visible>!Control.HasFocus(810) + String.IsEmpty(ListItem.Property(selected))</visible>
+					</control>
+					<control type="image">
+						<width>274</width><height>120</height>
+						<texture border="14" colordiffuse="404A9EFF">arrmada/rounded-12.png</texture>
+						<visible>!Control.HasFocus(810) + !String.IsEmpty(ListItem.Property(selected))</visible>
+					</control>
+					<control type="label">
+						<left>24</left><top>20</top><width>236</width><height>44</height>
+						<font>font13</font>
+						<textcolor>FFF5F7FA</textcolor>
+						<aligny>center</aligny>
+						<label>$INFO[ListItem.Label]</label>
+						<visible>!Control.HasFocus(810)</visible>
+					</control>
+					<control type="label">
+						<left>24</left><top>20</top><width>236</width><height>44</height>
+						<font>font13</font>
+						<textcolor>FF0A0E16</textcolor>
+						<aligny>center</aligny>
+						<label>$INFO[ListItem.Label]</label>
+						<visible>Control.HasFocus(810)</visible>
+					</control>
+					<control type="label">
+						<left>24</left><top>66</top><width>236</width><height>32</height>
+						<font>font10</font>
+						<textcolor>99C9D3E0</textcolor>
+						<aligny>center</aligny>
+						<label>$INFO[ListItem.Label2]</label>
+						<visible>!Control.HasFocus(810)</visible>
+					</control>
+					<control type="label">
+						<left>24</left><top>66</top><width>236</width><height>32</height>
+						<font>font10</font>
+						<textcolor>CC0A0E16</textcolor>
+						<aligny>center</aligny>
+						<label>$INFO[ListItem.Label2]</label>
+						<visible>Control.HasFocus(810)</visible>
+					</control>
+				</focusedlayout>
+			</control>
+
+			<!-- Saisons -->
+			<control type="list" id="830">
+				<left>48</left><top>288</top><width>868</width><height>84</height>
+				<orientation>horizontal</orientation>
+				<onup>810</onup>
+				<ondown>840</ondown>
+				<onright>820</onright>
+				<scrolltime tween="cubic" easing="out">200</scrolltime>
+				<visible>String.IsEqual(Window.Property(kind),series) + !String.IsEqual(Window.Property(scope),series)</visible>
+				<itemlayout width="212" height="84">
+					<control type="image">
+						<width>200</width><height>84</height>
+						<texture border="14" colordiffuse="14FFFFFF">arrmada/rounded-12.png</texture>
+						<visible>String.IsEmpty(ListItem.Property(selected))</visible>
+					</control>
+					<control type="image">
+						<width>200</width><height>84</height>
+						<texture border="14" colordiffuse="404A9EFF">arrmada/rounded-12.png</texture>
+						<visible>!String.IsEmpty(ListItem.Property(selected))</visible>
+					</control>
+					<control type="label">
+						<left>20</left><top>10</top><width>160</width><height>36</height>
+						<font>font12</font>
+						<textcolor>FFF5F7FA</textcolor>
+						<aligny>center</aligny>
+						<label>$INFO[ListItem.Label]</label>
+					</control>
+					<control type="label">
+						<left>20</left><top>44</top><width>160</width><height>28</height>
+						<font>font10</font>
+						<textcolor>99C9D3E0</textcolor>
+						<aligny>center</aligny>
+						<label>$INFO[ListItem.Label2]</label>
+					</control>
+				</itemlayout>
+				<focusedlayout width="212" height="84">
+					<control type="image">
+						<width>200</width><height>84</height>
+						<texture border="14" colordiffuse="FF4A9EFF">arrmada/rounded-12.png</texture>
+						<visible>Control.HasFocus(830)</visible>
+					</control>
+					<control type="image">
+						<width>200</width><height>84</height>
+						<texture border="14" colordiffuse="14FFFFFF">arrmada/rounded-12.png</texture>
+						<visible>!Control.HasFocus(830) + String.IsEmpty(ListItem.Property(selected))</visible>
+					</control>
+					<control type="image">
+						<width>200</width><height>84</height>
+						<texture border="14" colordiffuse="404A9EFF">arrmada/rounded-12.png</texture>
+						<visible>!Control.HasFocus(830) + !String.IsEmpty(ListItem.Property(selected))</visible>
+					</control>
+					<control type="label">
+						<left>20</left><top>10</top><width>160</width><height>36</height>
+						<font>font12</font>
+						<textcolor>FFF5F7FA</textcolor>
+						<aligny>center</aligny>
+						<label>$INFO[ListItem.Label]</label>
+						<visible>!Control.HasFocus(830)</visible>
+					</control>
+					<control type="label">
+						<left>20</left><top>10</top><width>160</width><height>36</height>
+						<font>font12</font>
+						<textcolor>FF0A0E16</textcolor>
+						<aligny>center</aligny>
+						<label>$INFO[ListItem.Label]</label>
+						<visible>Control.HasFocus(830)</visible>
+					</control>
+					<control type="label">
+						<left>20</left><top>44</top><width>160</width><height>28</height>
+						<font>font10</font>
+						<textcolor>99C9D3E0</textcolor>
+						<aligny>center</aligny>
+						<label>$INFO[ListItem.Label2]</label>
+						<visible>!Control.HasFocus(830)</visible>
+					</control>
+					<control type="label">
+						<left>20</left><top>44</top><width>160</width><height>28</height>
+						<font>font10</font>
+						<textcolor>CC0A0E16</textcolor>
+						<aligny>center</aligny>
+						<label>$INFO[ListItem.Label2]</label>
+						<visible>Control.HasFocus(830)</visible>
+					</control>
+				</focusedlayout>
+			</control>
+
+			<!-- Épisodes de la saison choisie (cochables pour « Un épisode ») -->
+			<control type="list" id="840">
+				<left>48</left><top>396</top><width>520</width><height>440</height>
+				<orientation>vertical</orientation>
+				<onup>830</onup>
+				<onright>820</onright>
+				<scrolltime tween="cubic" easing="out">200</scrolltime>
+				<visible>String.IsEqual(Window.Property(kind),series) + !String.IsEqual(Window.Property(scope),series)</visible>
+				<enable>String.IsEqual(Window.Property(scope),episode)</enable>
+				<itemlayout width="520" height="73">
+					<control type="image">
+						<width>520</width><height>65</height>
+						<texture border="14" colordiffuse="0FFFFFFF">arrmada/rounded-12.png</texture>
+					</control>
+					<control type="image">
+						<left>16</left><top>18</top><width>28</width><height>28</height>
+						<texture colordiffuse="66FFFFFF">arrmada/ring-circle.png</texture>
+						<visible>String.IsEqual(Window.Property(scope),episode) + String.IsEmpty(ListItem.Property(picked))</visible>
+					</control>
+					<control type="image">
+						<left>16</left><top>18</top><width>28</width><height>28</height>
+						<texture colordiffuse="FF22D3EE">arrmada/circle.png</texture>
+						<visible>!String.IsEmpty(ListItem.Property(picked))</visible>
+					</control>
+					<control type="label">
+						<left>60</left><top>0</top><width>110</width><height>65</height>
+						<font>font10</font>
+						<textcolor>FF8CC4FF</textcolor>
+						<aligny>center</aligny>
+						<label>$INFO[ListItem.Property(code)]</label>
+					</control>
+					<control type="label">
+						<left>170</left><top>0</top><width>200</width><height>65</height>
+						<font>font12</font>
+						<textcolor>FFF5F7FA</textcolor>
+						<aligny>center</aligny>
+						<label>$INFO[ListItem.Label]</label>
+						<visible>String.IsEmpty(ListItem.Property(state))</visible>
+					</control>
+					<control type="label">
+						<left>170</left><top>0</top><width>200</width><height>65</height>
+						<font>font12</font>
+						<textcolor>80C9D3E0</textcolor>
+						<aligny>center</aligny>
+						<label>$INFO[ListItem.Label]</label>
+						<visible>!String.IsEmpty(ListItem.Property(state))</visible>
+					</control>
+					<control type="label">
+						<left>370</left><top>0</top><width>134</width><height>65</height>
+						<font>font10</font>
+						<textcolor>99C9D3E0</textcolor>
+						<align>right</align><aligny>center</aligny>
+						<label>$INFO[ListItem.Property(note)]</label>
+						<visible>!String.IsEqual(ListItem.Property(state),have)</visible>
+					</control>
+					<control type="label">
+						<left>370</left><top>0</top><width>134</width><height>65</height>
+						<font>font10</font>
+						<textcolor>FF34D399</textcolor>
+						<align>right</align><aligny>center</aligny>
+						<label>$INFO[ListItem.Property(note)]</label>
+						<visible>String.IsEqual(ListItem.Property(state),have)</visible>
+					</control>
+				</itemlayout>
+				<focusedlayout width="520" height="73">
+					<control type="image">
+						<width>520</width><height>65</height>
+						<texture border="14" colordiffuse="0FFFFFFF">arrmada/rounded-12.png</texture>
+						<visible>!Control.HasFocus(840)</visible>
+					</control>
+					<control type="image">
+						<width>520</width><height>65</height>
+						<texture border="14" colordiffuse="FF16203A">arrmada/rounded-12.png</texture>
+						<visible>Control.HasFocus(840)</visible>
+					</control>
+					<control type="image">
+						<width>520</width><height>65</height>
+						<texture border="14" colordiffuse="FF4A9EFF">arrmada/ring-24.png</texture>
+						<visible>Control.HasFocus(840)</visible>
+					</control>
+					<control type="image">
+						<left>16</left><top>18</top><width>28</width><height>28</height>
+						<texture colordiffuse="66FFFFFF">arrmada/ring-circle.png</texture>
+						<visible>String.IsEqual(Window.Property(scope),episode) + String.IsEmpty(ListItem.Property(picked))</visible>
+					</control>
+					<control type="image">
+						<left>16</left><top>18</top><width>28</width><height>28</height>
+						<texture colordiffuse="FF22D3EE">arrmada/circle.png</texture>
+						<visible>!String.IsEmpty(ListItem.Property(picked))</visible>
+					</control>
+					<control type="label">
+						<left>60</left><top>0</top><width>110</width><height>65</height>
+						<font>font10</font>
+						<textcolor>FF8CC4FF</textcolor>
+						<aligny>center</aligny>
+						<label>$INFO[ListItem.Property(code)]</label>
+					</control>
+					<control type="label">
+						<left>170</left><top>0</top><width>200</width><height>65</height>
+						<font>font12</font>
+						<textcolor>FFF5F7FA</textcolor>
+						<aligny>center</aligny>
+						<scroll>true</scroll>
+						<label>$INFO[ListItem.Label]</label>
+					</control>
+					<control type="label">
+						<left>370</left><top>0</top><width>134</width><height>65</height>
+						<font>font10</font>
+						<textcolor>99C9D3E0</textcolor>
+						<align>right</align><aligny>center</aligny>
+						<label>$INFO[ListItem.Property(note)]</label>
+						<visible>!String.IsEqual(ListItem.Property(state),have)</visible>
+					</control>
+					<control type="label">
+						<left>370</left><top>0</top><width>134</width><height>65</height>
+						<font>font10</font>
+						<textcolor>FF34D399</textcolor>
+						<align>right</align><aligny>center</aligny>
+						<label>$INFO[ListItem.Property(note)]</label>
+						<visible>String.IsEqual(ListItem.Property(state),have)</visible>
+					</control>
+				</focusedlayout>
+			</control>
+			<control type="textbox">
+				<left>48</left><top>404</top><width>520</width><height>160</height>
+				<font>font12</font>
+				<textcolor>99C9D3E0</textcolor>
+				<label>$INFO[Window.Property(episodes_note)]</label>
+				<visible>String.IsEqual(Window.Property(kind),series) + !String.IsEqual(Window.Property(scope),series) + !String.IsEmpty(Window.Property(episodes_note))</visible>
+			</control>
+			<control type="label">
+				<left>48</left><top>846</top><width>868</width><height>30</height>
+				<font>font10</font>
+				<textcolor>99C9D3E0</textcolor>
+				<aligny>center</aligny>
+				<label>$INFO[Window.Property(list_hint)]</label>
+			</control>
+
+			<!-- ═══════════════ Actions (colonne de droite) ═══════════════ -->
+			<control type="button" id="820">
+				<left>600</left><top>396</top><width>316</width><height>96</height>
+				<label>Pour ce soir</label>
+				<font>font13</font>
+				<textcolor>FFF5F7FA</textcolor>
+				<focusedcolor>FF0A0E16</focusedcolor>
+				<textoffsetx>24</textoffsetx>
+				<aligny>center</aligny>
+				<onleft>840</onleft>
+				<onup>810</onup>
+				<ondown>821</ondown>
+				<texturenofocus border="14" colordiffuse="1AFFFFFF">arrmada/rounded-12.png</texturenofocus>
+				<texturefocus border="14" colordiffuse="FF4A9EFF">arrmada/rounded-12.png</texturefocus>
+			</control>
+			<!-- Interrupteur dessiné par-dessus le bouton 820 -->
+			<control type="image">
+				<left>820</left><top>424</top><width>72</width><height>40</height>
+				<texture border="14" colordiffuse="FF22D3EE">arrmada/rounded-12.png</texture>
+				<visible>String.IsEqual(Window.Property(tonight),1)</visible>
+			</control>
+			<control type="image">
+				<left>820</left><top>424</top><width>72</width><height>40</height>
+				<texture border="14" colordiffuse="4DFFFFFF">arrmada/rounded-12.png</texture>
+				<visible>!String.IsEqual(Window.Property(tonight),1)</visible>
+			</control>
+			<control type="image">
+				<left>856</left><top>428</top><width>32</width><height>32</height>
+				<texture colordiffuse="FFFFFFFF">arrmada/circle.png</texture>
+				<visible>String.IsEqual(Window.Property(tonight),1)</visible>
+				<animation effect="slide" start="-32,0" end="0,0" time="180" tween="cubic" easing="out">Visible</animation>
+			</control>
+			<control type="image">
+				<left>824</left><top>428</top><width>32</width><height>32</height>
+				<texture colordiffuse="FFFFFFFF">arrmada/circle.png</texture>
+				<visible>!String.IsEqual(Window.Property(tonight),1)</visible>
+				<animation effect="slide" start="32,0" end="0,0" time="180" tween="cubic" easing="out">Visible</animation>
+			</control>
+			<control type="textbox">
+				<left>600</left><top>500</top><width>316</width><height>64</height>
+				<font>font10</font>
+				<textcolor>99C9D3E0</textcolor>
+				<label>$INFO[Window.Property(tonight_hint)]</label>
+			</control>
+
+			<control type="button" id="821">
+				<left>600</left><top>580</top><width>316</width><height>110</height>
+				<label>$INFO[Window.Property(button_label)]</label>
+				<font>font13</font>
+				<textcolor>FF8CC4FF</textcolor>
+				<focusedcolor>FF0A0E16</focusedcolor>
+				<align>center</align><aligny>center</aligny>
+				<wrapmultiline>true</wrapmultiline>
+				<onleft>840</onleft>
+				<onup>820</onup>
+				<ondown>822</ondown>
+				<texturenofocus border="14" colordiffuse="334A9EFF">arrmada/rounded-12.png</texturenofocus>
+				<texturefocus border="14" colordiffuse="FF4A9EFF">arrmada/rounded-12.png</texturefocus>
+				<animation effect="zoom" start="100" end="104" time="160" tween="cubic" easing="out" center="auto">Focus</animation>
+				<animation effect="zoom" start="104" end="100" time="160" tween="cubic" easing="out" center="auto">UnFocus</animation>
+			</control>
+			<control type="image">
+				<left>876</left><top>598</top><width>28</width><height>28</height>
+				<texture colordiffuse="FFF5F7FA">arrmada/spinner.png</texture>
+				<visible>!String.IsEmpty(Window.Property(sending))</visible>
+				<animation effect="rotate" end="-360" center="auto" time="900" loop="true" condition="true">Conditional</animation>
+			</control>
+
+			<control type="button" id="822">
+				<left>600</left><top>710</top><width>316</width><height>64</height>
+				<label>Options avancées</label>
+				<font>font12</font>
+				<textcolor>D9F5F7FA</textcolor>
+				<focusedcolor>FF0A0E16</focusedcolor>
+				<align>center</align><aligny>center</aligny>
+				<onleft>840</onleft>
+				<onup>821</onup>
+				<texturenofocus border="14" colordiffuse="1AFFFFFF">arrmada/rounded-12.png</texturenofocus>
+				<texturefocus border="14" colordiffuse="FF4A9EFF">arrmada/rounded-12.png</texturefocus>
+			</control>
+		</control>
+
+		<control type="label">
+			<left>1024</left><top>1030</top><width>800</width><height>30</height>
+			<font>font10</font>
+			<textcolor>66C9D3E0</textcolor>
+			<align>right</align><aligny>center</aligny>
+			<label>OK : choisir   ·   Retour : annuler</label>
+		</control>
+		<!-- toast:begin · bulle ArrMada, bloc posé par tools/toast_xml.py (ne pas modifier ici) -->
+		<control type="group">
+			<left>1236</left><top>912</top>
+			<visible>!String.IsEmpty(Window(Home).Property(arrmada.toast))</visible>
+			<animation effect="slide" start="0,48" end="0,0" time="320" tween="cubic" easing="out">Visible</animation>
+			<animation effect="fade" start="0" end="100" time="320">Visible</animation>
+			<animation effect="fade" start="100" end="0" time="240">Hidden</animation>
+			<control type="image">
+				<left>-20</left><top>-20</top><width>684</width><height>164</height>
+				<texture border="56" colordiffuse="664A9EFF">arrmada/glow.png</texture>
+			</control>
+			<control type="image">
+				<width>644</width><height>124</height>
+				<texture border="26" colordiffuse="F7121826">arrmada/rounded-24.png</texture>
+			</control>
+			<control type="image">
+				<width>644</width><height>124</height>
+				<texture border="26" colordiffuse="804A9EFF">arrmada/ring-24.png</texture>
+				<visible>String.IsEmpty(Window(Home).Property(arrmada.toast.error))</visible>
+			</control>
+			<control type="image">
+				<width>644</width><height>124</height>
+				<texture border="26" colordiffuse="99F87171">arrmada/ring-24.png</texture>
+				<visible>!String.IsEmpty(Window(Home).Property(arrmada.toast.error))</visible>
+			</control>
+			<control type="image">
+				<left>18</left><top>14</top><width>64</width><height>96</height>
+				<aspectratio>keep</aspectratio>
+				<texture background="true">$INFO[Window(Home).Property(arrmada.toast.icon)]</texture>
+			</control>
+			<control type="label">
+				<left>100</left><top>14</top><width>524</width><height>36</height>
+				<font>font13</font>
+				<textcolor>FF8CC4FF</textcolor>
+				<aligny>center</aligny>
+				<label>$INFO[Window(Home).Property(arrmada.toast.heading)]</label>
+				<visible>String.IsEmpty(Window(Home).Property(arrmada.toast.error))</visible>
+			</control>
+			<control type="label">
+				<left>100</left><top>14</top><width>524</width><height>36</height>
+				<font>font13</font>
+				<textcolor>FFFCA5A5</textcolor>
+				<aligny>center</aligny>
+				<label>$INFO[Window(Home).Property(arrmada.toast.heading)]</label>
+				<visible>!String.IsEmpty(Window(Home).Property(arrmada.toast.error))</visible>
+			</control>
+			<control type="textbox">
+				<left>100</left><top>52</top><width>524</width><height>62</height>
+				<font>font12</font>
+				<textcolor>D9F5F7FA</textcolor>
+				<label>$INFO[Window(Home).Property(arrmada.toast.message)]</label>
+			</control>
+		</control>
+		<!-- toast:end -->
+	</controls>
+</window>

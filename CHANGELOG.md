@@ -7,6 +7,94 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Jellyfin: "Passer l'intro" without chapters, cast episodes (Kodi add-on 1.25.0)
+
+#### Added
+- **Episode markers from Jellyfin** (`services/jellyfin.py`, "media segments", Jellyfin 10.10+): the server finds the episode in Jellyfin (series TVDB, cached 10 min, refreshed once for a series added since; season; episode, double-episode files included) and returns its intro / recap / end-credits markers in seconds (`GET /api/kodi/segments?tvdb_id=&season=&episode=`, allowed for TV tokens, read-only). Markers come from a Jellyfin plugin (Intro Skipper, Chapter Segments Provider); Preview / Commercial ignored; Jellyfin older than 10.10, not configured, episode unknown: empty list
+- **TV**: at the start of a library episode the add-on asks for the markers in a background thread (the service loop never waits); named chapters stay first, markers are used when they say nothing: same "Passer l'intro" / "Passer le récap" button jumping to the end of the marker, and the "Épisode suivant" card as soon as the end credits start. Gated by the existing *Bouton « Passer l'intro »* setting
+- **Cast an episode** from the web app: a cast button on every episode with a file (series tab), when Jellyfin is configured; `POST /api/cast/play` accepts `tvdb_id + season + episode` besides `tmdb_id`, the stream is titled "Série · S02E04 · Titre"
+- **Settings → Cast & Jellyfin → Tester la connexion** now says whether markers are available: Jellyfin version (10.10+) and installed marker plugin, or what to install
+- Bench: `BENCH_ONLY=segments kodi-addon/bench/run.sh` (≈ 1 min, real Kodi 20): on an episode without chapters, button at 6 s, jump to 25 s (end of the intro marker), "Épisode suivant" card at 53 s on the end-credits marker, request received by the mock server
+- Jellyfin 12 compatibility: Jellyfin 12 disables "legacy authorization" by default, so the `api_key=` query parameter and the `X-Emby-Token` header are refused (401). ArrMada now uses `ApiKey=` (Cast stream URLs, which a Chromecast fetches without headers) and `Authorization: MediaBrowser Token="…"` (health check), both accepted since 10.10. This also fixes movie casting and the Jellyfin health check on Jellyfin 12
+- Tests: server 12 (fake Jellyfin behaves like 12.x and refuses legacy authorization; marker parsing, double episodes, support detection, TV route, series cache and refresh, no-marker cases, no Jellyfin, TV token scope, connection test, episode stream, cast validation); add-on 3 (parsing, button, credits)
+
+### No more emojis in the legacy TV menus (Kodi add-on 1.24.2)
+
+#### Fixed
+- "Options avancées" wizard, release picker, search results and the context menu showed their emojis (✅ ➕ 🎯 🚀 🏴‍☠️…) as empty squares with the TV font: removed, texts unchanged otherwise
+- Path arrows in displayed texts ("Paramètres → Avancé") become "›", which the font draws; bubbles convert them the same way
+
+#### Added
+- `tests/test_no_emoji.py`: every string of the add-on's Python code is checked, a new emoji fails CI (arrows stay allowed in docstrings and logs)
+
+### Notifications no longer hide the top menu of the TV app (Kodi add-on 1.24.1)
+
+#### Fixed
+- Kodi's notification bubble is drawn by the skin (Aeon Nox SiLVO) at the top of the screen, right over the ArrMada menu, and an add-on cannot move it. While an ArrMada screen is shown, notifications now appear **bottom right** in an ArrMada bubble drawn by the screen itself (poster, title, two lines, red outline for errors), never focusable, queued one after the other by the service (`lib/toast.py`, logic in `lib/toast_data.py`). Elsewhere (Kodi screens, playback) the Kodi bubble is kept; if the service is not running, too
+- All add-on notifications go through it: server events, camera bubbles, `ui.notify`, `show_notification`
+- Emojis removed from notification texts (the TV font showed "📥" as an empty square)
+
+#### Added
+- `kodi-addon/tools/toast_xml.py` places the shared bubble block in the 9 full-screen windows (generated screens call it); a test checks every screen carries it, last, without any focusable control
+- Bench: `BENCH_ONLY=toast kodi-addon/bench/run.sh` (≈ 1 min, real Kodi 20): ArrMada bubble on the ArrMada home with the menu visible, cleared on time, Kodi bubble on a Kodi screen
+- Tests: 7 (glyph cleaning, bounds, service heartbeat, queue, show/clear/next, fallback when leaving ArrMada, screen condition) + XML checks
+
+### "Prêt à regarder": subtitles at import, ready popup on the right TV, TV badge in the web app (Kodi add-on 1.24.0, lot 4 of ADR-005)
+
+#### Added
+- **Subtitles at import** (`services/tv_subtitles.py`): on the `Download` webhook of a title requested from a TV, the request records the import and what the TV needs to play it (TMDB of the movie, or TVDB + season + episode); Bazarr then searches in the background: French (full, then forced), retried every 20 s for 3 min (Bazarr needs a moment to see the new file), English as a fallback. A title without a Bazarr language profile gets the first profile containing French. Without Bazarr the request is ready at once, without subtitles
+- **Ready**: a movie or a single episode as soon as it is imported and its subtitles searched; a season or a series 3 min after leaving the queue (next episodes). The priority guardian then publishes `tv_ready` with the id of the TV that asked
+- **"Prêt à regarder" popup on that TV only** (`script-arrmada-ready.xml`, `lib/ready_window.py`, logic in `lib/ready_data.py`): poster, quality, subtitles found, **Regarder** / *Plus tard*, closes by itself after a minute; never over a film (waits for the end of playback). *Regarder* reuses "Lire sur la TV"; when the TV's Kodi library does not have the file yet, it is updated and playback retried for ~30 s
+- Cards: 5 steps *Trouvé → Télécharg. → Import → Sous-titres → Prêt*, "Sous-titres en cours…" phase, ready cards say which subtitles were found
+- **Web app**: "TV · Salon TV · ce soir" badge on downloads launched from a TV (`tv_request` of `/api/downloads`)
+- `tv_requests` gets `imported_at`, `subtitles`, `ready_info`, added at startup without migration
+- Bench: `BENCH_ONLY=ready kodi-addon/bench/run.sh` (≈ 1 min, real Kodi 20): announcement for another TV ignored, popup on this TV, *Regarder* updates the library then plays
+- Tests: server 11 (import targets, ready info, languages and profiles, ready rules, subtitles phase, French found after Bazarr discovers the file + profile set + event for the right TV, English fallback, no Bazarr, one episode with its numbers, a season waits, ordinary import untouched); add-on 10 (addressing, popup texts, Regarder parameters, subtitle labels, five-step cards, XML checks of the popup)
+
+### TV Downloads screen rebuilt: "Pour ce soir" lane, per-item actions, "Débloquer" (Kodi add-on 1.23.0, lot 3 of ADR-005)
+
+#### Added
+- **"Pour ce soir" lane**: one card per request launched from a TV, with the time it will be ready ("Prêt vers 20:58": end of download + 2 min of import), the steps *Trouvé → Téléchargement → Import → Prêt*, the TV that asked, size and quality, and the error when blocked. Finished requests stay 12 h as "Prêt à regarder"; without any request, an empty state explains how to launch one
+- **OK opens an action menu** on cards and queue rows, recalled under the selected element ("OK : En tête · Pause · Fiche"): *Passer en tête* (right behind the TV requests) and per-item *Pause* / *Reprendre* for Usenet items, **Débloquer**, *Annuler ma demande* (only the TV that asked), *Relancer la recherche*, *Fiche du titre*
+- **Débloquer** dialog: the server diagnoses the download (green: fine, red: what blocks, blue: what the button will do) and offers ONE remedy, re-diagnosed when applied (`services/unstick.py`): season pack refused by Sonarr → episode-by-episode import (same planner and safeguards as the background job, now `blocked_imports.plan_for_download`); downloaded but not imported → import of the files the *arr accepts **without any rejection** (so nothing is ever overwritten), the rest left to the web app; failed / stalled → release blocklisted and another one searched (episode-level for series; the failed download's partial files are removed from the download client, as Radarr / Sonarr do). Nothing in the library is ever deleted or overwritten
+- `GET /api/kodi/downloads/board` (whole screen in one call), `GET|POST /api/kodi/downloads/{radarr|sonarr}/{download_id}/diagnose|unstick`, `POST /api/kodi/tv-requests/{id}/retry` (same scope, request restarts for 24 h); allowed for TV tokens
+- Screen generated by `kodi-addon/tools/make_downloads_xml.py` (4 steps × 4 states per card, 6 row colours, twice): a test checks the committed XML is up to date
+- Bench: `BENCH_ONLY=board kodi-addon/bench/run.sh` (≈ 1 min, real Kodi 20): lane, blocked card, action menu, Débloquer dialog, row menu; the actions received by the mock server are checked
+- Tests: server 22 (cards: progress, time left, phases, blocked download, order; diagnosis: pack, import, failed / stalled, fine, gone; clean import plan; board, unstick retry / import / pack / nothing, retry scope); add-on 16 (ready time rounding, ago, card models for every phase, row actions Usenet vs torrent, summary, Débloquer model, glyphs, XML checks for both screens)
+
+#### Changed
+- "Tout mettre en pause" becomes **"Pause sauf ce soir"** (TV requests are in Force priority and keep downloading)
+
+#### Fixed
+- Queue rows without time left showed a stray "· 5,0 Mo/s"
+
+### "Télécharger" sheet on the TV: movie, whole series, one season or one episode (Kodi add-on 1.22.0, lot 2 of ADR-005)
+
+#### Added
+- **TV "Télécharger" sheet** (`script-arrmada-download.xml`, `lib/download_window.py`, logic in `lib/download_data.py`): opens on OK on a title not in the library (search, "Pour toi", Découvrir) and from the new **Télécharger** button of the media sheet (series, or movie without a file). Series: *Toute la série* / *Une saison* / *Un épisode*, seasons as chips ("3/10 sur le NAS"), episodes to tick (several allowed; already on the NAS or air date shown). Movie: one button. **Pour ce soir** switch, on by default. The button says exactly what leaves ("Télécharger S02E04"). Replaces the old 3-list wizard (quality, folder, mode), still reachable through **Options avancées**
+- `POST /api/kodi/media/download`: adds the title if needed with the **quality profile and root folder used most in the library**, records the TV request, answers within seconds; the search runs in the background. Season / episode of a new series: added with `monitor: none` and no season monitored, then the server waits for Sonarr to load the episodes and monitors **only** what was asked (Sonarr no longer downloads the whole series behind your back). "Pour ce soir": the best-ranked release the *arr approves that is **Usenet** is grabbed (full season pack for a season), else the *arr's own automatic search. Movie already on the NAS: "déjà sur le NAS", nothing launched
+- `GET /api/kodi/media/seasons`: seasons of a series and episodes of one season, from Sonarr when followed, else from TMDB (French titles)
+- Both routes allowed for TV tokens
+- Bench: `BENCH_ONLY=download kodi-addon/bench/run.sh` (≈ 1 min, real Kodi 20): series sheet, season change, episode ticked, switch on / off, sent payload checked on the mock server, movie sheet
+- Tests: server 19 (usenet first within approved releases, season pack only for a season, library defaults, default season, new movie, no priority, torrents only, already on the NAS, new series one season, one episode tonight, whole series, incomplete choices, seasons from Sonarr and from TMDB); add-on 17 (scope row, chips, episode rows, ticking, button labels, payloads, texts without missing glyphs, and the XML ↔ Python ↔ fonts ↔ textures checks for the new screen)
+
+#### Changed
+- Media sheet: for a movie without a file, **Télécharger** replaces *Meilleure version* and *Sous-titres*
+
+### Downloads launched from the TV jump the queue (server, lot 1 of ADR-005)
+
+#### Added
+- **"Tonight" priority**: anything launched from a TV (search, add with search, hand-picked release) is recorded as a TV request (`tv_requests` table: title, scope movie / series / season / episodes, TV of origin, state) and its downloads go to the **top of SABnzbd with the Force priority**, requests in arrival order. Radarr / Sonarr have no priority of their own: a guardian (`services/tv_priority.py`) matches their queue (`downloadId` = SABnzbd `nzo_id`) every 15 s while a request is open, and at once on the `Grab` webhook. Each NZB of a season is caught as it arrives. Force also downloads while the queue is paused. `"priority": false` opts out
+- Requests close on their own 3 min after their downloads left the queue, or expire after 24 h with nothing found; an unreachable Radarr / Sonarr never closes anything
+- TV routes: `GET /api/kodi/tv-requests`, `POST /api/kodi/tv-requests/{id}/cancel` (only the TV that asked, while in progress: downloads removed without blocklist, monitoring stopped if the request added the title; the partial download is removed from the client, the library is never touched), `POST /api/kodi/queue/{download_id}/pause|resume|top` (one SABnzbd item; `top` goes right behind the TV requests)
+- `GET /api/downloads`: `download_id`, `episode_ids`, `season_number` and `tv_request` per item
+- SABnzbd client: per-item priority, move, pause and resume
+- Settings: `TV_PRIORITY_ENABLED`, `TV_PRIORITY_INTERVAL_SECONDS`, `TV_REQUEST_TTL_HOURS`
+- Tests: fake SABnzbd with a real ordered queue (Force re-sorts, switch, per-item pause); add from a paired TV goes from last of 11 to first, idempotent second pass, arrival order, no-priority request, season caught NZB by NZB, close / expire / unreachable service, `Grab` webhook, hand-picked release, episode search, cancel by the right TV only, per-item actions, TV scope
+
+#### Fixed
+- TV actions (search, add, grab) now record **which TV** in the activity log (`device` was empty)
+
 ### Library: the last known list when Radarr / Sonarr does not answer
 
 #### Fixed

@@ -53,7 +53,7 @@ def add_media_item(item: dict):
     rating = item.get("rating") or 0.0
 
     # Badge in title
-    badge = " [✅ En médiathèque]" if in_lib else " [➕ Demander]"
+    badge = " [En médiathèque]" if in_lib else " [Demander]"
     year_str = f" ({year})" if year else ""
     display_title = f"{title}{year_str}{badge}"
 
@@ -208,7 +208,11 @@ def handle_search_results(query: str):
 
 
 def show_media_details_dialog(params: dict):
-    """Handle click on a poster: show detail popup and launch 3-step wizard or release picker."""
+    """Options avancées de la feuille « Télécharger » : qualité, dossier, release à la main.
+
+    Ancien assistant en 3 listes ; le chemin normal est désormais la feuille
+    (lib/download_window.py), qui prend la qualité et le dossier habituels.
+    """
     title = params.get("title", "")
     mtype = params.get("type", "movie")
     in_lib = params.get("in_library") == "1"
@@ -223,18 +227,18 @@ def show_media_details_dialog(params: dict):
     if year:
         header += f" ({year})"
 
-    status_tag = "✅ Déjà dans votre médiathèque" if in_lib else "➕ Non possédé"
+    status_tag = "Déjà dans votre médiathèque" if in_lib else "Non possédé"
 
     options = []
     if in_lib and arr_id:
-        options.append(("🎯 Choisir une Release manuellement (Torrent vs Usenet)", "pick_release"))
-        options.append(("🚀 Forcer la recherche automatique d'une meilleure release", "auto_search"))
-        options.append(("📖 Lire le synopsis complet", "show_plot"))
+        options.append(("Choisir une Release manuellement (Torrent vs Usenet)", "pick_release"))
+        options.append(("Forcer la recherche automatique d'une meilleure release", "auto_search"))
+        options.append(("Lire le synopsis complet", "show_plot"))
     else:
-        options.append(("🎛️ Demander & Télécharger (Qualité 1080p/4K, Dossier, Releases)", "add_wizard"))
-        options.append(("📖 Lire le synopsis complet", "show_plot"))
+        options.append(("Demander & Télécharger (Qualité 1080p/4K, Dossier, Releases)", "add_wizard"))
+        options.append(("Lire le synopsis complet", "show_plot"))
 
-    choice = xbmcgui.Dialog().select(f"🏴‍☠️ {header} — {status_tag}", [o[0] for o in options])
+    choice = xbmcgui.Dialog().select(f"{header} — {status_tag}", [o[0] for o in options])
     if choice < 0:
         return
 
@@ -281,8 +285,8 @@ def show_media_details_dialog(params: dict):
 
         # Step 3: Mode
         mode_choice = xbmcgui.Dialog().select(f"Étape 3/3 — Mode de téléchargement", [
-            "🚀 Téléchargement Automatique (Meilleure release)",
-            "🎯 Choisir la Release manuellement (Torrent vs Usenet)",
+            "Téléchargement Automatique (Meilleure release)",
+            "Choisir la Release manuellement (Torrent vs Usenet)",
         ])
         if mode_choice < 0:
             return
@@ -352,10 +356,10 @@ def show_downloads_dialog():
     item_id = selected.get("id") or idx + 1
 
     actions = [
-        "▶️ Reprendre le telechargement (Resume)",
-        "⏸️ Mettre en pause (Pause)",
-        "🗑️ Annuler et supprimer du client",
-        "⛔ Supprimer et bloquer cette version (Blocklist)",
+        "Reprendre le telechargement (Resume)",
+        "Mettre en pause (Pause)",
+        "Annuler et supprimer du client",
+        "Supprimer et bloquer cette version (Blocklist)",
     ]
 
     action_idx = xbmcgui.Dialog().select(f"Action pour : {title[:50]}...", actions)
@@ -482,6 +486,10 @@ def main():
         # « Lire sur la TV » depuis la web app (1.19.0) : lancé par le service
         import kodi_library
         kodi_library.remote_play(params)
+    elif action == "ready":
+        # « Prêt à regarder » (ADR-005, lot 4) : ouvert par le service sur la bonne TV
+        import ready_window
+        ready_window.show(params)
     elif action == "camera":
         # Pop-up d'une caméra Eufy par-dessus le film (ouverte par le service)
         import camera_window
@@ -585,6 +593,12 @@ def main():
     elif action == "dashboard" or action == "dashboard_popup":
         show_dashboard_dialog()
     elif action == "media_details":
+        # Feuille « Télécharger » (ADR-005) : film, série, saison ou épisode
+        import download_data
+        import download_window
+        download_window.open_download(download_data.entry_from_params(params))
+    elif action == "media_advanced":
+        # « Options avancées » de la feuille : l'ancien assistant (qualité, dossier, release)
         show_media_details_dialog(params)
     elif action == "downloads":
         show_downloads_dialog()

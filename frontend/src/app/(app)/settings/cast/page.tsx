@@ -32,6 +32,7 @@ import {
     useJellyfinConfig,
     useSetJellyfin,
     useTestJellyfin,
+    type JellyfinSegmentsSupport,
 } from "@/hooks/use-cast";
 import { plural } from "@/lib/format";
 import { stagger } from "@/lib/motion";
@@ -48,6 +49,15 @@ export default function CastSettingsPage() {
 
 /* ── Jellyfin ───────────────────────────────────────────────── */
 
+/** « Passer l'intro » sur la TV : ce que Jellyfin peut fournir (marqueurs d'épisode). */
+function markersLabel(s?: JellyfinSegmentsSupport): string | undefined {
+    if (!s) return undefined;
+    if (!s.supported) return "Marqueurs d'intro / générique : Jellyfin 10.10 ou plus récent requis.";
+    if (s.providers.length > 0) return `Marqueurs d'intro / générique : ${s.providers.join(", ")}.`;
+    if (!s.checked) return "Marqueurs d'intro / générique : liste des plugins illisible (clé non administrateur ?).";
+    return "Marqueurs d'intro / générique : aucun plugin. Installe Intro Skipper pour « Passer l'intro » sur la TV.";
+}
+
 function JellyfinPanel() {
     const { data: jf, isLoading, isError, error, refetch } = useJellyfinConfig();
     const setJf = useSetJellyfin();
@@ -56,7 +66,7 @@ function JellyfinPanel() {
     const [url, setUrl] = useState("");
     const [apiKey, setApiKey] = useState("");
     const [submitted, setSubmitted] = useState(false);
-    const [testResult, setTestResult] = useState<{ ok: boolean; label: string } | null>(null);
+    const [testResult, setTestResult] = useState<{ ok: boolean; label: string; markers?: string } | null>(null);
 
     // Pré-remplit l'URL enregistrée une fois chargée (sans écraser une saisie).
     useEffect(() => {
@@ -92,7 +102,11 @@ function JellyfinPanel() {
             onSuccess: (r) =>
                 setTestResult(
                     r.ok
-                        ? { ok: true, label: [r.server, r.version && `v${r.version}`].filter(Boolean).join(" · ") || "Connexion OK" }
+                        ? {
+                              ok: true,
+                              label: [r.server, r.version && `v${r.version}`].filter(Boolean).join(" · ") || "Connexion OK",
+                              markers: markersLabel(r.segments),
+                          }
                         : { ok: false, label: r.detail || "Jellyfin injoignable" },
                 ),
             onError: (e) => setTestResult({ ok: false, label: e.message }),
@@ -178,7 +192,12 @@ function JellyfinPanel() {
                                 )}
                             >
                                 {testResult.ok ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <XCircle className="h-4 w-4 shrink-0" />}
-                                {testResult.label}
+                                <span>
+                                    {testResult.label}
+                                    {testResult.markers && (
+                                        <span className="block text-xs text-muted-foreground">{testResult.markers}</span>
+                                    )}
+                                </span>
                             </motion.p>
                         )}
                     </AnimatePresence>
