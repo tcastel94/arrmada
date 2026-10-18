@@ -18,20 +18,59 @@ ssh root@unraid
 cd /mnt/user/appdata/arrmada
 
 cat > docker-compose.override.yml <<'EOF'
-# Réglages propres à CET hôte Unraid — non versionné (.gitignore)
+# ╔════════════════════════════════════════════════════════════╗
+# ║   ArrMada — réglages propres à l'hôte Unraid (NON versionné) ║
+# ╚════════════════════════════════════════════════════════════╝
+#
+# Emplacement : /mnt/user/appdata/arrmada/docker-compose.override.yml
+# (même dossier que docker-compose.yml). Docker Compose le fusionne
+# automatiquement avec docker-compose.yml : rien à passer en option.
+# Il est ignoré par git (.gitignore) : un `git pull` ne l'écrase jamais.
+#
+# But : passer à l'image unique SANS rien perdre de l'instance actuelle.
+#   - même base PostgreSQL (volume arrmada_arrmada-pgdata, conteneur arrmada-db)
+#   - même mot de passe (ARRMADA_AUTH_SECRET du .env)
+#   - même secret de signature : sessions web et URL d'artworks déjà
+#     données aux TV restent valides
+#   - mêmes montages : /mnt/user, socket Docker, add-on Kodi du clone Git
+#   - même réseau Docker (arrmada-network)
+#
+# Toutes les autres variables (PUBLIC_WEB_URL, Eufy, fanart.tv, Ollama,
+# auto-import…) sont déjà transmises par docker-compose.yml depuis le .env.
+#
+# Vérifier la fusion avant de démarrer :
+#   docker compose config | less
+
 services:
   arrmada:
-    # Construit depuis les sources tant que l'image GHCR n'est pas publique
+    # Construit depuis les sources du clone (tant que l'image GHCR n'est pas
+    # publique). Quand elle le sera : supprimer cette ligne, puis
+    # `docker compose pull && docker compose up -d` suffira.
     build: .
     volumes:
-      - /mnt/user:/mnt/user:rw              # nettoyage / doublons / artworks / auto-import
-      - /var/run/docker.sock:/var/run/docker.sock:ro   # analyse IA des logs Docker
-      - ./kodi-addon:/app/kodi-addon:ro     # dépôt Kodi à jour dès le git pull
+      # Médias : nettoyage, doublons, artworks des dossiers, auto-import
+      - /mnt/user:/mnt/user:rw
+      # Logs des conteneurs pour l'analyse IA (lecture seule)
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Add-on Kodi du clone Git : nouvelle version proposée aux TV dès le
+      # git pull, sans reconstruire l'image
+      - ./kodi-addon:/app/kodi-addon:ro
     environment:
-      - PUID=99                             # nobody:users (convention Unraid)
+      # nobody:users, propriétaire habituel des partages Unraid (comme les
+      # conteneurs linuxserver.io). ⚠️ L'ancien backend tournait en root :
+      # voir docs/deploy-unraid.md pour les fichiers créés par root.
+      - PUID=99
       - PGID=100
-      - DATABASE_URL=postgresql+asyncpg://arrmada:${POSTGRES_PASSWORD:-arrmada}@arrmada-db:5432/arrmada
-      - ARRMADA_AUTH_SECRET=${ARRMADA_AUTH_SECRET:-}   # ancien mot de passe (.env)
+      # Base PostgreSQL existante (même URL que l'ancienne stack)
+      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://arrmada:${POSTGRES_PASSWORD:-arrmada}@arrmada-db:5432/arrmada}
+      # Ancien mot de passe en clair, lu dans le .env. Une fois redéfini dans
+      # Paramètres → Mot de passe administrateur (stocké haché), il ne sert
+      # plus que de clé aux TV non appairées.
+      - ARRMADA_AUTH_SECRET=${ARRMADA_AUTH_SECRET:-}
+      # Secret de signature : l'ancienne stack utilisait JWT_SECRET_KEY, ou à
+      # défaut ARRMADA_AUTH_SECRET. On garde le même pour ne pas invalider
+      # sessions et URL d'artworks signées.
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-${ARRMADA_AUTH_SECRET:-}}
     depends_on:
       arrmada-db:
         condition: service_healthy
@@ -45,15 +84,22 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-arrmada}
       POSTGRES_DB: arrmada
     volumes:
-      - arrmada-pgdata:/var/lib/postgresql/data   # = volume existant arrmada_arrmada-pgdata
+      # = volume existant arrmada_arrmada-pgdata (projet compose « arrmada »)
+      - arrmada-pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U arrmada"]
       interval: 10s
       timeout: 5s
       retries: 5
+    # Port non exposé : accessible uniquement depuis le réseau Docker.
 
 volumes:
   arrmada-pgdata:
+
+networks:
+  default:
+    # Même réseau que l'ancienne stack (conteneurs qui y sont rattachés)
+    name: arrmada-network
 EOF
 ```
 
@@ -64,6 +110,21 @@ Pour vérifier avant de basculer :
 ```bash
 docker volume ls | grep pgdata        # doit afficher arrmada_arrmada-pgdata
 ```
+
+### Piège : fichiers créés par l'ancien backend (root)
+
+L'ancien conteneur backend tournait en **root**. Le nouveau tourne en
+`nobody:users` (PUID 99 / PGID 100), comme Sonarr, Radarr et les autres.
+Un fichier que l'ancien backend a créé dans les médias (artwork, NFO, import)
+appartient donc à root, et ArrMada ne pourra plus le modifier. Pour vérifier :
+
+```bash
+find /mnt/user/media -user root 2>/dev/null | head   # adapte le chemin à tes partages
+```
+
+S'il y en a, rends-les à Unraid : **Tools → New Permissions**, ou
+`chown -R nobody:users <dossier>`. Le dossier `data/` d'ArrMada est remis au
+bon propriétaire tout seul, à chaque démarrage.
 
 ## 2. Basculer
 
