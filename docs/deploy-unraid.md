@@ -11,13 +11,22 @@ automatiquement, et il est ignoré par git.
 > ⚠️ Sans cet override, le conteneur démarrerait sur une base SQLite **vide**.
 > Le workflow `deploy.yml` refuse donc de déployer s'il est absent.
 
-## 1. Créer l'override (une seule fois)
+> ⚠️ **Ne pas poser l'override sous son vrai nom avant la bascule.** Docker
+> Compose le lit automatiquement, quelle que soit la version du
+> `docker-compose.yml` : l'ancienne stack chercherait alors à construire le
+> service `arrmada` depuis un `Dockerfile` racine qu'elle n'a pas, et tout
+> déploiement (`deploy.sh`, `docker compose up --build`) échouerait. Les
+> conteneurs en marche ne seraient pas touchés, mais plus rien ne se
+> déploierait. On le prépare donc sous le nom `.next`, et on le renomme
+> pendant la bascule.
+
+## 1. Préparer l'override (une seule fois)
 
 ```bash
 ssh root@unraid
 cd /mnt/user/appdata/arrmada
 
-cat > docker-compose.override.yml <<'EOF'
+cat > docker-compose.override.yml.next <<'EOF'
 # ╔════════════════════════════════════════════════════════════╗
 # ║   ArrMada — réglages propres à l'hôte Unraid (NON versionné) ║
 # ╚════════════════════════════════════════════════════════════╝
@@ -140,8 +149,14 @@ tar czf ~/arrmada-data-$(date +%F).tgz data/
 docker compose down --remove-orphans
 
 git pull origin main
-./deploy.sh --build
+mv docker-compose.override.yml.next docker-compose.override.yml
+docker compose config --quiet && ./deploy.sh --build
 ```
+
+Au merge de la PR, le déploiement automatique s'arrête de lui-même si
+l'override n'est pas encore en place (message « docker-compose.override.yml
+absent ») : rien n'est touché. Fais alors la bascule à la main, comme
+ci-dessus.
 
 ## 3. Après le démarrage
 
@@ -166,6 +181,8 @@ git pull origin main
 
 ```bash
 docker compose down
+# L'ancienne stack ne connaît pas l'override : le mettre de côté
+mv docker-compose.override.yml docker-compose.override.yml.next
 git checkout <ancien-commit>
 docker compose up -d --build   # l'ancienne stack retrouve le même volume PostgreSQL
 ```

@@ -110,11 +110,14 @@ jobs:
             echo "📦 Pulling latest code..."
             git pull origin main
 
+            # Tant que le paquet GHCR est privé, le pull échoue : l'override
+            # (build: .) fait alors construire l'image sur place. --build ne
+            # change rien pour un service sans section build.
             echo "🐳 Pulling latest image..."
-            docker compose pull
+            docker compose pull 2>/dev/null || echo "ℹ️ Image non récupérable : construction locale"
 
             echo "🔄 Restarting..."
-            docker compose up -d --remove-orphans
+            docker compose up -d --build --remove-orphans
 
             echo "🧹 Cleaning up old images..."
             docker image prune -f
