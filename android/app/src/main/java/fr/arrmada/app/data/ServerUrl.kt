@@ -1,4 +1,4 @@
-package fr.arrmada.app
+package fr.arrmada.app.data
 
 import java.net.URI
 import java.net.URISyntaxException

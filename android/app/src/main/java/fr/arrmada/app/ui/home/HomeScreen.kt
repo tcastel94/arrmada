@@ -1,0 +1,309 @@
+package fr.arrmada.app.ui.home
+
+import android.widget.Toast
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewModelScope
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Text
+import coil.compose.AsyncImage
+import fr.arrmada.app.data.Api
+import fr.arrmada.app.data.CalendarEntry
+import fr.arrmada.app.data.LibraryItem
+import fr.arrmada.app.data.Repository
+import fr.arrmada.app.data.ResumeEntry
+import fr.arrmada.app.data.TmdbItem
+import fr.arrmada.app.ui.components.ArrButton
+import fr.arrmada.app.ui.components.ContentRow
+import fr.arrmada.app.ui.components.KenBurnsBackdrop
+import fr.arrmada.app.ui.components.LandscapeCard
+import fr.arrmada.app.ui.components.MessageScreen
+import fr.arrmada.app.ui.components.PosterCard
+import fr.arrmada.app.ui.components.formatClock
+import fr.arrmada.app.ui.theme.ArrColors
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+
+/** Ce que le héros (haut de l'écran) montre de l'élément sélectionné. */
+data class Hero(
+    val backdrop: String?,
+    val logo: String?,
+    val title: String,
+    val meta: String,
+    val overview: String?,
+    val note: String? = null,
+)
+
+data class HomeState(
+    val loading: Boolean = true,
+    val error: String? = null,
+    val resume: List<ResumeEntry> = emptyList(),
+    val recent: List<LibraryItem> = emptyList(),
+    val forYou: List<TmdbItem> = emptyList(),
+    val upcoming: List<CalendarEntry> = emptyList(),
+)
+
+/**
+ * Données de l'accueil. Les rangées sont chargées en parallèle et
+ * indépendamment : une rangée en erreur (TMDB absent…) n'empêche pas les
+ * autres de s'afficher, comme les flux en cache de l'add-on.
+ */
+class HomeViewModel(private val repository: Repository) : ViewModel() {
+
+    private val _state = MutableStateFlow(HomeState())
+    val state: StateFlow<HomeState> = _state
+
+    init {
+        load()
+    }
+
+    fun load() {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(loading = true, error = null)
+            val recent = async { runCatching { repository.recent() } }
+            val forYou = async { runCatching { repository.recommendations() } }
+            val upcoming = async { runCatching { repository.upcoming() } }
+            val resume = async {
+                runCatching {
+                    val states = repository.watchStates()
+                    val movies = async { repository.allLibrary("movie") }
+                    val series = async { repository.allLibrary("series") }
+                    repository.resumeRow(states, movies.await(), series.await())
+                }
+            }
+            val recentItems = recent.await()
+            val recos = forYou.await().getOrNull()
+            _state.value = HomeState(
+                loading = false,
+                // Erreur bloquante seulement si même la médiathèque ne répond pas
+                error = recentItems.exceptionOrNull()?.message,
+                resume = resume.await().getOrDefault(emptyList()),
+                recent = recentItems.getOrDefault(emptyList()),
+                forYou = recos?.let { r ->
+                    (r.trendingMovies + r.becauseYouHave.flatMap { it.recommendations })
+                        .filter { !it.inLibrary }
+                        .distinctBy { it.tmdbId }
+                        .take(20)
+                } ?: emptyList(),
+                upcoming = upcoming.await().getOrNull()?.items.orEmpty().take(20),
+            )
+        }
+    }
+}
+
+@Composable
+fun HomeScreen(
+    viewModel: HomeViewModel,
+    api: Api,
+    onOpenMovie: (LibraryItem) -> Unit,
+    onOpenMovieById: (Int) -> Unit,
+    onResume: (ResumeEntry) -> Unit,
+    onMovies: () -> Unit,
+    onSettings: () -> Unit,
+) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    var hero by remember { mutableStateOf<Hero?>(null) }
+    val firstFocus = remember { FocusRequester() }
+
+    fun soon(what: String) = Toast.makeText(context, "$what : dans la prochaine version de l’appli", Toast.LENGTH_SHORT).show()
+
+    if (state.loading && state.recent.isEmpty()) {
+        MessageScreen("Chargement…")
+        return
+    }
+    if (state.error != null && state.recent.isEmpty() && state.resume.isEmpty()) {
+        MessageScreen("Serveur ArrMada injoignable", state.error, "Réessayer") { viewModel.load() }
+        return
+    }
+
+    // Héros par défaut : le premier titre à reprendre, sinon le dernier ajout
+    val shown = hero ?: state.resume.firstOrNull()?.let { heroOf(it, api) } ?: state.recent.firstOrNull()?.let { heroOf(it, api) }
+
+    KenBurnsBackdrop(url = shown?.backdrop) {
+        Column(Modifier.fillMaxSize()) {
+            // ── Menu du haut (comme la coquille de l'add-on) ──
+            Row(
+                Modifier.padding(start = 48.dp, top = 20.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ArrButton("Accueil", {}, primary = true)
+                ArrButton("Films", onMovies)
+                ArrButton("Séries", { soon("Séries") })
+                ArrButton("Rechercher", { soon("Recherche") })
+                ArrButton("Réglages", onSettings)
+            }
+
+            // ── Héros : l'élément sélectionné ──
+            AnimatedContent(
+                targetState = shown,
+                transitionSpec = { fadeIn(tween(320)) togetherWith fadeOut(tween(200)) },
+                label = "hero",
+                modifier = Modifier.padding(start = 48.dp, top = 22.dp).height(178.dp),
+            ) { current ->
+                if (current != null) HeroBlock(current)
+            }
+
+            // ── Rangées ──
+            LazyColumn(
+                contentPadding = PaddingValues(bottom = 40.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                item {
+                    ContentRow("Reprendre", state.resume, key = { it.state.mediaType + it.state.id + it.state.season + it.state.episode }) { entry ->
+                        LandscapeCard(
+                            imageUrl = api.absolute(entry.item?.fanartUrl ?: entry.item?.posterUrl),
+                            title = entry.title,
+                            subtitle = entry.subtitle,
+                            progress = entry.progress,
+                            onClick = { onResume(entry) },
+                            onFocus = { hero = heroOf(entry, api) },
+                            modifier = if (entry == state.resume.first()) Modifier.focusRequester(firstFocus) else Modifier,
+                        )
+                    }
+                }
+                item {
+                    ContentRow("Ajouts récents", state.recent, key = { it.type + it.externalId }) { item ->
+                        PosterCard(
+                            imageUrl = api.absolute(item.posterUrl),
+                            title = item.title,
+                            onClick = { if (item.isMovie) onOpenMovie(item) else soon("Fiche série") },
+                            onFocus = { hero = heroOf(item, api) },
+                            modifier = if (state.resume.isEmpty() && item == state.recent.first()) Modifier.focusRequester(firstFocus) else Modifier,
+                        )
+                    }
+                }
+                item {
+                    ContentRow("Pour toi", state.forYou, key = { "t" + it.tmdbId }) { item ->
+                        PosterCard(
+                            imageUrl = item.posterUrl,
+                            title = item.title,
+                            onClick = { soon("Demander un titre") },
+                            onFocus = { hero = heroOf(item) },
+                        )
+                    }
+                }
+                item {
+                    ContentRow("Bientôt", state.upcoming, key = { it.id }) { entry ->
+                        PosterCard(
+                            imageUrl = api.absolute(entry.posterUrl),
+                            title = entry.title,
+                            onClick = { entry.movieId?.let(onOpenMovieById) ?: soon("Fiche série") },
+                            onFocus = { hero = heroOf(entry, api) },
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    // Focus de départ sur la première carte (sinon la télécommande ne « voit » rien)
+    LaunchedEffect(state.resume.isNotEmpty() || state.recent.isNotEmpty()) {
+        runCatching { firstFocus.requestFocus() }
+    }
+}
+
+@Composable
+private fun HeroBlock(hero: Hero) {
+    Column(Modifier.widthIn(max = 520.dp)) {
+        if (hero.logo != null) {
+            AsyncImage(
+                model = hero.logo,
+                contentDescription = hero.title,
+                contentScale = ContentScale.Fit,
+                alignment = Alignment.CenterStart,
+                modifier = Modifier.heightIn(max = 64.dp).widthIn(max = 280.dp),
+            )
+        } else {
+            Text(hero.title, style = MaterialTheme.typography.displayMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        if (hero.meta.isNotBlank()) {
+            Text(hero.meta, style = MaterialTheme.typography.labelLarge, color = ArrColors.TextSecondary, modifier = Modifier.padding(top = 8.dp))
+        }
+        if (hero.note != null) {
+            Text(hero.note, style = MaterialTheme.typography.labelLarge, color = ArrColors.AccentText, modifier = Modifier.padding(top = 4.dp))
+        }
+        if (!hero.overview.isNullOrBlank()) {
+            Text(
+                hero.overview,
+                style = MaterialTheme.typography.bodyMedium,
+                color = ArrColors.TextSecondary,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+    }
+}
+
+private fun meta(vararg parts: Any?): String = parts.filterNotNull().map { it.toString() }.filter { it.isNotBlank() }.joinToString("  ·  ")
+
+private fun heroOf(item: LibraryItem, api: Api) = Hero(
+    backdrop = api.absolute(item.fanartUrl ?: item.posterUrl),
+    logo = api.absolute(item.clearlogoUrl),
+    title = item.title,
+    meta = meta(item.year, item.genres.take(2).joinToString(", ").ifBlank { null }, item.runtime?.let { "$it min" }, item.rating?.let { "★ %.1f".format(it) }),
+    overview = item.overview,
+)
+
+private fun heroOf(entry: ResumeEntry, api: Api) = Hero(
+    backdrop = api.absolute(entry.item?.fanartUrl ?: entry.item?.posterUrl),
+    logo = api.absolute(entry.item?.clearlogoUrl),
+    title = entry.title,
+    meta = meta(entry.item?.year, entry.item?.genres?.take(2)?.joinToString(", ")?.ifBlank { null }),
+    overview = entry.item?.overview,
+    note = if (entry.isEpisode) entry.subtitle + "  ·  reprendre à " + formatClock(entry.state.position.toLong()) else entry.subtitle,
+)
+
+private fun heroOf(item: TmdbItem) = Hero(
+    backdrop = item.backdropUrl,
+    logo = null,
+    title = item.title,
+    meta = meta(item.year, item.rating?.let { "★ %.1f".format(it) }),
+    overview = item.overview,
+    note = "Pas encore dans la médiathèque",
+)
+
+private fun heroOf(entry: CalendarEntry, api: Api) = Hero(
+    backdrop = api.absolute(entry.posterUrl),
+    logo = null,
+    title = entry.title,
+    meta = meta(entry.label, entry.subtitle.ifBlank { null }),
+    overview = entry.overview,
+    note = entry.airDate?.take(10)?.let { "Sortie le " + it.split("-").reversed().joinToString("/") },
+)

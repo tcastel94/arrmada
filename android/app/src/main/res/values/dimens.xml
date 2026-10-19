@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Marges latérales de l'écran de connexion : étroites sur téléphone… -->
-<resources>
-    <dimen name="setup_side_padding">24dp</dimen>
-</resources>

@@ -1,14 +1,16 @@
-// Module « app » : l'appli ArrMada elle-même.
+// Module « app » : l'appli ArrMada native (ADR-007).
 
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
+    id("org.jetbrains.kotlin.plugin.serialization")
 }
 
 // ─── Version ─────────────────────────────────────────────────────────────────
 // versionName vient de gradle.properties ; versionCode est passé par
 // build-apk.sh (-Parrmada.versionCode=<nombre de commits>), 1 par défaut.
-val appVersionName = providers.gradleProperty("arrmada.versionName").getOrElse("1.0.0")
+val appVersionName = providers.gradleProperty("arrmada.versionName").getOrElse("2.0.0")
 val appVersionCode = providers.gradleProperty("arrmada.versionCode").getOrElse("1").toInt()
 
 // ─── Signature ───────────────────────────────────────────────────────────────
@@ -24,7 +26,7 @@ android {
 
     defaultConfig {
         applicationId = "fr.arrmada.app"
-        // Android 8.0 : couvre la Shield (Android 11) et tout téléphone récent.
+        // Android 8.0 : couvre la Shield (Android 11) et tout boîtier récent.
         minSdk = 26
         targetSdk = 35
         versionCode = appVersionCode
@@ -45,7 +47,7 @@ android {
 
     buildTypes {
         release {
-            // Pas d'obfuscation : l'appli est petite, et un plantage reste lisible.
+            // Pas d'obfuscation : un plantage reste lisible dans les journaux.
             isMinifyEnabled = false
             signingConfig = signingConfigs.findByName("release")
         }
@@ -57,12 +59,18 @@ android {
     }
 
     buildFeatures {
-        buildConfig = true // BuildConfig.VERSION_NAME, affiché dans l'écran de connexion
+        compose = true
+        buildConfig = true // BuildConfig.VERSION_NAME, affiché dans les réglages
     }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    testOptions {
+        // Tests d'écrans sur la machine de build (Robolectric) : ressources Android incluses
+        unitTests.isIncludeAndroidResources = true
     }
 }
 
@@ -73,10 +81,32 @@ kotlin {
 }
 
 dependencies {
-    // Trois bibliothèques AndroidX seulement (pas de framework) :
-    implementation("androidx.core:core-ktx:1.13.1") // marges des barres système
-    implementation("androidx.activity:activity-ktx:1.9.3") // touche Retour moderne
-    implementation("androidx.webkit:webkit:1.12.1") // script injecté avant la page
+    // ── Interface : Jetpack Compose + Compose for TV ──
+    // La « BOM » fixe d'un coup des versions compatibles entre elles pour
+    // toutes les bibliothèques Compose (comme un fichier de verrouillage).
+    val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
+    implementation(composeBom)
+    implementation("androidx.compose.foundation:foundation")
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.ui:ui-tooling-preview")
+    implementation("androidx.tv:tv-material:1.0.0") // composants TV (focus, cartes, boutons)
+    implementation("androidx.activity:activity-compose:1.9.3")
+    implementation("androidx.navigation:navigation-compose:2.8.5")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
 
+    // ── Lecteur vidéo : Media3 ExoPlayer ──
+    val media3 = "1.5.1"
+    implementation("androidx.media3:media3-exoplayer:$media3")
+    implementation("androidx.media3:media3-ui:$media3") // surface vidéo + sous-titres
+    implementation("androidx.media3:media3-datasource-okhttp:$media3") // jeton d'appareil sur le flux
+
+    // ── Réseau, JSON, images ──
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+    implementation("io.coil-kt:coil-compose:2.7.0")
+
+    // ── Tests ──
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
 }

@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  ArrMada Android : une seule appli pour téléphone, tablette et Android TV.
-  L'appli affiche l'interface web du serveur ArrMada (comme un navigateur
-  dédié) ; elle ne contient ni données ni logique métier.
+  ArrMada Android (ADR-007) : appli native pour Android TV (Shield) d'abord.
+  Interface Compose for TV, lecteur Media3 ExoPlayer.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
@@ -11,7 +10,7 @@
     <!-- Android TV : sans ces deux lignes, l'appli n'apparaît pas dans le
          lanceur de la Shield (« leanback ») ou est déclarée incompatible
          (une TV n'a pas d'écran tactile). required="false" : le même APK
-         reste installable sur un téléphone. -->
+         reste installable sur un téléphone ou une tablette. -->
     <uses-feature
         android:name="android.software.leanback"
         android:required="false" />
@@ -22,6 +21,7 @@
     <!-- networkSecurityConfig : autorise le HTTP du réseau local (voir le fichier).
          banner : la tuile 320×180 du lanceur Android TV. -->
     <application
+        android:name=".ArrMadaApplication"
         android:allowBackup="false"
         android:banner="@drawable/banner"
         android:icon="@mipmap/ic_launcher"
@@ -31,26 +31,20 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.ArrMada">
 
-        <!-- configChanges : tourner le téléphone ne recharge PAS la page
-             (sinon on perdrait le formulaire en cours ou la position). -->
+        <!-- configChanges : la fenêtre n'est pas recréée si le mode d'affichage
+             change (passage en 24p au lancement d'un film, HDR…) : la lecture
+             continue sans coupure. -->
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density"
             android:exported="true"
             android:launchMode="singleTask"
-            android:windowSoftInputMode="adjustResize">
+            android:screenOrientation="landscape">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-                <!-- Lanceur des téléphones et tablettes -->
                 <category android:name="android.intent.category.LAUNCHER" />
-                <!-- Lanceur d'Android TV -->
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <activity
-            android:name=".SetupActivity"
-            android:exported="false"
-            android:windowSoftInputMode="adjustResize" />
     </application>
 </manifest>

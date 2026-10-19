@@ -1,4 +1,4 @@
-package fr.arrmada.app
+package fr.arrmada.app.data
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

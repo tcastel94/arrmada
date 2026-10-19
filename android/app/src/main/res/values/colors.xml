@@ -1,14 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Couleurs de la marque ArrMada (branding/README.md), mêmes valeurs que la web app. -->
+<!-- Couleurs utilisées avant le démarrage de Compose (thème de la fenêtre). -->
 <resources>
     <color name="night">#FF0A0E16</color>
-    <color name="card">#FF121A2B</color>
-    <color name="border">#FF26324A</color>
-    <color name="text">#FFF5F7FA</color>
-    <color name="muted">#FF8B97AB</color>
     <color name="accent">#FF4A9EFF</color>
-    <color name="accent_pressed">#FF3B82E0</color>
-    <color name="accent_disabled">#FF2A4A75</color>
-    <color name="accent_soft">#334A9EFF</color>
-    <color name="error">#FFFF6B6B</color>
 </resources>

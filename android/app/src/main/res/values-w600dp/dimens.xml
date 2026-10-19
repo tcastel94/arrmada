@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- …plus larges sur tablette (écran de 600 dp et plus)… -->
-<resources>
-    <dimen name="setup_side_padding">96dp</dimen>
-</resources>

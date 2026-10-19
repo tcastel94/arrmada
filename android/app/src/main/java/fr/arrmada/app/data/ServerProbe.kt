@@ -1,4 +1,4 @@
-package fr.arrmada.app
+package fr.arrmada.app.data
 
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -8,11 +8,11 @@ import java.net.UnknownHostException
 import javax.net.ssl.SSLException
 
 /**
- * Test de connexion lancé par l'écran de connexion avant d'enregistrer
- * l'adresse : équivalent d'un « curl -m 5 <url> | grep -i arrmada ».
+ * Test de l'adresse saisie avant de l'enregistrer : équivalent d'un
+ * « curl -m 5 <adresse>/api/health | grep arrmada ».
  *
  * À appeler hors du fil principal (Android interdit le réseau sur le fil qui
- * dessine l'écran, l'appli planterait avec NetworkOnMainThreadException).
+ * dessine l'écran : l'appli planterait avec NetworkOnMainThreadException).
  */
 object ServerProbe {
 
@@ -21,24 +21,23 @@ object ServerProbe {
     data class Result(val outcome: Outcome, val detail: String = "")
 
     private const val TIMEOUT_MS = 5_000
+    private const val MAX_BYTES = 4 * 1024
 
-    // On lit au plus 64 Ko : le <title>ArrMada…</title> est dans l'en-tête de la page.
-    private const val MAX_BYTES = 64 * 1024
-
-    fun check(url: String): Result {
+    fun check(baseUrl: String): Result {
         var connection: HttpURLConnection? = null
         return try {
-            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+            val conn = (URL("$baseUrl/api/health").openConnection() as HttpURLConnection).apply {
                 connectTimeout = TIMEOUT_MS
                 readTimeout = TIMEOUT_MS
-                instanceFollowRedirects = true // « / » redirige vers « /login »
-                setRequestProperty("User-Agent", "ArrMadaAndroid-probe")
+                setRequestProperty("User-Agent", "ArrMada-Android")
             }
             connection = conn
             val code = conn.responseCode
+            // 404 : quelque chose répond, mais pas l'API ArrMada (port de la web app ?)
+            if (code == 404) return Result(Outcome.NOT_ARRMADA)
             if (code >= 400) return Result(Outcome.HTTP_ERROR, code.toString())
 
-            val head = conn.inputStream.use { stream ->
+            val body = conn.inputStream.use { stream ->
                 val buffer = ByteArray(MAX_BYTES)
                 var total = 0
                 while (total < buffer.size) {
@@ -48,10 +47,11 @@ object ServerProbe {
                 }
                 String(buffer, 0, total, Charsets.UTF_8)
             }
-            if (head.contains("ArrMada", ignoreCase = true)) Result(Outcome.OK)
+            // Réponse attendue : {"status":"ok","service":"arrmada","version":"…"}
+            if (body.contains("arrmada", ignoreCase = true)) Result(Outcome.OK)
             else Result(Outcome.NOT_ARRMADA)
         } catch (e: UnknownHostException) {
-            Result(Outcome.UNKNOWN_HOST, e.message ?: url)
+            Result(Outcome.UNKNOWN_HOST, e.message ?: baseUrl)
         } catch (e: SocketTimeoutException) {
             Result(Outcome.TIMEOUT)
         } catch (e: SSLException) {
