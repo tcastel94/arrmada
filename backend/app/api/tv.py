@@ -1,0 +1,53 @@
+"""Lecture dans l'appli Android native (ADR-007) : infos de lecture et flux relayé."""
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import StreamingResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.deps import get_current_user, get_db
+from app.services import tv_playback
+
+router = APIRouter(
+    prefix="/api/tv",
+    tags=["tv"],
+    dependencies=[Depends(get_current_user)],
+)
+
+
+@router.get("/play/movie/{tmdb_id}")
+async def play_movie(tmdb_id: int, db: AsyncSession = Depends(get_db)) -> dict:
+    """Film à lancer : adresse du flux relayé, durée, chapitres, reprise."""
+    return await tv_playback.movie(db, tmdb_id)
+
+
+@router.get("/play/episode/{tvdb_id}/{season}/{episode}")
+async def play_episode(
+    tvdb_id: int, season: int, episode: int, db: AsyncSession = Depends(get_db)
+) -> dict:
+    """Épisode à lancer : comme un film, plus les marqueurs intro / récap / générique."""
+    return await tv_playback.episode(db, tvdb_id, season, episode)
+
+
+@router.get("/stream/{item_id}")
+async def stream(item_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    """Fichier vidéo d'origine, relayé depuis Jellyfin (avance rapide par « Range »)."""
+    try:
+        status_code, headers, body = await tv_playback.open_stream(
+            db, item_id, request.headers.get("range")
+        )
+    except tv_playback.UpstreamError as exc:
+        raise HTTPException(exc.status_code, exc.detail) from exc
+    return StreamingResponse(body, status_code=status_code, headers=headers)
+
+
+@router.get("/chapter-image/{item_id}/{index}")
+async def chapter_image(item_id: str, index: int, db: AsyncSession = Depends(get_db)) -> Response:
+    """Vignette d'un chapitre (menu pause)."""
+    try:
+        content, media_type = await tv_playback.chapter_image(db, item_id, index)
+    except tv_playback.UpstreamError as exc:
+        raise HTTPException(exc.status_code, exc.detail) from exc
+    # Une vignette ne change pas : la TV peut la garder une journée.
+    return Response(
+        content, media_type=media_type, headers={"Cache-Control": "private, max-age=86400"}
+    )

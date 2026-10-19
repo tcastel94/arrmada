@@ -144,6 +144,12 @@ _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         ("GET", r"/api/qr"),  # QR codes vers la web app (rien à modifier)
         ("GET", r"/api/cameras/snapshot/\d+"),  # photo d'une détection Eufy (pop-up)
         ("POST", r"/api/yamaha/(control|preset/apply)"),
+        # Appli Android native (ADR-007) : infos de lecture, flux vidéo relayé
+        # depuis Jellyfin (la clé Jellyfin reste sur le serveur), vignettes
+        # de chapitres. Lecture seule.
+        ("GET", r"/api/tv/play/(movie/\d+|episode/\d+/\d+/\d+)"),
+        ("GET", r"/api/tv/stream/[0-9a-f]{32}"),
+        ("GET", r"/api/tv/chapter-image/[0-9a-f]{32}/\d+"),
     )
 )
 

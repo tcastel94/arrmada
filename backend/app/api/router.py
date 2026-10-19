@@ -43,6 +43,7 @@ from app.api.setup import router as setup_router
 from app.api.subtitles import router as subtitles_router
 from app.api.system import router as system_router
 from app.api.trash_guides import router as trash_guides_router
+from app.api.tv import router as tv_router
 from app.api.webhooks import router as webhooks_router
 from app.api.yamaha import router as yamaha_router
 
@@ -82,6 +83,7 @@ api_router.include_router(cast_router)
 api_router.include_router(devices_router)
 api_router.include_router(links_router)  # QR codes TV → web app (ADR-003 § 7)
 api_router.include_router(ambient_router)  # Écran d'appoint du salon (tablette)
+api_router.include_router(tv_router)  # Lecture dans l'appli Android native (ADR-007)
 
 # New feature routes
 api_router.include_router(events_router)
