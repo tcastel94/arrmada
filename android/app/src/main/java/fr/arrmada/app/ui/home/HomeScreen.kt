@@ -135,6 +135,21 @@ fun HomeScreen(
     onSettings: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    HomeContent(state, api::absolute, viewModel::load, onOpenMovie, onOpenMovieById, onResume, onMovies, onSettings)
+}
+
+/** Affichage de l'accueil à partir d'un état (séparé pour les captures d'écran de test). */
+@Composable
+fun HomeContent(
+    state: HomeState,
+    absolute: (String?) -> String?,
+    onRetry: () -> Unit,
+    onOpenMovie: (LibraryItem) -> Unit,
+    onOpenMovieById: (Int) -> Unit,
+    onResume: (ResumeEntry) -> Unit,
+    onMovies: () -> Unit,
+    onSettings: () -> Unit,
+) {
     val context = LocalContext.current
     var hero by remember { mutableStateOf<Hero?>(null) }
     val firstFocus = remember { FocusRequester() }
@@ -146,12 +161,12 @@ fun HomeScreen(
         return
     }
     if (state.error != null && state.recent.isEmpty() && state.resume.isEmpty()) {
-        MessageScreen("Serveur ArrMada injoignable", state.error, "Réessayer") { viewModel.load() }
+        MessageScreen("Serveur ArrMada injoignable", state.error, "Réessayer", onRetry)
         return
     }
 
     // Héros par défaut : le premier titre à reprendre, sinon le dernier ajout
-    val shown = hero ?: state.resume.firstOrNull()?.let { heroOf(it, api) } ?: state.recent.firstOrNull()?.let { heroOf(it, api) }
+    val shown = hero ?: state.resume.firstOrNull()?.let { heroOf(it, absolute) } ?: state.recent.firstOrNull()?.let { heroOf(it, absolute) }
 
     KenBurnsBackdrop(url = shown?.backdrop) {
         Column(Modifier.fillMaxSize()) {
@@ -187,12 +202,12 @@ fun HomeScreen(
                 item {
                     ContentRow("Reprendre", state.resume, key = { it.state.mediaType + it.state.id + it.state.season + it.state.episode }) { entry ->
                         LandscapeCard(
-                            imageUrl = api.absolute(entry.item?.fanartUrl ?: entry.item?.posterUrl),
+                            imageUrl = absolute(entry.item?.fanartUrl ?: entry.item?.posterUrl),
                             title = entry.title,
                             subtitle = entry.subtitle,
                             progress = entry.progress,
                             onClick = { onResume(entry) },
-                            onFocus = { hero = heroOf(entry, api) },
+                            onFocus = { hero = heroOf(entry, absolute) },
                             modifier = if (entry == state.resume.first()) Modifier.focusRequester(firstFocus) else Modifier,
                         )
                     }
@@ -200,10 +215,10 @@ fun HomeScreen(
                 item {
                     ContentRow("Ajouts récents", state.recent, key = { it.type + it.externalId }) { item ->
                         PosterCard(
-                            imageUrl = api.absolute(item.posterUrl),
+                            imageUrl = absolute(item.posterUrl),
                             title = item.title,
                             onClick = { if (item.isMovie) onOpenMovie(item) else soon("Fiche série") },
-                            onFocus = { hero = heroOf(item, api) },
+                            onFocus = { hero = heroOf(item, absolute) },
                             modifier = if (state.resume.isEmpty() && item == state.recent.first()) Modifier.focusRequester(firstFocus) else Modifier,
                         )
                     }
@@ -221,10 +236,10 @@ fun HomeScreen(
                 item {
                     ContentRow("Bientôt", state.upcoming, key = { it.id }) { entry ->
                         PosterCard(
-                            imageUrl = api.absolute(entry.posterUrl),
+                            imageUrl = absolute(entry.posterUrl),
                             title = entry.title,
                             onClick = { entry.movieId?.let(onOpenMovieById) ?: soon("Fiche série") },
-                            onFocus = { hero = heroOf(entry, api) },
+                            onFocus = { hero = heroOf(entry, absolute) },
                         )
                     }
                 }
@@ -273,17 +288,17 @@ private fun HeroBlock(hero: Hero) {
 
 private fun meta(vararg parts: Any?): String = parts.filterNotNull().map { it.toString() }.filter { it.isNotBlank() }.joinToString("  ·  ")
 
-private fun heroOf(item: LibraryItem, api: Api) = Hero(
-    backdrop = api.absolute(item.fanartUrl ?: item.posterUrl),
-    logo = api.absolute(item.clearlogoUrl),
+private fun heroOf(item: LibraryItem, absolute: (String?) -> String?) = Hero(
+    backdrop = absolute(item.fanartUrl ?: item.posterUrl),
+    logo = absolute(item.clearlogoUrl),
     title = item.title,
     meta = meta(item.year, item.genres.take(2).joinToString(", ").ifBlank { null }, item.runtime?.let { "$it min" }, item.rating?.let { "★ %.1f".format(it) }),
     overview = item.overview,
 )
 
-private fun heroOf(entry: ResumeEntry, api: Api) = Hero(
-    backdrop = api.absolute(entry.item?.fanartUrl ?: entry.item?.posterUrl),
-    logo = api.absolute(entry.item?.clearlogoUrl),
+private fun heroOf(entry: ResumeEntry, absolute: (String?) -> String?) = Hero(
+    backdrop = absolute(entry.item?.fanartUrl ?: entry.item?.posterUrl),
+    logo = absolute(entry.item?.clearlogoUrl),
     title = entry.title,
     meta = meta(entry.item?.year, entry.item?.genres?.take(2)?.joinToString(", ")?.ifBlank { null }),
     overview = entry.item?.overview,
@@ -299,8 +314,8 @@ private fun heroOf(item: TmdbItem) = Hero(
     note = "Pas encore dans la médiathèque",
 )
 
-private fun heroOf(entry: CalendarEntry, api: Api) = Hero(
-    backdrop = api.absolute(entry.posterUrl),
+private fun heroOf(entry: CalendarEntry, absolute: (String?) -> String?) = Hero(
+    backdrop = absolute(entry.posterUrl),
     logo = null,
     title = entry.title,
     meta = meta(entry.label, entry.subtitle.ifBlank { null }),

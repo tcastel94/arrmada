@@ -40,7 +40,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.C
-import androidx.media3.common.Player
 import androidx.media3.common.Tracks
 import androidx.tv.material3.Border
 import androidx.tv.material3.ClickableSurfaceDefaults
@@ -82,14 +81,13 @@ private val ChipShape = RoundedCornerShape(8.dp)
 fun PauseMenu(
     info: PlayInfo,
     detail: MovieDetail?,
-    player: Player,
     position: Long,
     duration: Long,
     tracks: Tracks,
     absolute: (String?) -> String?, // « /api/… » → adresse complète du serveur
     onResume: () -> Unit,
     onSeek: (seconds: Double) -> Unit,
-    onQuit: () -> Unit,
+    onSelectTrack: (type: Int, choice: TrackChoice?) -> Unit,
 ) {
     val tabs = PauseTab.entries.filter { tab ->
         when (tab) {
@@ -170,10 +168,10 @@ fun PauseMenu(
                     PauseTab.INFO -> InfoPanel(detail, info)
                     PauseTab.CAST -> CastPanel(detail)
                     PauseTab.AUDIO -> TracksPanel(trackChoices(tracks, C.TRACK_TYPE_AUDIO), allowOff = false) {
-                        selectTrack(player, C.TRACK_TYPE_AUDIO, it)
+                        onSelectTrack(C.TRACK_TYPE_AUDIO, it)
                     }
                     PauseTab.SUBTITLES -> TracksPanel(trackChoices(tracks, C.TRACK_TYPE_TEXT), allowOff = true) {
-                        selectTrack(player, C.TRACK_TYPE_TEXT, it)
+                        onSelectTrack(C.TRACK_TYPE_TEXT, it)
                     }
                 }
             }

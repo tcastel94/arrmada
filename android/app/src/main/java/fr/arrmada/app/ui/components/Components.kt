@@ -274,13 +274,17 @@ fun <T> ContentRow(
  */
 @Composable
 fun KenBurnsBackdrop(url: String?, modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit = {}) {
-    val transition = rememberInfiniteTransition(label = "ken-burns")
-    val zoom by transition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.08f,
-        animationSpec = infiniteRepeatable(tween(26_000, easing = LinearEasing), RepeatMode.Reverse),
-        label = "zoom",
-    )
+    val zoom = if (Motion.enabled) {
+        val transition = rememberInfiniteTransition(label = "ken-burns")
+        transition.animateFloat(
+            initialValue = 1f,
+            targetValue = 1.08f,
+            animationSpec = infiniteRepeatable(tween(26_000, easing = LinearEasing), RepeatMode.Reverse),
+            label = "zoom",
+        ).value
+    } else {
+        1f
+    }
     Box(modifier.fillMaxSize().background(ArrColors.Night)) {
         if (url != null) {
             AsyncImage(
@@ -295,6 +299,15 @@ fun KenBurnsBackdrop(url: String?, modifier: Modifier = Modifier, content: @Comp
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.35f to Color.Transparent, 1f to ArrColors.Night)))
         content()
     }
+}
+
+/**
+ * Animations permanentes (zoom lent du fond). Coupées dans les tests de
+ * captures d'écran : une animation sans fin empêcherait l'écran d'être
+ * « au repos » au moment de la photo.
+ */
+object Motion {
+    var enabled = true
 }
 
 /** Texte centré d'attente ou d'erreur, avec une action facultative. */

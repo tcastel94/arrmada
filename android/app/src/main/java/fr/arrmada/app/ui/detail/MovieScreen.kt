@@ -66,8 +66,6 @@ fun MovieScreen(
     var movie by remember { mutableStateOf<MovieDetail?>(null) }
     var play by remember { mutableStateOf<PlayInfo?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
-    val context = LocalContext.current
-    val playFocus = remember { FocusRequester() }
 
     LaunchedEffect(radarrId) {
         try {
@@ -87,14 +85,26 @@ fun MovieScreen(
     val m = movie
     if (error != null) return MessageScreen("Fiche indisponible", error)
     if (m == null) return MessageScreen("Chargement…")
+    MovieContent(m, play, api::absolute, onPlay)
+}
 
+/** Affichage de la fiche (séparé du chargement pour les captures d'écran de test). */
+@Composable
+fun MovieContent(
+    m: MovieDetail,
+    play: PlayInfo?,
+    absolute: (String?) -> String?,
+    onPlay: (movie: MovieDetail, startSeconds: Int) -> Unit,
+) {
+    val context = LocalContext.current
+    val playFocus = remember { FocusRequester() }
     val resumeAt = play?.resume?.takeIf { !it.watched && it.position > 0 }?.position
     val playable = play?.status == "ok"
 
-    KenBurnsBackdrop(url = api.absolute(m.images.fanart ?: m.images.landscape)) {
+    KenBurnsBackdrop(url = absolute(m.images.fanart ?: m.images.landscape)) {
         Column(Modifier.fillMaxSize().padding(start = 48.dp, top = 36.dp, end = 48.dp)) {
             // ── Logo ou titre ──
-            val logo = api.absolute(m.images.bestLogo)
+            val logo = absolute(m.images.bestLogo)
             if (logo != null) {
                 AsyncImage(
                     model = logo,

@@ -192,13 +192,32 @@ fun PairScreen(prefs: Prefs, repository: Repository, onPaired: () -> Unit, onCha
         error = "Le code a expiré."
     }
 
+    PairContent(
+        pairing = start,
+        error = error,
+        remaining = remaining,
+        qrUrl = start?.let { (prefs.serverUrl ?: "") + it.qrUrl },
+        onNewCode = { attempt++ },
+        onChangeServer = onChangeServer,
+    )
+}
+
+/** Affichage de l'appairage (séparé de l'attente pour les captures d'écran de test). */
+@Composable
+fun PairContent(
+    pairing: PairStart?,
+    error: String?,
+    remaining: Int,
+    qrUrl: String?,
+    onNewCode: () -> Unit,
+    onChangeServer: () -> Unit,
+) {
     SetupFrame(title = "Appairer cette TV") {
-        val pairing = start
         when {
             error != null -> {
-                Text(error!!, style = MaterialTheme.typography.bodyLarge, color = ArrColors.Error)
+                Text(error, style = MaterialTheme.typography.bodyLarge, color = ArrColors.Error)
                 Row(Modifier.padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    ArrButton("Nouveau code", { attempt++ }, primary = true)
+                    ArrButton("Nouveau code", onNewCode, primary = true)
                     ArrButton("Changer de serveur", onChangeServer)
                 }
             }
@@ -226,12 +245,12 @@ fun PairScreen(prefs: Prefs, repository: Repository, onPaired: () -> Unit, onCha
                         color = ArrColors.TextSecondary,
                     )
                     Row(Modifier.padding(top = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        ArrButton("Nouveau code", { attempt++ })
+                        ArrButton("Nouveau code", onNewCode)
                         ArrButton("Changer de serveur", onChangeServer)
                     }
                 }
                 Box(Modifier.size(200.dp).clip(RoundedCornerShape(12.dp)).background(androidx.compose.ui.graphics.Color.White).padding(8.dp)) {
-                    AsyncImage(model = (prefs.serverUrl ?: "") + pairing.qrUrl, contentDescription = "QR code d’appairage", modifier = Modifier.fillMaxSize())
+                    AsyncImage(model = qrUrl, contentDescription = "QR code d’appairage", modifier = Modifier.fillMaxSize())
                 }
             }
         }

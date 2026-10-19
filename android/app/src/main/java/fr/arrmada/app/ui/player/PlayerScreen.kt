@@ -340,7 +340,6 @@ private fun PlayerSurface(
             PauseMenu(
                 info = info,
                 detail = detail,
-                player = player,
                 position = position,
                 duration = duration,
                 tracks = tracks,
@@ -350,7 +349,7 @@ private fun PlayerSurface(
                     player.seekTo((seconds * 1000).toLong())
                     resume()
                 },
-                onQuit = onExit,
+                onSelectTrack = { type, choice -> selectTrack(player, type, choice) },
             )
         }
 

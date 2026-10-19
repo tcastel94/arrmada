@@ -31,6 +31,8 @@ jobs:
   build-apk:
     name: "Android — Tests & APK"
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # publication des captures d'écran sur la branche ci/android-screenshots
     defaults:
       run:
         working-directory: android
@@ -79,6 +81,34 @@ jobs:
             android/dist/*.sha256
           if-no-files-found: error
           retention-days: 30
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arrmada-android-captures
+          path: android/app/build/outputs/roborazzi/*.png
+          if-no-files-found: ignore
+          retention-days: 30
+
+      # Les captures sont aussi poussées (sans historique) sur une branche
+      # dédiée : on peut les relire avec un simple « git fetch », sans
+      # télécharger d'artifact.
+      - name: Publish screenshots to ci/android-screenshots
+        if: always() && github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          shots="$GITHUB_WORKSPACE/android/app/build/outputs/roborazzi"
+          ls "$shots"/*.png >/dev/null 2>&1 || { echo "Aucune capture"; exit 0; }
+          tmp="$(mktemp -d)"
+          cp "$shots"/*.png "$tmp"/
+          cd "$tmp"
+          printf 'Captures de %s (%s)\n' "${GITHUB_SHA::7}" "$GITHUB_REF_NAME" > README.md
+          git init -q -b ci/android-screenshots
+          git -c user.name="github-actions" -c user.email="github-actions@users.noreply.github.com" add .
+          git -c user.name="github-actions" -c user.email="github-actions@users.noreply.github.com" commit -qm "Captures ${GITHUB_SHA::7}"
+          git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ci/android-screenshots
 
       - name: Upload test report on failure
         if: failure()

@@ -71,6 +71,10 @@ android {
     testOptions {
         // Tests d'écrans sur la machine de build (Robolectric) : ressources Android incluses
         unitTests.isIncludeAndroidResources = true
+        unitTests.all {
+            // Captures d'écran (Roborazzi) écrites dans build/outputs/roborazzi/
+            it.systemProperty("roborazzi.test.record", "true")
+        }
     }
 }
 
@@ -108,5 +112,12 @@ dependencies {
 
     // ── Tests ──
     testImplementation("junit:junit:4.13.2")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+    // Captures d'écran sans appareil : Robolectric simule Android sur la
+    // machine de build, Roborazzi enregistre l'image de chaque écran.
+    testImplementation("org.robolectric:robolectric:4.13")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi:1.26.0")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi-compose:1.26.0")
+    testImplementation(composeBom)
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    testImplementation("androidx.compose.ui:ui-test-manifest")
 }
