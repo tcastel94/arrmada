@@ -263,6 +263,7 @@ data class PlayInfo(
     val reason: String? = null,
     @SerialName("item_id") val itemId: String = "",
     val title: String? = null,
+    val overview: String? = null, // résumé de l'épisode (menu pause)
     val duration: Int = 0,
     val stream: String = "",
     val chapters: List<Chapter> = emptyList(),
