@@ -15,3 +15,7 @@ captures/
 # Ne JAMAIS committer une clé de signature
 *.jks
 *.keystore
+# Le .gitignore racine exclut tout dossier « data/ » (données du serveur) :
+# on réautorise le paquet Kotlin « data » de l'appli.
+!/app/src/main/java/fr/arrmada/app/data/
+!/app/src/test/java/fr/arrmada/app/data/

@@ -178,24 +178,32 @@ fun MovieScreen(
 fun techBadges(file: FileInfo?): List<String> {
     if (file == null) return emptyList()
     val badges = mutableListOf<String>()
-    when (val h = file.height) {
-        null -> file.quality?.let { q -> if ("2160" in q) badges += "4K" else if ("1080" in q) badges += "1080p" }
-        else -> badges += if (h >= 2000) "4K" else if (h >= 1000) "1080p" else "${h}p"
+    val height = file.height
+    val quality = file.quality.orEmpty()
+    val resolution = when {
+        height != null && height >= 2000 -> "4K"
+        height != null && height >= 1000 -> "1080p"
+        height != null -> "${height}p"
+        "2160" in quality -> "4K"
+        "1080" in quality -> "1080p"
+        else -> null
     }
+    resolution?.let { badges.add(it) }
     val hdr = (file.dynamicRangeType ?: file.dynamicRange).orEmpty()
     when {
-        "DV" in hdr -> badges += "Dolby Vision"
-        "HDR10+" in hdr || "HDR10Plus" in hdr -> badges += "HDR10+"
-        "HDR" in hdr -> badges += "HDR"
+        "DV" in hdr -> badges.add("Dolby Vision")
+        "HDR10+" in hdr || "HDR10Plus" in hdr -> badges.add("HDR10+")
+        "HDR" in hdr -> badges.add("HDR")
     }
     val audio = file.audioCodec.orEmpty()
     when {
-        "Atmos" in audio -> badges += "Atmos"
-        "TrueHD" in audio -> badges += "TrueHD"
-        "DTS-X" in audio || "DTS:X" in audio -> badges += "DTS:X"
-        "DTS" in audio -> badges += "DTS"
+        "Atmos" in audio -> badges.add("Atmos")
+        "TrueHD" in audio -> badges.add("TrueHD")
+        "DTS-X" in audio || "DTS:X" in audio -> badges.add("DTS:X")
+        "DTS" in audio -> badges.add("DTS")
     }
-    file.audioChannels?.takeIf { it > 2.0 }?.let { badges += "%.1f".format(it).replace(",", ".") }
+    val channels = file.audioChannels
+    if (channels != null && channels > 2.0) badges.add("%.1f".format(java.util.Locale.ROOT, channels))
     return badges
 }
 
