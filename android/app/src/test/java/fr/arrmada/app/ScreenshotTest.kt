@@ -1,6 +1,10 @@
 package fr.arrmada.app
 
 import android.graphics.drawable.ColorDrawable
+import androidx.media3.common.C
+import androidx.media3.common.Format
+import androidx.media3.common.MimeTypes
+import androidx.media3.common.TrackGroup
 import androidx.media3.common.Tracks
 import coil.Coil
 import coil.ImageLoader
@@ -27,6 +31,7 @@ import fr.arrmada.app.ui.components.Motion
 import fr.arrmada.app.ui.detail.MovieContent
 import fr.arrmada.app.ui.home.HomeContent
 import fr.arrmada.app.ui.home.HomeState
+import fr.arrmada.app.ui.home.LibraryContent
 import fr.arrmada.app.ui.player.PauseMenu
 import fr.arrmada.app.ui.setup.PairContent
 import fr.arrmada.app.ui.theme.ArrMadaTheme
@@ -159,9 +164,62 @@ class ScreenshotTest {
     }
 
     @Test
+    fun menuPauseAudio() {
+        fun audio(mime: String, lang: String, channels: Int, label: String? = null) =
+            Format.Builder().setSampleMimeType(mime).setLanguage(lang).setChannelCount(channels).setLabel(label).build()
+        fun text(mime: String, lang: String, forced: Boolean = false) =
+            Format.Builder().setSampleMimeType(mime).setLanguage(lang)
+                .setSelectionFlags(if (forced) C.SELECTION_FLAG_FORCED else 0).build()
+        val tracks = Tracks(
+            listOf(
+                Tracks.Group(
+                    TrackGroup(
+                        audio(MimeTypes.AUDIO_TRUEHD, "en", 8, "Dolby Atmos"),
+                        audio(MimeTypes.AUDIO_E_AC3, "fr", 6, "VFF"),
+                        audio(MimeTypes.AUDIO_DTS_HD, "fr", 8, "VFQ"),
+                    ),
+                    false,
+                    intArrayOf(C.FORMAT_HANDLED, C.FORMAT_HANDLED, C.FORMAT_UNSUPPORTED_SUBTYPE),
+                    booleanArrayOf(false, true, false),
+                ),
+                Tracks.Group(
+                    TrackGroup(text(MimeTypes.APPLICATION_PGS, "fr", forced = true), text(MimeTypes.APPLICATION_SUBRIP, "en")),
+                    false,
+                    intArrayOf(C.FORMAT_HANDLED, C.FORMAT_HANDLED),
+                    booleanArrayOf(true, false),
+                ),
+            )
+        )
+        captureRoboImage(shot("05-menu-pause-audio")) {
+            ArrMadaTheme {
+                PauseMenu(
+                    info = play,
+                    detail = dune,
+                    position = 2530_000L,
+                    duration = 9300_000L,
+                    tracks = tracks,
+                    absolute = noAbsolute,
+                    onResume = {},
+                    onSeek = {},
+                    onSelectTrack = { _, _ -> },
+                    initialTab = "Audio",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun grilleFilms() {
+        val items = (titles + titles.map { "$it II" } + titles.map { "$it III" }).mapIndexed { i, t -> movie(i + 1, t, 2000 + i % 25).copy(added = "2026-10-${10 + i % 9}") }
+        captureRoboImage(shot("06-grille-films")) {
+            ArrMadaTheme { LibraryContent(items, noAbsolute) {} }
+        }
+    }
+
+    @Test
     fun appairage() {
         val pairing = PairStart(deviceCode = "x".repeat(20), userCode = "K7M4QX", qrUrl = "/api/devices/pair/qr/K7M4QX.png", expiresIn = 600)
-        captureRoboImage(shot("04-appairage")) {
+        captureRoboImage(shot("07-appairage")) {
             ArrMadaTheme { PairContent(pairing, null, 540, "https://img/qr", {}, {}) }
         }
     }

@@ -2,12 +2,14 @@ package fr.arrmada.app.ui.theme
 
 import android.graphics.Typeface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Typography
 import androidx.tv.material3.darkColorScheme
@@ -68,6 +70,8 @@ fun ArrMadaTheme(content: @Composable () -> Unit) {
             error = ArrColors.Error,
         ),
         typography = ArrTypography,
-        content = content,
-    )
+    ) {
+        // Couleur de texte par défaut (sinon : noir hors des « Surface » de la bibliothèque TV)
+        CompositionLocalProvider(LocalContentColor provides ArrColors.Text, content = content)
+    }
 }

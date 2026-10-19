@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -88,6 +89,7 @@ fun PauseMenu(
     onResume: () -> Unit,
     onSeek: (seconds: Double) -> Unit,
     onSelectTrack: (type: Int, choice: TrackChoice?) -> Unit,
+    initialTab: String? = null, // libellé de l'onglet affiché d'abord (tests)
 ) {
     val tabs = PauseTab.entries.filter { tab ->
         when (tab) {
@@ -96,7 +98,7 @@ fun PauseMenu(
             else -> true
         }
     }
-    var tab by remember { mutableStateOf(tabs.first()) }
+    var tab by remember { mutableStateOf(tabs.firstOrNull { it.label == initialTab } ?: tabs.first()) }
     val resumeFocus = remember { FocusRequester() }
     val remaining = ((duration - position) / 1000).coerceAtLeast(0)
     val endsAt = LocalTime.now().plusSeconds(remaining).format(DateTimeFormatter.ofPattern("HH:mm"))
@@ -158,7 +160,7 @@ fun PauseMenu(
                         TabButton(option.label, selected = option == tab, onFocus = { tab = option })
                     }
                     Spacer(Modifier.weight(1f))
-                    Text("Retour : quitter la lecture", style = MaterialTheme.typography.labelMedium, color = ArrColors.TextSecondary)
+                    Text("Retour : quitter la lecture", style = MaterialTheme.typography.labelMedium, color = ArrColors.TextSecondary, maxLines = 1)
                 }
             }
 
@@ -195,8 +197,9 @@ private fun TabButton(label: String, selected: Boolean, onFocus: () -> Unit) {
             focusedContentColor = ArrColors.Night,
         ),
     ) {
-        Box(Modifier.padding(horizontal = 14.dp).fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(label, style = MaterialTheme.typography.labelLarge)
+        // Largeur = celle du texte (fillMaxSize étirerait l'onglet sur toute la rangée)
+        Box(Modifier.fillMaxHeight().padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {
+            Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1)
         }
     }
 }

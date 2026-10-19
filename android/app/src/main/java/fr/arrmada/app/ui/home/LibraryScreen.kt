@@ -43,8 +43,6 @@ private enum class Sort(val label: String) { ADDED("Récents"), TITLE("A à Z"),
 fun LibraryScreen(repository: Repository, api: Api, onOpen: (LibraryItem) -> Unit) {
     var items by remember { mutableStateOf<List<LibraryItem>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
-    var sort by remember { mutableStateOf(Sort.ADDED) }
-    val firstFocus = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
         try {
@@ -59,11 +57,19 @@ fun LibraryScreen(repository: Repository, api: Api, onOpen: (LibraryItem) -> Uni
         error != null -> return MessageScreen("Films indisponibles", error)
         all == null -> return MessageScreen("Chargement des films…")
     }
+    LibraryContent(all!!, api::absolute, onOpen)
+}
+
+/** Affichage de la grille (séparé du chargement pour les captures d'écran de test). */
+@Composable
+fun LibraryContent(all: List<LibraryItem>, absolute: (String?) -> String?, onOpen: (LibraryItem) -> Unit) {
+    var sort by remember { mutableStateOf(Sort.ADDED) }
+    val firstFocus = remember { FocusRequester() }
     val sorted = when (sort) {
-        Sort.ADDED -> all!!.sortedByDescending { it.added }
-        Sort.TITLE -> all!!.sortedBy { it.title.lowercase() }
-        Sort.YEAR -> all!!.sortedByDescending { it.year ?: 0 }
-        Sort.FOUR_K -> all!!.filter { (it.quality ?: "").contains("2160") }.sortedByDescending { it.added }
+        Sort.ADDED -> all.sortedByDescending { it.added }
+        Sort.TITLE -> all.sortedBy { it.title.lowercase() }
+        Sort.YEAR -> all.sortedByDescending { it.year ?: 0 }
+        Sort.FOUR_K -> all.filter { (it.quality ?: "").contains("2160") }.sortedByDescending { it.added }
     }
 
     Column(Modifier.fillMaxSize().background(ArrColors.Night).padding(top = 20.dp)) {
@@ -86,7 +92,7 @@ fun LibraryScreen(repository: Repository, api: Api, onOpen: (LibraryItem) -> Uni
         ) {
             items(sorted, key = { it.externalId }) { item ->
                 PosterCard(
-                    imageUrl = api.absolute(item.posterUrl),
+                    imageUrl = absolute(item.posterUrl),
                     title = item.title,
                     width = 108.dp,
                     onClick = { onOpen(item) },
@@ -95,5 +101,5 @@ fun LibraryScreen(repository: Repository, api: Api, onOpen: (LibraryItem) -> Uni
             }
         }
     }
-    LaunchedEffect(sort, all != null) { runCatching { firstFocus.requestFocus() } }
+    LaunchedEffect(sort) { runCatching { firstFocus.requestFocus() } }
 }
