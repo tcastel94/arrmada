@@ -1,89 +1,98 @@
-# ArrMada Android
+# ArrMada Android TV
 
-Appli Android d'ArrMada : **un seul APK** pour le téléphone, la tablette et
-Android TV (Shield, Chromecast avec Google TV…).
+Appli native ArrMada pour **Android TV** (Shield en tête), avec son propre
+lecteur vidéo. L'interface reprend celle de l'add-on Kodi : mêmes couleurs,
+police condensée, focus bleu qui grossit, fond qui zoome lentement. Les choix
+sont expliqués dans l'[ADR-007](../docs/adr/007-appli-android-native.md).
 
-L'appli affiche l'interface web de ton serveur ArrMada. Elle ne contient ni
-données ni logique métier : tout reste sur le serveur, comme dans le
-navigateur. Une mise à jour du serveur met donc l'appli à jour, sans
-réinstaller l'APK. Voir l'[ADR-006](../docs/adr/006-appli-android.md) pour le
-pourquoi de ce choix.
+> Téléphone et tablette viendront en phase 4. L'APK s'y installe, mais
+> l'interface est pensée pour la télécommande.
 
-> **Et Kodi ?** Sur la Shield, l'appli Kodi reste **le lecteur** (ADR-004) :
-> c'est elle qui lit les films, gère le son, les sous-titres et la reprise.
-> L'appli Android, c'est **la console de gestion** sur la TV : tableau de bord,
-> demandes, téléchargements, réglages. Les deux cohabitent.
+## Ce que fait la version 2.0 (phase 1 : « regarder un film »)
 
-## Ce que l'appli ajoute à un simple navigateur
-
-| Besoin | Ce que fait l'appli |
+| Écran | Contenu |
 |---|---|
-| Pas de barre d'adresse | L'adresse du serveur est saisie une fois, testée, puis mémorisée |
-| Touche **Retour** | Ferme d'abord la fenêtre ouverte (modale, menu), sinon page précédente, sinon menu *Recharger / Changer de serveur / Quitter* |
-| **Télécommande TV** | Flèches = déplacer la sélection (liseré bleu) ; OK = cliquer ; OK sur un champ = clavier à l'écran ; touche Menu (≡) = menu de l'appli |
-| Lisibilité TV | Largeur d'affichage réglable : *Grande* (960), *Normale* (1280), *Compacte* (1600) |
-| Serveur arrêté | Écran *Serveur injoignable* avec *Réessayer* et *Changer de serveur* (pas de page d'erreur grise) |
-| Liens externes (TMDB, IMDb, YouTube) | Ouverts dans le navigateur de l'appareil |
-| Bandes-annonces | Plein écran |
+| **Mise en route** | Adresse du serveur (celle de l'add-on Kodi, port **8420**), testée sur `/api/health`. Puis appairage par **code + QR code**, validé dans la web app (*Réglages › Appareils*), exactement comme une TV sous Kodi |
+| **Accueil** | Menu du haut, héros (logo ou titre, méta, résumé, « Reprendre à… ») sur le fond de l'élément sélectionné, rangées **Reprendre** (états vu / reprise partagés avec les TV sous Kodi), **Ajouts récents**, **Pour toi**, **Bientôt** |
+| **Films** | Mur d'affiches de 7 colonnes : *Récents*, *A à Z*, *Année*, *4K* |
+| **Fiche film** | Logo, notes TMDB / IMDb / Rotten Tomatoes, pastilles **4K / Dolby Vision / Atmos / 7.1**, résumé, *Reprendre à…* / *Depuis le début*, bande-annonce (appli YouTube), distribution |
+| **Lecteur** | Fichier d'origine **sans transcodage**, son HD envoyé tel quel à l'ampli (passthrough), piste française préférée. Gauche / droite : −10 s / +30 s. Position enregistrée toutes les 30 s, en pause et en quittant ; « vu » à 90 %. Préréglage Yamaha de la pièce au lancement |
+| **Menu pause** (façon Apple TV) | Logo, pastilles, **heure de fin**, progression, onglets **Chapitres** (vignettes, saut direct), **Infos**, **Distribution**, **Audio** et **Sous-titres** (pistes nommées : langue, Dolby TrueHD, DTS-HD, 7.1, forcés, « non lisible ici ») |
+
+Pas encore là (phases 2 et 3, voir l'ADR) : séries, recherche (et
+vocale), demander / télécharger, écran Téléchargements, Salon, notifications,
+bande-annonce en fond, profils famille.
+
+### Télécommande
+
+| Touche | Pendant la lecture | Dans le menu pause |
+|---|---|---|
+| OK, Lecture/Pause | Pause + menu | Choisir (onglet, chapitre, piste) |
+| Gauche / droite | −10 s / +30 s | Se déplacer |
+| Retour | Pause + menu | **Quitter la lecture** (position enregistrée) |
+| *Reprendre* | — | Relance la lecture |
+
+## Prérequis côté serveur
+
+- **Jellyfin** déclaré dans ArrMada (*Réglages › Cast & Jellyfin*) : c'est lui
+  qui sert les fichiers vidéo. Un titre absent de Jellyfin affiche « Film absent
+  de Jellyfin ».
+- Le serveur ArrMada relaie la vidéo : la clé Jellyfin (administrateur) ne
+  quitte jamais le serveur.
+- Pour les vignettes de chapitres : dans Jellyfin, bibliothèque Films ›
+  *Gérer la bibliothèque* › cocher **Extraire les images des chapitres**.
+
+## Réglages conseillés sur la Shield
+
+Les intitulés exacts varient selon la version d'Android TV ; les deux
+réglages sont dans *Paramètres › Préférences de l'appareil › Écran et son*
+(réglages avancés du son et de l'affichage).
+
+| Réglage (Shield en anglais) | Valeur | Pourquoi |
+|---|---|---|
+| Son surround / formats audio (*Surround sound*, *Select formats*) | Automatique, ou Dolby TrueHD / DTS-HD cochés à la main | Sans ça, Android décode le son en PCM : l'ampli ne reçoit ni l'Atmos ni le DTS:X |
+| Adapter la fréquence d'image (*Match content frame rate*) | Activé | Films en 24p sans saccades |
 
 ## Installer l'APK
 
-### 1. Récupérer l'APK
-
-Le plus simple : **GitHub Actions** compile l'APK à chaque modification de
-`android/`. Onglet **Actions** du dépôt > workflow **ArrMada Android** > dernier
-run vert > section **Artifacts** > `arrmada-android-release` (ou `-debug`).
-Le zip contient l'APK et son empreinte SHA-256.
-
-### 2a. Sur un téléphone ou une tablette
-
-1. Copie l'APK sur l'appareil (Drive, câble, mail…) et ouvre-le.
-2. Android demande d'autoriser « l'installation d'applis inconnues » pour
-   l'appli qui ouvre le fichier (Fichiers, Chrome…) : accepte.
-
-### 2b. Sur Android TV (Shield) avec adb
-
-Il n'y a pas de gestionnaire de fichiers pratique sur une TV : on installe à
-distance depuis un PC, avec `adb` (paquet `android-tools` sur AlmaLinux 9,
-`adb` sur Ubuntu 24.04).
-
-1. Sur la Shield, active les options développeur : **Paramètres > Préférences
-   de l'appareil > À propos**, clique 7 fois sur **Build**.
-2. **Paramètres > Préférences de l'appareil > Options pour les développeurs** :
-   active **Débogage réseau** (ou *Débogage USB* selon la version). Note l'IP
-   de la Shield (**À propos > État**).
-3. Depuis le PC :
+1. **Récupérer l'APK** : onglet **Actions** du dépôt > workflow **ArrMada
+   Android** > dernier run vert > **Artifacts** > `arrmada-android-release` (ou
+   `-debug`). Le zip contient l'APK et son empreinte SHA-256.
+2. **Sur la Shield**, depuis un PC (`adb` : paquet `android-tools` sur AlmaLinux 9,
+   `adb` sur Ubuntu 24.04) :
 
    ```bash
-   adb connect 192.168.1.50:5555          # accepte la demande affichée sur la TV
-   adb install -r arrmada-1.0.0-123-release.apk
+   # Options développeur : Paramètres › Préférences de l'appareil › À propos ›
+   # cliquer 7 fois sur « Build » ; puis activer « Débogage réseau »
+   adb connect 192.168.1.50:5555            # accepter la demande sur la TV
+   adb install -r arrmada-2.0.0-150-debug.apk
    ```
 
-   Ou en une commande si tu compiles toi-même : `./build-apk.sh --install 192.168.1.50`.
-4. L'appli apparaît dans la rangée **Applications** du lanceur, avec sa bannière.
+   Ou, en compilant soi-même : `./build-apk.sh --debug --install 192.168.1.50`.
 
-**Astuce** : taper une adresse à la télécommande est pénible. L'écran de
-connexion ouvert sur la TV, envoie le texte depuis le PC :
+3. **Premier lancement** : adresse du serveur (taper une adresse à la
+   télécommande est pénible ; l'écran affiché, envoie-la depuis le PC avec
+   `adb shell input text 'http://192.168.1.10:8420'`), puis appairage depuis
+   ton téléphone.
 
-```bash
-adb shell input text 'http://192.168.1.10:3000'
-```
+> **APK de test (debug)** : la CI le signe avec une clé jetable, différente à
+> chaque build. Pour installer une nouvelle version, désinstalle d'abord
+> l'ancienne (`adb uninstall fr.arrmada.app.debug`) ; il faudra refaire
+> l'appairage. Une clé release (ci-dessous) supprime cette contrainte.
 
-### 3. Premier lancement
+## Captures d'écran (sans appareil)
 
-Saisis l'adresse de l'**interface web** ArrMada, la même que dans ton
-navigateur (ex. `http://192.168.1.10:3000`), puis *Tester et enregistrer*.
-Le test vérifie que le serveur répond **et** que c'est bien ArrMada (erreur
-classique : le port de l'API, 8420, au lieu de celui de l'interface).
+Chaque build dessine les écrans principaux avec des données factices
+(Robolectric + Roborazzi, en 1920×1080) et les publie :
 
-Pour changer de serveur plus tard : touche **Retour** sur la première page (ou
-touche **Menu** de la télécommande) > *Changer de serveur*.
+- en artifact `arrmada-android-captures` du run ;
+- sur la branche **`ci/android-screenshots`** (écrasée à chaque build) :
+  `git fetch origin ci/android-screenshots && git archive origin/ci/android-screenshots | tar -x -C /tmp/captures`.
+
+Les images y sont des aplats de couleur : il n'y a pas de réseau pendant les
+tests. C'est la mise en page qui est vérifiée.
 
 ## Compiler sur ta machine
-
-Pas obligatoire (la CI le fait), mais utile pour tester une modification.
-
-### Prérequis
 
 ```bash
 # JDK 17+
@@ -98,43 +107,28 @@ mv ~/android-sdk/cmdline-tools/cmdline-tools ~/android-sdk/cmdline-tools/latest
 export ANDROID_HOME=~/android-sdk                # à mettre dans ~/.bashrc
 yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses
 "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0" "platform-tools"
-```
 
-Pas besoin d'installer Gradle : `./gradlew` télécharge la bonne version tout
-seul (c'est le principe du « wrapper »).
-
-### Commandes
-
-```bash
 cd android
-./build-apk.sh --debug                         # APK de test, sans clé
-./build-apk.sh --init-keystore                 # une seule fois : crée la clé de release
-./build-apk.sh                                 # APK release signé, dans dist/
+./build-apk.sh --debug                         # tests + APK de test
+./build-apk.sh --init-keystore                 # une seule fois : clé de release
+./build-apk.sh                                 # tests + APK release signé, dans dist/
 ./build-apk.sh --debug --install 192.168.1.50  # build + installation sur la Shield
 ```
 
-Le script lance les tests unitaires avant de produire l'APK, et s'arrête au
-premier échec (codes retour documentés en tête de `build-apk.sh`).
+`./gradlew` télécharge seul la bonne version de Gradle (principe du
+« wrapper »). Codes retour de `build-apk.sh` : en tête du script.
 
-## Signature : à lire une fois
+## Signature
 
-Android **refuse d'installer un APK non signé**, et **refuse une mise à jour
-signée par une autre clé**. Deux types d'APK :
+Android **refuse un APK non signé**, et **refuse une mise à jour signée par une
+autre clé**.
 
-| | `--release` | `--debug` |
-|---|---|---|
-| Clé | La tienne, créée par `--init-keystore`, dans `~/.arrmada/` | Clé de debug générée par le SDK, propre à chaque machine |
-| Identifiant | `fr.arrmada.app` | `fr.arrmada.app.debug` (installé **à côté**) |
-| Mises à jour | Par-dessus, en gardant l'adresse et la session | Seulement depuis la même machine. En CI la clé change à chaque run : désinstaller avant |
-
-Pièges :
-
-- **Ne perds pas la clé release** (ni son mot de passe). Sans elle, impossible
-  de mettre à jour l'appli : il faut la désinstaller sur chaque appareil.
-  Sauvegarde `~/.arrmada/arrmada-release.jks` (NAS, gestionnaire de mots de passe).
-- **Ne la committe jamais** : `*.jks` est dans `.gitignore`.
-- Pour que la CI signe en release, crée ces **secrets** du dépôt (*Settings >
-  Secrets and variables > Actions*) :
+- `./build-apk.sh --init-keystore` crée la clé dans `~/.arrmada/` (droits 600).
+  **Sauvegarde-la** (NAS, gestionnaire de mots de passe) : perdue, plus aucune
+  mise à jour possible sans désinstaller l'appli partout.
+- **Jamais dans le dépôt** (`*.jks` est ignoré).
+- Pour que la CI signe en release, crée ces secrets du dépôt (*Settings ›
+  Secrets and variables › Actions*) :
 
   | Secret | Valeur |
   |---|---|
@@ -142,58 +136,44 @@ Pièges :
   | `ARRMADA_KEYSTORE_PASSWORD` | Le mot de passe de la clé |
   | `ARRMADA_KEY_ALIAS` | `arrmada` |
 
-- Le **numéro de version interne** (versionCode) est le nombre de commits git :
-  il doit toujours augmenter, sinon Android refuse la mise à jour
-  (`INSTALL_FAILED_VERSION_DOWNGRADE`). Compile depuis un clone **complet**
-  (pas `git clone --depth 1`). La version affichée se change dans
-  `gradle.properties` (`arrmada.versionName`).
+- Numéro de version interne = nombre de commits git (toujours croissant,
+  sinon `INSTALL_FAILED_VERSION_DOWNGRADE`). Version affichée :
+  `arrmada.versionName` dans `gradle.properties`.
 
 ## Dépannage
 
 | Symptôme | Cause probable | Solution |
 |---|---|---|
-| *Pas de réponse en 5 secondes* | Mauvaise IP / port, appareil sur un autre réseau (Wi-Fi invité, 4G) | Vérifie avec le navigateur de l'appareil, ou passe par le VPN |
-| *Ce serveur répond, mais ce n'est pas l'interface ArrMada* | Port de l'API (8420) au lieu de celui de l'interface | Mets le port de l'interface web |
-| *Nom inconnu sur le réseau* | Nom `.local` / nom Unraid non résolu par Android | Utilise l'IP |
-| *Certificat HTTPS refusé* | Reverse proxy avec CA maison | Installe la CA : *Paramètres > Sécurité > Chiffrement et identifiants > Installer un certificat* |
-| L'appli n'apparaît pas sur la TV | Lanceur tiers qui ignore les applis TV | Elle est dans *Paramètres > Applications* ; le lanceur Google TV l'affiche |
-| *Aucun navigateur sur cet appareil* | Normal sur Android TV | Ouvre le lien depuis le téléphone |
-| `INSTALL_FAILED_UPDATE_INCOMPATIBLE` | APK signé par une autre clé | `adb uninstall fr.arrmada.app`, puis réinstalle |
-| Écran figé ou blanc sur TV | WebView de la TV trop ancien | Mets à jour *Android System WebView* depuis le Play Store |
-
-Pour inspecter la page dans un APK `--debug` : téléphone en USB, Chrome sur le
-PC, `chrome://inspect`.
+| *Ce serveur répond, mais ce n'est pas l'API ArrMada* | Port de la web app (3000) au lieu de l'API (8420) | Mettre le port 8420 (celui de l'add-on) |
+| *Pas de réponse en 5 secondes* | Mauvaise IP / port, TV sur un autre réseau | Tester `curl http://IP:8420/api/health` depuis le PC |
+| *Accès refusé par le serveur (réseau local uniquement)* | Jeton d'appareil utilisé hors du réseau local | Normal : les TV ne fonctionnent que sur le LAN (ADR-002) |
+| *Cette TV n'est plus appairée* | TV supprimée dans la web app | L'appli revient seule à l'écran d'appairage |
+| *Film absent de Jellyfin* / *Jellyfin non configuré* | Titre non scanné par Jellyfin, ou Jellyfin pas déclaré | Lancer un scan Jellyfin ; déclarer Jellyfin dans ArrMada |
+| *Sortie audio impossible* | Format refusé par l'ampli en passthrough | Choisir une autre piste dans le menu pause (onglet Audio) ; vérifier le réglage « Format audio surround » |
+| Piste « non lisible ici » | Ni passthrough ni décodeur pour ce format sur cet appareil | Choisir une autre piste |
+| Pas de vignettes dans *Chapitres* | Jellyfin n'a pas extrait les images | Cocher « Extraire les images des chapitres » dans Jellyfin, relancer le scan |
+| Sous-titres ASS simplifiés | ExoPlayer ne gère pas les effets ASS avancés | Limite connue (ADR-007) |
 
 ## Organisation du code
 
 ```
 android/
-├── build-apk.sh                 # build + tests + signature + installation adb
-├── app/build.gradle.kts         # versions, signature, dépendances (3 bibliothèques AndroidX)
-├── app/src/main/
-│   ├── AndroidManifest.xml      # permissions, lanceurs téléphone + TV, bannière
-│   ├── java/fr/arrmada/app/
-│   │   ├── MainActivity.kt      # le WebView : Retour, erreurs, plein écran, liens externes
-│   │   ├── SetupActivity.kt     # écran de connexion
-│   │   ├── ServerUrl.kt         # nettoyage / comparaison d'adresses (testé)
-│   │   ├── ServerProbe.kt       # test de connexion
-│   │   ├── ServerConfig.kt      # réglages enregistrés, détection TV
-│   │   └── Insets.kt            # marges des barres système (Android 15)
-│   ├── assets/
-│   │   ├── arrmada-bridge.js    # touche Retour → ferme la modale (tous appareils)
-│   │   └── tv-navigation.js     # flèches + OK, focus visible, largeur TV
-│   └── res/                     # écrans, textes, couleurs, icônes
-├── app/src/test/                # tests Kotlin (JVM, sans appareil)
-└── tests/tv-navigation/         # tests des scripts injectés, dans Chromium
+├── build-apk.sh                    # tests + APK + signature + installation adb
+├── app/build.gradle.kts            # versions figées des bibliothèques
+└── app/src/
+    ├── main/java/fr/arrmada/app/
+    │   ├── MainActivity.kt         # fenêtre unique + navigation entre écrans + Réglages
+    │   ├── ArrMadaApplication.kt   # objets partagés (réglages, client HTTP, images)
+    │   ├── data/                   # API : client HTTP, modèles JSON, réglages, appels
+    │   └── ui/
+    │       ├── theme/              # charte de l'add-on (couleurs, police)
+    │       ├── components/         # affiches, boutons, rangées, fond « Ken Burns »
+    │       ├── setup/              # adresse du serveur, appairage
+    │       ├── home/               # accueil, grille Films
+    │       ├── detail/             # fiche film
+    │       └── player/             # lecteur ExoPlayer, menu pause, pistes
+    └── test/                       # tests JVM + captures d'écran (Robolectric)
 ```
 
-Icônes et bannière TV : **générées** par `python3 branding/export.py` à partir
-du logo SVG, jamais retouchées à la main.
-
-Tester les scripts injectés en local (Playwright, comme la CI) :
-
-```bash
-npm install --no-save --prefix /tmp/pw playwright@1.56.1
-/tmp/pw/node_modules/.bin/playwright install chromium
-NODE_PATH=/tmp/pw/node_modules node android/tests/tv-navigation/run.cjs
-```
+Côté serveur : `backend/app/api/tv.py` et `backend/app/services/tv_playback.py`
+(infos de lecture, relais du flux Jellyfin, vignettes de chapitres).

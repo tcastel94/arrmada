@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Native Android TV app with its own player (APK 2.0.0, phase 1 of ADR-007)
+
+#### Changed
+- **The Android app is now native** (Kotlin, Compose for TV, Media3 ExoPlayer) instead of the web app in a WebView (ADR-006 replaced by ADR-007). Look and feel of the Kodi add-on: same colors, condensed font, blue focus with zoom, slow-zoom backdrop
+
+#### Added
+- **Setup**: server address (API, port 8420) checked on `/api/health`, then pairing with code + QR code validated in the web app, like a Kodi TV (`X-Device-Token`, back to pairing when the TV is revoked)
+- **Home**: top menu, hero of the focused title (logo or title, meta, overview, "Reprendre à…"), rows Reprendre (shared watch states, same as Kodi TVs), Ajouts récents, Pour toi, Bientôt; **Films** grid (7 columns, Récents / A à Z / Année / 4K)
+- **Movie page**: logo, TMDB / IMDb / RT ratings, 4K / Dolby Vision / Atmos / 7.1 badges, resume or start over, trailer (YouTube app), cast
+- **Player** (ExoPlayer): original file streamed without transcoding, audio passthrough to the amp, French audio preferred, −10 / +30 s, position saved every 30 s, on pause and on exit (shared with Kodi TVs), watched at 90 %, room amp preset applied on start
+- **Pause menu, Apple TV style**: logo, end time, progress, tabs Chapters (thumbnails, jump), Info, Cast, Audio and Subtitles with readable track names (language, Dolby TrueHD, DTS-HD, 7.1, forced, "non lisible ici")
+- **Server**: `GET /api/tv/play/movie/{tmdb}` and `/api/tv/play/episode/{tvdb}/{s}/{e}` (Jellyfin item, duration, chapters, intro markers, resume), `GET /api/tv/stream/{item}` (original file relayed from Jellyfin with Range, the admin Jellyfin key never leaves the server, only player headers forwarded), `GET /api/tv/chapter-image/{item}/{i}`; device whitelist updated (read-only, Jellyfin id checked before any call). 15 tests
+- **CI**: Kotlin tests, screenshots of every main screen rendered without a device (Robolectric + Roborazzi, 1920×1080) published as an artifact and on the `ci/android-screenshots` branch
+
 ### Android app: phone, tablet and Android TV (APK 1.0.0)
 
 #### Added
