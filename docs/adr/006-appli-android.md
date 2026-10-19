@@ -2,8 +2,10 @@
 
 ## Statut
 
-**Accepté** le 18/10/2026. Complète l'[ADR-004](004-arrmada-remplace-kodi.md)
-sans le contredire (voir « Rapport avec Kodi »).
+~~Accepté le 18/10/2026.~~ **Remplacé le 19/10/2026 par
+l'[ADR-007](007-appli-android-native.md)** : la web app dans une fenêtre ne
+correspond pas au besoin (une interface TV dans l'esprit de l'add-on Kodi,
+avec son propre lecteur).
 
 ## Contexte
 
