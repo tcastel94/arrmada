@@ -129,11 +129,11 @@ data class AmpDevice(
     val input: String? = null,
     @SerialName("actual_db") val actualDb: Double? = null,
     @SerialName("sound_program") val soundProgram: String? = null,
+    // Absents (null) quand l'ampli ne les a pas : le réglage est alors masqué
+    @SerialName("dialog_level") val dialogLevel: Int? = null,
+    @SerialName("adaptive_drc") val adaptiveDrc: Boolean? = null,
     val error: String? = null,
 )
-
-@Serializable
-data class AmpProfile(val name: String = "")
 
 @Serializable
 data class AmpControl(val action: String, val value: JsonElement? = null, val zone: String = "main")

@@ -49,15 +49,12 @@ import fr.arrmada.app.data.ResumeEntry
 import fr.arrmada.app.data.TmdbItem
 import fr.arrmada.app.data.WatchState
 import fr.arrmada.app.data.AmpDevice
-import fr.arrmada.app.data.AmpProfile
-import fr.arrmada.app.data.AmpState
 import fr.arrmada.app.data.Board
 import fr.arrmada.app.data.BoardCard
 import fr.arrmada.app.data.DashDownload
 import fr.arrmada.app.data.DashService
 import fr.arrmada.app.data.DashStats
 import fr.arrmada.app.data.Dashboard
-import fr.arrmada.app.data.Device
 import fr.arrmada.app.data.Disk
 import fr.arrmada.app.data.EventLogic
 import fr.arrmada.app.data.PlayAnnounce
@@ -73,7 +70,6 @@ import fr.arrmada.app.ui.board.DashboardContent
 import fr.arrmada.app.ui.downloads.DownloadsContent
 import fr.arrmada.app.ui.home.TonightContent
 import fr.arrmada.app.ui.intro.IntroFrame
-import fr.arrmada.app.ui.salon.SalonContent
 import java.time.LocalDateTime
 import fr.arrmada.app.ui.components.Motion
 import fr.arrmada.app.ui.detail.MovieContent
@@ -456,14 +452,15 @@ class ScreenshotTest {
     }
 
     @Test
-    fun salon() {
-        val state = AmpState(listOf(AmpDevice(name = "Yamaha RX-A6A", online = true, power = "on", volumePct = 42, actualDb = -38.5, input = "hdmi1", soundProgram = "surr_decoder")))
-        captureRoboImage(shot("18-salon")) {
+    fun menuPauseAmpli() {
+        val amp = AmpDevice(name = "Yamaha RX-A6A", online = true, power = "on", volumePct = 42, actualDb = -38.5,
+            soundProgram = "surr_decoder", dialogLevel = 1, adaptiveDrc = false)
+        captureRoboImage(shot("18-menu-pause-ampli")) {
             ArrMadaTheme {
-                SalonContent(
-                    Device(id = 3, name = "Shield Salon", room = "salon", hasAmp = true), state,
-                    mapOf("salon" to AmpProfile("Salon"), "cinema" to AmpProfile("Salle de cinéma")),
-                    {}, {}, {}, {},
+                PauseMenu(
+                    info = play, meta = dune.toMeta(), position = 2_530_000, duration = 9_300_000, tracks = Tracks.EMPTY,
+                    absolute = noAbsolute, onResume = {}, onSeek = {}, onSelectTrack = { _, _ -> },
+                    initialTab = "Ampli", amp = amp,
                 )
             }
         }

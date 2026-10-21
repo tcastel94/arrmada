@@ -48,6 +48,9 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import kotlinx.serialization.json.JsonPrimitive
+import fr.arrmada.app.data.AmpDevice
+import fr.arrmada.app.data.AmpLogic
 import fr.arrmada.app.data.Chapter
 import fr.arrmada.app.data.PlayInfo
 import fr.arrmada.app.ui.components.ArrButton
@@ -62,7 +65,7 @@ import java.time.format.DateTimeFormatter
 
 /** Onglets du menu pause ; le contenu suit l'onglet qui a le focus. */
 private enum class PauseTab(val label: String) {
-    CHAPTERS("Chapitres"), INFO("Infos"), CAST("Distribution"), AUDIO("Audio"), SUBTITLES("Sous-titres")
+    CHAPTERS("Chapitres"), INFO("Infos"), CAST("Distribution"), AUDIO("Audio"), SUBTITLES("Sous-titres"), AMP("Ampli")
 }
 
 private val ChipShape = RoundedCornerShape(8.dp)
@@ -89,11 +92,14 @@ fun PauseMenu(
     onSeek: (seconds: Double) -> Unit,
     onSelectTrack: (type: Int, choice: TrackChoice?) -> Unit,
     initialTab: String? = null, // libellé de l'onglet affiché d'abord (tests)
+    amp: AmpDevice? = null, // ampli de la pièce (null : pas d'ampli, onglet masqué)
+    onAmp: (action: String, value: JsonPrimitive) -> Unit = { _, _ -> },
 ) {
     val tabs = PauseTab.entries.filter { tab ->
         when (tab) {
             PauseTab.CHAPTERS -> info.chapters.isNotEmpty()
             PauseTab.CAST -> !meta?.cast.isNullOrEmpty()
+            PauseTab.AMP -> amp?.online == true
             else -> true
         }
     }
@@ -174,6 +180,7 @@ fun PauseMenu(
                     PauseTab.SUBTITLES -> TracksPanel(trackChoices(tracks, C.TRACK_TYPE_TEXT), allowOff = true) {
                         onSelectTrack(C.TRACK_TYPE_TEXT, it)
                     }
+                    PauseTab.AMP -> amp?.let { AmpPanel(it, onAmp) }
                 }
             }
         }
@@ -281,6 +288,77 @@ private fun CastPanel(meta: PlaybackMeta?) {
                 Text(person.name, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 6.dp))
                 Text(person.character, style = MaterialTheme.typography.labelMedium, color = ArrColors.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
             }
+        }
+    }
+}
+
+/**
+ * Onglet « Ampli » : ce qu'on règle vraiment pendant un film. En haut le
+ * programme sonore et le volume ; en bas les voix (dialogues plus forts que
+ * les effets) et le mode nuit (écarts de volume réduits, pour ne pas
+ * réveiller la maison). Un réglage que l'ampli n'a pas n'est pas affiché.
+ */
+@Composable
+private fun AmpPanel(amp: AmpDevice, onAmp: (String, JsonPrimitive) -> Unit) {
+    Column(Modifier.padding(horizontal = 48.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+            AmpGroup("Programme sonore") {
+                AmpLogic.PROGRAMS.forEach { (id, label) ->
+                    AmpChip(label, selected = amp.soundProgram == id) { onAmp("sound_program", JsonPrimitive(id)) }
+                }
+            }
+            AmpGroup("Volume · ${AmpLogic.summary(amp)}") {
+                AmpChip("Vol −", selected = false) { onAmp("volume_step", JsonPrimitive(-AmpLogic.VOLUME_STEP)) }
+                AmpChip("Vol +", selected = false) { onAmp("volume_step", JsonPrimitive(AmpLogic.VOLUME_STEP)) }
+                AmpChip(if (amp.mute) "Remettre le son" else "Muet", selected = amp.mute) { onAmp("mute", JsonPrimitive(!amp.mute)) }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+            amp.dialogLevel?.let { level ->
+                AmpGroup("Voix plus claires") {
+                    AmpLogic.DIALOG_LEVELS.forEach { (value, label) ->
+                        AmpChip(label, selected = level == value) { onAmp("dialog_level", JsonPrimitive(value)) }
+                    }
+                }
+            }
+            amp.adaptiveDrc?.let { night ->
+                AmpGroup("Mode nuit") {
+                    AmpChip("Activé", selected = night) { onAmp("adaptive_drc", JsonPrimitive(true)) }
+                    AmpChip("Désactivé", selected = !night) { onAmp("adaptive_drc", JsonPrimitive(false)) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AmpGroup(label: String, chips: @Composable () -> Unit) {
+    Column {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = ArrColors.TextSecondary, maxLines = 1)
+        Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { chips() }
+    }
+}
+
+/** Pastille de réglage : bleue au focus, entourée quand c'est le réglage actuel. */
+@Composable
+private fun AmpChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.height(34.dp),
+        shape = ClickableSurfaceDefaults.shape(ChipShape),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.06f),
+        border = ClickableSurfaceDefaults.border(
+            border = if (selected) Border(BorderStroke(2.dp, ArrColors.Accent), shape = ChipShape) else Border.None,
+        ),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = if (selected) ArrColors.Accent.copy(alpha = 0.22f) else Color(0x26FFFFFF),
+            contentColor = ArrColors.Text,
+            focusedContainerColor = ArrColors.Accent,
+            focusedContentColor = ArrColors.Night,
+        ),
+    ) {
+        Box(Modifier.fillMaxHeight().padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {
+            Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1)
         }
     }
 }

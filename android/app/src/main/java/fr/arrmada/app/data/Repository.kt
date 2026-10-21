@@ -235,10 +235,8 @@ class Repository(private val api: Api) {
 
     suspend fun resumeAll(service: String): ActionResult = api.post("/api/kodi/downloads/$service/0/resume", empty)
 
-    // ── Salon (ampli Yamaha) ──
+    // ── Ampli Yamaha (onglet « Ampli » du menu pause) ──
     suspend fun ampState(): AmpState = api.get("/api/yamaha/state")
-
-    suspend fun ampProfiles(): Map<String, AmpProfile> = api.get("/api/yamaha/profiles")
 
     suspend fun ampControl(action: String, value: kotlinx.serialization.json.JsonElement?): ActionResult =
         api.post("/api/yamaha/control", AmpControl(action, value))
@@ -269,11 +267,6 @@ class Repository(private val api: Api) {
             "/api/yamaha/preset/apply",
             PresetBody(device.room, mediaType, audioCodec, audioChannels),
         )
-    }
-
-    /** Préréglage d'une pièce choisi dans l'écran Salon (« salon », « cinema »). */
-    suspend fun applyRoomPreset(room: String) {
-        api.post<kotlinx.serialization.json.JsonObject, PresetBody>("/api/yamaha/preset/apply", PresetBody(room, "movie"))
     }
 
     /** Cette TV (pièce, ampli, identifiant), relue toutes les 10 min au plus. */

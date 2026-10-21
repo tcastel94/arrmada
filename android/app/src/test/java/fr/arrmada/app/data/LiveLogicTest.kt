@@ -145,18 +145,15 @@ class LiveLogicTest {
         assertEquals("On sonne à la porte", EventLogic.cameraLabel(CameraEvent(detection = "ring")))
     }
 
-    // ── Salon ──
+    // ── Ampli (menu pause) ──
 
     @Test
-    fun `ampli`() {
-        assertEquals("HDMI 1", SalonLogic.input("hdmi1"))
-        assertEquals("Av On", SalonLogic.input("av_on"))
-        assertEquals("−42,5 dB", SalonLogic.decibels(-42.5))
-        val amp = SalonLogic.amp(AmpState(listOf(AmpDevice(name = "RX-A6A", online = true, power = "standby", volumePct = 40, soundProgram = "surr_decoder"))))
-        assertEquals("En veille", amp.power)
-        assertEquals("Surround Decoder", amp.program)
-        assertEquals("Hors ligne", SalonLogic.amp(AmpState(listOf(AmpDevice()))).power)
-        assertEquals("Pas d’ampli dans cette pièce : le son passe par la TV.", SalonLogic.message(AmpState(status = "no_amp"), true))
+    fun `ampli, résumé et programmes`() {
+        assertEquals("−42,5 dB", AmpLogic.decibels(-42.5))
+        assertEquals("Surround Decoder", AmpLogic.programName("surr_decoder"))
+        val amp = AmpDevice(online = true, volumePct = 42, actualDb = -38.5, soundProgram = "drama", mute = true)
+        assertEquals("42 % · −38,5 dB · Drama · muet", AmpLogic.summary(amp))
+        assertTrue(AmpLogic.PROGRAMS.any { it.first == "straight" })
     }
 
     // ── Tableau de bord ──

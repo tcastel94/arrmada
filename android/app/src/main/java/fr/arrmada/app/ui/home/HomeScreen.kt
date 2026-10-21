@@ -149,7 +149,7 @@ fun HomeScreen(viewModel: HomeViewModel, api: Api, actions: HomeActions) {
 val TOP_MENU = listOf(
     "home" to "Accueil", "movies" to "Films", "series" to "Séries", "tonight" to "Ce soir",
     "apps" to "Applis", "discover" to "Découvrir", "search" to "Rechercher", "queue" to "Téléchargements",
-    "salon" to "Salon", "board" to "Tableau de bord", "settings" to "Réglages",
+    "board" to "Tableau de bord", "settings" to "Réglages",
 )
 
 /** Affichage de l'accueil à partir d'un état (séparé pour les captures d'écran de test). */

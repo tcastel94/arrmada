@@ -215,10 +215,19 @@ def _pct(volume: int, max_volume: int) -> int:
     return round((volume / max_volume) * 100) if max_volume else 0
 
 
-async def _zone_status(base: str, zone: str = "main") -> dict[str, Any]:
-    st = await _get(base, f"/{zone}/getStatus")
+def zone_status(st: dict[str, Any]) -> dict[str, Any]:
+    """Réponse YXC `getStatus` → état exposé (web app, TV).
+
+    Réglages « voix » et « mode nuit » (dialog_lift, dialog_level,
+    adaptive_drc) : None quand l'ampli ne les a pas (la TV masque alors le
+    réglage dans son menu pause).
+    """
     max_vol = st.get("max_volume") or 161
     vol = st.get("volume") or 0
+
+    def flag(key: str) -> bool | None:
+        return bool(st[key]) if key in st else None
+
     return {
         "power": st.get("power"),
         "volume": vol,
@@ -228,7 +237,16 @@ async def _zone_status(base: str, zone: str = "main") -> dict[str, Any]:
         "input": st.get("input"),
         "actual_db": (st.get("actual_volume") or {}).get("value"),
         "sound_program": st.get("sound_program"),
+        "dialog_lift": st.get("dialogue_lift"),
+        "dialog_level": st.get("dialogue_level"),
+        "adaptive_drc": flag("adaptive_drc"),
+        "enhancer": flag("enhancer"),
+        "extra_bass": flag("extra_bass"),
     }
+
+
+async def _zone_status(base: str, zone: str = "main") -> dict[str, Any]:
+    return zone_status(await _get(base, f"/{zone}/getStatus"))
 
 
 async def get_state(db: AsyncSession, service_id: int | None = None) -> dict[str, Any]:

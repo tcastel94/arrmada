@@ -7,18 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Android TV app, phase 3: parity with the Kodi add-on (APK 2.3.0)
+### Android TV app, phase 3: parity with the Kodi add-on (APK 2.3.1)
 
 #### Added
 - **Téléchargements** screen from the add-on: "Pour ce soir" cards of TV requests ("Prêt vers 21:02", steps Trouvé → Télécharg. → Import → Sous-titres → Prêt, requesting TV, ready in green / blocked in red) and the Radarr / Sonarr queue (status colour, progress, time left, speed estimated between two reads, sizes). OK opens the actions: Débloquer (server diagnosis in 3 steps + fix button), Passer en tête, Pause / Reprendre (SABnzbd), Relancer la recherche, Fiche du titre, Annuler ma demande. "Pause sauf ce soir" / "Tout reprendre". Refreshed every 5 s
 - **Bubbles** at the bottom right (imported on the NAS, download started, import blocked, health alert), grouped beyond 2, held during playback and shown at the end as "Pendant ta séance"; **"Prêt à regarder"** pop-up for requests made from this TV (Regarder / Plus tard); **camera** detection: small window with the photo at the top left during playback, a bubble otherwise; **"Lire sur la TV"** sent from the web app starts playback. Server events polled every 5 s (`/api/events/recent`, back-off up to 2 min), only while the app is on screen
-- **Salon**: Yamaha amp of the room (power, volume and dB, mute, input, sound program), Vol − / Vol + / Muet / Veille buttons, room presets
+- **"Ampli" tab in the pause menu** (instead of the add-on's Salon page, which only duplicated the remote): sound program, volume, clearer dialogue (Yamaha dialogue level) and night mode (adaptive DRC), shown only in a room with an amp; the room preset still applies by itself at playback start. Server: `/api/yamaha/state` now returns `dialog_lift`, `dialog_level`, `adaptive_drc`, `enhancer`, `extra_bass` (null when the amp lacks them), 2 tests
 - **Tableau de bord**: greeting, animated counters (movies, series, storage with de-duplicated disks, downloads), downloads in progress, services, recent additions
 - **Animated intro** of the add-on at launch (A legs, waves, play button bounce, light sweep, wordmark), skipped by any key
 - **Ce soir**: what will be finished before 22:00, 22:30… ("fini vers 22:14"), resumes first then unwatched movies
 - **Applis**: Android apps installed on the TV (TV banners), launched with OK
 - **Background trailer** on the movie page: local trailer from the NAS (Jellyfin `LocalTrailers`), muted, fades in after 2.5 s. Server: `GET /api/tv/trailer/movie/{tmdb}`, 2 tests
-- Full top menu of the add-on (11 entries); pure Kotlin rules with 10 JVM tests; 7 more CI screenshots
+- Full top menu of the add-on (10 entries, Salon dropped); pure Kotlin rules with 10 JVM tests; 7 more CI screenshots
 
 ### Android TV app: Blu-ray files, faster screens, case and disc (APK 2.2.0)
 

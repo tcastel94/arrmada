@@ -14,7 +14,6 @@ import fr.arrmada.app.ui.components.Motion
 import fr.arrmada.app.ui.downloads.DownloadsScreen
 import fr.arrmada.app.ui.home.TonightScreen
 import fr.arrmada.app.ui.intro.IntroAnimation
-import fr.arrmada.app.ui.salon.SalonScreen
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -136,7 +135,6 @@ private object Routes {
     const val DOWNLOAD = "download"
     const val SETTINGS = "settings"
     const val DOWNLOADS = "downloads" // écran Téléchargements (file, « Pour ce soir »)
-    const val SALON = "salon"
     const val BOARD = "board" // tableau de bord
     const val APPS = "apps"
     const val TONIGHT = "tonight"
@@ -245,7 +243,6 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
             "tonight" -> nav.navigate(Routes.TONIGHT)
             "apps" -> nav.navigate(Routes.APPS)
             "queue" -> nav.navigate(Routes.DOWNLOADS)
-            "salon" -> nav.navigate(Routes.SALON)
             "board" -> nav.navigate(Routes.BOARD)
         }
     }
@@ -439,9 +436,6 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
                 onOpenMovie = { nav.navigate(Routes.movie(it.toString())) },
                 onOpenSeries = { nav.navigate(Routes.show(it.toString())) },
             )
-        }
-        composable(Routes.SALON) {
-            SalonScreen(app.repository)
         }
         composable(Routes.BOARD) {
             DashboardScreen(app.repository, app.api::absolute, ::openItem, onDownloads = { nav.navigate(Routes.DOWNLOADS) })

@@ -29,6 +29,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -64,6 +65,7 @@ import androidx.media3.ui.PlayerView
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import fr.arrmada.app.ArrMadaApplication
+import fr.arrmada.app.data.AmpDevice
 import fr.arrmada.app.data.PlayInfo
 import fr.arrmada.app.data.PlaybackLogic
 import fr.arrmada.app.data.Repository
@@ -77,6 +79,7 @@ import fr.arrmada.app.ui.components.formatClock
 import fr.arrmada.app.ui.theme.ArrColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonPrimitive
 
 /** Ce qu'il faut lancer : un film (TMDB) ou un épisode (TVDB + numéros). */
 data class PlayRequest(
@@ -202,6 +205,7 @@ private fun PlayerSurface(
 ) {
     val context = LocalContext.current
     val repository = app.repository
+    val uiScope = rememberCoroutineScope()
 
     // ── Création du lecteur (une fois) ──
     val player = remember {
@@ -234,6 +238,24 @@ private fun PlayerSurface(
     }
 
     var showMenu by remember { mutableStateOf(false) }
+    // Ampli de la pièce (onglet « Ampli » du menu pause) : relu à l'ouverture du menu
+    var amp by remember { mutableStateOf<AmpDevice?>(null) }
+    var ampRead by remember { mutableIntStateOf(0) }
+    LaunchedEffect(showMenu, ampRead) {
+        if (!showMenu) return@LaunchedEffect
+        val me = runCatching { repository.device() }.getOrNull()
+        amp = if (me?.hasAmp == true) runCatching { repository.ampState().devices.firstOrNull() }.getOrNull() else null
+    }
+
+    /** Commande à l'ampli, puis relecture de son état (le réglage choisi s'entoure). */
+    fun ampCommand(action: String, value: JsonPrimitive) {
+        uiScope.launch {
+            runCatching { repository.ampControl(action, value) }
+                .onSuccess { if (!it.ok) Toast.makeText(context, it.message ?: "L’ampli a refusé le réglage", Toast.LENGTH_SHORT).show() }
+                .onFailure { Toast.makeText(context, it.message ?: "Ampli injoignable", Toast.LENGTH_SHORT).show() }
+            ampRead++
+        }
+    }
     var osdUntil by remember { mutableLongStateOf(0L) }
     var position by remember { mutableLongStateOf(request.startSeconds * 1000L) }
     var duration by remember { mutableLongStateOf(info.duration * 1000L) }
@@ -478,6 +500,8 @@ private fun PlayerSurface(
                     resume()
                 },
                 onSelectTrack = { type, choice -> selectTrack(player, type, choice) },
+                amp = amp,
+                onAmp = ::ampCommand,
             )
         }
 
