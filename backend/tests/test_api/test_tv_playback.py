@@ -445,3 +445,25 @@ async def test_movie_without_trailer(client: AsyncClient, jellyfin: dict[str, st
         "status": "none"
     }
     assert (await client.get("/api/tv/trailer/movie/1", headers=tv)).json() == {"status": "none"}
+
+
+async def test_play_movie_resume_is_per_profile(
+    client: AsyncClient, jellyfin: dict[str, str]
+) -> None:
+    tv = await _tv(client, jellyfin)
+    tom = (await client.post("/api/profiles", json={"name": "Tom"}, headers=jellyfin)).json()
+    as_tom = {**tv, "X-Profile-Id": str(tom["id"])}
+    state = {
+        "media_type": "movie",
+        "id_type": "tmdb",
+        "id": "438631",
+        "position": 4210,
+        "total": 9300,
+    }
+    assert (
+        await client.post("/api/kodi/watch-state", json={"states": [state]}, headers=as_tom)
+    ).status_code == 200
+    mine = (await client.get("/api/tv/play/movie/438631", headers=as_tom)).json()
+    family = (await client.get("/api/tv/play/movie/438631", headers=tv)).json()
+    assert mine["resume"]["position"] == 4210
+    assert family["resume"]["position"] == 0  # la reprise de Tom n'est pas celle de la famille

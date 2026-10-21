@@ -43,6 +43,7 @@ data class BoardCard(
     val protocol: String? = null,
     val subtitles: String? = null, // fr, en, missing, off, searching
     @SerialName("device_name") val deviceName: String? = null,
+    @SerialName("profile_name") val profileName: String? = null, // profil qui a demandé
     @SerialName("requested_at") val requestedAt: String? = null,
     val mine: Boolean = false,
     @SerialName("poster_url") val posterUrl: String? = null,
@@ -166,6 +167,7 @@ data class ServerEvent(
 @Serializable
 data class PlayAnnounce(
     @SerialName("device_id") val deviceId: Int? = null,
+    @SerialName("profile_id") val profileId: Int? = null, // « Prêt à regarder » d'un profil (ADR-008)
     val title: String = "",
     val subtitles: String? = null,
     val quality: String? = null,
@@ -237,6 +239,22 @@ data class DashDownload(
     val timeleft: String? = null,
     val service: String? = null,
 )
+
+/** Profil famille (ADR-008) : qui regarde. */
+@Serializable
+data class FamilyProfile(
+    val id: Int = 0,
+    val name: String = "",
+    val color: String = "#4A9EFF",
+    val emoji: String = "",
+    @SerialName("is_default") val isDefault: Boolean = false,
+) {
+    /** Lettre de l'avatar quand il n'y a pas d'emoji. */
+    val initial: String get() = name.trim().take(1).uppercase()
+}
+
+@Serializable
+data class FamilyProfiles(val items: List<FamilyProfile> = emptyList())
 
 /** Bande-annonce locale d'un film (GET /api/tv/trailer/movie/{tmdb}). */
 @Serializable

@@ -50,6 +50,7 @@ class LiveLogicTest {
         assertEquals("Prêt vers 21:02", view.headline)
         assertEquals("60 % · torrent : pas de priorité possible", view.detail)
         assertEquals("Salon TV · il y a 4 min · Bluray-2160p", view.who)
+        assertEquals("Tom · Salon TV · il y a 4 min · Bluray-2160p", BoardLogic.card(card.copy(profileName = "Tom"), now, utc).who)
         assertEquals(BoardLogic.Step.NOW, view.steps[1])
         assertEquals(listOf(BoardLogic.Action.DETAIL, BoardLogic.Action.CANCEL), view.actions)
     }
@@ -136,6 +137,9 @@ class LiveLogicTest {
         assertTrue(EventLogic.forMe(3, 3, "2026-10-21T20:46:00+00:00", now, utc))
         assertFalse(EventLogic.forMe(4, 3, "2026-10-21T20:46:00+00:00", now, utc))
         assertFalse(EventLogic.forMe(3, 3, "2026-10-21T20:40:00+00:00", now, utc))
+        // Demande d'un profil : ce profil sur n'importe quelle TV, pas un autre profil sur la même TV
+        assertTrue(EventLogic.forMe(4, 3, "2026-10-21T20:46:00+00:00", now, utc, profileId = 7, myProfile = 7))
+        assertFalse(EventLogic.forMe(3, 3, "2026-10-21T20:46:00+00:00", now, utc, profileId = 7, myProfile = null))
         val json = Json { ignoreUnknownKeys = true }
         val ready = json.decodeFromString(PlayAnnounce.serializer(), """{"device_id":3,"title":"Severance","media_type":"episode","id":"371980","season":2,"episode":5,"quality":"WEBDL-2160p","subtitles":"fr","at":"x"}""")
         assertEquals(371980L, ready.externalId)

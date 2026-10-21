@@ -79,7 +79,9 @@ import fr.arrmada.app.ui.home.HomeActions
 import fr.arrmada.app.ui.home.HomeContent
 import fr.arrmada.app.ui.home.HomeState
 import fr.arrmada.app.ui.home.LibraryContent
+import fr.arrmada.app.data.FamilyProfile
 import fr.arrmada.app.ui.player.AudioContext
+import fr.arrmada.app.ui.profiles.ProfilesContent
 import fr.arrmada.app.ui.player.PauseMenu
 import fr.arrmada.app.ui.player.selectedSound
 import fr.arrmada.app.data.SoundAdvisor
@@ -525,6 +527,19 @@ class ScreenshotTest {
                     }
                 }
             }
+        }
+    }
+
+    @Test
+    fun quiRegarde() {
+        val profiles = listOf(
+            FamilyProfile(1, "Famille", "#4A9EFF", isDefault = true),
+            FamilyProfile(2, "Thomas", "#34D399", "🎬"),
+            FamilyProfile(3, "Julie", "#F472B6"),
+            FamilyProfile(4, "Léo", "#FBBF24", "⚽"),
+        )
+        captureRoboImage(shot("24-qui-regarde")) {
+            ArrMadaTheme { ProfilesContent(profiles, currentId = 2) {} }
         }
     }
 }

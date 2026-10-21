@@ -130,9 +130,21 @@ object EventLogic {
         )
     }
 
-    /** L'annonce (« Prêt à regarder », « Lire sur la TV ») vise cette TV et date de moins de 2 min. */
-    fun forMe(deviceId: Int?, myId: Int, at: String, now: LocalDateTime, zone: ZoneId = ZoneId.systemDefault()): Boolean {
-        if (myId <= 0 || deviceId != myId) return false
+    /**
+     * L'annonce vise ce spectateur et date de moins de 2 min. Demande d'un
+     * profil : ce profil, sur n'importe quelle TV (ADR-008) ; sinon la TV visée.
+     */
+    fun forMe(
+        deviceId: Int?,
+        myId: Int,
+        at: String,
+        now: LocalDateTime,
+        zone: ZoneId = ZoneId.systemDefault(),
+        profileId: Int? = null,
+        myProfile: Int? = null,
+    ): Boolean {
+        val target = if (profileId != null) profileId == myProfile else myId > 0 && deviceId == myId
+        if (!target) return false
         val sent = Fr.parseIso(at, zone) ?: return false
         val age = Duration.between(sent, now).seconds
         return age in -CLOCK_SKEW_SECONDS..MAX_AGE_SECONDS

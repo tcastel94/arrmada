@@ -15,9 +15,11 @@ router = APIRouter(
 
 
 @router.get("/play/movie/{tmdb_id}")
-async def play_movie(tmdb_id: int, db: AsyncSession = Depends(get_db)) -> dict:
-    """Film à lancer : adresse du flux relayé, durée, chapitres, reprise."""
-    return await tv_playback.movie(db, tmdb_id)
+async def play_movie(
+    tmdb_id: int, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)
+) -> dict:
+    """Film à lancer : adresse du flux relayé, durée, chapitres, reprise (du profil)."""
+    return await tv_playback.movie(db, tmdb_id, user.get("profile_id"))
 
 
 @router.get("/trailer/movie/{tmdb_id}")
@@ -28,10 +30,14 @@ async def movie_trailer(tmdb_id: int, db: AsyncSession = Depends(get_db)) -> dic
 
 @router.get("/play/episode/{tvdb_id}/{season}/{episode}")
 async def play_episode(
-    tvdb_id: int, season: int, episode: int, db: AsyncSession = Depends(get_db)
+    tvdb_id: int,
+    season: int,
+    episode: int,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
 ) -> dict:
     """Épisode à lancer : comme un film, plus les marqueurs intro / récap / générique."""
-    return await tv_playback.episode(db, tvdb_id, season, episode)
+    return await tv_playback.episode(db, tvdb_id, season, episode, user.get("profile_id"))
 
 
 @router.get("/series/{tvdb_id}/season/{season}")

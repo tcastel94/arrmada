@@ -147,7 +147,7 @@ class EventCenter(
     private suspend fun announce(event: ServerEvent): PlayAnnounce? {
         val data = runCatching { json.decodeFromJsonElement(PlayAnnounce.serializer(), event.data) }.getOrNull() ?: return null
         val me = runCatching { repository.device() }.getOrNull() ?: return null
-        return data.takeIf { EventLogic.forMe(it.deviceId, me.id, it.at, LocalDateTime.now()) }
+        return data.takeIf { EventLogic.forMe(it.deviceId, me.id, it.at, LocalDateTime.now(), profileId = it.profileId, myProfile = prefs.profileId) }
     }
 
     private fun onReady(ready: PlayAnnounce) {

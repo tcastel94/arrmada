@@ -79,8 +79,18 @@ def origin_of(user: dict[str, Any] | None) -> dict[str, Any]:
             "device_id": user.get("device_id"),
             "device_name": str(user.get("device_name") or "TV"),
             "room": user.get("room"),
+            # Profil famille qui demande (ADR-008) ; None : « Famille »
+            "profile_id": user.get("profile_id"),
+            "profile_name": user.get("profile_name"),
         }
     return {"device_id": None, "device_name": "TV", "room": None}
+
+
+def is_mine(req: TvRequest, device_id: int | None, profile_id: int | None) -> bool:
+    """La demande appartient à ce spectateur : son profil, sinon (« Famille ») sa TV."""
+    if req.profile_id is not None:
+        return profile_id is not None and req.profile_id == profile_id
+    return device_id is not None and req.device_id == device_id
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -352,6 +362,8 @@ async def create_request(
             device_id=origin.get("device_id"),
             device_name=str(origin.get("device_name") or "TV")[:100],
             room=origin.get("room"),
+            profile_id=origin.get("profile_id"),
+            profile_name=(origin.get("profile_name") or None) and str(origin["profile_name"])[:40],
             status="open",
             download_ids=[],
             requested_at=_now(),
@@ -367,7 +379,9 @@ async def create_request(
         return None
 
 
-def as_dict(req: TvRequest, viewer_device_id: int | None = None) -> dict[str, Any]:
+def as_dict(
+    req: TvRequest, viewer_device_id: int | None = None, viewer_profile_id: int | None = None
+) -> dict[str, Any]:
     """Forme envoyée à la TV et à la web app."""
 
     def iso(value: datetime | None) -> str | None:
@@ -386,7 +400,9 @@ def as_dict(req: TvRequest, viewer_device_id: int | None = None) -> dict[str, An
         "priority": req.priority,
         "device_name": req.device_name,
         "room": req.room,
-        "mine": viewer_device_id is not None and req.device_id == viewer_device_id,
+        "profile_id": req.profile_id,
+        "profile_name": req.profile_name,
+        "mine": is_mine(req, viewer_device_id, viewer_profile_id),
         "status": req.status,
         "download_ids": req.download_ids or [],
         "requested_at": iso(req.requested_at),
@@ -397,7 +413,9 @@ def as_dict(req: TvRequest, viewer_device_id: int | None = None) -> dict[str, An
     }
 
 
-async def list_requests(db: AsyncSession, viewer_device_id: int | None = None) -> list[dict]:
+async def list_requests(
+    db: AsyncSession, viewer_device_id: int | None = None, viewer_profile_id: int | None = None
+) -> list[dict]:
     """Demandes en cours + fermées depuis moins de 12 h (les plus anciennes d'abord)."""
     since = _now() - RECENT_CLOSED
     rows = await db.execute(
@@ -405,7 +423,7 @@ async def list_requests(db: AsyncSession, viewer_device_id: int | None = None) -
         .where(or_(TvRequest.status == "open", TvRequest.closed_at >= since))
         .order_by(TvRequest.requested_at)
     )
-    return [as_dict(r, viewer_device_id) for r in rows.scalars().all()]
+    return [as_dict(r, viewer_device_id, viewer_profile_id) for r in rows.scalars().all()]
 
 
 async def annotate_queue(db: AsyncSession, items: list[dict[str, Any]]) -> None:
@@ -554,6 +572,9 @@ def ready_event(req: TvRequest, now: datetime) -> dict[str, Any]:
         "device_id": req.device_id,
         "device_name": req.device_name,
         "room": req.room,
+        # Profil qui a demandé (ADR-008) : l'annonce le suit sur n'importe quelle TV
+        "profile_id": req.profile_id,
+        "profile_name": req.profile_name,
         "title": req.title,
         "subtitles": req.subtitles or "",
         "quality": info.get("quality") or "",
@@ -673,12 +694,15 @@ async def cancel_request(db: AsyncSession, request_id: int, user: dict[str, Any]
     req = await db.get(TvRequest, request_id)
     if req is None:
         return {"status": "error", "code": 404, "message": "Demande introuvable"}
-    if user.get("role") == "device" and req.device_id != user.get("device_id"):
-        return {
-            "status": "error",
-            "code": 403,
-            "message": f"Seule la TV qui l'a lancée ({req.device_name}) peut l'annuler",
-        }
+    if user.get("role") == "device" and not is_mine(
+        req, user.get("device_id"), user.get("profile_id")
+    ):
+        message = (
+            f"Seul le profil {req.profile_name} peut annuler cette demande"
+            if req.profile_name
+            else f"Seule la TV qui l'a lancée ({req.device_name}) peut l'annuler"
+        )
+        return {"status": "error", "code": 403, "message": message}
     if req.status != "open":
         return {"status": "error", "code": 409, "message": "Cette demande est déjà terminée"}
 

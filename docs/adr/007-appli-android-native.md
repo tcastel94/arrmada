@@ -175,3 +175,7 @@ Chaque phase est livrée en APK testable sur la Shield.
 > piste (objets Atmos / DTS:X, canaux, stéréo) et les enceintes de la pièce
 > (`speakers` des profils : salon 5.1, salle de cinéma 7.2.2), et appliqué
 > automatiquement (désactivable).
+>
+> **Mise à jour (21/10/2026, APK 2.5.0)** : phase 4, premier lot : **profils
+> famille** (voir l'[ADR-008](008-profils-famille.md)) : sans code PIN ni
+> profil enfant. Restent : téléphone / tablette, écran d'accueil de la Shield.

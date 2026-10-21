@@ -41,6 +41,8 @@ class WatchState(Base):
     # « 2026-10-11 21:42:05 ») : recopiée telle quelle sur les autres TV.
     last_played: Mapped[str] = mapped_column(String(19), default="", server_default="")
     device: Mapped[str] = mapped_column(String(100), default="", server_default="")
+    # Profil famille (ADR-008) ; null : profil « Famille » (TV sous Kodi, web app)
+    profile_id: Mapped[int | None] = mapped_column(nullable=True)
     # Curseur de relecture des TV : strictement croissant (services/watch_sync.py)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 

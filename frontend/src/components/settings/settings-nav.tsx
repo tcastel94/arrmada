@@ -21,6 +21,7 @@ import {
     SlidersHorizontal,
     Sofa,
     Speaker,
+    Users,
     type LucideIcon,
 } from "lucide-react";
 import { SPRING } from "@/lib/motion";
@@ -71,6 +72,13 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
         short: "Yamaha",
         icon: Speaker,
         description: "Ton ampli home cinéma MusicCast et ses profils audio Salon / Cinéma, pilotés depuis le Salon.",
+    },
+    {
+        href: "/settings/profils",
+        label: "Profils famille",
+        short: "Profils",
+        icon: Users,
+        description: "Qui regarde sur les TV : chacun sa rangée Reprendre, ses vus, son « Pour toi » et ses demandes.",
     },
 ];
 

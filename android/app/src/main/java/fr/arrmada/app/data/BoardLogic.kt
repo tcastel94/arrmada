@@ -111,6 +111,7 @@ object BoardLogic {
             else -> HEADLINES[phase].orEmpty()
         }
         val who = listOfNotNull(
+            card.profileName?.takeIf { it.isNotBlank() },
             card.deviceName?.takeIf { it.isNotBlank() } ?: "TV",
             Fr.ago(card.requestedAt, now, zone).ifBlank { null },
             card.quality?.takeIf { it.isNotBlank() },

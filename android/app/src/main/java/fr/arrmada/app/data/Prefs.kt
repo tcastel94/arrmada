@@ -43,12 +43,45 @@ class Prefs(context: Context) {
         get() = prefs.getString(KEY_DEVICE, null)
         set(value) = prefs.edit().putString(KEY_DEVICE, value).apply()
 
+    /**
+     * Profil famille qui regarde (ADR-008), envoyé au serveur à chaque appel
+     * (en-tête X-Profile-Id). null : profil « Famille », celui des TV sous Kodi.
+     */
+    private val _profile = MutableStateFlow(readProfile())
+    val profile: StateFlow<FamilyProfile?> = _profile
+
+    val profileId: Int? get() = _profile.value?.id
+
+    fun setProfile(profile: FamilyProfile?) {
+        val chosen = profile?.takeIf { !it.isDefault }
+        prefs.edit().apply {
+            if (chosen == null) {
+                remove(KEY_PROFILE_ID).remove(KEY_PROFILE_NAME).remove(KEY_PROFILE_COLOR).remove(KEY_PROFILE_EMOJI)
+            } else {
+                putInt(KEY_PROFILE_ID, chosen.id).putString(KEY_PROFILE_NAME, chosen.name)
+                    .putString(KEY_PROFILE_COLOR, chosen.color).putString(KEY_PROFILE_EMOJI, chosen.emoji)
+            }
+        }.apply()
+        _profile.value = chosen
+    }
+
+    private fun readProfile(): FamilyProfile? {
+        val id = prefs.getInt(KEY_PROFILE_ID, 0).takeIf { it > 0 } ?: return null
+        return FamilyProfile(
+            id = id,
+            name = prefs.getString(KEY_PROFILE_NAME, null).orEmpty(),
+            color = prefs.getString(KEY_PROFILE_COLOR, null) ?: "#4A9EFF",
+            emoji = prefs.getString(KEY_PROFILE_EMOJI, null).orEmpty(),
+        )
+    }
+
     /** Décodage auto : l'ampli prend le programme conseillé pour le son du film. */
     var autoSound: Boolean
         get() = prefs.getBoolean(KEY_AUTO_SOUND, true)
         set(value) = prefs.edit().putBoolean(KEY_AUTO_SOUND, value).apply()
 
     fun forgetPairing() {
+        setProfile(null) // autre maison, autres profils
         prefs.edit().remove(KEY_TOKEN).remove(KEY_DEVICE).apply()
         _paired.value = false
     }
@@ -58,5 +91,9 @@ class Prefs(context: Context) {
         const val KEY_TOKEN = "device_token"
         const val KEY_DEVICE = "device_name"
         const val KEY_AUTO_SOUND = "auto_sound"
+        const val KEY_PROFILE_ID = "profile_id"
+        const val KEY_PROFILE_NAME = "profile_name"
+        const val KEY_PROFILE_COLOR = "profile_color"
+        const val KEY_PROFILE_EMOJI = "profile_emoji"
     }
 }

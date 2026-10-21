@@ -5,7 +5,9 @@ import android.view.KeyEvent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import fr.arrmada.app.data.FamilyProfile
 import fr.arrmada.app.data.PlayAnnounce
+import fr.arrmada.app.ui.profiles.ProfilesScreen
 import fr.arrmada.app.data.TonightLogic
 import fr.arrmada.app.notify.EventOverlays
 import fr.arrmada.app.ui.apps.AppsScreen
@@ -134,6 +136,7 @@ private object Routes {
     const val SEARCH = "search?voice={voice}"
     const val DOWNLOAD = "download"
     const val SETTINGS = "settings"
+    const val PROFILES = "profiles" // « Qui regarde ? » (ADR-008)
     const val DOWNLOADS = "downloads" // écran Téléchargements (file, « Pour ce soir »)
     const val BOARD = "board" // tableau de bord
     const val APPS = "apps"
@@ -184,10 +187,11 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
     val scope = rememberCoroutineScope()
     val paired by app.prefs.paired.collectAsStateWithLifecycle()
     val searchCount by searchRequests.collectAsStateWithLifecycle()
+    val viewer by app.prefs.profile.collectAsStateWithLifecycle()
     val start = when {
         app.prefs.serverUrl == null -> Routes.SERVER
         !paired -> Routes.PAIR
-        else -> Routes.HOME
+        else -> Routes.PROFILES // « Qui regarde ? », passé tout seul sans profils
     }
 
     // TV révoquée dans la web app (réponse 401) : retour à l'appairage
@@ -244,6 +248,7 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
             "apps" -> nav.navigate(Routes.APPS)
             "queue" -> nav.navigate(Routes.DOWNLOADS)
             "board" -> nav.navigate(Routes.BOARD)
+            "profiles" -> nav.navigate(Routes.PROFILES)
         }
     }
 
@@ -288,7 +293,7 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
     LaunchedEffect(Unit) { app.events.playRequests.collect { playAnnounced(it) } }
 
     // Intro animée au lancement (une fois), seulement vers l'accueil
-    var showIntro by remember { mutableStateOf(!app.introSeen && start == Routes.HOME && Motion.enabled) }
+    var showIntro by remember { mutableStateOf(!app.introSeen && start == Routes.PROFILES && Motion.enabled) }
     val skipIntro by intro.skip.collectAsStateWithLifecycle()
     LaunchedEffect(showIntro) { intro.active.value = showIntro }
 
@@ -310,8 +315,25 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
             PairScreen(
                 prefs = app.prefs,
                 repository = app.repository,
-                onPaired = { nav.navigate(Routes.HOME) { popUpTo(0) } },
+                onPaired = { nav.navigate(Routes.PROFILES) { popUpTo(0) } },
                 onChangeServer = { nav.navigate(Routes.SERVER) { popUpTo(0) } },
+            )
+        }
+        composable(Routes.PROFILES) {
+            ProfilesScreen(
+                repository = app.repository,
+                current = viewer,
+                onHasProfiles = { app.hasProfiles = it },
+                onChosen = { chosen ->
+                    scope.launch {
+                        // Autre spectateur : son vu / reprise, son « Pour toi », ses demandes
+                        if (chosen?.id != app.prefs.profileId) {
+                            app.prefs.setProfile(chosen)
+                            app.repository.forgetViewer()
+                        }
+                        nav.navigate(Routes.HOME) { popUpTo(0) }
+                    }
+                },
             )
         }
         composable(Routes.HOME) {
@@ -327,6 +349,7 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
                     request = ::openTmdb,
                     go = ::go,
                     prefetch = prefetcher::focus,
+                    viewer = if (app.hasProfiles) viewer ?: FamilyProfile(name = "Famille", isDefault = true) else null,
                 ),
             )
         }

@@ -52,6 +52,9 @@ class TvRequest(Base):
     device_id: Mapped[int | None] = mapped_column(nullable=True, index=True)
     device_name: Mapped[str] = mapped_column(String(100), default="TV", server_default="TV")
     room: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Profil qui a demandé (ADR-008) ; null : profil « Famille »
+    profile_id: Mapped[int | None] = mapped_column(nullable=True)
+    profile_name: Mapped[str | None] = mapped_column(String(40), nullable=True)
     status: Mapped[str] = mapped_column(String(10), default="open", index=True)
     # Téléchargements vus pour cette demande (downloadId *arr = nzo_id SABnzbd)
     download_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)

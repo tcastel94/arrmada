@@ -45,6 +45,9 @@ class ArrMadaApplication : Application(), ImageLoaderFactory {
         fr.arrmada.app.notify.EventCenter(repository, prefs, appScope, api.json)
     }
 
+    /** La maison a des profils famille : avatar du profil dans le menu du haut. */
+    var hasProfiles = false
+
     /** L'intro animée ne se joue qu'une fois par lancement de l'appli (comme l'add-on). */
     var introSeen = false
 

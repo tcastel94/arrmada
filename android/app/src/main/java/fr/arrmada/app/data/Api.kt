@@ -48,7 +48,11 @@ class Api(private val prefs: Prefs) {
             val sameServer = server != null && ServerUrl.sameHost(server, request.url.toString())
             chain.proceed(
                 if (sameServer && token != null) {
-                    request.newBuilder().header("X-Device-Token", token).build()
+                    request.newBuilder()
+                        .header("X-Device-Token", token)
+                        // Profil qui regarde (ADR-008) : sans en-tête, « Famille »
+                        .apply { prefs.profileId?.let { header("X-Profile-Id", it.toString()) } }
+                        .build()
                 } else {
                     request
                 }

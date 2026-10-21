@@ -252,6 +252,21 @@ class Repository(private val api: Api) {
 
     suspend fun dashboard(): Dashboard = api.get("/api/kodi/dashboard")
 
+    // ── Profils famille (ADR-008) ──
+    suspend fun profiles(): List<FamilyProfile> = api.get<FamilyProfiles>("/api/profiles").items
+
+    /**
+     * Changement de profil : on oublie ce qui dépend de qui regarde (vu /
+     * reprise, infos de lecture) ; la médiathèque et les fiches restent.
+     */
+    suspend fun forgetViewer() {
+        statesLock.withLock {
+            states.clear()
+            statesCursor = ""
+        }
+        details.keys.removeAll { it.startsWith("play:") }
+    }
+
     suspend fun movieTrailer(tmdbId: Long): TrailerInfo =
         cached("trailer:$tmdbId", DETAIL_TTL, false) { api.get<TrailerInfo>("/api/tv/trailer/movie/$tmdbId") }
 

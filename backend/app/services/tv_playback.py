@@ -35,6 +35,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services import jellyfin, watch_sync
+from app.services.family_profiles import profiled_key
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -190,7 +191,7 @@ def _found(item_id: str, details: dict[str, Any] | None, resume: dict[str, Any])
     }
 
 
-async def movie(db: AsyncSession, tmdb_id: int) -> dict[str, Any]:
+async def movie(db: AsyncSession, tmdb_id: int, profile_id: int | None = None) -> dict[str, Any]:
     """Tout ce qu'il faut pour lancer un film (TMDB)."""
     cfg = await jellyfin.get_config(db)
     if not cfg:
@@ -200,7 +201,9 @@ async def movie(db: AsyncSession, tmdb_id: int) -> dict[str, Any]:
     if item is None:
         return {"status": "not_found", "reason": "Film absent de Jellyfin"}
     details = await _item_details(base, key, item["id"])
-    resume = await _resume(db, watch_sync.state_key("movie", "tmdb", str(tmdb_id)))
+    resume = await _resume(
+        db, profiled_key(watch_sync.state_key("movie", "tmdb", str(tmdb_id)), profile_id)
+    )
     return _found(item["id"], details, resume)
 
 
@@ -242,7 +245,9 @@ async def movie_trailer(db: AsyncSession, tmdb_id: int) -> dict[str, Any]:
     return {"status": "none"}
 
 
-async def episode(db: AsyncSession, tvdb_id: int, season: int, number: int) -> dict[str, Any]:
+async def episode(
+    db: AsyncSession, tvdb_id: int, season: int, number: int, profile_id: int | None = None
+) -> dict[str, Any]:
     """Tout ce qu'il faut pour lancer un épisode (TVDB de la série + numéros)."""
     cfg = await jellyfin.get_config(db)
     if not cfg:
@@ -253,7 +258,10 @@ async def episode(db: AsyncSession, tvdb_id: int, season: int, number: int) -> d
         return {"status": "not_found", "reason": "Épisode absent de Jellyfin"}
     details = await _item_details(base, key, item["id"])
     resume = await _resume(
-        db, watch_sync.state_key("episode", "tvdb", str(tvdb_id), season, number)
+        db,
+        profiled_key(
+            watch_sync.state_key("episode", "tvdb", str(tvdb_id), season, number), profile_id
+        ),
     )
     result = _found(item["id"], details, resume)
     segments = await jellyfin.episode_segments(db, tvdb_id, season, number)

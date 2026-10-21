@@ -152,6 +152,8 @@ _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         ("GET", r"/api/tv/chapter-image/[0-9a-f]{32}/\d+"),
         ("GET", r"/api/tv/item-image/[0-9a-f]{32}"),
         ("GET", r"/api/tv/trailer/movie/\d+"),
+        # Profils famille (ADR-008) : écran « Qui regarde ? » (lecture seule)
+        ("GET", r"/api/profiles"),
         # Remux HLS (.m2ts, .iso…) : listes et morceaux seulement, puis arrêt
         (
             "GET",

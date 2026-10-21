@@ -95,14 +95,56 @@ def _format_tmdb_series(raw: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+async def _history_bases(db: AsyncSession, profile_id: int, media: list[dict]) -> list[dict]:
+    """Titres de la médiathèque regardés récemment par un profil (4 au plus).
+
+    « Pour toi » d'un profil (ADR-008) : les recommandations TMDB partent
+    de ce que CE profil a vu ou commencé, du plus récent au plus ancien.
+    """
+    from sqlalchemy import select
+
+    from app.models.watch_state import WatchState
+
+    rows = await db.execute(
+        select(WatchState)
+        .where(WatchState.profile_id == profile_id)
+        .order_by(WatchState.updated_at.desc())
+        .limit(200)
+    )
+    movies = {
+        str(m.get("tmdb_id")): m for m in media if m.get("type") == "movie" and m.get("tmdb_id")
+    }
+    # Série : `tmdb_id` de l'agrégateur = identifiant TVDB (Sonarr), celui du vu partagé
+    series = {
+        str(m.get("tmdb_id")): m for m in media if m.get("type") == "series" and m.get("tmdb_id")
+    }
+    bases: list[dict] = []
+    seen: set[str] = set()
+    for row in rows.scalars():
+        if not (row.watched or row.position):
+            continue
+        item = (movies if row.media_type == "movie" else series).get(str(row.external_id))
+        key = f"{row.media_type}:{row.external_id}"
+        if item is None or key in seen:
+            continue
+        seen.add(key)
+        bases.append(item)
+        if len(bases) >= 4:
+            break
+    return bases
+
+
 @router.get("")
-async def get_recommendations(db: AsyncSession = Depends(get_db)):
+async def get_recommendations(
+    db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)
+):
     """Smart recommendations based on library analysis + TMDB.
 
     Returns:
     - trending_movies: current trending movies
     - trending_series: current trending series
     - because_you_have: recommendations based on user library movies & series
+      (for a family profile: on what this profile watched, ADR-008)
     - library_select_items: items from user library for custom recommendation selector
     - wanted: monitored but not downloaded items from library
     """
@@ -191,9 +233,13 @@ async def get_recommendations(db: AsyncSession = Depends(get_db)):
         except Exception as exc:
             logger.error("TMDB trending series failed: %s", exc)
 
-        # 5. "Because you have X" — pick random library movies AND series with tmdb_id
+        # 5. "Because you have X" — a profile's recent viewing first, then
+        # random library movies AND series with tmdb_id to fill up to 4
         media_with_tmdb = [m for m in media if m.get("tmdb_id") and m.get("has_file")]
-        sample_items = random.sample(media_with_tmdb, min(4, len(media_with_tmdb)))
+        sample_items = await _history_bases(db, profile_id, media) if profile_id else []
+        rest = [m for m in media_with_tmdb if m not in sample_items]
+        sample_items += random.sample(rest, min(4 - len(sample_items), len(rest)))
+        result["based_on_history"] = bool(profile_id)
 
         for base_item in sample_items:
             m_type = base_item.get("type", "movie")
@@ -238,7 +284,9 @@ async def get_recommendations(db: AsyncSession = Depends(get_db)):
 
         return result
 
-    return await cache.get_or_set("recommendations:full", _fetch, ttl_seconds=3600)
+    profile_id = user.get("profile_id")
+    key = "recommendations:full" if profile_id is None else f"recommendations:full:p{profile_id}"
+    return await cache.get_or_set(key, _fetch, ttl_seconds=3600)
 
 
 @router.get("/details/{media_type}/{tmdb_id}")

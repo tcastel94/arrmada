@@ -31,6 +31,7 @@ from app.api.links import router as links_router
 from app.api.media import router as media_router
 from app.api.notifications import router as notifications_router
 from app.api.profile_overrides import router as profile_overrides_router
+from app.api.profiles import router as profiles_router
 from app.api.prowlarr_stats import router as prowlarr_stats_router
 from app.api.quality import router as quality_router
 from app.api.recommendations import router as recommendations_router
@@ -84,6 +85,7 @@ api_router.include_router(devices_router)
 api_router.include_router(links_router)  # QR codes TV → web app (ADR-003 § 7)
 api_router.include_router(ambient_router)  # Écran d'appoint du salon (tablette)
 api_router.include_router(tv_router)  # Lecture dans l'appli Android native (ADR-007)
+api_router.include_router(profiles_router)  # Profils famille (ADR-008)
 
 # New feature routes
 api_router.include_router(events_router)

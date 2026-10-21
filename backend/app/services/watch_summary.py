@@ -196,7 +196,13 @@ async def load_summary(db: Any) -> dict[str, Any]:
     from app.models.watch_state import WatchState
     from app.services.media_aggregator import cached_library
 
-    rows = (await db.execute(select(WatchState))).scalars().all()
+    # Profil « Famille » (celui des TV sous Kodi) : les autres profils ont
+    # leur propre « Reprendre » dans l'appli TV (ADR-008)
+    rows = (
+        (await db.execute(select(WatchState).where(WatchState.profile_id.is_(None))))
+        .scalars()
+        .all()
+    )
     states = [watch_sync.public(row) for row in rows]
     try:
         library = await cached_library(db)

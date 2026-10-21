@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Family profiles (ADR-008, APK 2.5.0)
+
+#### Added
+- **"Qui regarde ?"** screen at launch on the Android TV app (skipped when there are no profiles) and the current profile's avatar at the right of the top menu to switch. Each profile has its own **Reprendre / watched**, its own **"Pour toi"** (TMDB recommendations seeded with what this profile watched) and its own **"Pour ce soir" requests**: "Prêt à regarder" follows the person on whichever TV runs their profile; the Downloads cards show who asked
+- **Web app**: Settings › **Profils famille** (add, rename, emoji, colour, delete; 8 at most)
+- **Server**: `family_profiles` table; the "Famille" profile is the existing data (`profile_id` null), so Kodi TVs and the web app are unchanged; `X-Profile-Id` header resolved for device calls; `watch_states.profile_id`, `tv_requests.profile_id / profile_name` (columns added at startup); `GET/POST/PATCH/DELETE /api/profiles` (devices: read only); per-profile watch-state, playback resume, recommendations cache, request ownership and `tv_ready` payload. 10 tests
+
 ### Android TV app: audio settings screen and recommended sound (APK 2.4.0)
 
 #### Changed

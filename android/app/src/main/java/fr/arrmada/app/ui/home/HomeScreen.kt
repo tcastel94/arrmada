@@ -14,7 +14,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
@@ -137,6 +140,8 @@ class HomeActions(
     val request: (TmdbItem) -> Unit = {}, // titre absent : feuille « Télécharger »
     val go: (String) -> Unit = {},
     val prefetch: (LibraryItem) -> Unit = {}, // carte survolée : fiche préchargée
+    // Profil qui regarde (ADR-008), à droite du menu ; null : pas de profils dans la maison
+    val viewer: fr.arrmada.app.data.FamilyProfile? = null,
 )
 
 @Composable
@@ -182,6 +187,7 @@ fun HomeContent(state: HomeState, absolute: (String?) -> String?, onRetry: () ->
                 TOP_MENU.forEach { (route, label) ->
                     ArrButton(label, { if (route != "home") actions.go(route) }, primary = route == "home", compact = true)
                 }
+                actions.viewer?.let { viewer -> ViewerChip(viewer) { actions.go("profiles") } }
             }
 
             // ── Héros : l'élément sélectionné ──
@@ -328,3 +334,29 @@ private fun heroOf(entry: CalendarEntry, absolute: (String?) -> String?) = Hero(
     overview = entry.overview,
     note = entry.airDate?.take(10)?.let { "Sortie le " + it.split("-").reversed().joinToString("/") },
 )
+
+/** Avatar et nom du profil qui regarde : OK ramène à « Qui regarde ? ». */
+@Composable
+private fun ViewerChip(viewer: fr.arrmada.app.data.FamilyProfile, onClick: () -> Unit) {
+    androidx.tv.material3.Surface(
+        onClick = onClick,
+        modifier = Modifier.height(34.dp),
+        shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(RoundedCornerShape(17.dp)),
+        scale = androidx.tv.material3.ClickableSurfaceDefaults.scale(focusedScale = 1.06f),
+        colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+            containerColor = Color(0x26FFFFFF),
+            contentColor = ArrColors.Text,
+            focusedContainerColor = ArrColors.Accent,
+            focusedContentColor = ArrColors.Night,
+        ),
+    ) {
+        Row(
+            Modifier.padding(start = 4.dp, end = 12.dp).fillMaxHeight(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            fr.arrmada.app.ui.profiles.ProfileAvatar(viewer, 26.dp)
+            Text(viewer.name, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+        }
+    }
+}

@@ -8,7 +8,7 @@ sont expliqués dans l'[ADR-007](../docs/adr/007-appli-android-native.md).
 > Téléphone et tablette viendront en phase 4. L'APK s'y installe, mais
 > l'interface est pensée pour la télécommande.
 
-## Ce que fait la version 2.4 (phases 1 à 3 de l'ADR-007)
+## Ce que fait la version 2.5 (phases 1 à 4 de l'ADR-007)
 
 | Écran | Contenu |
 |---|---|
@@ -27,10 +27,11 @@ sont expliqués dans l'[ADR-007](../docs/adr/007-appli-android-native.md).
 | **Tableau de bord** | Salutation, compteurs animés (films, séries, stockage, téléchargements), téléchargements en cours, services, ajouts récents ; **intro animée** de l'add-on au lancement |
 | **Ce soir** | Ce qui sera fini avant 22:00, 22:30… (« fini vers 22:14 ») |
 | **Applis** | Applis Android installées sur la TV, lancées avec OK |
+| **Profils famille** (ADR-008) | **Qui regarde ?** au lancement, avatar dans le menu pour changer : chacun sa rangée Reprendre, ses vus, son « Pour toi », ses demandes (« Prêt à regarder » le suit sur n'importe quelle TV). Gestion dans la web app (*Réglages › Profils famille*) |
 | **Bande-annonce en fond** | Sur la fiche film, la bande-annonce rangée sur le NAS se lance sans le son après 2,5 s |
 
-Pas encore là (phase 4, voir l'ADR) : profils famille, interface téléphone /
-tablette.
+Pas encore là (phase 4, voir l'ADR) : interface téléphone / tablette, option
+« écran d'accueil de la Shield ».
 
 ### Télécommande
 
