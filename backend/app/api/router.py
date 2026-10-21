@@ -46,6 +46,7 @@ from app.api.subtitles import router as subtitles_router
 from app.api.system import router as system_router
 from app.api.trash_guides import router as trash_guides_router
 from app.api.tv import router as tv_router
+from app.api.videos import router as videos_router
 from app.api.webhooks import router as webhooks_router
 from app.api.yamaha import router as yamaha_router
 
@@ -99,3 +100,4 @@ api_router.include_router(ai_search_router)
 api_router.include_router(subtitles_router)
 api_router.include_router(cameras_router)  # Caméras Eufy : pop-up sur la TV
 api_router.include_router(android_router)  # Mises à jour de l'appli Android (ADR-009)
+api_router.include_router(videos_router)  # Écran « Vidéos » : dossiers hors médiathèque

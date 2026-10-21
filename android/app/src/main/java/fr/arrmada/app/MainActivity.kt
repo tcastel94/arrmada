@@ -7,6 +7,7 @@ import fr.arrmada.app.data.HomeRowsLogic
 import fr.arrmada.app.home.HomeRowsWorker
 import fr.arrmada.app.home.TvHomeRows
 import fr.arrmada.app.update.UpdateDialog
+import fr.arrmada.app.ui.videos.VideosScreen
 import fr.arrmada.app.ui.components.gutter
 import android.os.Bundle
 import android.view.KeyEvent
@@ -182,14 +183,16 @@ private object Routes {
     const val TONIGHT = "tonight"
     const val MOVIE = "movie/{radarrId}?tmdb={tmdb}"
     const val SHOW = "show/{sonarrId}"
-    const val PLAY = "play/{kind}/{id}/{season}/{episode}/{start}?radarr={radarr}&sonarr={sonarr}"
+    const val PLAY = "play/{kind}/{id}/{season}/{episode}/{start}?radarr={radarr}&sonarr={sonarr}&file={file}"
+    const val VIDEOS = "videos?path={path}" // écran Vidéos : un dossier (sans path : les dossiers déclarés)
 
     fun library(type: String) = "library/$type"
     fun search(voice: Boolean) = "search?voice=$voice"
     fun movie(radarrId: String, tmdbId: Long? = null) = "movie/$radarrId" + (tmdbId?.let { "?tmdb=$it" } ?: "")
     fun show(sonarrId: String) = "show/$sonarrId"
     fun play(r: PlayRequest) = "play/${r.kind}/${r.id}/${r.season}/${r.episode}/${r.startSeconds}" +
-        "?radarr=${r.radarrId.orEmpty()}&sonarr=${r.sonarrId.orEmpty()}"
+        "?radarr=${r.radarrId.orEmpty()}&sonarr=${r.sonarrId.orEmpty()}&file=${r.file.orEmpty()}"
+    fun videos(token: String? = null) = "videos?path=${token.orEmpty()}"
 }
 
 /** Intro à l'écran ([active]) et demande de la passer ([skip]), partagées avec l'activité. */
@@ -291,6 +294,7 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
             "settings" -> nav.navigate(Routes.SETTINGS)
             "tonight" -> nav.navigate(Routes.TONIGHT)
             "apps" -> nav.navigate(Routes.APPS)
+            "videos" -> nav.navigate(Routes.videos())
             "queue" -> nav.navigate(Routes.DOWNLOADS)
             "board" -> nav.navigate(Routes.BOARD)
             "profiles" -> nav.navigate(Routes.PROFILES)
@@ -329,7 +333,7 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
         Routes.LIBRARY -> if (backStack?.arguments?.getString("type") == "series") "series" else "movies"
         Routes.SEARCH -> "search"
         Routes.DOWNLOADS -> "queue"
-        Routes.MORE, Routes.TONIGHT, Routes.DISCOVER, Routes.BOARD, Routes.SETTINGS -> "more"
+        Routes.MORE, Routes.TONIGHT, Routes.DISCOVER, Routes.BOARD, Routes.SETTINGS, Routes.VIDEOS -> "more"
         else -> null
     }
 
@@ -543,6 +547,7 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
                 navArgument("start") { type = NavType.IntType },
                 navArgument("radarr") { type = NavType.StringType; defaultValue = "" },
                 navArgument("sonarr") { type = NavType.StringType; defaultValue = "" },
+                navArgument("file") { type = NavType.StringType; defaultValue = "" },
             ),
         ) { entry ->
             val args = requireNotNull(entry.arguments)
@@ -554,6 +559,7 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
                 radarrId = args.getString("radarr")?.takeIf { it.isNotBlank() },
                 sonarrId = args.getString("sonarr")?.takeIf { it.isNotBlank() },
                 startSeconds = args.getInt("start"),
+                file = args.getString("file")?.takeIf { it.isNotBlank() },
             )
             PlayerScreen(
                 request = request,
@@ -565,6 +571,14 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
                         popUpTo(Routes.PLAY) { inclusive = true }
                     }
                 },
+            )
+        }
+        composable(Routes.VIDEOS, arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" })) { entry ->
+            VideosScreen(
+                repository = app.repository,
+                token = entry.arguments?.getString("path")?.takeIf { it.isNotBlank() },
+                onFolder = { nav.navigate(Routes.videos(it)) },
+                onPlay = { file, start -> nav.navigate(Routes.play(PlayRequest(kind = "file", id = 0, startSeconds = start, file = file.token))) },
             )
         }
         composable(Routes.DOWNLOADS) {

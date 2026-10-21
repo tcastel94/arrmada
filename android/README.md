@@ -8,7 +8,7 @@ sont expliqués dans l'[ADR-007](../docs/adr/007-appli-android-native.md).
 > Une seule APK : elle reconnaît l'écran au lancement (TV, tablette ou
 > téléphone) et adapte la navigation. Voir [Téléphone et tablette](#téléphone-et-tablette).
 
-## Ce que fait la version 2.8 (phases 1 à 4 de l'ADR-007)
+## Ce que fait la version 2.9 (phases 1 à 4 de l'ADR-007)
 
 | Écran | Contenu |
 |---|---|
@@ -29,6 +29,7 @@ sont expliqués dans l'[ADR-007](../docs/adr/007-appli-android-native.md).
 | **Applis** | Applis Android installées sur la TV, lancées avec OK |
 | **Profils famille** (ADR-008) | **Qui regarde ?** au lancement, avatar dans le menu pour changer : chacun sa rangée Reprendre, ses vus, son « Pour toi », ses demandes (« Prêt à regarder » le suit sur n'importe quelle TV). Gestion dans la web app (*Réglages › Profils famille*) |
 | **Bande-annonce en fond** | Sur la fiche film, la bande-annonce rangée sur le NAS se lance sans le son après 2,5 s |
+| **Vidéos** | Explorateur des dossiers du NAS déclarés dans la web app (*Réglages › Dossiers vidéo*) : ce qui n'a pas de fiche officielle (mangas **Kai**, montages, vidéos perso). Tri naturel (Ep 2 avant Ep 10), Retour remonte d'un dossier. Lecture du fichier d'origine avec le lecteur habituel, **vu / reprise** par profil, **sous-titres posés à côté** (`Ep 01.fr.srt`, `.ass`, `.vtt`) dans l'onglet Sous-titres. Appui long : reprendre, depuis le début, vu / pas vu |
 | **Accueil de la Shield** | Rangée **À suivre** d'Android TV : les films et épisodes commencés, un clic reprend la lecture dans ArrMada. Chaîne **ArrMada · Ajouts récents** : un clic ouvre la fiche. Mises à jour en quittant l'appli et toutes les 30 min ; à couper dans *Réglages* |
 
 
@@ -244,6 +245,9 @@ autre clé**.
 | *Accès refusé par le serveur (réseau local uniquement)* | Jeton d'appareil utilisé hors du réseau local | Normal hors de la maison (ADR-002). Téléphone : passer par le VPN et déclarer ses adresses dans `DEVICE_TRUSTED_NETWORKS` (voir [Téléphone et tablette](#téléphone-et-tablette)) |
 | Jamais de « mise à jour disponible » | Appli de test (debug), pas de clé release dans les secrets GitHub, ou serveur sans accès à GitHub | Installer une fois la version release ; vérifier `/api/android/status` (champ `check.error`) ; à défaut, déposer l'APK dans `data/apk/` |
 | *Mise à jour refusée : APK signée par une autre clé* | Appli installée avec une autre clé (APK de test, ancienne clé) | Désinstaller ArrMada une fois, installer la version release par adb ; les suivantes passent seules |
+| *Aucun dossier vidéo* dans l'écran Vidéos | Rien de déclaré dans la web app | *Réglages › Dossiers vidéo* : nom + chemin vu par le serveur (sous `/mnt/user`) |
+| Dossier vidéo *Introuvable sur le NAS* | Partage démonté, ou chemin vu par l'hôte et non par le conteneur | Vérifier le montage (`/mnt/user` dans `docker-compose.yml`) et le chemin dans la web app |
+| Sous-titre `.srt` absent du menu | Nom différent de la vidéo | Même début de nom : `Episode 01.mkv` → `Episode 01.srt` ou `Episode 01.fr.srt` |
 | Pas de rangée ArrMada sur l'accueil de la Shield | Option coupée, ou chaîne masquée dans les réglages d'Android TV | *Réglages* d'ArrMada : rangées affichées ; Android : *Écran d'accueil › Personnaliser les chaînes*. Les cartes arrivent après la première synchro (en quittant l'appli) |
 | *Aucune TV appairée* dans « Lire sur une TV » | Aucune TV (appli ou Kodi) appairée, ou seulement des téléphones | Appairer la TV ; les téléphones / tablettes ne sont pas proposés |
 | *Cette TV n'est plus appairée* | TV supprimée dans la web app | L'appli revient seule à l'écran d'appairage |
@@ -276,6 +280,7 @@ android/
     │       ├── components/         # affiches, boutons, rangées, fond « Ken Burns »,
     │       │                       #   format d'écran (Screen.kt : TV / tablette / téléphone, tap)
     │       ├── shell/              # navigation tactile (barre du bas, colonne, « Plus »)
+    │       ├── videos/             # écran Vidéos : explorateur des dossiers hors médiathèque
     │       ├── setup/              # adresse du serveur, appairage
     │       ├── home/               # accueil, grilles Films / Séries, Découvrir
     │       ├── detail/             # fiche film (boîtier + disque animé), écran Série
@@ -285,6 +290,7 @@ android/
 ```
 
 Côté serveur : `backend/app/api/tv.py` et `backend/app/services/tv_playback.py` ;
-mises à jour : `backend/app/api/android.py` et `backend/app/services/android_update.py`
+mises à jour : `backend/app/api/android.py` et `backend/app/services/android_update.py` ;
+écran Vidéos : `backend/app/api/videos.py` et `backend/app/services/video_files.py`
 (infos de lecture, relais du flux Jellyfin, remux HLS des .m2ts / .iso,
 vignettes de chapitres).

@@ -151,7 +151,8 @@ class Repository(private val api: Api) {
         val moviesByTmdb = movies.associateBy { it.tmdbId?.toString() }
         val seriesByTvdb = series.associateBy { it.tmdbId?.toString() } // tmdb_id = TVDB pour une série
         return states
-            .filter { !it.watched && it.position > 0 }
+            // Les vidéos de l'écran Vidéos n'ont ni fiche ni affiche : pas dans Reprendre
+            .filter { !it.watched && it.position > 0 && it.mediaType != "file" }
             .sortedByDescending { it.updatedAt }
             .distinctBy { if (it.mediaType == "episode") "s:${it.id}" else "m:${it.id}" } // un épisode par série
             .take(20)
@@ -297,6 +298,13 @@ class Repository(private val api: Api) {
     }
 
     /** Cette TV (pièce, ampli, identifiant), relue toutes les 10 min au plus. */
+    /** Écran Vidéos : dossiers déclarés ([token] null) ou contenu d'un dossier. */
+    suspend fun videos(token: String?): VideoListing =
+        api.get("/api/videos/browse" + (token?.let { "?path=${q(it)}" } ?: ""))
+
+    /** Infos de lecture d'une vidéo de l'écran Vidéos (même format qu'un film). */
+    suspend fun playFile(token: String): PlayInfo = api.get("/api/videos/play/$token")
+
     /** Version plus récente de l'appli sur le serveur (ADR-009) pour ce type d'APK. */
     suspend fun updateOffer(versionCode: Int, buildType: String): UpdateOffer =
         api.get("/api/android/update?version_code=$versionCode&build_type=${q(buildType)}")

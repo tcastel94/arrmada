@@ -187,6 +187,10 @@ _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         # Mises à jour de l'appli Android (ADR-009) : version proposée, APK
         ("GET", r"/api/android/update"),
         ("GET", r"/api/android/apk/arrmada-[A-Za-z0-9.+_-]+\.apk"),
+        # Écran « Vidéos » : parcourir les dossiers déclarés, lire (jetons
+        # opaques confinés au dossier racine, lecture seule)
+        ("GET", r"/api/videos/browse"),
+        ("GET", r"/api/videos/(play|stream|subtitle)/[A-Za-z0-9_-]{1,2000}"),
     )
 )
 

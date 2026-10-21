@@ -103,6 +103,7 @@ private fun TabItem(tab: ShellTab, selected: Boolean, modifier: Modifier, onClic
 @Composable
 fun MoreScreen(viewer: FamilyProfile?, onGo: (String) -> Unit) {
     val entries = listOfNotNull(
+        Triple("videos", "Vidéos", "Dossiers du NAS hors médiathèque (mangas Kai…)"),
         Triple("tonight", "Ce soir", "Ce qui sera fini avant l’heure choisie"),
         Triple("discover", "Découvrir", "Tendances et « Parce que tu as… »"),
         Triple("board", "Tableau de bord", "Médiathèque, stockage, services"),

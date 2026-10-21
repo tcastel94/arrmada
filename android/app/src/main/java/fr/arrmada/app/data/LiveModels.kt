@@ -294,3 +294,37 @@ data class UpdateOffer(
     val sha256: String = "",
     val url: String = "",
 )
+
+// ─── Écran Vidéos : dossiers hors médiathèque ───────────────────────────────
+
+/** Étape du fil d'Ariane (« Mangas Kai › Dragon Ball Kai »). */
+@Serializable
+data class VideoCrumb(val name: String = "", val token: String = "")
+
+@Serializable
+data class VideoFolder(
+    val name: String = "",
+    val token: String = "", // jeton opaque du dossier (jamais un chemin)
+    val available: Boolean = true, // dossier racine présent sur le NAS
+)
+
+@Serializable
+data class VideoFile(
+    val name: String = "",
+    val title: String = "", // nom sans l'extension
+    val token: String = "",
+    val size: Long = 0,
+    val modified: Long = 0,
+    @SerialName("watch_id") val watchId: String = "", // clé de vu / reprise
+    val subtitles: Int = 0, // sous-titres posés à côté
+)
+
+/** Contenu d'un dossier (ou, sans jeton, la liste des dossiers déclarés). */
+@Serializable
+data class VideoListing(
+    val title: String = "Vidéos",
+    val crumbs: List<VideoCrumb> = emptyList(),
+    val parent: String? = null,
+    val folders: List<VideoFolder> = emptyList(),
+    val files: List<VideoFile> = emptyList(),
+)

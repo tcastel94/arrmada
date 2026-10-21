@@ -49,6 +49,11 @@ class Settings(BaseSettings):
     ANDROID_UPDATE_TAG: str = "android-latest"
     ANDROID_APK_DIR: str = "data/apk"
 
+    # ── Vidéos hors médiathèque (écran « Vidéos ») ────────────
+    # Les dossiers déclarés dans la web app doivent être sous ce chemin
+    # (garde-fou : jamais /app/data, /etc…). Vide = n'importe où.
+    VIDEO_ALLOWED_BASE: str = "/mnt/user"
+
     # ── Telegram ──────────────────────────────────────────────
     TELEGRAM_BOT_TOKEN: str = ""
     TELEGRAM_CHAT_ID: str = ""

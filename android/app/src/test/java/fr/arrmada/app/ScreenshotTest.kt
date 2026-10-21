@@ -78,6 +78,11 @@ import fr.arrmada.app.ui.components.ScreenLayout
 import fr.arrmada.app.ui.shell.MoreScreen
 import fr.arrmada.app.ui.shell.TouchShell
 import androidx.compose.runtime.CompositionLocalProvider
+import fr.arrmada.app.data.VideoCrumb
+import fr.arrmada.app.data.VideoFile
+import fr.arrmada.app.data.VideoFolder
+import fr.arrmada.app.data.VideoListing
+import fr.arrmada.app.ui.videos.VideosContent
 import fr.arrmada.app.ui.detail.MovieContent
 import fr.arrmada.app.ui.detail.SeriesContent
 import fr.arrmada.app.ui.home.DiscoverContent
@@ -653,6 +658,43 @@ class ScreenshotTest {
     fun tabletteFicheFilm() {
         captureRoboImage(shot("37-tablette-fiche-film")) {
             OnScreen(tablet) { MovieContent(dune, play, noAbsolute, onPlay = { _, _ -> }, onSendToTv = {}) }
+        }
+    }
+
+    // ── Écran Vidéos (dossiers hors médiathèque) ──
+
+    private val kai = VideoListing(
+        title = "Dragon Ball Kai",
+        crumbs = listOf(VideoCrumb("Mangas Kai", "a"), VideoCrumb("Dragon Ball Kai", "b")),
+        parent = "a",
+        folders = listOf(VideoFolder("Films", "f1"), VideoFolder("Saison 2 (Buu)", "f2")),
+        files = (1..8).map { n ->
+            VideoFile(
+                name = "DBK - Ep %02d.mkv".format(n), title = "Dragon Ball Kai - Episode %02d".format(n), token = "t$n",
+                size = 350L * 1024 * 1024 + n * 7L * 1024 * 1024, watchId = "w$n", subtitles = if (n <= 3) 2 else 0,
+            )
+        },
+    )
+    private val kaiStates = mapOf(
+        "w1" to WatchState(mediaType = "file", idType = "sha1", id = "w1", watched = true),
+        "w2" to WatchState(mediaType = "file", idType = "sha1", id = "w2", watched = true),
+        "w3" to WatchState(mediaType = "file", idType = "sha1", id = "w3", position = 750, total = 1380),
+    )
+
+    @Test
+    fun videos() {
+        captureRoboImage(shot("25-videos")) {
+            ArrMadaTheme { VideosContent(kai, kaiStates, {}, {}, {}) }
+        }
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-port-xxhdpi")
+    fun telephoneVideos() {
+        captureRoboImage(shot("38-telephone-videos")) {
+            OnScreen(phone) {
+                TouchShell(selected = "more", visible = true, onGo = {}) { VideosContent(kai, kaiStates, {}, {}, {}) }
+            }
         }
     }
 }

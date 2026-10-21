@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### "Vidéos" screen: NAS folders outside the library (APK 2.9.0)
+
+#### Added
+- **Android app, "Vidéos" screen** (TV top menu, "Plus" on phones): browse NAS folders like a file explorer for videos with no official TMDB / TVDB page that Radarr, Sonarr and Jellyfin ignore (Dragon Ball **Kai** and other fan edits, home videos). Natural sort (Ep 2 before Ep 10), breadcrumb, Back goes up one folder. OK plays the original file with the usual player (pause menu, audio / embedded subtitle tracks); long press: resume, from the start, mark watched / unwatched
+- **Watched / resume per file and per family profile** (watch-state `media_type: "file"`, `id_type: "sha1"` of the real path); progress bar and ✓ in the list; files are kept out of the "Reprendre" rows
+- **External subtitles** next to the video (`Ep 01.srt`, `Ep 01.fr.ass`, `Ep 01.forced.fr.srt`, `.vtt`) added to the Subtitles tab; served as UTF-8 (French `.srt` in Windows-1252 no longer show `Ã©`)
+- **Web app**: Settings › **Dossiers vidéo** (name + server path; flagged when the share is missing)
+- **Server**: `video_roots` table; `GET /api/videos/browse`, `/play/{token}`, `/stream/{token}` (HTTP Range: seeking, resume), `/subtitle/{token}` open to device tokens; `GET/POST/PATCH/DELETE /api/videos/roots` for the web app. Items are opaque tokens resolved to their real path and **confined to their root folder** (`../` or a symlink leaving it → 404); only folders, videos and subtitles are listed or served; roots must be under `VIDEO_ALLOWED_BASE` (default `/mnt/user`). 12 tests
+
 ### Android app: automatic updates without adb (ADR-009, APK 2.8.0)
 
 #### Added

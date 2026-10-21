@@ -102,6 +102,7 @@ data class PlayRequest(
     val radarrId: String? = null, // film : fiche Radarr (logo, distribution) pour le menu pause
     val sonarrId: String? = null, // épisode : fiche Sonarr (logo, épisode suivant)
     val startSeconds: Int = 0,
+    val file: String? = null, // « file » : jeton de la vidéo (écran Vidéos)
 )
 
 /** Un titre est « vu » passé 90 % (le générique de fin ne compte pas). */
@@ -143,8 +144,11 @@ fun PlayerScreen(request: PlayRequest, app: ArrMadaApplication, onExit: () -> Un
 
     LaunchedEffect(request) {
         try {
-            val play = if (request.kind == "movie") repository.playMovie(request.id)
-            else repository.playEpisode(request.id, request.season, request.episode)
+            val play = when (request.kind) {
+                "movie" -> repository.playMovie(request.id)
+                "file" -> repository.playFile(request.file.orEmpty()) // vidéo hors médiathèque
+                else -> repository.playEpisode(request.id, request.season, request.episode)
+            }
             if (play.status != "ok") {
                 error = play.reason ?: "Titre introuvable dans Jellyfin"
                 return@LaunchedEffect
@@ -268,7 +272,7 @@ private fun PlayerSurface(
             .setSeekForwardIncrementMs(30_000)
             .build()
             .apply {
-                setMediaItem(mediaItem(app.api.baseUrl + info.stream, hls = info.mode == "remux"))
+                setMediaItem(mediaItem(app.api.baseUrl + info.stream, hls = info.mode == "remux", sideSubtitles(info, app.api.baseUrl)))
                 prepare()
                 if (request.startSeconds > 0) seekTo(request.startSeconds * 1000L)
                 playWhenReady = true
@@ -362,10 +366,13 @@ private fun PlayerSurface(
         if (pos < 5 && !done) return // rien de commencé
         val watched = done || (total > 0 && pos >= total * WATCHED_RATIO)
         if (watched) finished = true
+        // Vidéo de l'écran Vidéos : repérée par l'empreinte de son chemin (fournie par le serveur)
+        val file = request.kind == "file"
+        if (file && info.watchId.isBlank()) return
         val update = WatchStateUpdate(
-            mediaType = if (request.kind == "movie") "movie" else "episode",
-            idType = if (request.kind == "movie") "tmdb" else "tvdb",
-            id = request.id.toString(),
+            mediaType = when { file -> "file"; request.kind == "movie" -> "movie"; else -> "episode" },
+            idType = when { file -> "sha1"; request.kind == "movie" -> "tmdb"; else -> "tvdb" },
+            id = if (file) info.watchId else request.id.toString(),
             season = request.season.takeIf { request.kind == "episode" },
             episode = request.episode.takeIf { request.kind == "episode" },
             title = meta?.subtitle?.substringAfter(" · ", "") ?: meta?.title ?: info.title.orEmpty(),
@@ -674,8 +681,27 @@ private val REMUX_RETRY = setOf(
 )
 
 /** Élément à lire : fichier d'origine, ou liste HLS du remux. */
-private fun mediaItem(url: String, hls: Boolean): MediaItem =
-    MediaItem.Builder().setUri(url).apply { if (hls) setMimeType(MimeTypes.APPLICATION_M3U8) }.build()
+private fun mediaItem(url: String, hls: Boolean, subtitles: List<MediaItem.SubtitleConfiguration> = emptyList()): MediaItem =
+    MediaItem.Builder()
+        .setUri(url)
+        .apply { if (hls) setMimeType(MimeTypes.APPLICATION_M3U8) }
+        .setSubtitleConfigurations(subtitles)
+        .build()
+
+/**
+ * Sous-titres posés à côté de la vidéo (écran Vidéos) : ajoutés aux pistes du
+ * fichier, choisis dans l'onglet Sous-titres du menu pause. Téléchargés par
+ * le même client HTTP que la vidéo (jeton d'appareil), en UTF-8.
+ */
+private fun sideSubtitles(info: PlayInfo, baseUrl: String): List<MediaItem.SubtitleConfiguration> =
+    info.subtitles.map { sub ->
+        MediaItem.SubtitleConfiguration.Builder(android.net.Uri.parse(baseUrl + sub.url))
+            .setMimeType(sub.mime)
+            .setLanguage(sub.language.ifBlank { null })
+            .setLabel(sub.label)
+            .setSelectionFlags(if ("forcés" in sub.label) C.SELECTION_FLAG_FORCED else 0)
+            .build()
+    }
 
 /**
  * Message lisible, suivi du détail technique (code ExoPlayer, format du

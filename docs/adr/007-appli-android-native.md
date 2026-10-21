@@ -155,6 +155,16 @@ Chaque phase est livrée en APK testable sur la Shield.
 > par l'appli et servies au lanceur en lecture seule, parce que celles du
 > serveur ArrMada exigent le jeton d'appareil. Phase 4 terminée.
 
+> **Note (21/10/2026, APK 2.9.0) : écran Vidéos.** Pour les vidéos sans fiche
+> officielle (mangas « Kai », montages, vidéos perso) que ni Radarr, ni Sonarr,
+> ni Jellyfin ne rangent : un explorateur des dossiers du NAS déclarés dans la
+> web app (*Réglages › Dossiers vidéo*, table `video_roots`). Le serveur sert
+> le fichier tel quel (Range : avance rapide, reprise), sans passer par
+> Jellyfin. Les éléments sont des jetons opaques confinés à leur dossier racine
+> (chemin réel vérifié, comme un chroot) ; vu / reprise par fichier et par
+> profil (empreinte SHA-1 du chemin) ; sous-titres posés à côté, convertis en
+> UTF-8. Choix : dossiers déclarés à la souris plutôt que dans `.env`.
+
 ## Conséquences
 
 - ➕ Interface pensée pour la TV, rapide (affichage natif), et des

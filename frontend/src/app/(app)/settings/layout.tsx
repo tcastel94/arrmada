@@ -28,6 +28,7 @@ import { useServices } from "@/hooks/use-services";
 import { useKodiSettings } from "@/hooks/use-kodi";
 import { useYamahaSettings } from "@/hooks/use-yamaha";
 import { useCastDevices, useJellyfinConfig } from "@/hooks/use-cast";
+import { useVideoRoots } from "@/hooks/use-video-roots";
 import { EASE_OUT } from "@/lib/motion";
 import { APP_VERSION } from "@/components/settings/app-version";
 
@@ -41,6 +42,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
     const { data: amps } = useYamahaSettings();
     const { data: castDevices } = useCastDevices();
     const { data: jellyfin } = useJellyfinConfig();
+    const { data: videoRoots } = useVideoRoots();
 
     const enabled = services?.filter((s) => s.is_enabled) ?? [];
     const online = enabled.filter((s) => s.last_status === "online").length;
@@ -57,6 +59,9 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
             <NavCount tone={jellyfin && !jellyfin.configured ? "warning" : "default"}>{castDevices.length}</NavCount>
         ) : undefined,
         "/settings/yamaha": amps ? <NavCount>{amps.length}</NavCount> : undefined,
+        "/settings/dossiers": videoRoots ? (
+            <NavCount tone={videoRoots.some((r) => !r.available) ? "warning" : "default"}>{videoRoots.length}</NavCount>
+        ) : undefined,
     };
 
     return (

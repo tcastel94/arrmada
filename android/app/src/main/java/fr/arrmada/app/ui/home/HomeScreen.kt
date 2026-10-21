@@ -156,7 +156,7 @@ fun HomeScreen(viewModel: HomeViewModel, api: Api, actions: HomeActions) {
 /** Menu du haut, commun à l'accueil et aux grilles (comme la coquille de l'add-on). */
 val TOP_MENU = listOf(
     "home" to "Accueil", "movies" to "Films", "series" to "Séries", "tonight" to "Ce soir",
-    "apps" to "Applis", "discover" to "Découvrir", "search" to "Rechercher", "queue" to "Téléchargements",
+    "videos" to "Vidéos", "apps" to "Applis", "discover" to "Découvrir", "search" to "Rechercher", "queue" to "Téléchargements",
     "board" to "Tableau de bord", "settings" to "Réglages",
 )
 

@@ -16,6 +16,7 @@ import {
     ArrowUpRight,
     BookMarked,
     Cast,
+    FolderOpen,
     MonitorPlay,
     Server,
     SlidersHorizontal,
@@ -79,6 +80,13 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
         short: "Profils",
         icon: Users,
         description: "Qui regarde sur les TV : chacun sa rangée Reprendre, ses vus, son « Pour toi » et ses demandes.",
+    },
+    {
+        href: "/settings/dossiers",
+        label: "Dossiers vidéo",
+        short: "Vidéos",
+        icon: FolderOpen,
+        description: "Dossiers du NAS parcourus dans l'écran Vidéos de l'appli : mangas Kai, vidéos perso, tout ce qui n'a pas de fiche.",
     },
 ];
 

@@ -125,7 +125,9 @@ def summarize(states: list[dict[str, Any]], library: list[dict[str, Any]]) -> di
                     "device": state.get("device") or "",
                     "updated_at": state.get("updated_at") or "",
                 }
-        if position and not watched:
+        # Page Reprendre de la web app : films et épisodes (une vidéo de l'écran
+        # Vidéos n'a ni fiche ni lien à ouvrir)
+        if position and not watched and state.get("media_type") in ("movie", "episode"):
             started.append(state)
 
     index = _library_index(library)

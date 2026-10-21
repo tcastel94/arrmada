@@ -275,6 +275,18 @@ data class PlayInfo(
     val chapters: List<Chapter> = emptyList(),
     val resume: Resume = Resume(),
     val segments: List<Segment> = emptyList(),
+    // Écran Vidéos : identifiant de vu / reprise du fichier, sous-titres posés à côté
+    @SerialName("watch_id") val watchId: String = "",
+    val subtitles: List<SideSubtitle> = emptyList(),
+)
+
+/** Sous-titre externe (« Ep01.fr.srt » à côté de la vidéo), servi en UTF-8 par le serveur. */
+@Serializable
+data class SideSubtitle(
+    val url: String = "",
+    val label: String = "",
+    val language: String = "",
+    val mime: String = "",
 )
 
 // ─── Série (Sonarr) et épisodes (Jellyfin) ──────────────────────────────────

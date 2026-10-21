@@ -30,8 +30,10 @@ import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-MEDIA_TYPES = ("movie", "episode")
-ID_TYPES = ("tmdb", "tvdb", "imdb")
+# « file » + « sha1 » : vidéo hors médiathèque (écran Vidéos), repérée par
+# l'empreinte de son chemin sur le NAS
+MEDIA_TYPES = ("movie", "episode", "file")
+ID_TYPES = ("tmdb", "tvdb", "imdb", "sha1")
 POSITION_TOLERANCE = 10  # s : en dessous, deux positions de reprise sont « la même »
 MAX_STATES = 500  # par envoi et par page de relecture
 _ID = re.compile(r"^[A-Za-z0-9_.-]{1,40}$")
