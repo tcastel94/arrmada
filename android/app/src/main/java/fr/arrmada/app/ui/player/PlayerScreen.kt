@@ -6,34 +6,44 @@ import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.nativeKeyCode
 import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.nativeKeyCode
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.AudioAttributes
@@ -52,10 +62,13 @@ import androidx.media3.ui.PlayerView
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import fr.arrmada.app.ArrMadaApplication
-import fr.arrmada.app.data.MovieDetail
 import fr.arrmada.app.data.PlayInfo
+import fr.arrmada.app.data.PlaybackLogic
 import fr.arrmada.app.data.Repository
+import fr.arrmada.app.data.SeriesDetail
+import fr.arrmada.app.data.SeriesLogic
 import fr.arrmada.app.data.WatchStateUpdate
+import fr.arrmada.app.ui.components.ArtImage
 import fr.arrmada.app.ui.components.MessageScreen
 import fr.arrmada.app.ui.components.ProgressBar
 import fr.arrmada.app.ui.components.formatClock
@@ -69,12 +82,16 @@ data class PlayRequest(
     val id: Long, // TMDB du film, ou TVDB de la série
     val season: Int = 0,
     val episode: Int = 0,
-    val radarrId: String? = null, // pour la fiche (logo, distribution) du menu pause
+    val radarrId: String? = null, // film : fiche Radarr (logo, distribution) pour le menu pause
+    val sonarrId: String? = null, // épisode : fiche Sonarr (logo, épisode suivant)
     val startSeconds: Int = 0,
 )
 
-/** Un film est « vu » passé 90 % (le générique de fin ne compte pas). */
+/** Un titre est « vu » passé 90 % (le générique de fin ne compte pas). */
 private const val WATCHED_RATIO = 0.90
+
+/** Épisode à enchaîner, avec ce qu'en montre la carte « Épisode suivant ». */
+data class UpNext(val request: PlayRequest, val code: String, val title: String, val image: String?)
 
 /**
  * Lecteur vidéo plein écran (Media3 ExoPlayer).
@@ -87,14 +104,19 @@ private const val WATCHED_RATIO = 0.90
  * Télécommande :
  *  - OK, Lecture/Pause ou Retour : pause et menu pause (façon Apple TV) ;
  *  - gauche / droite : −10 s / +30 s ;
+ *  - bouton « Passer l'intro » affiché : OK saute le passage ;
+ *  - carte « Épisode suivant » affichée : OK lance tout de suite, Retour l'écarte ;
  *  - dans le menu pause, Retour quitte la lecture (position enregistrée).
+ *
+ * [onPlayNext] remplace l'écran par celui de l'épisode suivant.
  */
 @OptIn(UnstableApi::class)
 @Composable
-fun PlayerScreen(request: PlayRequest, app: ArrMadaApplication, onExit: () -> Unit) {
+fun PlayerScreen(request: PlayRequest, app: ArrMadaApplication, onExit: () -> Unit, onPlayNext: (PlayRequest) -> Unit) {
     val repository = app.repository
     var info by remember { mutableStateOf<PlayInfo?>(null) }
-    var detail by remember { mutableStateOf<MovieDetail?>(null) }
+    var meta by remember { mutableStateOf<PlaybackMeta?>(null) }
+    var series by remember { mutableStateOf<SeriesDetail?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(request) {
@@ -106,7 +128,18 @@ fun PlayerScreen(request: PlayRequest, app: ArrMadaApplication, onExit: () -> Un
                 return@LaunchedEffect
             }
             info = play
-            request.radarrId?.let { id -> detail = runCatching { repository.movie(id) }.getOrNull() }
+            // Fiche du titre pour le menu pause (et l'épisode suivant) : en
+            // arrière-plan, la lecture n'attend pas
+            if (request.kind == "movie") {
+                request.radarrId?.let { id -> runCatching { repository.movie(id) }.getOrNull()?.let { meta = it.toMeta() } }
+            } else {
+                request.sonarrId?.let { id ->
+                    runCatching { repository.series(id) }.getOrNull()?.takeIf { it.error == null }?.let {
+                        series = it
+                        meta = it.toMeta(request.season, request.episode, play)
+                    }
+                }
+            }
         } catch (e: Exception) {
             error = e.message ?: "Serveur injoignable"
         }
@@ -117,14 +150,20 @@ fun PlayerScreen(request: PlayRequest, app: ArrMadaApplication, onExit: () -> Un
         app.appScope.launch {
             runCatching {
                 val device = repository.me()
-                val file = detail?.file
-                repository.applyAmpPreset(
-                    device,
-                    if (request.kind == "movie") "movie" else "series",
-                    file?.audioCodec,
-                    file?.audioChannels,
-                )
+                repository.applyAmpPreset(device, if (request.kind == "movie") "movie" else "series", null, null)
             }
+        }
+    }
+
+    // Épisode suivant (fiche Sonarr) : disponible sur le disque, dans l'ordre
+    val upNext = series?.let { s ->
+        SeriesLogic.following(s, request.season, request.episode)?.let { ep ->
+            UpNext(
+                request = request.copy(season = ep.seasonNumber, episode = ep.episodeNumber, startSeconds = 0),
+                code = "S%02dE%02d".format(ep.seasonNumber, ep.episodeNumber),
+                title = ep.title ?: "Épisode ${ep.episodeNumber}",
+                image = s.images.fanart ?: s.images.landscape,
+            )
         }
     }
 
@@ -133,7 +172,7 @@ fun PlayerScreen(request: PlayRequest, app: ArrMadaApplication, onExit: () -> Un
         error != null -> return MessageScreen("Lecture impossible", error, "Retour", onExit)
         play == null -> return MessageScreen("Préparation de la lecture…")
     }
-    PlayerSurface(request, play!!, detail, app, onExit)
+    PlayerSurface(request, play!!, meta, upNext, app, onExit, onPlayNext)
 }
 
 @OptIn(UnstableApi::class)
@@ -141,9 +180,11 @@ fun PlayerScreen(request: PlayRequest, app: ArrMadaApplication, onExit: () -> Un
 private fun PlayerSurface(
     request: PlayRequest,
     info: PlayInfo,
-    detail: MovieDetail?,
+    meta: PlaybackMeta?,
+    upNext: UpNext?,
     app: ArrMadaApplication,
     onExit: () -> Unit,
+    onPlayNext: (PlayRequest) -> Unit,
 ) {
     val context = LocalContext.current
     val repository = app.repository
@@ -178,29 +219,39 @@ private fun PlayerSurface(
             }
     }
 
-    var isPlaying by remember { mutableStateOf(true) }
     var showMenu by remember { mutableStateOf(false) }
     var osdUntil by remember { mutableLongStateOf(0L) }
     var position by remember { mutableLongStateOf(request.startSeconds * 1000L) }
     var duration by remember { mutableLongStateOf(info.duration * 1000L) }
     var tracks by remember { mutableStateOf(Tracks.EMPTY) }
     var playbackError by remember { mutableStateOf<String?>(null) }
-    var ended by remember { mutableStateOf(false) }
+    var finished by remember { mutableStateOf(false) } // fin enregistrée (vu)
+    var upNextDismissed by remember { mutableStateOf(false) }
+    var countdown by remember { mutableIntStateOf(PlaybackLogic.UP_NEXT_SECONDS) }
     val keyFocus = remember { FocusRequester() }
 
+    val durationSeconds = (duration / 1000.0).takeIf { it > 0 } ?: info.duration.toDouble()
+    val skips = remember(info, durationSeconds) { PlaybackLogic.skippable(info, durationSeconds) }
+    val activeSkip = PlaybackLogic.activeSkip(skips, position / 1000.0)
+    val upNextAt = remember(info, durationSeconds) { PlaybackLogic.upNextAt(info, durationSeconds) }
+    val showUpNext = upNext != null && !upNextDismissed && !showMenu && durationSeconds > 0 &&
+        position / 1000.0 >= upNextAt
+
     /** Enregistre la position sur le serveur (partagée avec les TV sous Kodi). */
-    fun saveProgress(finished: Boolean = false) {
+    fun saveProgress(done: Boolean = false) {
+        if (finished) return
         val pos = (player.currentPosition / 1000).toInt()
         val total = (player.duration.takeIf { it > 0 } ?: duration).div(1000).toInt()
-        if (pos < 5 && !finished) return // rien de commencé
-        val watched = finished || (total > 0 && pos >= total * WATCHED_RATIO)
+        if (pos < 5 && !done) return // rien de commencé
+        val watched = done || (total > 0 && pos >= total * WATCHED_RATIO)
+        if (watched) finished = true
         val update = WatchStateUpdate(
             mediaType = if (request.kind == "movie") "movie" else "episode",
             idType = if (request.kind == "movie") "tmdb" else "tvdb",
             id = request.id.toString(),
             season = request.season.takeIf { request.kind == "episode" },
             episode = request.episode.takeIf { request.kind == "episode" },
-            title = detail?.title ?: info.title.orEmpty(),
+            title = meta?.subtitle?.substringAfter(" · ", "") ?: meta?.title ?: info.title.orEmpty(),
             watched = watched,
             position = if (watched) 0 else pos,
             total = total,
@@ -209,23 +260,31 @@ private fun PlayerSurface(
         app.appScope.launch { runCatching { repository.saveWatchState(update) } }
     }
 
+    fun playNext() {
+        val next = upNext ?: return
+        saveProgress(done = true)
+        onPlayNext(next.request)
+    }
+
+    // Le lecteur et ses écouteurs sont créés une seule fois : ils appellent
+    // toujours la DERNIÈRE version de ces actions (la fiche et l'épisode
+    // suivant arrivent après le démarrage de la lecture).
+    val save by rememberUpdatedState<(Boolean) -> Unit> { done -> saveProgress(done) }
+    val onEnded by rememberUpdatedState {
+        saveProgress(done = true)
+        val next = upNext
+        if (next != null && !upNextDismissed) onPlayNext(next.request) else onExit()
+    }
+
     DisposableEffect(player) {
         val listener = object : Player.Listener {
-            override fun onIsPlayingChanged(playing: Boolean) {
-                isPlaying = playing
-            }
-
             override fun onTracksChanged(newTracks: Tracks) {
                 tracks = newTracks
             }
 
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == Player.STATE_READY && player.duration > 0) duration = player.duration
-                if (state == Player.STATE_ENDED) {
-                    ended = true
-                    saveProgress(finished = true)
-                    onExit()
-                }
+                if (state == Player.STATE_ENDED) onEnded()
             }
 
             override fun onPlayerError(e: PlaybackException) {
@@ -234,7 +293,7 @@ private fun PlayerSurface(
         }
         player.addListener(listener)
         onDispose {
-            if (!ended) saveProgress()
+            save(false)
             player.removeListener(listener)
             player.release()
         }
@@ -246,11 +305,24 @@ private fun PlayerSurface(
         while (true) {
             position = player.currentPosition
             if (player.isPlaying && System.currentTimeMillis() - lastSave > 30_000) {
-                saveProgress()
+                save(false)
                 lastSave = System.currentTimeMillis()
             }
             delay(500)
         }
+    }
+
+    // Compte à rebours de la carte « Épisode suivant »
+    LaunchedEffect(showUpNext) {
+        if (!showUpNext) {
+            countdown = PlaybackLogic.UP_NEXT_SECONDS
+            return@LaunchedEffect
+        }
+        while (countdown > 0) {
+            delay(1000)
+            if (player.isPlaying) countdown--
+        }
+        playNext()
     }
 
     fun pause() {
@@ -265,9 +337,14 @@ private fun PlayerSurface(
         runCatching { keyFocus.requestFocus() }
     }
 
-    // Retour : pendant la lecture → pause et menu ; dans le menu → quitter
+    // Retour : carte « Épisode suivant » → l'écarter ; pendant la lecture →
+    // pause et menu ; dans le menu → quitter
     BackHandler {
-        if (showMenu) onExit() else pause()
+        when {
+            showUpNext -> upNextDismissed = true
+            showMenu -> onExit()
+            else -> pause()
+        }
     }
 
     Box(
@@ -278,22 +355,29 @@ private fun PlayerSurface(
             .focusable()
             .onPreviewKeyEvent { event ->
                 if (showMenu || playbackError != null || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                when (event.key.nativeKeyCode) {
-                    AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER,
-                    AndroidKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, AndroidKeyEvent.KEYCODE_MEDIA_PAUSE,
-                    AndroidKeyEvent.KEYCODE_SPACE -> { pause(); true }
-                    AndroidKeyEvent.KEYCODE_MEDIA_PLAY -> { player.play(); true }
-                    AndroidKeyEvent.KEYCODE_DPAD_LEFT, AndroidKeyEvent.KEYCODE_MEDIA_REWIND -> {
-                        player.seekBack(); osdUntil = System.currentTimeMillis() + 3000; true
+                val code = event.key.nativeKeyCode
+                val ok = code == AndroidKeyEvent.KEYCODE_DPAD_CENTER || code == AndroidKeyEvent.KEYCODE_ENTER
+                when {
+                    ok && showUpNext -> { playNext(); true }
+                    ok && activeSkip != null -> { player.seekTo((activeSkip.end * 1000).toLong()); true }
+                    else -> when (code) {
+                        AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER,
+                        AndroidKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, AndroidKeyEvent.KEYCODE_MEDIA_PAUSE,
+                        AndroidKeyEvent.KEYCODE_SPACE -> { pause(); true }
+                        AndroidKeyEvent.KEYCODE_MEDIA_PLAY -> { player.play(); true }
+                        AndroidKeyEvent.KEYCODE_DPAD_LEFT, AndroidKeyEvent.KEYCODE_MEDIA_REWIND -> {
+                            player.seekBack(); osdUntil = System.currentTimeMillis() + 3000; true
+                        }
+                        AndroidKeyEvent.KEYCODE_DPAD_RIGHT, AndroidKeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
+                            player.seekForward(); osdUntil = System.currentTimeMillis() + 3000; true
+                        }
+                        AndroidKeyEvent.KEYCODE_DPAD_UP, AndroidKeyEvent.KEYCODE_DPAD_DOWN -> {
+                            osdUntil = System.currentTimeMillis() + 3000; true
+                        }
+                        AndroidKeyEvent.KEYCODE_MEDIA_NEXT -> { if (upNext != null) playNext(); upNext != null }
+                        AndroidKeyEvent.KEYCODE_MEDIA_STOP -> { onExit(); true }
+                        else -> false
                     }
-                    AndroidKeyEvent.KEYCODE_DPAD_RIGHT, AndroidKeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
-                        player.seekForward(); osdUntil = System.currentTimeMillis() + 3000; true
-                    }
-                    AndroidKeyEvent.KEYCODE_DPAD_UP, AndroidKeyEvent.KEYCODE_DPAD_DOWN -> {
-                        osdUntil = System.currentTimeMillis() + 3000; true
-                    }
-                    AndroidKeyEvent.KEYCODE_MEDIA_STOP -> { onExit(); true }
-                    else -> false
                 }
             },
     ) {
@@ -326,20 +410,36 @@ private fun PlayerSurface(
                 ProgressBar(if (duration > 0) position.toFloat() / duration else 0f, Modifier.fillMaxWidth(), height = 4.dp)
                 Row(Modifier.fillMaxWidth().padding(top = 6.dp)) {
                     Text(formatClock(position / 1000), style = MaterialTheme.typography.labelLarge)
-                    Text(
-                        " / " + formatClock(duration / 1000),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = ArrColors.TextSecondary,
-                    )
+                    Text(" / " + formatClock(duration / 1000), style = MaterialTheme.typography.labelLarge, color = ArrColors.TextSecondary)
                 }
             }
+        }
+
+        // « Passer l'intro » (en bas à droite, comme dans l'add-on)
+        AnimatedVisibility(
+            visible = activeSkip != null && !showMenu && !showUpNext,
+            enter = fadeIn() + slideInHorizontally { it / 2 },
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 48.dp, bottom = 48.dp),
+        ) {
+            SkipButton(activeSkip?.let { PlaybackLogic.skipLabel(it) } ?: "")
+        }
+
+        // Carte « Épisode suivant »
+        AnimatedVisibility(
+            visible = showUpNext,
+            enter = fadeIn() + slideInHorizontally { it },
+            exit = fadeOut() + slideOutHorizontally { it },
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 48.dp, bottom = 48.dp),
+        ) {
+            upNext?.let { UpNextCard(it, countdown, app.api::absolute) }
         }
 
         // Menu pause façon Apple TV
         AnimatedVisibility(visible = showMenu, enter = fadeIn(), exit = fadeOut()) {
             PauseMenu(
                 info = info,
-                detail = detail,
+                meta = meta,
                 position = position,
                 duration = duration,
                 tracks = tracks,
@@ -364,6 +464,47 @@ private fun PlayerSurface(
         osdUntil = 0
     }
     LaunchedEffect(Unit) { runCatching { keyFocus.requestFocus() } }
+}
+
+/** Bouton « Passer l'intro » : bleu plein, OK pour sauter. */
+@Composable
+fun SkipButton(label: String) {
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(ArrColors.Accent)
+            .padding(horizontal = 22.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(label, style = MaterialTheme.typography.titleMedium, color = ArrColors.Night)
+        Text("OK", style = MaterialTheme.typography.labelSmall, color = ArrColors.Night.copy(alpha = 0.7f))
+    }
+}
+
+/** Carte « Épisode suivant dans N s » (OK : maintenant ; Retour : non merci). */
+@Composable
+fun UpNextCard(next: UpNext, countdown: Int, absolute: (String?) -> String?) {
+    Row(
+        Modifier
+            .width(420.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(ArrColors.CardDeep.copy(alpha = 0.96f))
+            .padding(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ArtImage(absolute(next.image), next.title, Modifier.width(150.dp).height(84.dp).clip(RoundedCornerShape(8.dp)))
+        Column(Modifier.weight(1f)) {
+            Text("Épisode suivant dans $countdown s", style = MaterialTheme.typography.labelLarge, color = ArrColors.AccentText)
+            Text("${next.code} · ${next.title}", style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            ProgressBar(
+                1f - countdown.toFloat() / PlaybackLogic.UP_NEXT_SECONDS,
+                Modifier.fillMaxWidth().padding(top = 6.dp),
+            )
+            Text("OK : maintenant  ·  Retour : non merci", style = MaterialTheme.typography.labelSmall, color = ArrColors.TextSecondary, modifier = Modifier.padding(top = 4.dp))
+        }
+    }
 }
 
 /** Message lisible pour les erreurs de lecture les plus courantes. */

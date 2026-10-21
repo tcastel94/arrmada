@@ -62,6 +62,7 @@ fun MovieScreen(
     repository: Repository,
     api: Api,
     onPlay: (movie: MovieDetail, startSeconds: Int) -> Unit,
+    onDownload: (MovieDetail) -> Unit = {},
 ) {
     var movie by remember { mutableStateOf<MovieDetail?>(null) }
     var play by remember { mutableStateOf<PlayInfo?>(null) }
@@ -85,7 +86,7 @@ fun MovieScreen(
     val m = movie
     if (error != null) return MessageScreen("Fiche indisponible", error)
     if (m == null) return MessageScreen("Chargement…")
-    MovieContent(m, play, api::absolute, onPlay)
+    MovieContent(m, play, api::absolute, onPlay, onDownload)
 }
 
 /** Affichage de la fiche (séparé du chargement pour les captures d'écran de test). */
@@ -95,6 +96,7 @@ fun MovieContent(
     play: PlayInfo?,
     absolute: (String?) -> String?,
     onPlay: (movie: MovieDetail, startSeconds: Int) -> Unit,
+    onDownload: (MovieDetail) -> Unit = {},
 ) {
     val context = LocalContext.current
     val playFocus = remember { FocusRequester() }
@@ -151,8 +153,11 @@ fun MovieContent(
                 if (resumeAt != null) {
                     ArrButton("Reprendre à ${formatClock(resumeAt.toLong())}", { if (playable) onPlay(m, resumeAt) else notReady() }, primary = true, leading = "▶", modifier = Modifier.focusRequester(playFocus))
                     ArrButton("Depuis le début", { if (playable) onPlay(m, 0) else notReady() })
-                } else {
+                } else if (m.hasFile) {
                     ArrButton("Lire", { if (playable) onPlay(m, 0) else notReady() }, primary = true, leading = "▶", modifier = Modifier.focusRequester(playFocus))
+                } else {
+                    // Suivi par Radarr mais pas encore sur le disque
+                    ArrButton("Télécharger", { onDownload(m) }, primary = true, modifier = Modifier.focusRequester(playFocus))
                 }
                 m.trailerId?.takeIf { it.isNotBlank() }?.let { id ->
                     ArrButton("Bande-annonce", { openTrailer(context, id) })

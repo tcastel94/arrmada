@@ -1,6 +1,7 @@
 package fr.arrmada.app
 
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -13,9 +14,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -27,18 +30,30 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import fr.arrmada.app.data.DownloadTarget
+import fr.arrmada.app.data.LibraryItem
+import fr.arrmada.app.data.LookupItem
 import fr.arrmada.app.data.ResumeEntry
+import fr.arrmada.app.data.TmdbItem
 import fr.arrmada.app.ui.components.ArrButton
+import fr.arrmada.app.ui.components.MessageScreen
 import fr.arrmada.app.ui.detail.MovieScreen
+import fr.arrmada.app.ui.detail.SeriesScreen
+import fr.arrmada.app.ui.home.DiscoverScreen
+import fr.arrmada.app.ui.home.HomeActions
 import fr.arrmada.app.ui.home.HomeScreen
 import fr.arrmada.app.ui.home.HomeViewModel
 import fr.arrmada.app.ui.home.LibraryScreen
 import fr.arrmada.app.ui.player.PlayRequest
 import fr.arrmada.app.ui.player.PlayerScreen
+import fr.arrmada.app.ui.request.DownloadScreen
+import fr.arrmada.app.ui.request.SearchScreen
 import fr.arrmada.app.ui.setup.PairScreen
 import fr.arrmada.app.ui.setup.ServerScreen
 import fr.arrmada.app.ui.theme.ArrColors
 import fr.arrmada.app.ui.theme.ArrMadaTheme
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 
 /**
  * Unique fenêtre de l'appli : elle affiche l'écran courant et gère le
@@ -46,12 +61,26 @@ import fr.arrmada.app.ui.theme.ArrMadaTheme
  * La touche Retour revient à l'écran précédent.
  */
 class MainActivity : ComponentActivity() {
+
+    /** Compteur incrémenté à chaque appui sur la touche recherche / micro. */
+    private val searchRequests = MutableStateFlow(0)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val app = application as ArrMadaApplication
         setContent {
-            ArrMadaTheme { ArrMadaNavigation(app) }
+            ArrMadaTheme { ArrMadaNavigation(app, searchRequests) }
         }
+    }
+
+    /**
+     * Touche « recherche » ou micro de la télécommande, quand Android la
+     * transmet à l'appli (sur certaines télécommandes, l'Assistant Google la
+     * garde pour lui) : ouvre la recherche en mode dictée.
+     */
+    override fun onSearchRequested(): Boolean {
+        searchRequests.value++
+        return true
     }
 }
 
@@ -60,20 +89,30 @@ private object Routes {
     const val SERVER = "server"
     const val PAIR = "pair"
     const val HOME = "home"
-    const val MOVIES = "movies"
+    const val LIBRARY = "library/{type}" // grille Films ou Séries
+    const val DISCOVER = "discover"
+    const val SEARCH = "search?voice={voice}"
+    const val DOWNLOAD = "download"
     const val SETTINGS = "settings"
     const val MOVIE = "movie/{radarrId}"
-    const val PLAY = "play/{kind}/{id}/{season}/{episode}/{start}?radarr={radarr}"
+    const val SHOW = "show/{sonarrId}"
+    const val PLAY = "play/{kind}/{id}/{season}/{episode}/{start}?radarr={radarr}&sonarr={sonarr}"
 
+    fun library(type: String) = "library/$type"
+    fun search(voice: Boolean) = "search?voice=$voice"
     fun movie(radarrId: String) = "movie/$radarrId"
+    fun show(sonarrId: String) = "show/$sonarrId"
     fun play(r: PlayRequest) = "play/${r.kind}/${r.id}/${r.season}/${r.episode}/${r.startSeconds}" +
-        (r.radarrId?.let { "?radarr=$it" } ?: "")
+        "?radarr=${r.radarrId.orEmpty()}&sonarr=${r.sonarrId.orEmpty()}"
 }
 
 @Composable
-private fun ArrMadaNavigation(app: ArrMadaApplication) {
+private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableStateFlow<Int>) {
     val nav = rememberNavController()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val paired by app.prefs.paired.collectAsStateWithLifecycle()
+    val searchCount by searchRequests.collectAsStateWithLifecycle()
     val start = when {
         app.prefs.serverUrl == null -> Routes.SERVER
         !paired -> Routes.PAIR
@@ -84,6 +123,50 @@ private fun ArrMadaNavigation(app: ArrMadaApplication) {
     LaunchedEffect(paired) {
         if (!paired && app.prefs.serverUrl != null && nav.currentDestination?.route !in listOf(Routes.PAIR, Routes.SERVER, null)) {
             nav.navigate(Routes.PAIR) { popUpTo(0) }
+        }
+    }
+    // Touche recherche / micro de la télécommande
+    LaunchedEffect(searchCount) {
+        if (searchCount > 0 && paired) nav.navigate(Routes.search(voice = true)) { launchSingleTop = true }
+    }
+
+    fun openItem(item: LibraryItem) {
+        nav.navigate(if (item.isMovie) Routes.movie(item.externalId) else Routes.show(item.externalId))
+    }
+
+    fun openDownload(target: DownloadTarget) {
+        app.pendingDownload = target
+        nav.navigate(Routes.DOWNLOAD)
+    }
+
+    /** Titre TMDB (Pour toi, Découvrir) : sa fiche s'il est déjà là, sinon la feuille « Télécharger ». */
+    fun openTmdb(item: TmdbItem) {
+        if (!item.inLibrary) return openDownload(DownloadTarget.of(item))
+        scope.launch {
+            val found = runCatching {
+                if (item.type == "movie") app.repository.allLibrary("movie").firstOrNull { it.tmdbId == item.tmdbId }
+                else app.repository.allLibrary("series").firstOrNull { it.tmdbTvId == item.tmdbId }
+            }.getOrNull()
+            if (found != null) openItem(found) else openDownload(DownloadTarget.of(item))
+        }
+    }
+
+    fun openLookup(item: LookupItem) {
+        val arrId = item.arrId
+        when {
+            item.inLibrary && arrId != null && item.type == "movie" -> nav.navigate(Routes.movie(arrId.toString()))
+            item.inLibrary && arrId != null -> nav.navigate(Routes.show(arrId.toString()))
+            else -> openDownload(DownloadTarget.of(item))
+        }
+    }
+
+    fun go(route: String) {
+        when (route) {
+            "movies" -> nav.navigate(Routes.library("movie"))
+            "series" -> nav.navigate(Routes.library("series"))
+            "discover" -> nav.navigate(Routes.DISCOVER)
+            "search" -> nav.navigate(Routes.search(voice = false))
+            "settings" -> nav.navigate(Routes.SETTINGS)
         }
     }
 
@@ -104,22 +187,73 @@ private fun ArrMadaNavigation(app: ArrMadaApplication) {
             HomeScreen(
                 viewModel = viewModel,
                 api = app.api,
-                onOpenMovie = { nav.navigate(Routes.movie(it.externalId)) },
-                onOpenMovieById = { nav.navigate(Routes.movie(it.toString())) },
-                onResume = { entry -> nav.navigate(Routes.play(resumeRequest(entry))) },
-                onMovies = { nav.navigate(Routes.MOVIES) },
-                onSettings = { nav.navigate(Routes.SETTINGS) },
+                actions = HomeActions(
+                    open = ::openItem,
+                    openMovieId = { nav.navigate(Routes.movie(it.toString())) },
+                    openSeriesId = { nav.navigate(Routes.show(it.toString())) },
+                    resume = { entry -> nav.navigate(Routes.play(resumeRequest(entry))) },
+                    request = ::openTmdb,
+                    go = ::go,
+                ),
             )
         }
-        composable(Routes.MOVIES) {
-            LibraryScreen(app.repository, app.api) { nav.navigate(Routes.movie(it.externalId)) }
+        composable(Routes.LIBRARY, arguments = listOf(navArgument("type") { type = NavType.StringType })) { entry ->
+            LibraryScreen(entry.arguments?.getString("type") ?: "movie", app.repository, app.api, ::openItem)
+        }
+        composable(Routes.DISCOVER) {
+            DiscoverScreen(app.repository, ::openTmdb)
+        }
+        composable(Routes.SEARCH, arguments = listOf(navArgument("voice") { type = NavType.BoolType; defaultValue = false })) { entry ->
+            SearchScreen(
+                repository = app.repository,
+                absolute = app.api::absolute,
+                startWithVoice = entry.arguments?.getBoolean("voice") == true,
+                onOpen = ::openItem,
+                onOpenTracked = ::openLookup,
+                onRequest = ::openLookup,
+            )
+        }
+        composable(Routes.DOWNLOAD) {
+            val target = remember { app.pendingDownload }
+            if (target == null) {
+                MessageScreen("Rien à télécharger", null, "Retour") { nav.popBackStack() }
+            } else {
+                DownloadScreen(target, app.repository, app.api::absolute) { nav.popBackStack() }
+            }
         }
         composable(Routes.MOVIE, arguments = listOf(navArgument("radarrId") { type = NavType.StringType })) { entry ->
             val radarrId = entry.arguments?.getString("radarrId").orEmpty()
-            MovieScreen(radarrId, app.repository, app.api) { movie, start ->
-                val tmdb = movie.tmdbId ?: return@MovieScreen
-                nav.navigate(Routes.play(PlayRequest("movie", tmdb, radarrId = radarrId, startSeconds = start)))
-            }
+            MovieScreen(
+                radarrId = radarrId,
+                repository = app.repository,
+                api = app.api,
+                onPlay = { movie, start ->
+                    val tmdb = movie.tmdbId
+                    if (tmdb == null) {
+                        Toast.makeText(context, "Film sans identifiant TMDB", Toast.LENGTH_SHORT).show()
+                    } else {
+                        nav.navigate(Routes.play(PlayRequest("movie", tmdb, radarrId = radarrId, startSeconds = start)))
+                    }
+                },
+                onDownload = { openDownload(DownloadTarget.of(it)) },
+            )
+        }
+        composable(Routes.SHOW, arguments = listOf(navArgument("sonarrId") { type = NavType.StringType })) { entry ->
+            val sonarrId = entry.arguments?.getString("sonarrId").orEmpty()
+            SeriesScreen(
+                sonarrId = sonarrId,
+                repository = app.repository,
+                absolute = app.api::absolute,
+                onPlay = { series, season, episode, start ->
+                    val tvdb = series.tvdbId
+                    if (tvdb == null) {
+                        Toast.makeText(context, "Série sans identifiant TVDB", Toast.LENGTH_SHORT).show()
+                    } else {
+                        nav.navigate(Routes.play(PlayRequest("episode", tvdb, season, episode, sonarrId = sonarrId, startSeconds = start)))
+                    }
+                },
+                onDownload = { openDownload(DownloadTarget.of(it)) },
+            )
         }
         composable(
             Routes.PLAY,
@@ -129,7 +263,8 @@ private fun ArrMadaNavigation(app: ArrMadaApplication) {
                 navArgument("season") { type = NavType.IntType },
                 navArgument("episode") { type = NavType.IntType },
                 navArgument("start") { type = NavType.IntType },
-                navArgument("radarr") { type = NavType.StringType; nullable = true; defaultValue = null },
+                navArgument("radarr") { type = NavType.StringType; defaultValue = "" },
+                navArgument("sonarr") { type = NavType.StringType; defaultValue = "" },
             ),
         ) { entry ->
             val args = requireNotNull(entry.arguments)
@@ -138,10 +273,21 @@ private fun ArrMadaNavigation(app: ArrMadaApplication) {
                 id = args.getLong("id"),
                 season = args.getInt("season"),
                 episode = args.getInt("episode"),
-                radarrId = args.getString("radarr"),
+                radarrId = args.getString("radarr")?.takeIf { it.isNotBlank() },
+                sonarrId = args.getString("sonarr")?.takeIf { it.isNotBlank() },
                 startSeconds = args.getInt("start"),
             )
-            PlayerScreen(request, app) { nav.popBackStack() }
+            PlayerScreen(
+                request = request,
+                app = app,
+                onExit = { nav.popBackStack() },
+                // Épisode suivant : remplace le lecteur (Retour ramène à l'écran Série)
+                onPlayNext = { next ->
+                    nav.navigate(Routes.play(next)) {
+                        popUpTo(Routes.PLAY) { inclusive = true }
+                    }
+                },
+            )
         }
         composable(Routes.SETTINGS) {
             SettingsScreen(
@@ -165,6 +311,7 @@ private fun resumeRequest(entry: ResumeEntry): PlayRequest {
         season = state.season ?: 0,
         episode = state.episode ?: 0,
         radarrId = entry.item?.externalId?.takeIf { !entry.isEpisode },
+        sonarrId = entry.item?.externalId?.takeIf { entry.isEpisode },
         startSeconds = state.position,
     )
 }

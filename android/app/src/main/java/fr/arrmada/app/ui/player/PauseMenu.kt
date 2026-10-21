@@ -49,7 +49,6 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import fr.arrmada.app.data.Chapter
-import fr.arrmada.app.data.MovieDetail
 import fr.arrmada.app.data.PlayInfo
 import fr.arrmada.app.ui.components.ArrButton
 import fr.arrmada.app.ui.components.ArtImage
@@ -81,7 +80,7 @@ private val ChipShape = RoundedCornerShape(8.dp)
 @Composable
 fun PauseMenu(
     info: PlayInfo,
-    detail: MovieDetail?,
+    meta: PlaybackMeta?,
     position: Long,
     duration: Long,
     tracks: Tracks,
@@ -94,7 +93,7 @@ fun PauseMenu(
     val tabs = PauseTab.entries.filter { tab ->
         when (tab) {
             PauseTab.CHAPTERS -> info.chapters.isNotEmpty()
-            PauseTab.CAST -> !detail?.cast.isNullOrEmpty()
+            PauseTab.CAST -> !meta?.cast.isNullOrEmpty()
             else -> true
         }
     }
@@ -117,24 +116,24 @@ fun PauseMenu(
     ) {
         // ── En haut : logo / titre, méta ──
         Column(Modifier.align(Alignment.TopStart).padding(start = 48.dp, top = 32.dp).widthIn(max = 520.dp)) {
-            val logo = absolute(detail?.images?.bestLogo)
+            val logo = absolute(meta?.logo)
             if (logo != null) {
                 AsyncImage(
                     model = logo,
-                    contentDescription = detail?.title,
+                    contentDescription = meta?.title,
                     contentScale = ContentScale.Fit,
                     alignment = Alignment.CenterStart,
                     modifier = Modifier.heightIn(max = 70.dp).widthIn(max = 300.dp),
                 )
             } else {
-                Text(detail?.title ?: info.title.orEmpty(), style = MaterialTheme.typography.displayMedium, maxLines = 2)
+                Text(meta?.title ?: info.title.orEmpty(), style = MaterialTheme.typography.displayMedium, maxLines = 2)
             }
-            if (detail == null && !info.title.isNullOrBlank()) {
-                // Épisode : son titre propre
-                Text(info.title, style = MaterialTheme.typography.titleLarge, color = ArrColors.TextSecondary, modifier = Modifier.padding(top = 6.dp))
+            // Épisode : « S02E03 · Static »
+            meta?.subtitle?.let {
+                Text(it, style = MaterialTheme.typography.titleLarge, color = ArrColors.TextSecondary, modifier = Modifier.padding(top = 6.dp))
             }
             Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                techBadges(detail?.file).forEach { Badge(it, highlight = true) }
+                techBadges(meta?.file).forEach { Badge(it, highlight = true) }
             }
         }
 
@@ -167,8 +166,8 @@ fun PauseMenu(
             Box(Modifier.fillMaxWidth().height(150.dp).padding(top = 14.dp)) {
                 when (tab) {
                     PauseTab.CHAPTERS -> ChaptersPanel(info.chapters, position, absolute, onSeek)
-                    PauseTab.INFO -> InfoPanel(detail, info)
-                    PauseTab.CAST -> CastPanel(detail)
+                    PauseTab.INFO -> InfoPanel(meta, info)
+                    PauseTab.CAST -> CastPanel(meta)
                     PauseTab.AUDIO -> TracksPanel(trackChoices(tracks, C.TRACK_TYPE_AUDIO), allowOff = false) {
                         onSelectTrack(C.TRACK_TYPE_AUDIO, it)
                     }
@@ -246,16 +245,13 @@ private fun ChaptersPanel(chapters: List<Chapter>, position: Long, absolute: (St
 }
 
 @Composable
-private fun InfoPanel(detail: MovieDetail?, info: PlayInfo) {
+private fun InfoPanel(meta: PlaybackMeta?, info: PlayInfo) {
     Column(Modifier.padding(horizontal = 48.dp).widthIn(max = 760.dp)) {
-        val meta = listOfNotNull(
-            detail?.year?.toString(),
-            detail?.genres?.take(3)?.joinToString(", ")?.ifBlank { null },
-            detail?.crew?.firstOrNull { it.job == "Director" }?.let { "Réalisé par ${it.name}" },
-        ).joinToString("  ·  ")
-        if (meta.isNotBlank()) Text(meta, style = MaterialTheme.typography.labelLarge, color = ArrColors.TextSecondary)
+        meta?.metaLine?.takeIf { it.isNotBlank() }?.let {
+            Text(it, style = MaterialTheme.typography.labelLarge, color = ArrColors.TextSecondary)
+        }
         Text(
-            detail?.overview ?: info.overview.orEmpty(),
+            meta?.overview ?: info.overview.orEmpty(),
             style = MaterialTheme.typography.bodyLarge,
             maxLines = 5,
             overflow = TextOverflow.Ellipsis,
@@ -265,9 +261,9 @@ private fun InfoPanel(detail: MovieDetail?, info: PlayInfo) {
 }
 
 @Composable
-private fun CastPanel(detail: MovieDetail?) {
+private fun CastPanel(meta: PlaybackMeta?) {
     LazyRow(contentPadding = PaddingValues(horizontal = 48.dp), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-        items(detail?.cast.orEmpty().take(20)) { person ->
+        items(meta?.cast.orEmpty().take(20)) { person ->
             Column(Modifier.width(92.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 // Focusable (sans action) : c'est ce qui fait défiler la rangée à la télécommande
                 Surface(

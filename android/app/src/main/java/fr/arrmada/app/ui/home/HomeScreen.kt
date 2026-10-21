@@ -1,6 +1,5 @@
 package fr.arrmada.app.ui.home
 
-import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -124,37 +123,36 @@ class HomeViewModel(private val repository: Repository) : ViewModel() {
     }
 }
 
+/**
+ * Ce que l'accueil peut demander à la navigation. [go] reçoit le nom d'un
+ * écran du menu : « movies », « series », « discover », « search », « settings ».
+ */
+class HomeActions(
+    val open: (LibraryItem) -> Unit = {}, // fiche film ou écran Série
+    val openMovieId: (Int) -> Unit = {}, // fiche film par identifiant Radarr
+    val openSeriesId: (Int) -> Unit = {}, // écran Série par identifiant Sonarr
+    val resume: (ResumeEntry) -> Unit = {},
+    val request: (TmdbItem) -> Unit = {}, // titre absent : feuille « Télécharger »
+    val go: (String) -> Unit = {},
+)
+
 @Composable
-fun HomeScreen(
-    viewModel: HomeViewModel,
-    api: Api,
-    onOpenMovie: (LibraryItem) -> Unit,
-    onOpenMovieById: (Int) -> Unit,
-    onResume: (ResumeEntry) -> Unit,
-    onMovies: () -> Unit,
-    onSettings: () -> Unit,
-) {
+fun HomeScreen(viewModel: HomeViewModel, api: Api, actions: HomeActions) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    HomeContent(state, api::absolute, viewModel::load, onOpenMovie, onOpenMovieById, onResume, onMovies, onSettings)
+    HomeContent(state, api::absolute, viewModel::load, actions)
 }
+
+/** Menu du haut, commun à l'accueil et aux grilles (comme la coquille de l'add-on). */
+val TOP_MENU = listOf(
+    "home" to "Accueil", "movies" to "Films", "series" to "Séries",
+    "discover" to "Découvrir", "search" to "Rechercher", "settings" to "Réglages",
+)
 
 /** Affichage de l'accueil à partir d'un état (séparé pour les captures d'écran de test). */
 @Composable
-fun HomeContent(
-    state: HomeState,
-    absolute: (String?) -> String?,
-    onRetry: () -> Unit,
-    onOpenMovie: (LibraryItem) -> Unit,
-    onOpenMovieById: (Int) -> Unit,
-    onResume: (ResumeEntry) -> Unit,
-    onMovies: () -> Unit,
-    onSettings: () -> Unit,
-) {
-    val context = LocalContext.current
+fun HomeContent(state: HomeState, absolute: (String?) -> String?, onRetry: () -> Unit, actions: HomeActions) {
     var hero by remember { mutableStateOf<Hero?>(null) }
     val firstFocus = remember { FocusRequester() }
-
-    fun soon(what: String) = Toast.makeText(context, "$what : dans la prochaine version de l’appli", Toast.LENGTH_SHORT).show()
 
     if (state.loading && state.recent.isEmpty()) {
         MessageScreen("Chargement…")
@@ -176,11 +174,9 @@ fun HomeContent(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                ArrButton("Accueil", {}, primary = true)
-                ArrButton("Films", onMovies)
-                ArrButton("Séries", { soon("Séries") })
-                ArrButton("Rechercher", { soon("Recherche") })
-                ArrButton("Réglages", onSettings)
+                TOP_MENU.forEach { (route, label) ->
+                    ArrButton(label, { if (route != "home") actions.go(route) }, primary = route == "home")
+                }
             }
 
             // ── Héros : l'élément sélectionné ──
@@ -206,7 +202,7 @@ fun HomeContent(
                             title = entry.title,
                             subtitle = entry.subtitle,
                             progress = entry.progress,
-                            onClick = { onResume(entry) },
+                            onClick = { actions.resume(entry) },
                             onFocus = { hero = heroOf(entry, absolute) },
                             modifier = if (entry == state.resume.first()) Modifier.focusRequester(firstFocus) else Modifier,
                         )
@@ -217,7 +213,7 @@ fun HomeContent(
                         PosterCard(
                             imageUrl = absolute(item.posterUrl),
                             title = item.title,
-                            onClick = { if (item.isMovie) onOpenMovie(item) else soon("Fiche série") },
+                            onClick = { actions.open(item) },
                             onFocus = { hero = heroOf(item, absolute) },
                             modifier = if (state.resume.isEmpty() && item == state.recent.first()) Modifier.focusRequester(firstFocus) else Modifier,
                         )
@@ -228,7 +224,7 @@ fun HomeContent(
                         PosterCard(
                             imageUrl = item.posterUrl,
                             title = item.title,
-                            onClick = { soon("Demander un titre") },
+                            onClick = { actions.request(item) },
                             onFocus = { hero = heroOf(item) },
                         )
                     }
@@ -238,7 +234,9 @@ fun HomeContent(
                         PosterCard(
                             imageUrl = absolute(entry.posterUrl),
                             title = entry.title,
-                            onClick = { entry.movieId?.let(onOpenMovieById) ?: soon("Fiche série") },
+                            onClick = {
+                                entry.movieId?.let(actions.openMovieId) ?: entry.seriesId?.let(actions.openSeriesId)
+                            },
                             onFocus = { hero = heroOf(entry, absolute) },
                         )
                     }
@@ -254,7 +252,7 @@ fun HomeContent(
 }
 
 @Composable
-private fun HeroBlock(hero: Hero) {
+fun HeroBlock(hero: Hero) {
     Column(Modifier.widthIn(max = 520.dp)) {
         if (hero.logo != null) {
             AsyncImage(
@@ -305,13 +303,13 @@ private fun heroOf(entry: ResumeEntry, absolute: (String?) -> String?) = Hero(
     note = if (entry.isEpisode) entry.subtitle + "  ·  reprendre à " + formatClock(entry.state.position.toLong()) else entry.subtitle,
 )
 
-private fun heroOf(item: TmdbItem) = Hero(
+fun heroOf(item: TmdbItem) = Hero(
     backdrop = item.backdropUrl,
     logo = null,
     title = item.title,
     meta = meta(item.year, item.rating?.let { "★ %.1f".format(it) }),
     overview = item.overview,
-    note = "Pas encore dans la médiathèque",
+    note = if (item.inLibrary) "Dans la médiathèque" else "Pas encore dans la médiathèque",
 )
 
 private fun heroOf(entry: CalendarEntry, absolute: (String?) -> String?) = Hero(

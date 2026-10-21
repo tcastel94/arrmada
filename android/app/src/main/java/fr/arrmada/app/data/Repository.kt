@@ -78,6 +78,12 @@ class Repository(private val api: Api) {
 
     suspend fun movie(radarrId: String): MovieDetail = api.get("/api/media/movie/$radarrId")
 
+    suspend fun series(sonarrId: String): SeriesDetail = api.get("/api/media/series/$sonarrId")
+
+    /** Épisodes d'une saison présents dans Jellyfin (vignettes, durées). */
+    suspend fun seasonEpisodes(tvdbId: Long, season: Int): SeasonEpisodes =
+        api.get("/api/tv/series/$tvdbId/season/$season")
+
     // ── Vu / reprise ──
     /** Tous les états partagés (relus page par page, 500 par page). */
     suspend fun watchStates(): List<WatchState> {
@@ -112,6 +118,41 @@ class Repository(private val api: Api) {
                 ResumeEntry(state, item)
             }
     }
+
+    @Serializable
+    private data class EpisodeSearchBody(
+        @kotlinx.serialization.SerialName("media_type") val mediaType: String = "episode",
+        @kotlinx.serialization.SerialName("tvdb_id") val tvdbId: Long,
+        val title: String,
+        val season: Int,
+        val episode: Int,
+    )
+
+    /** « Chercher » un épisode manquant (Sonarr lance la recherche), comme l'add-on. */
+    suspend fun searchEpisode(tvdbId: Long, title: String, season: Int, episode: Int): ActionResult =
+        api.post("/api/kodi/actions/search", EpisodeSearchBody(tvdbId = tvdbId, title = title, season = season, episode = episode))
+
+    // ── Recherche et demandes ──
+    private fun q(text: String) = java.net.URLEncoder.encode(text, "UTF-8")
+
+    /** Titres de la médiathèque dont le nom contient [text] (30 au plus). */
+    suspend fun searchLibrary(text: String): SearchResults = api.get("/api/media/search?q=${q(text)}")
+
+    /** Titres à ajouter (Radarr + Sonarr, donc TMDB / TVDB). */
+    suspend fun lookup(text: String): List<LookupItem> = api.get("/api/kodi/media/lookup?q=${q(text)}&type=all")
+
+    suspend fun seasons(title: String, tmdbId: Long?, tvdbId: Long?, season: Int? = null): SeasonsInfo {
+        val params = buildList {
+            add("title=${q(title)}")
+            tmdbId?.let { add("tmdb_id=$it") }
+            tvdbId?.let { add("tvdb_id=$it") }
+            season?.let { add("season=$it") }
+        }.joinToString("&")
+        return api.get("/api/kodi/media/seasons?$params")
+    }
+
+    /** Ajoute le titre si besoin et lance le téléchargement (réponse immédiate). */
+    suspend fun download(request: DownloadRequest): ActionResult = api.post("/api/kodi/media/download", request)
 
     // ── Lecture ──
     suspend fun playMovie(tmdbId: Long): PlayInfo = api.get("/api/tv/play/movie/$tmdbId")

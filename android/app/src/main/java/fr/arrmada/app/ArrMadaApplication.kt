@@ -29,6 +29,12 @@ class ArrMadaApplication : Application(), ImageLoaderFactory {
      */
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    /**
+     * Titre à afficher dans la feuille « Télécharger » : passé d'un écran à
+     * l'autre ici plutôt que dans l'adresse de l'écran (trop de champs).
+     */
+    var pendingDownload: fr.arrmada.app.data.DownloadTarget? = null
+
     override fun onCreate() {
         super.onCreate()
         prefs = Prefs(this)

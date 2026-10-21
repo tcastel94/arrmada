@@ -270,3 +270,145 @@ data class PlayInfo(
     val resume: Resume = Resume(),
     val segments: List<Segment> = emptyList(),
 )
+
+// ─── Série (Sonarr) et épisodes (Jellyfin) ──────────────────────────────────
+
+/** Épisode tel que Sonarr le connaît (présent sur le disque, manquant ou à venir). */
+@Serializable
+data class EpisodeInfo(
+    val id: Int = 0,
+    @SerialName("season_number") val seasonNumber: Int = 0,
+    @SerialName("episode_number") val episodeNumber: Int = 0,
+    val title: String? = null,
+    val overview: String? = null,
+    @SerialName("air_date") val airDate: String? = null, // « 2023-01-15 »
+    @SerialName("has_file") val hasFile: Boolean = false,
+    val monitored: Boolean = false,
+    val file: FileInfo? = null,
+)
+
+@Serializable
+data class SeasonInfo(
+    @SerialName("season_number") val seasonNumber: Int = 0,
+    @SerialName("episode_count") val episodeCount: Int = 0,
+    @SerialName("episodes_have") val episodesHave: Int = 0,
+    val monitored: Boolean = false,
+    val episodes: List<EpisodeInfo> = emptyList(),
+)
+
+@Serializable
+data class SeriesRatings(val value: Double? = null)
+
+/** Fiche d'une série (GET /api/media/series/{id Sonarr}). */
+@Serializable
+data class SeriesDetail(
+    val error: String? = null,
+    val id: Int = 0,
+    val title: String = "",
+    val year: Int? = null,
+    val overview: String? = null,
+    val network: String? = null,
+    val genres: List<String> = emptyList(),
+    val runtime: Int? = null,
+    val status: String? = null, // « continuing », « ended »
+    val certification: String? = null,
+    @SerialName("tvdb_id") val tvdbId: Long? = null,
+    val ratings: SeriesRatings = SeriesRatings(),
+    val images: Images = Images(),
+    val seasons: List<SeasonInfo> = emptyList(),
+)
+
+/** Épisode présent dans Jellyfin (GET /api/tv/series/{tvdb}/season/{n}). */
+@Serializable
+data class JellyfinEpisode(
+    val season: Int? = null,
+    val episode: Int = 0,
+    @SerialName("episode_end") val episodeEnd: Int? = null, // fichier double « E01-E02 »
+    @SerialName("item_id") val itemId: String = "",
+    val title: String? = null,
+    val overview: String? = null,
+    val runtime: Int = 0, // secondes
+    val image: String? = null, // vignette relayée par le serveur
+)
+
+@Serializable
+data class SeasonEpisodes(
+    val status: String = "error",
+    val found: Boolean = false,
+    val episodes: List<JellyfinEpisode> = emptyList(),
+)
+
+/** Réponse générique des actions (« status » ok / error + message à afficher). */
+@Serializable
+data class ActionResult(
+    val status: String = "error",
+    val message: String? = null,
+    val title: String? = null,
+    val code: String? = null,
+    @SerialName("arr_id") val arrId: Int? = null,
+) {
+    val ok: Boolean get() = status == "ok"
+}
+
+// ─── Recherche et demandes (comme l'add-on, ADR-005) ────────────────────────
+
+@Serializable
+data class SearchResults(val items: List<LibraryItem> = emptyList(), val total: Int = 0)
+
+/** Résultat de recherche TMDB / TVDB (GET /api/kodi/media/lookup). */
+@Serializable
+data class LookupItem(
+    val title: String = "",
+    val year: Int? = null,
+    val type: String = "movie", // « movie » ou « series »
+    @SerialName("tmdb_id") val tmdbId: Long? = null, // films seulement
+    @SerialName("tvdb_id") val tvdbId: Long? = null, // séries seulement
+    val overview: String? = null,
+    @SerialName("poster_url") val posterUrl: String? = null,
+    @SerialName("in_library") val inLibrary: Boolean = false,
+    @SerialName("arr_id") val arrId: Int? = null, // identifiant Radarr / Sonarr s'il est suivi
+)
+
+/** Saison proposée par la feuille « Télécharger ». */
+@Serializable
+data class SeasonCount(val number: Int = 0, val episodes: Int = 0, val aired: Int = 0, val have: Int = 0)
+
+@Serializable
+data class SeasonEpisode(
+    val season: Int = 0,
+    val number: Int = 0,
+    val title: String? = null,
+    @SerialName("air_date") val airDate: String? = null,
+    val aired: Boolean = true,
+    @SerialName("has_file") val hasFile: Boolean = false,
+    val runtime: Int? = null, // minutes
+)
+
+/** GET /api/kodi/media/seasons : saisons d'une série et épisodes d'une saison. */
+@Serializable
+data class SeasonsInfo(
+    val status: String = "error",
+    val message: String? = null,
+    @SerialName("tvdb_id") val tvdbId: Long? = null,
+    @SerialName("tmdb_id") val tmdbId: Long? = null,
+    @SerialName("arr_id") val arrId: Int? = null,
+    @SerialName("in_library") val inLibrary: Boolean = false,
+    val source: String? = null, // « sonarr » ou « tmdb »
+    val seasons: List<SeasonCount> = emptyList(),
+    val season: Int? = null,
+    val episodes: List<SeasonEpisode> = emptyList(),
+)
+
+/** Corps de POST /api/kodi/media/download (les null ne sont pas envoyés). */
+@Serializable
+data class DownloadRequest(
+    val type: String, // « movie » ou « series »
+    val title: String,
+    val priority: Boolean, // « Pour ce soir » : passe devant les autres téléchargements
+    @SerialName("tmdb_id") val tmdbId: Long? = null,
+    @SerialName("tvdb_id") val tvdbId: Long? = null,
+    @SerialName("arr_id") val arrId: Int? = null,
+    val scope: String? = null, // série : « series », « season », « episode »
+    val season: Int? = null,
+    val episodes: List<Int>? = null, // numéros des épisodes de la saison
+)

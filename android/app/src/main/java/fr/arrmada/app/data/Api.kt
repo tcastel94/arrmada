@@ -28,7 +28,8 @@ class Api(private val prefs: Prefs) {
     val json = Json {
         ignoreUnknownKeys = true
         coerceInputValues = true
-        explicitNulls = false
+        explicitNulls = false // champ null : ni attendu en lecture, ni envoyé en écriture
+        encodeDefaults = true // valeurs par défaut envoyées (ex. media_type = "episode")
         isLenient = true
     }
 
