@@ -96,6 +96,8 @@ dependencies {
     implementation("androidx.tv:tv-material:1.0.0") // composants TV (focus, cartes, boutons)
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.core:core-ktx:1.13.1") // plein écran du lecteur (téléphone, tablette)
+    implementation("androidx.tvprovider:tvprovider:1.0.0") // rangées sur l'accueil Android TV (À suivre, chaîne)
+    implementation("androidx.work:work-runtime-ktx:2.9.1") // mise à jour de ces rangées en tâche de fond
     implementation("androidx.navigation:navigation-compose:2.8.5")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")

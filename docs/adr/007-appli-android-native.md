@@ -145,6 +145,16 @@ Chaque phase est livrée en APK testable sur la Shield.
 > sont ajoutées au « réseau local » par `DEVICE_TRUSTED_NETWORKS` ; le principe
 > de l'ADR-002 (jetons d'appareil jamais exposés à Internet) ne change pas.
 
+> **Note (21/10/2026, APK 2.7.0) : accueil de la Shield.** Choix : garder
+> l'accueil d'Android TV et y **ajouter** les rangées d'ArrMada, plutôt que de
+> remplacer le lanceur (qui demandait de désactiver celui de Google par adb,
+> réactivé parfois par les mises à jour). ArrMada écrit dans le TvProvider du
+> système : la rangée **À suivre** (reprises, un clic relance la lecture) et
+> une chaîne **Ajouts récents** (un clic ouvre la fiche). Synchro en quittant
+> l'appli et toutes les 30 min (WorkManager). Les affiches sont mises en cache
+> par l'appli et servies au lanceur en lecture seule, parce que celles du
+> serveur ArrMada exigent le jeton d'appareil. Phase 4 terminée.
+
 ## Conséquences
 
 - ➕ Interface pensée pour la TV, rapide (affichage natif), et des

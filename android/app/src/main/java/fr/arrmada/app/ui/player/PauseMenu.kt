@@ -231,7 +231,7 @@ fun PauseMenu(
                 }
             }
 
-            Box(Modifier.fillMaxWidth().height(if (LocalScreen.current.isPhone) 118.dp else 150.dp).padding(top = 14.dp)) {
+            Box(Modifier.fillMaxWidth().height(if (LocalScreen.current.isPhone) 128.dp else 150.dp).padding(top = 14.dp)) {
                 when (tab) {
                     PauseTab.CHAPTERS -> ChaptersPanel(info.chapters, position, absolute, onSeek)
                     PauseTab.INFO -> InfoPanel(meta, info)

@@ -6,6 +6,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Rangées sur l'accueil Android TV (« À suivre », chaîne ArrMada) -->
+    <uses-permission android:name="com.android.providers.tv.permission.WRITE_EPG_DATA" />
 
     <!-- Android TV : sans ces deux lignes, l'appli n'apparaît pas dans le
          lanceur de la Shield (« leanback ») ou est déclarée incompatible
@@ -60,5 +62,13 @@
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Affiches des rangées de l'accueil Android TV, servies au lanceur
+             (lecture seule, uniquement le cache des affiches : home/TvHomeRows.kt).
+             Adresse tirée du nom de l'appli : la version de test a la sienne. -->
+        <provider
+            android:name=".home.HomeArtProvider"
+            android:authorities="${applicationId}.homeart"
+            android:exported="true" />
     </application>
 </manifest>

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Android TV app: rows on the Shield home screen (ADR-007 phase 4, APK 2.7.0)
+
+#### Added
+- **"À suivre" (Play Next) row of the Android TV home screen**: movies and episodes started in ArrMada, with their progress bar; a click resumes playback in ArrMada at the saved position (current profile)
+- **"ArrMada · Ajouts récents" channel** on the home screen: the last 20 movies and series added to the NAS; a click opens the movie page or the series screen. The stock home screen is kept (no launcher replacement, no adb)
+- Rows refreshed when leaving the app and every 30 minutes in the background (WorkManager), on/off in **Réglages** (on by default). Posters are cached by the app and served to the launcher by a read-only content provider (posters from the ArrMada server need the device token, which the launcher does not have)
+- Card links are explicit intents to the app (`arrmada://play|movie|show`), so the debug and release APKs installed side by side never answer for each other; pure Kotlin rules with 6 JVM tests
+
+#### Changed
+- Phone pause menu: chapter time no longer clipped
+
 ### Android app on phones and tablets (ADR-007 phase 4, APK 2.6.0)
 
 #### Added

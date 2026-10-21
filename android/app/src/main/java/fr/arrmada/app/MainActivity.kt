@@ -1,6 +1,11 @@
 package fr.arrmada.app
 
 import fr.arrmada.app.ui.components.FormFactor
+import android.content.Intent
+import fr.arrmada.app.data.HomeLink
+import fr.arrmada.app.data.HomeRowsLogic
+import fr.arrmada.app.home.HomeRowsWorker
+import fr.arrmada.app.home.TvHomeRows
 import fr.arrmada.app.ui.components.gutter
 import android.os.Bundle
 import android.view.KeyEvent
@@ -96,15 +101,34 @@ class MainActivity : ComponentActivity() {
     /** Intro animée à l'écran : une touche la passe (sans agir sur l'écran dessous). */
     private val intro = IntroKeys()
 
+    /** Lien arrmada://… reçu d'une carte de l'accueil Android TV, en attente d'ouverture. */
+    private val links = MutableStateFlow<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val app = application as ArrMadaApplication
+        if (savedInstanceState == null) receive(intent)
+        // Ouvert depuis une carte de l'accueil : on va droit au titre, sans l'intro
+        if (links.value != null) app.introSeen = true
+        // Rangées de l'accueil Android TV : passe toutes les 30 minutes
+        HomeRowsWorker.schedule(this)
         setContent {
             // TV, tablette ou téléphone : transmis à tous les écrans
             CompositionLocalProvider(LocalScreen provides rememberScreenLayout()) {
-                ArrMadaTheme { ArrMadaNavigation(app, searchRequests, intro) }
+                ArrMadaTheme { ArrMadaNavigation(app, searchRequests, intro, links) }
             }
         }
+    }
+
+    /** Appli déjà ouverte (singleTask) et clic sur une carte de l'accueil : même fenêtre, nouveau lien. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        receive(intent)
+    }
+
+    private fun receive(intent: Intent?) {
+        intent?.dataString?.takeIf { HomeRowsLogic.parse(it) != null }?.let { links.value = it }
     }
 
     // Relevé des événements du serveur : seulement quand l'appli est à l'écran
@@ -115,6 +139,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         (application as ArrMadaApplication).events.stop()
+        // Retour à l'accueil Android : « À suivre » montre ce qu'on vient d'arrêter
+        HomeRowsWorker.syncSoon(this)
         super.onStop()
     }
 
@@ -193,7 +219,7 @@ private class Prefetcher(private val app: ArrMadaApplication) {
 }
 
 @Composable
-private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableStateFlow<Int>, intro: IntroKeys) {
+private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableStateFlow<Int>, intro: IntroKeys, links: MutableStateFlow<String?>) {
     val screen = LocalScreen.current
     app.repository.kindLabel = when (screen.form) {
         FormFactor.TV -> " TV"
@@ -345,6 +371,34 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
 
     // « Lire sur la TV » depuis la web app
     LaunchedEffect(Unit) { app.events.playRequests.collect { playAnnounced(it) } }
+
+    // Carte de l'accueil Android TV (« À suivre », chaîne ArrMada) : profil
+    // en cours (celui des rangées), l'accueil d'ArrMada dessous pour Retour
+    val link by links.collectAsStateWithLifecycle()
+    LaunchedEffect(link, paired) {
+        val target = HomeRowsLogic.parse(link) ?: return@LaunchedEffect
+        if (!paired) return@LaunchedEffect // l'appairage d'abord ; le lien attend
+        links.value = null
+        if (nav.currentDestination?.route in listOf(null, Routes.PROFILES)) nav.navigate(Routes.HOME) { popUpTo(0) }
+        when (target) {
+            is HomeLink.Play -> nav.navigate(
+                Routes.play(
+                    PlayRequest(
+                        kind = target.kind,
+                        id = target.id,
+                        season = target.season,
+                        episode = target.episode,
+                        radarrId = target.radarrId,
+                        sonarrId = target.sonarrId,
+                        startSeconds = target.startSeconds,
+                    )
+                )
+            )
+            is HomeLink.Movie -> nav.navigate(Routes.movie(target.radarrId, target.tmdbId))
+            is HomeLink.Show -> nav.navigate(Routes.show(target.sonarrId))
+            HomeLink.Home -> Unit
+        }
+    }
 
     // Intro animée au lancement (une fois), seulement vers l'accueil
     var showIntro by remember { mutableStateOf(!app.introSeen && start == Routes.PROFILES && Motion.enabled) }
@@ -596,6 +650,27 @@ private fun SettingsScreen(app: ArrMadaApplication, onChangeServer: () -> Unit, 
         Row(Modifier.padding(top = 28.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             ArrButton("Changer de serveur", onChangeServer, modifier = Modifier.focusRequester(focus))
             ArrButton("Refaire l’appairage", onRepair)
+        }
+        // Accueil Android TV : rangée « À suivre » et chaîne « ArrMada · Ajouts récents »
+        val context = LocalContext.current
+        if (TvHomeRows.supported(context)) {
+            var homeRows by remember { mutableStateOf(app.prefs.homeRows) }
+            ArrButton(
+                if (homeRows) "Accueil Android TV : rangées ArrMada affichées" else "Accueil Android TV : rangées ArrMada masquées",
+                {
+                    homeRows = !homeRows
+                    app.prefs.homeRows = homeRows
+                    HomeRowsWorker.syncSoon(context) // pose ou retire les rangées tout de suite
+                },
+                leading = if (homeRows) "✓" else "✕",
+                modifier = Modifier.padding(top = 16.dp),
+            )
+            Text(
+                "« À suivre » reprend un film en un clic, la chaîne ArrMada montre les derniers ajouts. Mises à jour en quittant l’appli et toutes les 30 min.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = ArrColors.TextSecondary,
+                modifier = Modifier.padding(top = 8.dp),
+            )
         }
     }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }

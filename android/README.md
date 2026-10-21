@@ -8,7 +8,7 @@ sont expliqués dans l'[ADR-007](../docs/adr/007-appli-android-native.md).
 > Une seule APK : elle reconnaît l'écran au lancement (TV, tablette ou
 > téléphone) et adapte la navigation. Voir [Téléphone et tablette](#téléphone-et-tablette).
 
-## Ce que fait la version 2.6 (phases 1 à 4 de l'ADR-007)
+## Ce que fait la version 2.7 (phases 1 à 4 de l'ADR-007)
 
 | Écran | Contenu |
 |---|---|
@@ -29,8 +29,8 @@ sont expliqués dans l'[ADR-007](../docs/adr/007-appli-android-native.md).
 | **Applis** | Applis Android installées sur la TV, lancées avec OK |
 | **Profils famille** (ADR-008) | **Qui regarde ?** au lancement, avatar dans le menu pour changer : chacun sa rangée Reprendre, ses vus, son « Pour toi », ses demandes (« Prêt à regarder » le suit sur n'importe quelle TV). Gestion dans la web app (*Réglages › Profils famille*) |
 | **Bande-annonce en fond** | Sur la fiche film, la bande-annonce rangée sur le NAS se lance sans le son après 2,5 s |
+| **Accueil de la Shield** | Rangée **À suivre** d'Android TV : les films et épisodes commencés, un clic reprend la lecture dans ArrMada. Chaîne **ArrMada · Ajouts récents** : un clic ouvre la fiche. Mises à jour en quittant l'appli et toutes les 30 min ; à couper dans *Réglages* |
 
-Pas encore là (phase 4, voir l'ADR) : option « écran d'accueil de la Shield ».
 
 ## Téléphone et tablette
 
@@ -103,6 +103,20 @@ réglages sont dans *Paramètres › Préférences de l'appareil › Écran et s
 |---|---|---|
 | Son surround / formats audio (*Surround sound*, *Select formats*) | Automatique, ou Dolby TrueHD / DTS-HD cochés à la main | Sans ça, Android décode le son en PCM : l'ampli ne reçoit ni l'Atmos ni le DTS:X |
 | Adapter la fréquence d'image (*Match content frame rate*) | Activé | Films en 24p sans saccades |
+
+### Rangées ArrMada sur l'accueil de la Shield
+
+- **À suivre** apparaît tout seul dans la rangée du système (en haut de
+  l'accueil) dès qu'un film ou un épisode est commencé dans ArrMada.
+- La chaîne **ArrMada · Ajouts récents** est ajoutée d'office (première chaîne
+  de l'appli). Pour la déplacer ou la masquer : *Paramètres › Préférences de
+  l'appareil › Écran d'accueil › Personnaliser les chaînes* (ou flèche gauche
+  sur la chaîne, puis le bouton de déplacement).
+- Les cartes suivent le **profil en cours** dans ArrMada (le dernier choisi
+  dans « Qui regarde ? ») ; un clic ouvre ArrMada directement sur ce profil.
+- Limite : sur **Google TV** (Chromecast, TV Sony / TCL récentes), les chaînes
+  d'applis ne sont plus affichées ; seule « À suivre » peut l'être. La Shield
+  est sous Android TV : les deux rangées s'affichent.
 
 ## Installer l'APK
 
@@ -198,6 +212,7 @@ autre clé**.
 | *Ce serveur répond, mais ce n'est pas l'API ArrMada* | Port de la web app (3000) au lieu de l'API (8420) | Mettre le port 8420 (celui de l'add-on) |
 | *Pas de réponse en 5 secondes* | Mauvaise IP / port, TV sur un autre réseau | Tester `curl http://IP:8420/api/health` depuis le PC |
 | *Accès refusé par le serveur (réseau local uniquement)* | Jeton d'appareil utilisé hors du réseau local | Normal hors de la maison (ADR-002). Téléphone : passer par le VPN et déclarer ses adresses dans `DEVICE_TRUSTED_NETWORKS` (voir [Téléphone et tablette](#téléphone-et-tablette)) |
+| Pas de rangée ArrMada sur l'accueil de la Shield | Option coupée, ou chaîne masquée dans les réglages d'Android TV | *Réglages* d'ArrMada : rangées affichées ; Android : *Écran d'accueil › Personnaliser les chaînes*. Les cartes arrivent après la première synchro (en quittant l'appli) |
 | *Aucune TV appairée* dans « Lire sur une TV » | Aucune TV (appli ou Kodi) appairée, ou seulement des téléphones | Appairer la TV ; les téléphones / tablettes ne sont pas proposés |
 | *Cette TV n'est plus appairée* | TV supprimée dans la web app | L'appli revient seule à l'écran d'appairage |
 | *Film absent de Jellyfin* / *Jellyfin non configuré* | Titre non scanné par Jellyfin, ou Jellyfin pas déclaré | Lancer un scan Jellyfin ; déclarer Jellyfin dans ArrMada |
@@ -222,6 +237,7 @@ android/
     │   │                           #   SeriesLogic (Lire la suite), PlaybackLogic (intro, générique),
     │   │                           #   DownloadLogic (feuille Télécharger), CaseLogic (boîtier),
     │   │                           #   ImageSizes (taille des images TMDB)
+    │   ├── home/                   # rangées sur l'accueil Android TV (À suivre, chaîne), tâche de fond
     │   └── ui/
     │       ├── theme/              # charte de l'add-on (couleurs, police)
     │       ├── components/         # affiches, boutons, rangées, fond « Ken Burns »,

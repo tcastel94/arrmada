@@ -80,6 +80,11 @@ class Prefs(context: Context) {
         get() = prefs.getBoolean(KEY_AUTO_SOUND, true)
         set(value) = prefs.edit().putBoolean(KEY_AUTO_SOUND, value).apply()
 
+    /** Rangées « À suivre » et chaîne ArrMada sur l'accueil Android TV (Réglages). */
+    var homeRows: Boolean
+        get() = prefs.getBoolean(KEY_HOME_ROWS, true)
+        set(value) = prefs.edit().putBoolean(KEY_HOME_ROWS, value).apply()
+
     fun forgetPairing() {
         setProfile(null) // autre maison, autres profils
         prefs.edit().remove(KEY_TOKEN).remove(KEY_DEVICE).apply()
@@ -91,6 +96,7 @@ class Prefs(context: Context) {
         const val KEY_TOKEN = "device_token"
         const val KEY_DEVICE = "device_name"
         const val KEY_AUTO_SOUND = "auto_sound"
+        const val KEY_HOME_ROWS = "home_rows"
         const val KEY_PROFILE_ID = "profile_id"
         const val KEY_PROFILE_NAME = "profile_name"
         const val KEY_PROFILE_COLOR = "profile_color"
