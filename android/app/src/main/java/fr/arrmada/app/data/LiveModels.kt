@@ -132,8 +132,14 @@ data class AmpDevice(
     // Absents (null) quand l'ampli ne les a pas : le réglage est alors masqué
     @SerialName("dialog_level") val dialogLevel: Int? = null,
     @SerialName("adaptive_drc") val adaptiveDrc: Boolean? = null,
+    @SerialName("extra_bass") val extraBass: Boolean? = null,
+    @SerialName("subwoofer_volume") val subwooferVolume: Int? = null, // caisson, −12 à +12
     val error: String? = null,
 )
+
+/** Profil sonore d'une pièce (GET /api/yamaha/profiles) : nom et enceintes. */
+@Serializable
+data class RoomProfile(val name: String = "", val speakers: String? = null)
 
 @Serializable
 data class AmpControl(val action: String, val value: JsonElement? = null, val zone: String = "main")

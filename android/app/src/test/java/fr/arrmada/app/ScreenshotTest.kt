@@ -79,7 +79,10 @@ import fr.arrmada.app.ui.home.HomeActions
 import fr.arrmada.app.ui.home.HomeContent
 import fr.arrmada.app.ui.home.HomeState
 import fr.arrmada.app.ui.home.LibraryContent
+import fr.arrmada.app.ui.player.AudioContext
 import fr.arrmada.app.ui.player.PauseMenu
+import fr.arrmada.app.ui.player.selectedSound
+import fr.arrmada.app.data.SoundAdvisor
 import fr.arrmada.app.ui.player.PlayRequest
 import fr.arrmada.app.ui.player.SkipButton
 import fr.arrmada.app.ui.player.UpNext
@@ -239,14 +242,14 @@ class ScreenshotTest {
         }
     }
 
-    @Test
-    fun menuPauseAudio() {
+    /** Pistes d'un film : Atmos (anglais), DD+ 5.1 VFF choisie, DTS-HD VFQ illisible ; sous-titres. */
+    private fun sampleTracks(): Tracks {
         fun audio(mime: String, lang: String, channels: Int, label: String? = null) =
             Format.Builder().setSampleMimeType(mime).setLanguage(lang).setChannelCount(channels).setLabel(label).build()
         fun text(mime: String, lang: String, forced: Boolean = false) =
             Format.Builder().setSampleMimeType(mime).setLanguage(lang)
                 .setSelectionFlags(if (forced) C.SELECTION_FLAG_FORCED else 0).build()
-        val tracks = Tracks(
+        return Tracks(
             listOf(
                 Tracks.Group(
                     TrackGroup(
@@ -266,19 +269,37 @@ class ScreenshotTest {
                 ),
             )
         )
-        captureRoboImage(shot("05-menu-pause-audio")) {
+    }
+
+    @Test
+    fun reglagesAudioCinema() {
+        val tracks = sampleTracks()
+        val advice = SoundAdvisor.advise(SoundAdvisor.layout("7.2.2"), selectedSound(tracks, "TrueHD Atmos"))
+        val amp = AmpDevice(name = "Yamaha RX-A6A", online = true, power = "on", volumePct = 58, actualDb = -26.5,
+            soundProgram = "surr_decoder", dialogLevel = 1, adaptiveDrc = false, extraBass = true, subwooferVolume = 2)
+        captureRoboImage(shot("05-reglages-audio-cinema")) {
             ArrMadaTheme {
                 PauseMenu(
-                    info = play,
-                    meta = dune.toMeta(),
-                    position = 2530_000L,
-                    duration = 9300_000L,
-                    tracks = tracks,
-                    absolute = noAbsolute,
-                    onResume = {},
-                    onSeek = {},
-                    onSelectTrack = { _, _ -> },
-                    initialTab = "Audio",
+                    info = play, meta = dune.toMeta(), position = 2_530_000, duration = 9_300_000, tracks = tracks,
+                    absolute = noAbsolute, onResume = {}, onSeek = {}, onSelectTrack = { _, _ -> },
+                    audio = AudioContext("Salle de cinéma · enceintes 7.2.2", true, advice, auto = true),
+                    amp = amp, audioOpen = true,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun reglagesAudioSansAmpli() {
+        val tracks = sampleTracks()
+        val advice = SoundAdvisor.advise(null, selectedSound(tracks, null))
+        captureRoboImage(shot("18-reglages-audio-sans-ampli")) {
+            ArrMadaTheme {
+                PauseMenu(
+                    info = play, meta = dune.toMeta(), position = 2_530_000, duration = 9_300_000, tracks = tracks,
+                    absolute = noAbsolute, onResume = {}, onSeek = {}, onSelectTrack = { _, _ -> },
+                    audio = AudioContext("Pas d’ampli dans cette pièce : son de la TV", false, advice, auto = true),
+                    audioOpen = true,
                 )
             }
         }
@@ -447,21 +468,6 @@ class ScreenshotTest {
         captureRoboImage(shot("17-telechargements")) {
             ArrMadaTheme {
                 DownloadsContent(board, evening, mapOf("radarr:801" to 5.2 * 1024 * 1024), noAbsolute, {}, {}, {}, {})
-            }
-        }
-    }
-
-    @Test
-    fun menuPauseAmpli() {
-        val amp = AmpDevice(name = "Yamaha RX-A6A", online = true, power = "on", volumePct = 42, actualDb = -38.5,
-            soundProgram = "surr_decoder", dialogLevel = 1, adaptiveDrc = false)
-        captureRoboImage(shot("18-menu-pause-ampli")) {
-            ArrMadaTheme {
-                PauseMenu(
-                    info = play, meta = dune.toMeta(), position = 2_530_000, duration = 9_300_000, tracks = Tracks.EMPTY,
-                    absolute = noAbsolute, onResume = {}, onSeek = {}, onSelectTrack = { _, _ -> },
-                    initialTab = "Ampli", amp = amp,
-                )
             }
         }
     }

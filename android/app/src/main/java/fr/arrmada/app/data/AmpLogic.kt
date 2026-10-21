@@ -34,7 +34,14 @@ object AmpLogic {
     /** −42.5 → « −42,5 dB » (moins typographique). */
     fun decibels(db: Double?): String = db?.let { Fr.decimal(it) + " dB" }?.replace("-", "−").orEmpty()
 
-    /** « 42 % · −38,5 dB · Surround Decoder » sous le titre de l'onglet. */
+    /** Niveau du caisson : « neutre », « +2 », « −3 ». */
+    fun subwooferLabel(level: Int): String = when {
+        level == 0 -> "neutre"
+        level > 0 -> "+$level"
+        else -> "−${-level}"
+    }
+
+    /** « 42 % · −38,5 dB · Surround Decoder » (en-tête des réglages de l'ampli). */
     fun summary(amp: AmpDevice): String = listOf(
         "${amp.volumePct} %",
         decibels(amp.actualDb),

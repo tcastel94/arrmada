@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Android TV app: audio settings screen and recommended sound (APK 2.4.0)
+
+#### Changed
+- **Pause menu**: an **Audio** button opens a dedicated **Réglages audio** screen (Back returns to the menu) instead of the Audio and Ampli tabs: recommended sound, audio track, then the amp (sound program, volume, clearer dialogue, night mode, **Extra Bass** and **subwoofer level**)
+
+#### Added
+- **Recommended sound / auto decoding**: from the sound of the selected track (Dolby Atmos / DTS:X objects, 7.1, 5.1, stereo) and the speakers of the room (**salon 5.1**, **salle de cinéma 7.2.2**: centre, 2 front, 2 surround, 2 rear, 2 subwoofers, 2 Atmos), the app picks the Yamaha program: Straight for native decoding (Atmos folded onto 5.1 without height speakers), Surround Decoder (Dolby Surround / Neural:X) to spread a smaller source over the room. Applied automatically after the room preset and on each audio track change (can be switched off, remembered on the TV); without an amp, advice for the TV speakers (stereo, lighter track). Pure Kotlin rules, 4 JVM tests
+- **Server**: room profiles carry `speakers` (`"5.1"`, `"7.2.2"`), `/api/yamaha/state` returns `subwoofer_volume`, new control `subwoofer_volume` (−12 to +12); 1 test
+
 ### Android TV app, phase 3: parity with the Kodi add-on (APK 2.3.1)
 
 #### Added

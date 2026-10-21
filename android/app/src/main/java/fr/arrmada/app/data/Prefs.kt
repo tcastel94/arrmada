@@ -43,6 +43,11 @@ class Prefs(context: Context) {
         get() = prefs.getString(KEY_DEVICE, null)
         set(value) = prefs.edit().putString(KEY_DEVICE, value).apply()
 
+    /** Décodage auto : l'ampli prend le programme conseillé pour le son du film. */
+    var autoSound: Boolean
+        get() = prefs.getBoolean(KEY_AUTO_SOUND, true)
+        set(value) = prefs.edit().putBoolean(KEY_AUTO_SOUND, value).apply()
+
     fun forgetPairing() {
         prefs.edit().remove(KEY_TOKEN).remove(KEY_DEVICE).apply()
         _paired.value = false
@@ -52,5 +57,6 @@ class Prefs(context: Context) {
         const val KEY_URL = "server_url"
         const val KEY_TOKEN = "device_token"
         const val KEY_DEVICE = "device_name"
+        const val KEY_AUTO_SOUND = "auto_sound"
     }
 }

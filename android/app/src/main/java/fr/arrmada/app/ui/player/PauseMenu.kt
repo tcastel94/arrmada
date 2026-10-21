@@ -1,5 +1,6 @@
 package fr.arrmada.app.ui.player
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -39,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.C
 import androidx.media3.common.Tracks
@@ -50,7 +52,7 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import kotlinx.serialization.json.JsonPrimitive
 import fr.arrmada.app.data.AmpDevice
-import fr.arrmada.app.data.AmpLogic
+import fr.arrmada.app.data.SoundAdvisor
 import fr.arrmada.app.data.Chapter
 import fr.arrmada.app.data.PlayInfo
 import fr.arrmada.app.ui.components.ArrButton
@@ -65,7 +67,7 @@ import java.time.format.DateTimeFormatter
 
 /** Onglets du menu pause ; le contenu suit l'onglet qui a le focus. */
 private enum class PauseTab(val label: String) {
-    CHAPTERS("Chapitres"), INFO("Infos"), CAST("Distribution"), AUDIO("Audio"), SUBTITLES("Sous-titres"), AMP("Ampli")
+    CHAPTERS("Chapitres"), INFO("Infos"), CAST("Distribution"), SUBTITLES("Sous-titres")
 }
 
 private val ChipShape = RoundedCornerShape(8.dp)
@@ -92,14 +94,37 @@ fun PauseMenu(
     onSeek: (seconds: Double) -> Unit,
     onSelectTrack: (type: Int, choice: TrackChoice?) -> Unit,
     initialTab: String? = null, // libellé de l'onglet affiché d'abord (tests)
-    amp: AmpDevice? = null, // ampli de la pièce (null : pas d'ampli, onglet masqué)
+    audio: AudioContext? = null, // pièce, son conseillé, décodage auto
+    amp: AmpDevice? = null, // ampli de la pièce (null : pas d'ampli)
     onAmp: (action: String, value: JsonPrimitive) -> Unit = { _, _ -> },
+    onAuto: (Boolean) -> Unit = {},
+    onApplyAdvice: () -> Unit = {},
+    audioOpen: Boolean = false, // écran Réglages audio ouvert d'emblée (tests)
 ) {
+    // Bouton « Audio » → écran Réglages audio par-dessus le menu ; Retour y revient
+    var showAudio by remember { mutableStateOf(audioOpen) }
+    var backFromAudio by remember { mutableStateOf(false) } // au retour, le focus revient sur « Audio »
+    val audioFocus = remember { FocusRequester() }
+    if (showAudio) {
+        BackHandler { showAudio = false }
+        AudioSettings(
+            audio = audio ?: AudioContext("", false, SoundAdvisor.advise(null, null), false),
+            tracks = tracks,
+            amp = amp,
+            onSelectTrack = { onSelectTrack(C.TRACK_TYPE_AUDIO, it) },
+            onAmp = onAmp,
+            onAuto = onAuto,
+            onApplyAdvice = onApplyAdvice,
+            onClose = { showAudio = false },
+        )
+        LaunchedEffect(Unit) { backFromAudio = true }
+        return
+    }
+
     val tabs = PauseTab.entries.filter { tab ->
         when (tab) {
             PauseTab.CHAPTERS -> info.chapters.isNotEmpty()
             PauseTab.CAST -> !meta?.cast.isNullOrEmpty()
-            PauseTab.AMP -> amp?.online == true
             else -> true
         }
     }
@@ -160,6 +185,7 @@ fun PauseMenu(
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                     ArrButton("Reprendre", onResume, primary = true, leading = "▶", modifier = Modifier.focusRequester(resumeFocus))
+                    ArrButton("Audio", { showAudio = true }, leading = "♪", modifier = Modifier.focusRequester(audioFocus))
                     Spacer(Modifier.width(8.dp))
                     tabs.forEach { option ->
                         TabButton(option.label, selected = option == tab, onFocus = { tab = option })
@@ -174,18 +200,14 @@ fun PauseMenu(
                     PauseTab.CHAPTERS -> ChaptersPanel(info.chapters, position, absolute, onSeek)
                     PauseTab.INFO -> InfoPanel(meta, info)
                     PauseTab.CAST -> CastPanel(meta)
-                    PauseTab.AUDIO -> TracksPanel(trackChoices(tracks, C.TRACK_TYPE_AUDIO), allowOff = false) {
-                        onSelectTrack(C.TRACK_TYPE_AUDIO, it)
-                    }
                     PauseTab.SUBTITLES -> TracksPanel(trackChoices(tracks, C.TRACK_TYPE_TEXT), allowOff = true) {
                         onSelectTrack(C.TRACK_TYPE_TEXT, it)
                     }
-                    PauseTab.AMP -> amp?.let { AmpPanel(it, onAmp) }
                 }
             }
         }
     }
-    LaunchedEffect(Unit) { runCatching { resumeFocus.requestFocus() } }
+    LaunchedEffect(Unit) { runCatching { (if (backFromAudio) audioFocus else resumeFocus).requestFocus() } }
 }
 
 /** Onglet : il s'active dès qu'il reçoit le focus (pas besoin de valider). */
@@ -292,84 +314,13 @@ private fun CastPanel(meta: PlaybackMeta?) {
     }
 }
 
-/**
- * Onglet « Ampli » : ce qu'on règle vraiment pendant un film. En haut le
- * programme sonore et le volume ; en bas les voix (dialogues plus forts que
- * les effets) et le mode nuit (écarts de volume réduits, pour ne pas
- * réveiller la maison). Un réglage que l'ampli n'a pas n'est pas affiché.
- */
 @Composable
-private fun AmpPanel(amp: AmpDevice, onAmp: (String, JsonPrimitive) -> Unit) {
-    Column(Modifier.padding(horizontal = 48.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
-            AmpGroup("Programme sonore") {
-                AmpLogic.PROGRAMS.forEach { (id, label) ->
-                    AmpChip(label, selected = amp.soundProgram == id) { onAmp("sound_program", JsonPrimitive(id)) }
-                }
-            }
-            AmpGroup("Volume · ${AmpLogic.summary(amp)}") {
-                AmpChip("Vol −", selected = false) { onAmp("volume_step", JsonPrimitive(-AmpLogic.VOLUME_STEP)) }
-                AmpChip("Vol +", selected = false) { onAmp("volume_step", JsonPrimitive(AmpLogic.VOLUME_STEP)) }
-                AmpChip(if (amp.mute) "Remettre le son" else "Muet", selected = amp.mute) { onAmp("mute", JsonPrimitive(!amp.mute)) }
-            }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
-            amp.dialogLevel?.let { level ->
-                AmpGroup("Voix plus claires") {
-                    AmpLogic.DIALOG_LEVELS.forEach { (value, label) ->
-                        AmpChip(label, selected = level == value) { onAmp("dialog_level", JsonPrimitive(value)) }
-                    }
-                }
-            }
-            amp.adaptiveDrc?.let { night ->
-                AmpGroup("Mode nuit") {
-                    AmpChip("Activé", selected = night) { onAmp("adaptive_drc", JsonPrimitive(true)) }
-                    AmpChip("Désactivé", selected = !night) { onAmp("adaptive_drc", JsonPrimitive(false)) }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun AmpGroup(label: String, chips: @Composable () -> Unit) {
-    Column {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = ArrColors.TextSecondary, maxLines = 1)
-        Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { chips() }
-    }
-}
-
-/** Pastille de réglage : bleue au focus, entourée quand c'est le réglage actuel. */
-@Composable
-private fun AmpChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    Surface(
-        onClick = onClick,
-        modifier = Modifier.height(34.dp),
-        shape = ClickableSurfaceDefaults.shape(ChipShape),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.06f),
-        border = ClickableSurfaceDefaults.border(
-            border = if (selected) Border(BorderStroke(2.dp, ArrColors.Accent), shape = ChipShape) else Border.None,
-        ),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (selected) ArrColors.Accent.copy(alpha = 0.22f) else Color(0x26FFFFFF),
-            contentColor = ArrColors.Text,
-            focusedContainerColor = ArrColors.Accent,
-            focusedContentColor = ArrColors.Night,
-        ),
-    ) {
-        Box(Modifier.fillMaxHeight().padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {
-            Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1)
-        }
-    }
-}
-
-@Composable
-private fun TracksPanel(choices: List<TrackChoice>, allowOff: Boolean, onSelect: (TrackChoice?) -> Unit) {
+internal fun TracksPanel(choices: List<TrackChoice>, allowOff: Boolean, sidePadding: Dp = 48.dp, onSelect: (TrackChoice?) -> Unit) {
     if (choices.isEmpty() && !allowOff) {
-        Text("Aucune piste", style = MaterialTheme.typography.bodyLarge, color = ArrColors.TextSecondary, modifier = Modifier.padding(horizontal = 48.dp))
+        Text("Aucune piste", style = MaterialTheme.typography.bodyLarge, color = ArrColors.TextSecondary, modifier = Modifier.padding(horizontal = sidePadding))
         return
     }
-    LazyRow(contentPadding = PaddingValues(horizontal = 48.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyRow(contentPadding = PaddingValues(horizontal = sidePadding), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         if (allowOff) {
             item {
                 OptionChip("Aucun", "Sous-titres désactivés", selected = choices.none { it.selected }, supported = true) { onSelect(null) }

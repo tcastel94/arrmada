@@ -16,6 +16,7 @@ def test_zone_status_with_dialogue_and_drc() -> None:
         "dialogue_level": 1,
         "adaptive_drc": True,
         "enhancer": False,
+        "subwoofer_volume": -2,
     }
     out = zone_status(st)
     assert out["volume_pct"] == 40
@@ -23,6 +24,7 @@ def test_zone_status_with_dialogue_and_drc() -> None:
     assert (out["dialog_lift"], out["dialog_level"], out["adaptive_drc"]) == (2, 1, True)
     assert out["enhancer"] is False
     assert out["extra_bass"] is None  # absent de cet ampli
+    assert out["subwoofer_volume"] == -2
 
 
 def test_zone_status_without_extras() -> None:
@@ -30,3 +32,10 @@ def test_zone_status_without_extras() -> None:
     assert out["dialog_level"] is None
     assert out["adaptive_drc"] is None
     assert out["mute"] is False
+
+
+def test_default_profiles_describe_speakers() -> None:
+    from app.services.yamaha import DEFAULT_PROFILES
+
+    assert DEFAULT_PROFILES["salon"]["speakers"] == "5.1"
+    assert DEFAULT_PROFILES["cinema"]["speakers"] == "7.2.2"

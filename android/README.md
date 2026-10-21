@@ -8,7 +8,7 @@ sont expliqués dans l'[ADR-007](../docs/adr/007-appli-android-native.md).
 > Téléphone et tablette viendront en phase 4. L'APK s'y installe, mais
 > l'interface est pensée pour la télécommande.
 
-## Ce que fait la version 2.3 (phases 1 à 3 de l'ADR-007)
+## Ce que fait la version 2.4 (phases 1 à 3 de l'ADR-007)
 
 | Écran | Contenu |
 |---|---|
@@ -21,7 +21,7 @@ sont expliqués dans l'[ADR-007](../docs/adr/007-appli-android-native.md).
 | **Télécharger** | La feuille de l'add-on : un film en un bouton ; une série en entier, une saison ou des épisodes cochés ; **Pour ce soir** (passe devant les autres téléchargements). Le bouton dit ce qui part (« Télécharger S02E05 », « Télécharger 3 épisodes ») |
 | **Fiche film** | Logo, notes TMDB / IMDb / Rotten Tomatoes, pastilles **4K / Dolby Vision / Atmos / 7.1**, résumé, *Reprendre à…* / *Depuis le début*, bande-annonce (appli YouTube), distribution. À droite, le **boîtier de l'add-on** (Blu-ray bleu, 4K ULTRA HD noir, DVD, transparent si le fichier n'est pas là) et son **disque qui sort en roulant** puis tourne (rond imprimé fanart.tv, sinon l'affiche en anneau) |
 | **Lecteur** | Fichier d'origine **sans transcodage**, son HD envoyé tel quel à l'ampli (passthrough), piste française préférée. Gauche / droite : −10 s / +30 s. Position enregistrée toutes les 30 s, en pause et en quittant ; « vu » à 90 %. Préréglage Yamaha de la pièce au lancement. Formats qu'ExoPlayer n'ouvre pas (**.m2ts** de Blu-ray, **.iso**…) : Jellyfin change le conteneur à la volée (**remux**, image intacte), automatiquement **Passer l'intro / le récap** (chapitres nommés du fichier, sinon marqueurs Jellyfin), carte **Épisode suivant dans 10 s** au générique de fin (ou 30 s avant la fin) puis enchaînement |
-| **Menu pause** (façon Apple TV) | Logo, pastilles, **heure de fin**, progression, onglets **Chapitres** (vignettes, saut direct), **Infos**, **Distribution**, **Audio**, **Sous-titres** (pistes nommées : langue, Dolby TrueHD, DTS-HD, 7.1, forcés, « non lisible ici ») et **Ampli** quand la pièce en a un : programme sonore, volume, **voix plus claires**, **mode nuit** |
+| **Menu pause** (façon Apple TV) | Logo, pastilles, **heure de fin**, progression, onglets **Chapitres** (vignettes, saut direct), **Infos**, **Distribution**, **Sous-titres** (pistes nommées : langue, forcés, format), et un bouton **Audio** qui ouvre les **Réglages audio** : **son conseillé** selon le film et les enceintes de la pièce (salon 5.1, salle de cinéma 7.2.2, TV sans ampli) avec **décodage auto**, piste audio (Dolby TrueHD, DTS-HD, 7.1, « non lisible ici »), ampli : programme sonore, volume, **voix plus claires**, **mode nuit**, **basses** (Extra Bass, niveau du caisson) |
 | **Téléchargements** | Cartes **Pour ce soir** (« Prêt vers 21:02 », étapes jusqu'à *Prêt à regarder*) et file Radarr / Sonarr (état, %, reste, débit). OK : **Débloquer**, Passer en tête, Pause / Reprendre, Relancer la recherche, Fiche, Annuler ma demande. *Pause sauf ce soir*, *Tout reprendre* |
 | **Bulles et annonces** | Bulles en bas à droite (importé sur le NAS, téléchargement lancé, import bloqué), retenues pendant un film puis résumées (« Pendant ta séance »). Pop-up **Prêt à regarder** (Regarder / Plus tard), alerte **caméra** avec photo, **Lire sur la TV** depuis la web app |
 | **Tableau de bord** | Salutation, compteurs animés (films, séries, stockage, téléchargements), téléchargements en cours, services, ajouts récents ; **intro animée** de l'add-on au lancement |

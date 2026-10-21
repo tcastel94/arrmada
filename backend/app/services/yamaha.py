@@ -242,6 +242,7 @@ def zone_status(st: dict[str, Any]) -> dict[str, Any]:
         "adaptive_drc": flag("adaptive_drc"),
         "enhancer": flag("enhancer"),
         "extra_bass": flag("extra_bass"),
+        "subwoofer_volume": st.get("subwoofer_volume"),  # niveau du caisson (−12 à +12)
     }
 
 
@@ -331,6 +332,9 @@ async def control(
         elif action == "adaptive_drc":
             enable = "true" if value else "false"
             await _get(base, f"/{zone}/setAdaptiveDrc?enable={enable}")
+        elif action == "subwoofer_volume":
+            val = max(-12, min(12, int(value)))
+            await _get(base, f"/{zone}/setSubwooferVolume?volume={val}")
         else:
             return {"status": "error", "detail": f"Action inconnue: {action}"}
     except Exception as exc:
@@ -345,6 +349,9 @@ async def control(
 DEFAULT_PROFILES = {
     "salon": {
         "name": "Salon",
+        # Disposition des enceintes (principales.caissons.plafond) : la TV en
+        # déduit le décodage conseillé selon le son du film
+        "speakers": "5.1",
         "volume_pct": 40,
         "volume_raw": 65,  # Typical YXC volume step (0..161)
         "dialog_lift": 2,
@@ -359,6 +366,8 @@ DEFAULT_PROFILES = {
     },
     "cinema": {
         "name": "Salle de cinéma",
+        # Centrale, 2 avant, 2 surround, 2 arrière, 2 caissons, 2 Atmos
+        "speakers": "7.2.2",
         "volume_pct": 60,
         "volume_raw": 95,
         "dialog_lift": 1,

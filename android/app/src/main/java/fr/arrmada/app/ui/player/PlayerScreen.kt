@@ -66,6 +66,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import fr.arrmada.app.ArrMadaApplication
 import fr.arrmada.app.data.AmpDevice
+import fr.arrmada.app.data.SoundAdvisor
 import fr.arrmada.app.data.PlayInfo
 import fr.arrmada.app.data.PlaybackLogic
 import fr.arrmada.app.data.Repository
@@ -77,7 +78,9 @@ import fr.arrmada.app.ui.components.MessageScreen
 import fr.arrmada.app.ui.components.ProgressBar
 import fr.arrmada.app.ui.components.formatClock
 import fr.arrmada.app.ui.theme.ArrColors
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonPrimitive
 
@@ -163,11 +166,18 @@ fun PlayerScreen(request: PlayRequest, app: ArrMadaApplication, onExit: () -> Un
     }
 
     // Préréglage de l'ampli de la pièce (comme l'add-on), sans attendre
+    // Fin du préréglage (ou échec) : le décodage auto attend ce signal pour
+    // ne pas être écrasé par le programme du préréglage
+    val presetDone = remember(request) { CompletableDeferred<Unit>() }
     LaunchedEffect(request) {
         app.appScope.launch {
-            runCatching {
-                val device = repository.me()
-                repository.applyAmpPreset(device, if (request.kind == "movie") "movie" else "series", null, null)
+            try {
+                runCatching {
+                    val device = repository.me()
+                    repository.applyAmpPreset(device, if (request.kind == "movie") "movie" else "series", null, null)
+                }
+            } finally {
+                presetDone.complete(Unit)
             }
         }
     }
@@ -189,7 +199,7 @@ fun PlayerScreen(request: PlayRequest, app: ArrMadaApplication, onExit: () -> Un
         error != null -> return MessageScreen("Lecture impossible", error, "Retour", onExit)
         play == null -> return MessageScreen("Préparation de la lecture…")
     }
-    PlayerSurface(request, play!!, meta, upNext, app, onExit, onPlayNext)
+    PlayerSurface(request, play!!, meta, upNext, app, presetDone, onExit, onPlayNext)
 }
 
 @OptIn(UnstableApi::class)
@@ -200,6 +210,7 @@ private fun PlayerSurface(
     meta: PlaybackMeta?,
     upNext: UpNext?,
     app: ArrMadaApplication,
+    presetDone: CompletableDeferred<Unit>,
     onExit: () -> Unit,
     onPlayNext: (PlayRequest) -> Unit,
 ) {
@@ -242,9 +253,32 @@ private fun PlayerSurface(
     var amp by remember { mutableStateOf<AmpDevice?>(null) }
     var ampRead by remember { mutableIntStateOf(0) }
     LaunchedEffect(showMenu, ampRead) {
-        if (!showMenu) return@LaunchedEffect
+        if (!showMenu && ampRead == 0) return@LaunchedEffect
         val me = runCatching { repository.device() }.getOrNull()
         amp = if (me?.hasAmp == true) runCatching { repository.ampState().devices.firstOrNull() }.getOrNull() else null
+    }
+
+    // ── Son conseillé : enceintes de la pièce × son de la piste en cours ──
+    var hasAmp by remember { mutableStateOf(false) }
+    var layout by remember { mutableStateOf<SoundAdvisor.Layout?>(null) }
+    var room by remember { mutableStateOf("") }
+    var autoSound by remember { mutableStateOf(app.prefs.autoSound) }
+    var appliedProgram by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        val me = runCatching { repository.device() }.getOrNull() ?: return@LaunchedEffect
+        hasAmp = me.hasAmp
+        if (!me.hasAmp) {
+            room = "Pas d’ampli dans cette pièce : son de la TV"
+            return@LaunchedEffect
+        }
+        val profiles = runCatching { repository.roomProfiles() }.getOrDefault(emptyMap())
+        val profile = profiles[me.room] ?: profiles[if ("cin" in me.room.lowercase()) "cinema" else "salon"]
+        // Enceintes non renseignées : on suppose un 5.1, le cas le plus courant
+        layout = SoundAdvisor.layout(profile?.speakers) ?: SoundAdvisor.layout("5.1")
+        room = listOfNotNull(
+            profile?.name?.ifBlank { null } ?: me.room.replaceFirstChar { it.uppercase() },
+            layout?.let { "enceintes ${it.label}" },
+        ).joinToString(" · ")
     }
 
     /** Commande à l'ampli, puis relecture de son état (le réglage choisi s'entoure). */
@@ -266,6 +300,25 @@ private fun PlayerSurface(
     var upNextDismissed by remember { mutableStateOf(false) }
     var countdown by remember { mutableIntStateOf(PlaybackLogic.UP_NEXT_SECONDS) }
     val keyFocus = remember { FocusRequester() }
+
+    val sound = remember(tracks, meta) { selectedSound(tracks, meta?.file?.audioCodec) }
+    val advice = SoundAdvisor.advise(if (hasAmp) layout else null, sound)
+
+    // Décodage auto : dès que le son du film est connu (ou change de piste),
+    // l'ampli prend le programme conseillé, une fois le préréglage terminé
+    LaunchedEffect(advice.program, autoSound, hasAmp) {
+        val program = advice.program ?: return@LaunchedEffect
+        if (!autoSound || !hasAmp || program == appliedProgram) return@LaunchedEffect
+        withTimeoutOrNull(10_000) { presetDone.await() }
+        delay(800) // l'ampli finit d'appliquer le préréglage
+        runCatching { repository.ampControl("sound_program", JsonPrimitive(program)) }.onSuccess {
+            if (it.ok) {
+                appliedProgram = program
+                Toast.makeText(context, "Son : ${advice.headline}", Toast.LENGTH_SHORT).show()
+            }
+        }
+        ampRead++
+    }
 
     val durationSeconds = (duration / 1000.0).takeIf { it > 0 } ?: info.duration.toDouble()
     val skips = remember(info, durationSeconds) { PlaybackLogic.skippable(info, durationSeconds) }
@@ -500,8 +553,14 @@ private fun PlayerSurface(
                     resume()
                 },
                 onSelectTrack = { type, choice -> selectTrack(player, type, choice) },
+                audio = AudioContext(room, hasAmp, advice, autoSound),
                 amp = amp,
                 onAmp = ::ampCommand,
+                onAuto = { on ->
+                    autoSound = on
+                    app.prefs.autoSound = on
+                },
+                onApplyAdvice = { advice.program?.let { ampCommand("sound_program", JsonPrimitive(it)) } },
             )
         }
 

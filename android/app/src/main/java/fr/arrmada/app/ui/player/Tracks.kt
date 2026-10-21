@@ -43,6 +43,22 @@ fun trackChoices(tracks: Tracks, type: Int): List<TrackChoice> {
     return choices
 }
 
+/**
+ * Son de la piste audio en cours (pour le « son conseillé »), ou null tant
+ * que rien n'est choisi. [fileAudio] : format lu par Radarr (« TrueHD Atmos »).
+ */
+fun selectedSound(tracks: Tracks, fileAudio: String?): fr.arrmada.app.data.SoundAdvisor.Sound? {
+    for (group in tracks.groups) {
+        if (group.type != C.TRACK_TYPE_AUDIO) continue
+        for (i in 0 until group.length) {
+            if (!group.isTrackSelected(i)) continue
+            val format = group.getTrackFormat(i)
+            return fr.arrmada.app.data.SoundAdvisor.sound(format.sampleMimeType, format.channelCount, format.label, fileAudio)
+        }
+    }
+    return null
+}
+
 /** Choisit une piste ; pour les sous-titres, `choice == null` les coupe. */
 fun selectTrack(player: Player, type: Int, choice: TrackChoice?) {
     val builder = player.trackSelectionParameters.buildUpon()

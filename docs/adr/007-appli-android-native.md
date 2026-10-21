@@ -168,3 +168,10 @@ Chaque phase est livrée en APK testable sur la Shield.
 > intro animée ; bande-annonce en fond (fichiers « -trailer » du NAS,
 > nouvelle route `/api/tv/trailer/movie/{tmdb}` ; pas de repli YouTube).
 > À valider sur la Shield avant de retirer l'add-on.
+>
+> **Mise à jour (21/10/2026, APK 2.4.0)** : les réglages audio quittent les
+> onglets du menu pause pour un écran dédié (bouton « Audio »), avec un
+> **son conseillé** : le programme Yamaha est choisi d'après le son de la
+> piste (objets Atmos / DTS:X, canaux, stéréo) et les enceintes de la pièce
+> (`speakers` des profils : salon 5.1, salle de cinéma 7.2.2), et appliqué
+> automatiquement (désactivable).

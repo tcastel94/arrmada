@@ -238,6 +238,10 @@ class Repository(private val api: Api) {
     // ── Ampli Yamaha (onglet « Ampli » du menu pause) ──
     suspend fun ampState(): AmpState = api.get("/api/yamaha/state")
 
+    /** Profils des pièces (nom, enceintes « 5.1 » / « 7.2.2 »), relus toutes les 10 min au plus. */
+    suspend fun roomProfiles(): Map<String, RoomProfile> =
+        cached("rooms", 10 * 60_000L, false) { api.get<Map<String, RoomProfile>>("/api/yamaha/profiles") }
+
     suspend fun ampControl(action: String, value: kotlinx.serialization.json.JsonElement?): ActionResult =
         api.post("/api/yamaha/control", AmpControl(action, value))
 
