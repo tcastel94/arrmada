@@ -108,14 +108,26 @@ fun DashboardContent(
 
     LazyColumn(Modifier.fillMaxSize().background(ArrColors.Night)) {
         item {
-            Row(Modifier.fillMaxWidth().padding(start = gutter, end = gutter, top = 28.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("${Fr.greeting(now.hour)}.", style = MaterialTheme.typography.displayMedium)
-                    Text(DashboardLogic.summary(dashboard), style = MaterialTheme.typography.bodyLarge, color = ArrColors.TextSecondary)
-                }
+            val title: @Composable () -> Unit = {
+                Text("${Fr.greeting(now.hour)}.", style = MaterialTheme.typography.displayMedium)
+                Text(DashboardLogic.summary(dashboard), style = MaterialTheme.typography.bodyLarge, color = ArrColors.TextSecondary)
+            }
+            val buttons: @Composable () -> Unit = {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     ArrButton("Téléchargements", onDownloads, modifier = Modifier.focusRequester(focus))
                     ArrButton("Actualiser", onRefresh)
+                }
+            }
+            if (LocalScreen.current.isPhone) {
+                // Téléphone : titre et résumé sur toute la largeur, boutons dessous
+                Column(Modifier.fillMaxWidth().padding(start = gutter, end = gutter, top = 28.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column { title() }
+                    buttons()
+                }
+            } else {
+                Row(Modifier.fillMaxWidth().padding(start = gutter, end = gutter, top = 28.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) { title() }
+                    buttons()
                 }
             }
         }

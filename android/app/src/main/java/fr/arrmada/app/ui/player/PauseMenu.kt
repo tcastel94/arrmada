@@ -273,6 +273,10 @@ private fun ChaptersPanel(chapters: List<Chapter>, position: Long, absolute: (St
     val seconds = position / 1000.0
     val current = chapters.indexOfLast { it.start <= seconds }.coerceAtLeast(0)
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = (current - 1).coerceAtLeast(0))
+    // Téléphone : vignette 16:9 plus petite, pour que le nom tienne sous la vignette
+    val phone = LocalScreen.current.isPhone
+    val thumbWidth = if (phone) 128.dp else 168.dp
+    val thumbHeight = if (phone) 72.dp else 94.dp
     LazyRow(
         state = listState,
         contentPadding = PaddingValues(horizontal = gutter),
@@ -280,10 +284,10 @@ private fun ChaptersPanel(chapters: List<Chapter>, position: Long, absolute: (St
     ) {
         items(chapters, key = { it.index }) { chapter ->
             val isCurrent = chapter.index == chapters.getOrNull(current)?.index
-            Column(Modifier.width(168.dp)) {
+            Column(Modifier.width(thumbWidth)) {
                 Surface(
                     onClick = { onSeek(chapter.start) },
-                    modifier = Modifier.width(168.dp).height(94.dp).tapToClick({ onSeek(chapter.start) }),
+                    modifier = Modifier.width(thumbWidth).height(thumbHeight).tapToClick({ onSeek(chapter.start) }),
                     shape = ClickableSurfaceDefaults.shape(ChipShape),
                     scale = ClickableSurfaceDefaults.scale(focusedScale = 1.08f),
                     border = ClickableSurfaceDefaults.border(

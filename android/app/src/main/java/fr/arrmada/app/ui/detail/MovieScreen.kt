@@ -1,5 +1,7 @@
 package fr.arrmada.app.ui.detail
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import fr.arrmada.app.data.PlayOnTv
 import fr.arrmada.app.ui.request.SendToTvDialog
 import fr.arrmada.app.ui.components.touchScroll
@@ -284,8 +286,11 @@ fun MovieContent(
                 modifier = Modifier.widthIn(max = 560.dp).padding(top = 12.dp),
             )
 
-            // ── Actions ──
-            Row(Modifier.padding(top = 18.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            // ── Actions ── (téléphone : la rangée défile au doigt plutôt que d'écraser les boutons)
+            Row(
+                Modifier.padding(top = 18.dp).then(if (LocalScreen.current.isTouch) Modifier.horizontalScroll(rememberScrollState()) else Modifier),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
                 val notReady = { Toast.makeText(context, play?.reason ?: "Lecture impossible : Jellyfin ne répond pas", Toast.LENGTH_LONG).show() }
                 if (resumeAt != null) {
                     ArrButton("Reprendre à ${formatClock(resumeAt.toLong())}", { if (playable) onPlay(m, resumeAt) else notReady() }, primary = true, leading = "▶", modifier = Modifier.focusRequester(playFocus))
