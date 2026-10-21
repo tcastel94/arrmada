@@ -1,5 +1,7 @@
 package fr.arrmada.app.ui.request
 
+import fr.arrmada.app.ui.components.LocalScreen
+import fr.arrmada.app.ui.components.gutter
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
@@ -147,8 +149,9 @@ fun SearchContent(
     val toRequest = state.toRequest.filter { !(it.inLibrary && it.arrId != null) }
 
     Column(Modifier.fillMaxSize().background(ArrColors.Night).padding(top = 24.dp)) {
-        Row(Modifier.padding(horizontal = 48.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Rechercher", style = MaterialTheme.typography.headlineMedium)
+        Row(Modifier.padding(horizontal = gutter), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            val phone = LocalScreen.current.isPhone
+            if (!phone) Text("Rechercher", style = MaterialTheme.typography.headlineMedium)
             BasicTextField(
                 value = query,
                 onValueChange = onQuery,
@@ -162,7 +165,7 @@ fun SearchContent(
                     inner()
                 },
                 modifier = Modifier
-                    .width(460.dp)
+                    .then(if (phone) Modifier.weight(1f) else Modifier.width(460.dp))
                     .focusRequester(fieldFocus)
                     .onFocusChanged { fieldFocused = it.isFocused }
                     .clip(RoundedCornerShape(6.dp))
@@ -181,7 +184,7 @@ fun SearchContent(
             else -> null
         }
         if (status != null) {
-            Text(status, style = MaterialTheme.typography.bodyLarge, color = ArrColors.TextSecondary, modifier = Modifier.padding(start = 48.dp, top = 14.dp))
+            Text(status, style = MaterialTheme.typography.bodyLarge, color = ArrColors.TextSecondary, modifier = Modifier.padding(start = gutter, top = 14.dp))
         }
 
         LazyColumn(contentPadding = PaddingValues(top = 16.dp, bottom = 40.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -36,8 +36,11 @@ class Repository(private val api: Api) {
     @Serializable
     private data class PairPollBody(@kotlinx.serialization.SerialName("device_code") val deviceCode: String)
 
+    /** Ce que la web app affiche pour cet appareil (« ArrMada Android TV », « … (téléphone) »). */
+    var kindLabel: String = " TV"
+
     suspend fun pairStart(): PairStart =
-        api.post("/api/devices/pair/start", PairStartBody("ArrMada Android TV · ${Build.MANUFACTURER} ${Build.MODEL}"))
+        api.post("/api/devices/pair/start", PairStartBody("ArrMada Android$kindLabel · ${Build.MANUFACTURER} ${Build.MODEL}"))
 
     /** null tant que la web app n'a pas validé ; ApiException(410) si le code a expiré. */
     suspend fun pairPoll(deviceCode: String): PairPoll = api.post("/api/devices/pair/poll", PairPollBody(deviceCode))
@@ -251,6 +254,11 @@ class Repository(private val api: Api) {
     suspend fun cameraSnapshot(id: Int): CameraSnapshot = api.get("/api/cameras/snapshot/$id")
 
     suspend fun dashboard(): Dashboard = api.get("/api/kodi/dashboard")
+
+    // ── Téléphone / tablette : envoyer un titre sur une TV ──
+    suspend fun playTargets(): List<PlayTarget> = api.get<PlayTargets>("/api/tv/targets").items
+
+    suspend fun playOnTv(deviceId: Int, what: PlayOnTv): ActionResult = api.post("/api/tv/targets/$deviceId/play", what)
 
     // ── Profils famille (ADR-008) ──
     suspend fun profiles(): List<FamilyProfile> = api.get<FamilyProfiles>("/api/profiles").items

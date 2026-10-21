@@ -72,6 +72,12 @@ import fr.arrmada.app.ui.home.TonightContent
 import fr.arrmada.app.ui.intro.IntroFrame
 import java.time.LocalDateTime
 import fr.arrmada.app.ui.components.Motion
+import fr.arrmada.app.ui.components.FormFactor
+import fr.arrmada.app.ui.components.LocalScreen
+import fr.arrmada.app.ui.components.ScreenLayout
+import fr.arrmada.app.ui.shell.MoreScreen
+import fr.arrmada.app.ui.shell.TouchShell
+import androidx.compose.runtime.CompositionLocalProvider
 import fr.arrmada.app.ui.detail.MovieContent
 import fr.arrmada.app.ui.detail.SeriesContent
 import fr.arrmada.app.ui.home.DiscoverContent
@@ -179,21 +185,22 @@ class ScreenshotTest {
 
     // ── Écrans ──
 
+    private fun homeState() = HomeState(
+        loading = false,
+        resume = listOf(
+            ResumeEntry(WatchState(mediaType = "movie", id = "1001", position = 2530, total = 9300), movie(1, "Dune", 2021)),
+            ResumeEntry(WatchState(mediaType = "episode", idType = "tvdb", id = "305288", season = 4, episode = 3, title = "La traque", position = 1200, total = 3000), movie(11, "Stranger Things", 2016).copy(type = "series")),
+            ResumeEntry(WatchState(mediaType = "movie", id = "1003", position = 5000, total = 10140), movie(3, "Interstellar", 2014)),
+        ),
+        recent = titles.mapIndexed { i, t -> movie(i + 1, t, 2010 + i) },
+        forYou = titles.take(6).mapIndexed { i, t -> TmdbItem(tmdbId = 5000L + i, title = "$t 2", posterUrl = "https://img/r$i", year = "2026") },
+        upcoming = titles.take(5).mapIndexed { i, t -> CalendarEntry(id = "c$i", title = t, label = "2026", posterUrl = "https://img/u$i", airDate = "2026-11-0${i + 1}T00:00:00Z") },
+    )
+
     @Test
     fun accueil() {
-        val state = HomeState(
-            loading = false,
-            resume = listOf(
-                ResumeEntry(WatchState(mediaType = "movie", id = "1001", position = 2530, total = 9300), movie(1, "Dune", 2021)),
-                ResumeEntry(WatchState(mediaType = "episode", idType = "tvdb", id = "305288", season = 4, episode = 3, title = "La traque", position = 1200, total = 3000), movie(11, "Stranger Things", 2016).copy(type = "series")),
-                ResumeEntry(WatchState(mediaType = "movie", id = "1003", position = 5000, total = 10140), movie(3, "Interstellar", 2014)),
-            ),
-            recent = titles.mapIndexed { i, t -> movie(i + 1, t, 2010 + i) },
-            forYou = titles.take(6).mapIndexed { i, t -> TmdbItem(tmdbId = 5000L + i, title = "$t 2", posterUrl = "https://img/r$i", year = "2026") },
-            upcoming = titles.take(5).mapIndexed { i, t -> CalendarEntry(id = "c$i", title = t, label = "2026", posterUrl = "https://img/u$i", airDate = "2026-11-0${i + 1}T00:00:00Z") },
-        )
         captureRoboImage(shot("01-accueil")) {
-            ArrMadaTheme { HomeContent(state, noAbsolute, {}, HomeActions()) }
+            ArrMadaTheme { HomeContent(homeState(), noAbsolute, {}, HomeActions()) }
         }
     }
 
@@ -446,46 +453,52 @@ class ScreenshotTest {
 
     private val evening = LocalDateTime.of(2026, 10, 21, 20, 47)
 
+    private val speeds = mapOf("radarr:801" to 5.2 * 1024 * 1024)
+
+    private fun board() = Board(
+        tonight = listOf(
+            BoardCard(id = 1, title = "Dune : Deuxième partie", phase = "downloading", progress = 62.0, timeLeftSeconds = 720,
+                deviceName = "Salon TV", requestedAt = "2026-10-21T20:43:00", quality = "Bluray-2160p", sizeBytes = 64.0 * 1024 * 1024 * 1024,
+                posterUrl = "https://img/p1", fanartUrl = "https://img/f1", arrId = 1, canCancel = true, protocol = "usenet"),
+            BoardCard(id = 2, title = "Severance S02E05", phase = "ready", progress = 100.0, subtitles = "fr", status = "done",
+                deviceName = "Chambre", requestedAt = "2026-10-21T19:10:00", posterUrl = "https://img/p2", serviceType = "sonarr"),
+        ),
+        queue = listOf(
+            QueueItem(id = 801, title = "Oppenheimer", status = "downloading", trackedState = "downloading", progress = 41.0,
+                sizeBytes = 80.0 * 1024 * 1024 * 1024, sizeLeftBytes = 47.0 * 1024 * 1024 * 1024, timeLeft = "00:38:00",
+                serviceType = "radarr", downloadClient = "SABnzbd", quality = "Remux-2160p", indexer = "NZBgeek", protocol = "usenet", downloadId = "SAB_1", movieId = 3, posterUrl = "https://img/p3"),
+            QueueItem(id = 802, title = "Tenet", status = "paused", trackedState = "downloading", progress = 12.0, sizeBytes = 40.0 * 1024 * 1024 * 1024,
+                sizeLeftBytes = 35.0 * 1024 * 1024 * 1024, serviceType = "radarr", downloadClient = "SABnzbd", quality = "Bluray-1080p", protocol = "usenet", downloadId = "SAB_2", posterUrl = "https://img/p4"),
+            QueueItem(id = 803, title = "The Bear S03", status = "completed", trackedState = "importBlocked", progress = 100.0,
+                serviceType = "sonarr", error = "Fichier d'échantillon : import refusé", downloadId = "abc", protocol = "torrent", posterUrl = "https://img/p5"),
+        ),
+        sab = SabInfo(paused = false, kbpersec = 48230.0),
+    )
+
     @Test
     fun telechargements() {
-        val board = Board(
-            tonight = listOf(
-                BoardCard(id = 1, title = "Dune : Deuxième partie", phase = "downloading", progress = 62.0, timeLeftSeconds = 720,
-                    deviceName = "Salon TV", requestedAt = "2026-10-21T20:43:00", quality = "Bluray-2160p", sizeBytes = 64.0 * 1024 * 1024 * 1024,
-                    posterUrl = "https://img/p1", fanartUrl = "https://img/f1", arrId = 1, canCancel = true, protocol = "usenet"),
-                BoardCard(id = 2, title = "Severance S02E05", phase = "ready", progress = 100.0, subtitles = "fr", status = "done",
-                    deviceName = "Chambre", requestedAt = "2026-10-21T19:10:00", posterUrl = "https://img/p2", serviceType = "sonarr"),
-            ),
-            queue = listOf(
-                QueueItem(id = 801, title = "Oppenheimer", status = "downloading", trackedState = "downloading", progress = 41.0,
-                    sizeBytes = 80.0 * 1024 * 1024 * 1024, sizeLeftBytes = 47.0 * 1024 * 1024 * 1024, timeLeft = "00:38:00",
-                    serviceType = "radarr", downloadClient = "SABnzbd", quality = "Remux-2160p", indexer = "NZBgeek", protocol = "usenet", downloadId = "SAB_1", movieId = 3, posterUrl = "https://img/p3"),
-                QueueItem(id = 802, title = "Tenet", status = "paused", trackedState = "downloading", progress = 12.0, sizeBytes = 40.0 * 1024 * 1024 * 1024,
-                    sizeLeftBytes = 35.0 * 1024 * 1024 * 1024, serviceType = "radarr", downloadClient = "SABnzbd", quality = "Bluray-1080p", protocol = "usenet", downloadId = "SAB_2", posterUrl = "https://img/p4"),
-                QueueItem(id = 803, title = "The Bear S03", status = "completed", trackedState = "importBlocked", progress = 100.0,
-                    serviceType = "sonarr", error = "Fichier d'échantillon : import refusé", downloadId = "abc", protocol = "torrent", posterUrl = "https://img/p5"),
-            ),
-            sab = SabInfo(paused = false, kbpersec = 48230.0),
-        )
         captureRoboImage(shot("17-telechargements")) {
             ArrMadaTheme {
-                DownloadsContent(board, evening, mapOf("radarr:801" to 5.2 * 1024 * 1024), noAbsolute, {}, {}, {}, {})
+                DownloadsContent(board(), evening, speeds, noAbsolute, {}, {}, {}, {})
             }
         }
     }
 
-    @Test
-    fun tableauDeBord() {
+    private fun dashboard(): Dashboard {
         val tb = 1024L * 1024 * 1024 * 1024
-        val dashboard = Dashboard(
+        return Dashboard(
             services = listOf("Radarr", "Sonarr", "SABnzbd", "Prowlarr", "Bazarr", "Jellyfin").map { DashService(it, it.lowercase(), true) } + DashService("qBittorrent", "qbittorrent", false),
             stats = DashStats(movies = 3412, series = 186, episodes = 9120, totalSize = "42,1 To"),
             disks = listOf(Disk("/mnt/user", 60 * tb, 13 * tb)),
             downloads = listOf(DashDownload("Oppenheimer", 41.0, "00:38:00", "radarr"), DashDownload("Tenet", 12.0, null, "radarr")),
             downloadsCount = 4,
         )
+    }
+
+    @Test
+    fun tableauDeBord() {
         captureRoboImage(shot("19-tableau-de-bord")) {
-            ArrMadaTheme { DashboardContent(dashboard, titles.mapIndexed { i, t -> movie(i + 1, t, 2010 + i) }, evening, evening, noAbsolute, {}, {}, {}) }
+            ArrMadaTheme { DashboardContent(dashboard(), titles.mapIndexed { i, t -> movie(i + 1, t, 2010 + i) }, evening, evening, noAbsolute, {}, {}, {}) }
         }
     }
 
@@ -540,6 +553,106 @@ class ScreenshotTest {
         )
         captureRoboImage(shot("24-qui-regarde")) {
             ArrMadaTheme { ProfilesContent(profiles, currentId = 2) {} }
+        }
+    }
+
+    // ── Téléphone et tablette (v2.6.0) ──
+    // Même APK, autre écran : @Config sur la méthode remplace l'écran TV de la
+    // classe, et LocalScreen dit aux composants qu'ils sont sur un appareil tactile.
+
+    private val phone = ScreenLayout(FormFactor.PHONE, 411)
+    private val tablet = ScreenLayout(FormFactor.TABLET, 1280)
+    private val thomas = FamilyProfile(2, "Thomas", "#34D399", "🎬")
+
+    /** Écran [layout] + thème, comme MainActivity le fournit à l'appli. */
+    @androidx.compose.runtime.Composable
+    private fun OnScreen(layout: ScreenLayout, content: @androidx.compose.runtime.Composable () -> Unit) {
+        CompositionLocalProvider(LocalScreen provides layout) { ArrMadaTheme(content) }
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-port-xxhdpi")
+    fun telephoneAccueil() {
+        captureRoboImage(shot("30-telephone-accueil")) {
+            OnScreen(phone) {
+                TouchShell(selected = "home", visible = true, onGo = {}) {
+                    HomeContent(homeState(), noAbsolute, {}, HomeActions(viewer = thomas, showMenu = false))
+                }
+            }
+        }
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-port-xxhdpi")
+    fun telephoneFicheFilm() {
+        captureRoboImage(shot("31-telephone-fiche-film")) {
+            OnScreen(phone) { MovieContent(dune, play, noAbsolute, onPlay = { _, _ -> }, onSendToTv = {}) }
+        }
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-port-xxhdpi")
+    fun telephoneTelechargements() {
+        captureRoboImage(shot("32-telephone-telechargements")) {
+            OnScreen(phone) {
+                TouchShell(selected = "queue", visible = true, onGo = {}) {
+                    DownloadsContent(board(), evening, speeds, noAbsolute, {}, {}, {}, {})
+                }
+            }
+        }
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-port-xxhdpi")
+    fun telephoneTableauDeBord() {
+        captureRoboImage(shot("33-telephone-tableau-de-bord")) {
+            OnScreen(phone) {
+                DashboardContent(dashboard(), titles.mapIndexed { i, t -> movie(i + 1, t, 2010 + i) }, evening, evening, noAbsolute, {}, {}, {})
+            }
+        }
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-port-xxhdpi")
+    fun telephonePlus() {
+        captureRoboImage(shot("34-telephone-plus")) {
+            OnScreen(phone) {
+                TouchShell(selected = "more", visible = true, onGo = {}) { MoreScreen(thomas) {} }
+            }
+        }
+    }
+
+    @Test
+    @Config(qualifiers = "w891dp-h411dp-land-xxhdpi")
+    fun telephoneLecteurPause() {
+        // Le lecteur passe en paysage : barre touchable, −10 s / +30 s, Quitter
+        captureRoboImage(shot("35-telephone-menu-pause")) {
+            OnScreen(ScreenLayout(FormFactor.PHONE, 891)) {
+                PauseMenu(
+                    info = play, meta = dune.toMeta(), position = 2_530_000, duration = 9_300_000, tracks = sampleTracks(),
+                    absolute = noAbsolute, onResume = {}, onSeek = {}, onSelectTrack = { _, _ -> },
+                )
+            }
+        }
+    }
+
+    @Test
+    @Config(qualifiers = "w1280dp-h800dp-land-xhdpi")
+    fun tabletteAccueil() {
+        captureRoboImage(shot("36-tablette-accueil")) {
+            OnScreen(tablet) {
+                TouchShell(selected = "home", visible = true, onGo = {}) {
+                    HomeContent(homeState(), noAbsolute, {}, HomeActions(viewer = thomas, showMenu = false))
+                }
+            }
+        }
+    }
+
+    @Test
+    @Config(qualifiers = "w1280dp-h800dp-land-xhdpi")
+    fun tabletteFicheFilm() {
+        captureRoboImage(shot("37-tablette-fiche-film")) {
+            OnScreen(tablet) { MovieContent(dune, play, noAbsolute, onPlay = { _, _ -> }, onSendToTv = {}) }
         }
     }
 }

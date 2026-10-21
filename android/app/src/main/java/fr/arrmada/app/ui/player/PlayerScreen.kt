@@ -1,5 +1,14 @@
 package fr.arrmada.app.ui.player
 
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowCompat
+import android.content.pm.ActivityInfo
+import fr.arrmada.app.ui.components.LocalScreen
+import androidx.compose.foundation.layout.widthIn
+import fr.arrmada.app.ui.components.gutter
 import android.view.KeyEvent as AndroidKeyEvent
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -169,10 +178,12 @@ fun PlayerScreen(request: PlayRequest, app: ArrMadaApplication, onExit: () -> Un
     // Fin du préréglage (ou échec) : le décodage auto attend ce signal pour
     // ne pas être écrasé par le programme du préréglage
     val presetDone = remember(request) { CompletableDeferred<Unit>() }
+    val touch = LocalScreen.current.isTouch
     LaunchedEffect(request) {
         app.appScope.launch {
             try {
-                runCatching {
+                // Téléphone / tablette : jamais l'ampli de la pièce (on regarde au casque, ailleurs…)
+                if (!touch) runCatching {
                     val device = repository.me()
                     repository.applyAmpPreset(device, if (request.kind == "movie") "movie" else "series", null, null)
                 }
@@ -217,6 +228,22 @@ private fun PlayerSurface(
     val context = LocalContext.current
     val repository = app.repository
     val uiScope = rememberCoroutineScope()
+    val touch = LocalScreen.current.isTouch
+
+    // Téléphone / tablette : plein écran, à l'horizontale, pendant la lecture
+    DisposableEffect(touch) {
+        val activity = context.findActivity()
+        if (!touch || activity == null) return@DisposableEffect onDispose {}
+        val previous = activity.requestedOrientation
+        activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        val bars = WindowCompat.getInsetsController(activity.window, activity.window.decorView)
+        bars.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        bars.hide(WindowInsetsCompat.Type.systemBars())
+        onDispose {
+            bars.show(WindowInsetsCompat.Type.systemBars())
+            activity.requestedOrientation = previous
+        }
+    }
 
     // ── Création du lecteur (une fois) ──
     val player = remember {
@@ -266,9 +293,9 @@ private fun PlayerSurface(
     var appliedProgram by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
         val me = runCatching { repository.device() }.getOrNull() ?: return@LaunchedEffect
-        hasAmp = me.hasAmp
+        hasAmp = me.hasAmp && !touch // l'ampli de la pièce ne concerne pas le téléphone
         if (!me.hasAmp) {
-            room = "Pas d’ampli dans cette pièce : son de la TV"
+            room = if (touch) "Téléphone / tablette : son de l’appareil" else "Pas d’ampli dans cette pièce : son de la TV"
             return@LaunchedEffect
         }
         val profiles = runCatching { repository.roomProfiles() }.getOrDefault(emptyMap())
@@ -302,7 +329,7 @@ private fun PlayerSurface(
     val keyFocus = remember { FocusRequester() }
 
     val sound = remember(tracks, meta) { selectedSound(tracks, meta?.file?.audioCodec) }
-    val advice = SoundAdvisor.advise(if (hasAmp) layout else null, sound)
+    val advice = SoundAdvisor.advise(if (hasAmp) layout else null, sound, screenName = if (touch) "l’appareil" else "la TV")
 
     // Décodage auto : dès que le son du film est connu (ou change de piste),
     // l'ampli prend le programme conseillé, une fois le préréglage terminé
@@ -456,6 +483,24 @@ private fun PlayerSurface(
             .background(Color.Black)
             .focusRequester(keyFocus)
             .focusable()
+            // Au doigt : un tap met en pause (menu), deux taps à gauche / à droite : −10 s / +30 s
+            .then(
+                if (touch) {
+                    Modifier.pointerInput(Unit) {
+                        detectTapGestures(
+                            onTap = { if (!showMenu && playbackError == null) pause() },
+                            onDoubleTap = { offset ->
+                                if (!showMenu) {
+                                    if (offset.x < size.width / 2) player.seekBack() else player.seekForward()
+                                    osdUntil = System.currentTimeMillis() + 3000
+                                }
+                            },
+                        )
+                    }
+                } else {
+                    Modifier
+                },
+            )
             .onPreviewKeyEvent { event ->
                 if (showMenu || playbackError != null || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 val code = event.key.nativeKeyCode
@@ -508,7 +553,7 @@ private fun PlayerSurface(
                 Modifier
                     .fillMaxWidth()
                     .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xCC000000))))
-                    .padding(horizontal = 48.dp, vertical = 24.dp)
+                    .padding(horizontal = gutter, vertical = 24.dp)
             ) {
                 ProgressBar(if (duration > 0) position.toFloat() / duration else 0f, Modifier.fillMaxWidth(), height = 4.dp)
                 Row(Modifier.fillMaxWidth().padding(top = 6.dp)) {
@@ -523,7 +568,7 @@ private fun PlayerSurface(
             visible = activeSkip != null && !showMenu && !showUpNext,
             enter = fadeIn() + slideInHorizontally { it / 2 },
             exit = fadeOut(),
-            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 48.dp, bottom = 48.dp),
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = gutter, bottom = 48.dp),
         ) {
             SkipButton(activeSkip?.let { PlaybackLogic.skipLabel(it) } ?: "")
         }
@@ -533,7 +578,7 @@ private fun PlayerSurface(
             visible = showUpNext,
             enter = fadeIn() + slideInHorizontally { it },
             exit = fadeOut() + slideOutHorizontally { it },
-            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 48.dp, bottom = 48.dp),
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = gutter, bottom = 48.dp),
         ) {
             upNext?.let { UpNextCard(it, countdown, app.api::absolute) }
         }
@@ -553,6 +598,8 @@ private fun PlayerSurface(
                     resume()
                 },
                 onSelectTrack = { type, choice -> selectTrack(player, type, choice) },
+                onQuit = onExit,
+                onSkip = { seconds -> player.seekTo((player.currentPosition + seconds * 1000L).coerceAtLeast(0)) },
                 audio = AudioContext(room, hasAmp, advice, autoSound),
                 amp = amp,
                 onAmp = ::ampCommand,
@@ -598,7 +645,7 @@ fun SkipButton(label: String) {
 fun UpNextCard(next: UpNext, countdown: Int, absolute: (String?) -> String?) {
     Row(
         Modifier
-            .width(420.dp)
+            .widthIn(max = 420.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(ArrColors.CardDeep.copy(alpha = 0.96f))
             .padding(12.dp),
@@ -657,4 +704,11 @@ private fun describe(e: PlaybackException): String = when (e.errorCode) {
     PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
     PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED -> "Fichier illisible ou format de conteneur non pris en charge."
     else -> "${e.errorCodeName} : ${e.message.orEmpty()}"
+}
+
+/** L'activité qui porte cet écran (le Context de Compose peut être une enveloppe). */
+private tailrec fun android.content.Context.findActivity(): android.app.Activity? = when (this) {
+    is android.app.Activity -> this
+    is android.content.ContextWrapper -> baseContext.findActivity()
+    else -> null
 }

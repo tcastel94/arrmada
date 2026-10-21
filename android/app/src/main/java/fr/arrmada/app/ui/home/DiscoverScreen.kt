@@ -1,5 +1,6 @@
 package fr.arrmada.app.ui.home
 
+import fr.arrmada.app.ui.components.gutter
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -71,12 +72,12 @@ fun DiscoverContent(recos: Recommendations, onOpen: (TmdbItem) -> Unit) {
 
     KenBurnsBackdrop(url = hero?.backdrop) {
         Column(Modifier.fillMaxSize()) {
-            Text("Découvrir", style = MaterialTheme.typography.headlineMedium, color = ArrColors.TextSecondary, modifier = Modifier.padding(start = 48.dp, top = 22.dp))
+            Text("Découvrir", style = MaterialTheme.typography.headlineMedium, color = ArrColors.TextSecondary, modifier = Modifier.padding(start = gutter, top = 22.dp))
             AnimatedContent(
                 targetState = hero,
                 transitionSpec = { fadeIn(tween(320)) togetherWith fadeOut(tween(200)) },
                 label = "hero",
-                modifier = Modifier.padding(start = 48.dp, top = 12.dp).height(170.dp),
+                modifier = Modifier.padding(start = gutter, top = 12.dp).height(170.dp),
             ) { current -> if (current != null) HeroBlock(current) }
             LazyColumn(
                 contentPadding = PaddingValues(bottom = 40.dp),

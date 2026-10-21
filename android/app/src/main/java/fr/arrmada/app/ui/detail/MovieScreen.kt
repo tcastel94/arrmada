@@ -1,5 +1,10 @@
 package fr.arrmada.app.ui.detail
 
+import fr.arrmada.app.data.PlayOnTv
+import fr.arrmada.app.ui.request.SendToTvDialog
+import fr.arrmada.app.ui.components.touchScroll
+import fr.arrmada.app.ui.components.LocalScreen
+import fr.arrmada.app.ui.components.gutter
 import android.content.ActivityNotFoundException
 import android.view.TextureView
 import androidx.annotation.OptIn
@@ -137,10 +142,29 @@ fun MovieScreen(
     if (error != null) return MessageScreen("Fiche indisponible", error)
     if (m == null) return MessageScreen("Chargement…")
     val video = trailer?.takeIf { !trailerDone }
+    val context = LocalContext.current
+    var sending by remember { mutableStateOf(false) }
     MovieContent(
         m, play, api::absolute, onPlay, onDownload,
         backdropVideo = video?.let { url -> @Composable { TrailerVideo(url, api.http) { trailerDone = true } } },
+        // Téléphone / tablette : « Sur la TV »
+        onSendToTv = if (LocalScreen.current.isTouch && m.tmdbId != null) { { sending = true } } else null,
     )
+    if (sending) {
+        SendToTvDialog(
+            repository = repository,
+            title = m.title,
+            onDismiss = { sending = false },
+            onSend = { target ->
+                scope.launch {
+                    val what = PlayOnTv("movie", m.tmdbId.toString(), title = m.title, resume = true)
+                    val message = runCatching { repository.playOnTv(target.id, what) }
+                        .fold({ it.message ?: "Envoyé sur ${target.name}" }, { it.message ?: "Échec" })
+                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                }
+            },
+        )
+    }
 }
 
 /**
@@ -197,6 +221,7 @@ fun MovieContent(
     onPlay: (movie: MovieDetail, startSeconds: Int) -> Unit,
     onDownload: (MovieDetail) -> Unit = {},
     backdropVideo: (@Composable () -> Unit)? = null,
+    onSendToTv: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val playFocus = remember { FocusRequester() }
@@ -204,16 +229,19 @@ fun MovieContent(
     val playable = play?.status == "ok"
 
     KenBurnsBackdrop(url = absolute(m.images.fanart ?: m.images.landscape), video = backdropVideo) {
-        // Boîtier + disque, colonne de droite (comme l'add-on)
-        DiscCase(
-            format = CaseLogic.format(m.hasFile, m.file),
-            poster = absolute(m.images.poster),
-            discart = absolute(m.images.discart),
-            title = m.title,
-            modifier = Modifier.align(Alignment.TopEnd).padding(top = 46.dp, end = 40.dp),
-        )
+        // Boîtier + disque, colonne de droite (comme l'add-on) ; pas sur un écran étroit
+        val wide = LocalScreen.current.wide
+        if (wide) {
+            DiscCase(
+                format = CaseLogic.format(m.hasFile, m.file),
+                poster = absolute(m.images.poster),
+                discart = absolute(m.images.discart),
+                title = m.title,
+                modifier = Modifier.align(Alignment.TopEnd).padding(top = 46.dp, end = 40.dp),
+            )
+        }
         // Texte et boutons à gauche : la place du disque sorti est laissée libre
-        Column(Modifier.fillMaxSize().padding(start = 48.dp, top = 36.dp, end = 360.dp)) {
+        Column(Modifier.fillMaxSize().touchScroll().padding(start = gutter, top = 36.dp, end = if (wide) 360.dp else gutter, bottom = 24.dp)) {
             // ── Logo ou titre ──
             val logo = absolute(m.images.bestLogo)
             if (logo != null) {
@@ -268,6 +296,7 @@ fun MovieContent(
                     // Suivi par Radarr mais pas encore sur le disque
                     ArrButton("Télécharger", { onDownload(m) }, primary = true, modifier = Modifier.focusRequester(playFocus))
                 }
+                if (onSendToTv != null && playable) ArrButton("Sur la TV", onSendToTv, leading = "📺")
                 m.trailerId?.takeIf { it.isNotBlank() }?.let { id ->
                     ArrButton("Bande-annonce", { openTrailer(context, id) })
                 }
@@ -279,7 +308,7 @@ fun MovieContent(
             // ── Distribution ──
             if (m.cast.isNotEmpty()) {
                 Text("Distribution", style = MaterialTheme.typography.titleMedium, color = ArrColors.TextSecondary, modifier = Modifier.padding(top = 22.dp, bottom = 8.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(end = 48.dp)) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(end = gutter)) {
                     items(m.cast.take(15)) { person -> // pas de clé : deux rôles peuvent avoir le même nom
                         Column(Modifier.width(76.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                             Box(Modifier.size(60.dp).clip(CircleShape).background(ArrColors.Card)) {

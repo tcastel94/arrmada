@@ -1,7 +1,15 @@
 package fr.arrmada.app
 
+import fr.arrmada.app.ui.components.FormFactor
+import fr.arrmada.app.ui.components.gutter
 import android.os.Bundle
 import android.view.KeyEvent
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.navigation.compose.currentBackStackEntryAsState
+import fr.arrmada.app.ui.components.LocalScreen
+import fr.arrmada.app.ui.components.rememberScreenLayout
+import fr.arrmada.app.ui.shell.MoreScreen
+import fr.arrmada.app.ui.shell.TouchShell
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -92,7 +100,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val app = application as ArrMadaApplication
         setContent {
-            ArrMadaTheme { ArrMadaNavigation(app, searchRequests, intro) }
+            // TV, tablette ou téléphone : transmis à tous les écrans
+            CompositionLocalProvider(LocalScreen provides rememberScreenLayout()) {
+                ArrMadaTheme { ArrMadaNavigation(app, searchRequests, intro) }
+            }
         }
     }
 
@@ -137,6 +148,7 @@ private object Routes {
     const val DOWNLOAD = "download"
     const val SETTINGS = "settings"
     const val PROFILES = "profiles" // « Qui regarde ? » (ADR-008)
+    const val MORE = "more" // « Plus » (téléphone, tablette)
     const val DOWNLOADS = "downloads" // écran Téléchargements (file, « Pour ce soir »)
     const val BOARD = "board" // tableau de bord
     const val APPS = "apps"
@@ -182,6 +194,12 @@ private class Prefetcher(private val app: ArrMadaApplication) {
 
 @Composable
 private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableStateFlow<Int>, intro: IntroKeys) {
+    val screen = LocalScreen.current
+    app.repository.kindLabel = when (screen.form) {
+        FormFactor.TV -> " TV"
+        FormFactor.TABLET -> " (tablette)"
+        FormFactor.PHONE -> " (téléphone)"
+    }
     val nav = rememberNavController()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -249,7 +267,43 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
             "queue" -> nav.navigate(Routes.DOWNLOADS)
             "board" -> nav.navigate(Routes.BOARD)
             "profiles" -> nav.navigate(Routes.PROFILES)
+            "more" -> nav.navigate(Routes.MORE)
+            "home" -> nav.navigate(Routes.HOME) { popUpTo(Routes.HOME) { inclusive = false }; launchSingleTop = true }
         }
+    }
+
+    /**
+     * Onglet de la barre tactile : un seul écran par onglet dans la pile
+     * (taper deux fois « Films » n'empile pas deux grilles), Retour ramène à
+     * l'accueil.
+     */
+    fun goTab(key: String) {
+        val route = when (key) {
+            "home" -> Routes.HOME
+            "movies" -> Routes.library("movie")
+            "series" -> Routes.library("series")
+            "search" -> Routes.search(voice = false)
+            "queue" -> Routes.DOWNLOADS
+            "more" -> Routes.MORE
+            else -> return go(key)
+        }
+        nav.navigate(route) {
+            popUpTo(Routes.HOME) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
+
+    // Écran affiché → onglet en surbrillance, barre visible ou non
+    val backStack by nav.currentBackStackEntryAsState()
+    val route = backStack?.destination?.route
+    val tab = when (route) {
+        Routes.HOME -> "home"
+        Routes.LIBRARY -> if (backStack?.arguments?.getString("type") == "series") "series" else "movies"
+        Routes.SEARCH -> "search"
+        Routes.DOWNLOADS -> "queue"
+        Routes.MORE, Routes.TONIGHT, Routes.DISCOVER, Routes.BOARD, Routes.SETTINGS -> "more"
+        else -> null
     }
 
     /**
@@ -300,6 +354,7 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
     // Passage d'un écran à l'autre : fondu court (le fondu par défaut dure
     // 700 ms, ce qui donnait l'impression d'une appli lente)
     Box(Modifier.fillMaxSize()) {
+    TouchShell(selected = tab, visible = tab != null, onGo = ::goTab) {
     NavHost(
         navController = nav,
         startDestination = start,
@@ -350,6 +405,7 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
                     go = ::go,
                     prefetch = prefetcher::focus,
                     viewer = if (app.hasProfiles) viewer ?: FamilyProfile(name = "Famille", isDefault = true) else null,
+                    showMenu = !LocalScreen.current.isTouch, // tactile : la barre de navigation remplace le menu
                 ),
             )
         }
@@ -479,6 +535,10 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
                 },
             )
         }
+        composable(Routes.MORE) {
+            MoreScreen(viewer = if (app.hasProfiles) viewer ?: FamilyProfile(name = "Famille", isDefault = true) else null, onGo = ::go)
+        }
+    }
     }
 
     // Par-dessus tous les écrans : bulles, « Prêt à regarder », caméra
@@ -528,7 +588,7 @@ private fun resumeRequest(entry: ResumeEntry): PlayRequest {
 @Composable
 private fun SettingsScreen(app: ArrMadaApplication, onChangeServer: () -> Unit, onRepair: () -> Unit) {
     val focus = remember { FocusRequester() }
-    Column(Modifier.fillMaxSize().background(ArrColors.Night).padding(horizontal = 96.dp, vertical = 48.dp)) {
+    Column(Modifier.fillMaxSize().background(ArrColors.Night).padding(horizontal = gutter * 2, vertical = 48.dp)) {
         Text("Réglages", style = MaterialTheme.typography.headlineMedium)
         Text("Serveur : ${app.prefs.serverUrl.orEmpty()}", style = MaterialTheme.typography.bodyLarge, color = ArrColors.TextSecondary, modifier = Modifier.padding(top = 18.dp))
         Text("Cette TV : ${app.prefs.deviceName ?: "—"}", style = MaterialTheme.typography.bodyLarge, color = ArrColors.TextSecondary, modifier = Modifier.padding(top = 6.dp))

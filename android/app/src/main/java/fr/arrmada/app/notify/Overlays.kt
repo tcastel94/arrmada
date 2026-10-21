@@ -1,5 +1,6 @@
 package fr.arrmada.app.notify
 
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -195,7 +196,7 @@ fun ReadyCard(
 ) {
     Row(
         Modifier
-            .width(434.dp)
+            .widthIn(max = 434.dp)
             .shadow(22.dp, RoundedCornerShape(16.dp), ambientColor = ArrColors.Seen, spotColor = ArrColors.Seen)
             .background(Color(0xF7121826), RoundedCornerShape(16.dp))
             .border(2.dp, ArrColors.Seen.copy(alpha = 0.7f), RoundedCornerShape(16.dp))

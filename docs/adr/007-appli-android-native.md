@@ -133,6 +133,18 @@ Mêmes couleurs, formes et animations que le skin (inventaire du 19/10/2026) :
 
 Chaque phase est livrée en APK testable sur la Shield.
 
+> **Note (21/10/2026, APK 2.6.0) : téléphone et tablette.** Une seule APK,
+> pas une deuxième appli : le format d'écran est lu au lancement et transmis à
+> tous les écrans (`LocalScreen`). La TV garde le menu du haut de l'add-on ;
+> téléphone et tablette ont une barre de navigation (en bas / à gauche). Les
+> composants Compose for TV ne réagissent qu'à la télécommande : un
+> `tapToClick` leur ajoute le doigt. Le téléphone sert à **regarder** (lecteur
+> tactile, son de l'appareil, pas d'ampli) et à **piloter la maison** (demandes,
+> téléchargements, « Sur la TV » : `POST /api/tv/targets/{id}/play`, même
+> événement que la web app). Hors de la maison : par le VPN, dont les adresses
+> sont ajoutées au « réseau local » par `DEVICE_TRUSTED_NETWORKS` ; le principe
+> de l'ADR-002 (jetons d'appareil jamais exposés à Internet) ne change pas.
+
 ## Conséquences
 
 - ➕ Interface pensée pour la TV, rapide (affichage natif), et des

@@ -1,5 +1,8 @@
 package fr.arrmada.app.ui.home
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
+import fr.arrmada.app.ui.components.gutter
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -76,7 +79,7 @@ fun TonightContent(all: List<TonightLogic.Row>, now: LocalDateTime, absolute: (S
     KenBurnsBackdrop(url = absolute(focused?.item?.fanartUrl ?: shown.firstOrNull()?.item?.fanartUrl)) {
         Column(Modifier.fillMaxSize()) {
             ScreenHeader("Ce soir", "Ce qui sera fini avant l’heure choisie, en partant de maintenant")
-            Row(Modifier.padding(start = 48.dp, top = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.padding(top = 14.dp).horizontalScroll(rememberScrollState()).padding(horizontal = gutter), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 slots.forEachIndexed { index, s ->
                     ArrButton(s.label, { slot = index }, primary = index == slot)
                 }
@@ -89,11 +92,11 @@ fun TonightContent(all: List<TonightLogic.Row>, now: LocalDateTime, absolute: (S
                 color = ArrColors.AccentText,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = 48.dp, top = 14.dp, end = 48.dp),
+                modifier = Modifier.padding(start = gutter, top = 14.dp, end = gutter),
             )
             LazyVerticalGrid(
-                columns = GridCells.Fixed(7),
-                contentPadding = PaddingValues(horizontal = 48.dp, vertical = 14.dp),
+                columns = GridCells.Adaptive(108.dp),
+                contentPadding = PaddingValues(horizontal = gutter, vertical = 14.dp),
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {

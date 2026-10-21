@@ -1,5 +1,8 @@
 package fr.arrmada.app.ui.components
 
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -78,6 +81,7 @@ fun PosterCard(
             modifier = Modifier
                 .width(width)
                 .height(width * 1.5f)
+                .tapToClick(onClick)
                 .onFocusChanged { if (it.isFocused) onFocus() },
             shape = ClickableSurfaceDefaults.shape(PosterShape),
             scale = ClickableSurfaceDefaults.scale(focusedScale = 1.08f),
@@ -117,6 +121,7 @@ fun LandscapeCard(
             modifier = Modifier
                 .width(width)
                 .height(width * 9f / 16f)
+                .tapToClick(onClick)
                 .onFocusChanged { if (it.isFocused) onFocus() },
             shape = ClickableSurfaceDefaults.shape(PosterShape),
             scale = ClickableSurfaceDefaults.scale(focusedScale = 1.06f),
@@ -221,7 +226,7 @@ fun ArrButton(
 ) {
     Surface(
         onClick = onClick,
-        modifier = modifier.height(if (compact) 34.dp else 40.dp),
+        modifier = modifier.height(if (compact) 34.dp else 40.dp).tapToClick(onClick),
         shape = ClickableSurfaceDefaults.shape(ButtonShape),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.06f),
         colors = ClickableSurfaceDefaults.colors(
@@ -257,10 +262,10 @@ fun <T> ContentRow(
             title,
             style = MaterialTheme.typography.titleMedium,
             color = ArrColors.TextSecondary,
-            modifier = Modifier.padding(start = 48.dp, bottom = 8.dp),
+            modifier = Modifier.padding(start = gutter, bottom = 8.dp),
         )
         LazyRow(
-            contentPadding = PaddingValues(horizontal = 48.dp, vertical = 10.dp),
+            contentPadding = PaddingValues(horizontal = gutter, vertical = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             items(items, key = key) { itemContent(it) }
@@ -322,7 +327,7 @@ object Motion {
 fun MessageScreen(title: String, detail: String? = null, action: String? = null, onAction: () -> Unit = {}) {
     val actionFocus = remember { FocusRequester() }
     Column(
-        Modifier.fillMaxSize().background(ArrColors.Night).padding(48.dp),
+        Modifier.fillMaxSize().background(ArrColors.Night).padding(gutter),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -354,7 +359,8 @@ fun ChoiceDialog(
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Column(
             Modifier
-                .width(420.dp)
+                .widthIn(max = 420.dp)
+                .fillMaxWidth()
                 .background(ArrColors.CardDeep, RoundedCornerShape(16.dp))
                 .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -380,7 +386,18 @@ fun ChoiceDialog(
 /** En-tête d'un écran de la coquille : titre, ligne de résumé, boutons à droite. */
 @Composable
 fun ScreenHeader(title: String, summary: String?, modifier: Modifier = Modifier, actions: @Composable () -> Unit = {}) {
-    Row(modifier.fillMaxWidth().padding(start = 48.dp, end = 48.dp, top = 28.dp), verticalAlignment = Alignment.CenterVertically) {
+    if (LocalScreen.current.isPhone) {
+        // Téléphone : les boutons passent sous le titre
+        Column(modifier.fillMaxWidth().padding(start = gutter, end = gutter, top = 20.dp)) {
+            Text(title, style = MaterialTheme.typography.headlineMedium)
+            if (!summary.isNullOrBlank()) {
+                Text(summary, style = MaterialTheme.typography.bodyMedium, color = ArrColors.TextSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            Row(Modifier.padding(top = 10.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) { actions() }
+        }
+        return
+    }
+    Row(modifier.fillMaxWidth().padding(start = gutter, end = gutter, top = 28.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.headlineMedium)
             if (!summary.isNullOrBlank()) {
@@ -410,7 +427,7 @@ fun FocusPanel(
     Surface(
         onClick = onClick,
         onLongClick = onLongClick,
-        modifier = modifier.onFocusChanged { onFocus(it.isFocused) },
+        modifier = modifier.onFocusChanged { onFocus(it.isFocused) }.tapToClick(onClick, onLongClick),
         shape = ClickableSurfaceDefaults.shape(shape),
         scale = ClickableSurfaceDefaults.scale(focusedScale = scale),
         border = ClickableSurfaceDefaults.border(

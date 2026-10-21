@@ -256,6 +256,24 @@ data class FamilyProfile(
 @Serializable
 data class FamilyProfiles(val items: List<FamilyProfile> = emptyList())
 
+/** TV de la maison où envoyer un titre depuis le téléphone (GET /api/tv/targets). */
+@Serializable
+data class PlayTarget(val id: Int = 0, val name: String = "", val room: String = "", val online: Boolean = false)
+
+@Serializable
+data class PlayTargets(val items: List<PlayTarget> = emptyList())
+
+/** Titre à lancer sur une TV (POST /api/tv/targets/{id}/play), format de « Lire sur la TV ». */
+@Serializable
+data class PlayOnTv(
+    @SerialName("media_type") val mediaType: String,
+    val id: String,
+    val season: Int? = null,
+    val episode: Int? = null,
+    val title: String = "",
+    val resume: Boolean = true,
+)
+
 /** Bande-annonce locale d'un film (GET /api/tv/trailer/movie/{tmdb}). */
 @Serializable
 data class TrailerInfo(

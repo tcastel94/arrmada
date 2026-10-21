@@ -1,5 +1,7 @@
 package fr.arrmada.app.ui.home
 
+import fr.arrmada.app.ui.components.gutter
+import fr.arrmada.app.ui.components.tapToClick
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -142,6 +144,7 @@ class HomeActions(
     val prefetch: (LibraryItem) -> Unit = {}, // carte survolée : fiche préchargée
     // Profil qui regarde (ADR-008), à droite du menu ; null : pas de profils dans la maison
     val viewer: fr.arrmada.app.data.FamilyProfile? = null,
+    val showMenu: Boolean = true, // téléphone / tablette : la barre de navigation le remplace
 )
 
 @Composable
@@ -179,15 +182,22 @@ fun HomeContent(state: HomeState, absolute: (String?) -> String?, onRetry: () ->
         Column(Modifier.fillMaxSize()) {
             // ── Menu du haut (comme la coquille de l'add-on) ──
             // Défile si besoin : l'entrée qui prend le focus est toujours amenée à l'écran
-            Row(
-                Modifier.padding(top = 20.dp).horizontalScroll(rememberScrollState()).padding(horizontal = 48.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                TOP_MENU.forEach { (route, label) ->
-                    ArrButton(label, { if (route != "home") actions.go(route) }, primary = route == "home", compact = true)
+            if (actions.showMenu) {
+                Row(
+                    Modifier.padding(top = 20.dp).horizontalScroll(rememberScrollState()).padding(horizontal = gutter),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TOP_MENU.forEach { (route, label) ->
+                        ArrButton(label, { if (route != "home") actions.go(route) }, primary = route == "home", compact = true)
+                    }
+                    actions.viewer?.let { viewer -> ViewerChip(viewer) { actions.go("profiles") } }
                 }
-                actions.viewer?.let { viewer -> ViewerChip(viewer) { actions.go("profiles") } }
+            } else {
+                // Tactile : le profil en haut à droite seulement
+                Row(Modifier.fillMaxWidth().padding(top = 14.dp, end = gutter), horizontalArrangement = Arrangement.End) {
+                    actions.viewer?.let { viewer -> ViewerChip(viewer) { actions.go("profiles") } }
+                }
             }
 
             // ── Héros : l'élément sélectionné ──
@@ -195,7 +205,7 @@ fun HomeContent(state: HomeState, absolute: (String?) -> String?, onRetry: () ->
                 targetState = shown,
                 transitionSpec = { fadeIn(tween(320)) togetherWith fadeOut(tween(200)) },
                 label = "hero",
-                modifier = Modifier.padding(start = 48.dp, top = 22.dp).height(178.dp),
+                modifier = Modifier.padding(start = gutter, top = 22.dp).height(178.dp),
             ) { current ->
                 if (current != null) HeroBlock(current)
             }
@@ -340,7 +350,7 @@ private fun heroOf(entry: CalendarEntry, absolute: (String?) -> String?) = Hero(
 private fun ViewerChip(viewer: fr.arrmada.app.data.FamilyProfile, onClick: () -> Unit) {
     androidx.tv.material3.Surface(
         onClick = onClick,
-        modifier = Modifier.height(34.dp),
+        modifier = Modifier.height(34.dp).tapToClick(onClick),
         shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(RoundedCornerShape(17.dp)),
         scale = androidx.tv.material3.ClickableSurfaceDefaults.scale(focusedScale = 1.06f),
         colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(

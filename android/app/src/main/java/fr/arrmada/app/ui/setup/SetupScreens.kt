@@ -1,5 +1,9 @@
 package fr.arrmada.app.ui.setup
 
+import androidx.compose.foundation.layout.widthIn
+import fr.arrmada.app.ui.components.touchScroll
+import fr.arrmada.app.ui.components.LocalScreen
+import fr.arrmada.app.ui.components.gutter
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -212,7 +216,8 @@ fun PairContent(
     onNewCode: () -> Unit,
     onChangeServer: () -> Unit,
 ) {
-    SetupFrame(title = "Appairer cette TV") {
+    val touch = LocalScreen.current.isTouch
+    SetupFrame(title = if (touch) "Appairer cet appareil" else "Appairer cette TV") {
         when {
             error != null -> {
                 Text(error, style = MaterialTheme.typography.bodyLarge, color = ArrColors.Error)
@@ -249,8 +254,11 @@ fun PairContent(
                         ArrButton("Changer de serveur", onChangeServer)
                     }
                 }
-                Box(Modifier.size(200.dp).clip(RoundedCornerShape(12.dp)).background(androidx.compose.ui.graphics.Color.White).padding(8.dp)) {
-                    AsyncImage(model = qrUrl, contentDescription = "QR code d’appairage", modifier = Modifier.fillMaxSize())
+                // QR code : à scanner avec le téléphone… inutile quand on EST le téléphone
+                if (!touch) {
+                    Box(Modifier.size(200.dp).clip(RoundedCornerShape(12.dp)).background(androidx.compose.ui.graphics.Color.White).padding(8.dp)) {
+                        AsyncImage(model = qrUrl, contentDescription = "QR code d’appairage", modifier = Modifier.fillMaxSize())
+                    }
                 }
             }
         }
@@ -260,8 +268,8 @@ fun PairContent(
 /** Cadre commun des écrans de mise en route : logo, titre, contenu, version. */
 @Composable
 private fun SetupFrame(title: String, content: @Composable () -> Unit) {
-    Box(Modifier.fillMaxSize().background(ArrColors.Night).padding(horizontal = 96.dp, vertical = 48.dp)) {
-        Column(Modifier.align(Alignment.CenterStart).width(720.dp)) {
+    Box(Modifier.fillMaxSize().background(ArrColors.Night).padding(horizontal = gutter * 2, vertical = 48.dp)) {
+        Column(Modifier.align(Alignment.CenterStart).widthIn(max = 720.dp).fillMaxWidth().touchScroll()) {
             androidx.compose.foundation.Image(
                 painter = painterResource(R.drawable.ic_logo),
                 contentDescription = null,

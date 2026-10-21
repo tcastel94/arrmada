@@ -1,5 +1,11 @@
 package fr.arrmada.app.ui.detail
 
+import fr.arrmada.app.data.PlayOnTv
+import fr.arrmada.app.ui.request.SendToTvDialog
+import fr.arrmada.app.ui.components.LocalScreen
+import fr.arrmada.app.ui.components.touchScroll
+import fr.arrmada.app.ui.components.gutter
+import fr.arrmada.app.ui.components.tapToClick
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -95,6 +101,7 @@ fun SeriesScreen(
     var states by remember { mutableStateOf<List<WatchState>>(emptyList()) }
     var error by remember { mutableStateOf<String?>(null) }
     var chosenSeason by remember { mutableIntStateOf(-1) } // -1 : pas encore choisie
+    var sendTo by remember { mutableStateOf<EpisodeRow?>(null) } // « Sur la TV »
     val jellyfin = remember { mutableStateMapOf<Int, List<JellyfinEpisode>>() }
 
     LaunchedEffect(sonarrId) {
@@ -170,7 +177,25 @@ fun SeriesScreen(
         },
         onMark = ::mark,
         onDownload = { onDownload(s) },
+        onSendToTv = if (LocalScreen.current.isTouch && s.tvdbId != null) ({ row: EpisodeRow -> sendTo = row }) else null,
     )
+
+    // « Sur la TV » : épisode envoyé à une TV de la maison
+    sendTo?.let { row ->
+        SendToTvDialog(
+            repository = repository,
+            title = "${s.title} ${row.code}",
+            onDismiss = { sendTo = null },
+            onSend = { target ->
+                scope.launch {
+                    val what = PlayOnTv("episode", s.tvdbId.toString(), row.season, row.episode, "${s.title} ${row.code}", resume = true)
+                    val message = runCatching { repository.playOnTv(target.id, what) }
+                        .fold({ it.message ?: "Envoyé sur ${target.name}" }, { it.message ?: "Échec" })
+                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                }
+            },
+        )
+    }
 }
 
 /** « 9/9 vus », « 4/10 sur le NAS », « À venir ». */
@@ -200,6 +225,7 @@ fun SeriesContent(
     onMissing: (EpisodeRow) -> Unit,
     onMark: (EpisodeRow, watched: Boolean) -> Unit,
     onDownload: () -> Unit,
+    onSendToTv: ((EpisodeRow) -> Unit)? = null, // téléphone / tablette : « Sur la TV »
 ) {
     val mainFocus = remember { FocusRequester() }
     var focused by remember(season) { mutableStateOf<EpisodeRow?>(null) }
@@ -213,9 +239,9 @@ fun SeriesContent(
     }
 
     KenBurnsBackdrop(url = absolute(series.images.fanart ?: series.images.landscape)) {
-        Column(Modifier.fillMaxSize().padding(top = 26.dp)) {
+        Column(Modifier.fillMaxSize().touchScroll().padding(top = 26.dp, bottom = 24.dp)) {
             // ── Titre, méta, résumé ──
-            Column(Modifier.padding(horizontal = 48.dp).widthIn(max = 600.dp)) {
+            Column(Modifier.padding(horizontal = gutter).widthIn(max = 600.dp)) {
                 val logo = absolute(series.images.bestLogo)
                 if (logo != null) {
                     AsyncImage(
@@ -251,7 +277,7 @@ fun SeriesContent(
             }
 
             // ── Actions ──
-            Row(Modifier.padding(start = 48.dp, top = 14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(Modifier.padding(start = gutter, top = 14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (nextUp != null) {
                     ArrButton(
                         nextUp.label,
@@ -266,7 +292,7 @@ fun SeriesContent(
 
             // ── Saisons ──
             LazyRow(
-                contentPadding = PaddingValues(horizontal = 48.dp, vertical = 10.dp),
+                contentPadding = PaddingValues(horizontal = gutter, vertical = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.padding(top = 8.dp),
             ) {
@@ -283,7 +309,7 @@ fun SeriesContent(
             // ── Épisodes ──
             LazyRow(
                 state = listState,
-                contentPadding = PaddingValues(horizontal = 48.dp, vertical = 10.dp),
+                contentPadding = PaddingValues(horizontal = gutter, vertical = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 items(rows, key = { "${it.season}-${it.episode}" }) { row ->
@@ -305,7 +331,7 @@ fun SeriesContent(
             // ── Épisode sélectionné : résumé ──
             val current = focused
             if (current != null) {
-                Column(Modifier.padding(horizontal = 48.dp).widthIn(max = 760.dp)) {
+                Column(Modifier.padding(horizontal = gutter).widthIn(max = 760.dp)) {
                     Text(
                         listOfNotNull(
                             "${current.code} · ${current.title}",
@@ -336,6 +362,7 @@ fun SeriesContent(
             onDismiss = { menuFor = null },
             onFromStart = { menuFor = null; onPlay(row, 0) },
             onToggleWatched = { menuFor = null; onMark(row, !row.watched) },
+            onSendToTv = onSendToTv?.let { send -> { menuFor = null; send(row) } },
         )
     }
 
@@ -348,7 +375,7 @@ private fun SeasonChip(label: String, subtitle: String, selected: Boolean, onFoc
     val shape = RoundedCornerShape(8.dp)
     Surface(
         onClick = onFocus,
-        modifier = Modifier.height(46.dp).onFocusChanged { if (it.isFocused) onFocus() },
+        modifier = Modifier.height(46.dp).onFocusChanged { if (it.isFocused) onFocus() }.tapToClick(onFocus),
         shape = ClickableSurfaceDefaults.shape(shape),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.06f),
         border = ClickableSurfaceDefaults.border(
@@ -383,7 +410,8 @@ private fun EpisodeCard(
         Surface(
             onClick = onClick,
             onLongClick = onLongClick,
-            modifier = Modifier.width(200.dp).height(112.dp).onFocusChanged { if (it.isFocused) onFocus() },
+            modifier = Modifier.width(200.dp).height(112.dp).onFocusChanged { if (it.isFocused) onFocus() }
+                .tapToClick(onClick, onLongClick),
             shape = ClickableSurfaceDefaults.shape(shape),
             scale = ClickableSurfaceDefaults.scale(focusedScale = 1.08f),
             border = ClickableSurfaceDefaults.border(focusedBorder = Border(BorderStroke(2.dp, ArrColors.Accent), shape = shape)),
@@ -423,7 +451,13 @@ private fun EpisodeCard(
 }
 
 @Composable
-private fun EpisodeMenu(row: EpisodeRow, onDismiss: () -> Unit, onFromStart: () -> Unit, onToggleWatched: () -> Unit) {
+private fun EpisodeMenu(
+    row: EpisodeRow,
+    onDismiss: () -> Unit,
+    onFromStart: () -> Unit,
+    onToggleWatched: () -> Unit,
+    onSendToTv: (() -> Unit)? = null,
+) {
     val first = remember { FocusRequester() }
     Dialog(onDismissRequest = onDismiss) {
         Column(
@@ -436,6 +470,7 @@ private fun EpisodeMenu(row: EpisodeRow, onDismiss: () -> Unit, onFromStart: () 
             Spacer(Modifier.height(4.dp))
             ArrButton("Lire depuis le début", onFromStart, primary = true, modifier = Modifier.fillMaxWidth().focusRequester(first))
             ArrButton(if (row.watched) "Marquer comme non vu" else "Marquer comme vu", onToggleWatched, modifier = Modifier.fillMaxWidth())
+            onSendToTv?.let { ArrButton("Lire sur une TV", it, modifier = Modifier.fillMaxWidth()) }
             ArrButton("Annuler", onDismiss, modifier = Modifier.fillMaxWidth())
         }
     }

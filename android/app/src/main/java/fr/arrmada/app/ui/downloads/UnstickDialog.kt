@@ -1,5 +1,7 @@
 package fr.arrmada.app.ui.downloads
 
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -52,7 +54,7 @@ fun UnstickDialog(repository: Repository, service: String, downloadId: String, o
 
     Dialog(onDismissRequest = { if (!working) onDone(null) }) {
         Column(
-            Modifier.width(520.dp).background(ArrColors.CardDeep, RoundedCornerShape(16.dp)).padding(24.dp),
+            Modifier.widthIn(max = 520.dp).fillMaxWidth().background(ArrColors.CardDeep, RoundedCornerShape(16.dp)).padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text("Débloquer", style = MaterialTheme.typography.titleLarge)

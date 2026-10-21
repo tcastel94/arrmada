@@ -117,6 +117,12 @@ class Settings(BaseSettings):
     EUFY_WS_URL: str = ""
     EUFY_DETECTIONS: str = "person"
 
+    # ── Appareils hors de la maison (VPN) ─────────────────────
+    # Réseaux acceptés comme « locaux » pour les jetons d'appareil (TV,
+    # téléphones), en plus des réseaux privés : ceux d'un VPN qui n'est pas
+    # en 10.x / 192.168.x, ex. « 100.64.0.0/10 » pour Tailscale. Virgules.
+    DEVICE_TRUSTED_NETWORKS: str = ""
+
     # ── Misc ──────────────────────────────────────────────────
     LOG_LEVEL: str = "INFO"
 

@@ -1,5 +1,8 @@
 package fr.arrmada.app.ui.home
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
+import fr.arrmada.app.ui.components.gutter
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -79,7 +82,7 @@ fun LibraryContent(label: String, all: List<LibraryItem>, absolute: (String?) ->
 
     Column(Modifier.fillMaxSize().background(ArrColors.Night).padding(top = 20.dp)) {
         Row(
-            Modifier.padding(horizontal = 48.dp),
+            Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = gutter),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -105,8 +108,9 @@ fun PosterGrid(
     onFocusItem: (LibraryItem) -> Unit = {},
 ) {
     LazyVerticalGrid(
-        columns = GridCells.Fixed(7),
-        contentPadding = PaddingValues(horizontal = 48.dp, vertical = 18.dp),
+        // 7 colonnes à la TV, 3 sur un téléphone (largeur mini d'une affiche)
+        columns = GridCells.Adaptive(108.dp),
+        contentPadding = PaddingValues(horizontal = gutter, vertical = 18.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp),
         modifier = modifier,

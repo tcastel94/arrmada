@@ -1,11 +1,15 @@
 """Lecture dans l'appli Android native (ADR-007) : infos de lecture et flux relayé."""
 
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
-from app.services import tv_playback
+from app.services import tv_playback, watch_summary
+from app.utils.event_bus import event_bus
 
 router = APIRouter(
     prefix="/api/tv",
@@ -38,6 +42,73 @@ async def play_episode(
 ) -> dict:
     """Épisode à lancer : comme un film, plus les marqueurs intro / récap / générique."""
     return await tv_playback.episode(db, tvdb_id, season, episode, user.get("profile_id"))
+
+
+# Appli Android sur un téléphone ou une tablette : appairée comme une TV
+# (même périmètre de jeton), mais ce n'est pas un écran où envoyer un film.
+# Repérée au nom de plateforme qu'elle envoie à l'appairage.
+_HANDHELD_MARKS = ("(téléphone)", "(tablette)")
+
+
+def _is_tv_screen(device) -> bool:
+    platform = device.platform or ""
+    return device.kind == "tv" and not any(mark in platform for mark in _HANDHELD_MARKS)
+
+
+@router.get("/targets")
+async def play_targets(
+    db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)
+) -> dict:
+    """TV de la maison où envoyer un titre (« Sur la TV » du téléphone), sauf soi-même."""
+    from app.models.device import Device
+
+    now = datetime.now(UTC)
+    rows = (
+        await db.execute(select(Device).where(Device.kind == "tv").order_by(Device.name))
+    ).scalars()
+    return {
+        "items": [
+            {
+                "id": d.id,
+                "name": d.name,
+                "room": d.room,
+                "online": watch_summary.is_online(d.last_seen_at, now),
+            }
+            for d in rows
+            if d.id != user.get("device_id") and _is_tv_screen(d)
+        ]
+    }
+
+
+@router.post("/targets/{device_id}/play")
+async def play_on_target(
+    device_id: int,
+    data: dict,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Envoie un film ou un épisode sur une TV (même événement que « Lire sur la TV » de la web app).
+
+    Corps : {media_type, id (TMDB d'un film / TVDB d'une série), season,
+    episode, title, resume}. La TV visée le reçoit dans les 5 s.
+    """
+    from app.models.device import Device
+
+    device = await db.get(Device, device_id)
+    if device is None or not _is_tv_screen(device) or device.id == user.get("device_id"):
+        raise HTTPException(status_code=404, detail="TV inconnue (appairée ?)")
+    now = datetime.now(UTC)
+    request = watch_summary.play_request(
+        {"id": device.id, "name": device.name, "room": device.room}, data or {}, now
+    )
+    if request is None:
+        raise HTTPException(status_code=422, detail="Titre à lire invalide")
+    await event_bus.publish(event_type="play_request", data=request)
+    return {
+        "status": "ok",
+        "online": watch_summary.is_online(device.last_seen_at, now),
+        "message": f"Envoyé sur {device.name}",
+    }
 
 
 @router.get("/series/{tvdb_id}/season/{season}")

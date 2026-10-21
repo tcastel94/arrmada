@@ -1,5 +1,8 @@
 package fr.arrmada.app.ui.profiles
 
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import fr.arrmada.app.ui.components.tapToClick
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -91,6 +94,7 @@ fun ProfilesScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ProfilesContent(profiles: List<FamilyProfile>, currentId: Int?, onChosen: (FamilyProfile?) -> Unit) {
     val focus = remember { FocusRequester() }
@@ -102,12 +106,18 @@ fun ProfilesContent(profiles: List<FamilyProfile>, currentId: Int?, onChosen: (F
         verticalArrangement = Arrangement.Center,
     ) {
         Text("Qui regarde ?", style = MaterialTheme.typography.displayMedium)
-        Row(Modifier.padding(top = 36.dp), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+        // Plusieurs lignes si l'écran est étroit (téléphone)
+        FlowRow(
+            Modifier.padding(top = 36.dp, start = 16.dp, end = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(28.dp, Alignment.CenterHorizontally),
+            verticalArrangement = Arrangement.spacedBy(24.dp),
+        ) {
             profiles.forEach { profile ->
                 Column(Modifier.width(120.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Surface(
                         onClick = { onChosen(profile.takeIf { !it.isDefault }) },
-                        modifier = Modifier.size(104.dp).then(if (profile == focused) Modifier.focusRequester(focus) else Modifier),
+                        modifier = Modifier.size(104.dp).then(if (profile == focused) Modifier.focusRequester(focus) else Modifier)
+                            .tapToClick({ onChosen(profile.takeIf { !it.isDefault }) }),
                         shape = ClickableSurfaceDefaults.shape(CircleShape),
                         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.12f),
                         border = ClickableSurfaceDefaults.border(

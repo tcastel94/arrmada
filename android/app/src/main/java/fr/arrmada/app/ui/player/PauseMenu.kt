@@ -1,5 +1,12 @@
 package fr.arrmada.app.ui.player
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
+import fr.arrmada.app.ui.components.LocalScreen
+import fr.arrmada.app.ui.components.gutter
+import fr.arrmada.app.ui.components.tapToClick
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -100,7 +107,10 @@ fun PauseMenu(
     onAuto: (Boolean) -> Unit = {},
     onApplyAdvice: () -> Unit = {},
     audioOpen: Boolean = false, // écran Réglages audio ouvert d'emblée (tests)
+    onQuit: () -> Unit = {}, // tactile : bouton « Quitter » (à la TV, c'est la touche Retour)
+    onSkip: (seconds: Int) -> Unit = {}, // tactile : −10 s / +30 s
 ) {
+    val touch = LocalScreen.current.isTouch
     // Bouton « Audio » → écran Réglages audio par-dessus le menu ; Retour y revient
     var showAudio by remember { mutableStateOf(audioOpen) }
     var backFromAudio by remember { mutableStateOf(false) } // au retour, le focus revient sur « Audio »
@@ -146,7 +156,7 @@ fun PauseMenu(
             )
     ) {
         // ── En haut : logo / titre, méta ──
-        Column(Modifier.align(Alignment.TopStart).padding(start = 48.dp, top = 32.dp).widthIn(max = 520.dp)) {
+        Column(Modifier.align(Alignment.TopStart).padding(start = gutter, top = 32.dp).widthIn(max = 520.dp)) {
             val logo = absolute(meta?.logo)
             if (logo != null) {
                 AsyncImage(
@@ -169,33 +179,59 @@ fun PauseMenu(
         }
 
         // ── En haut à droite : heure de fin ──
-        Column(Modifier.align(Alignment.TopEnd).padding(end = 48.dp, top = 36.dp), horizontalAlignment = Alignment.End) {
+        Column(Modifier.align(Alignment.TopEnd).padding(end = gutter, top = 36.dp), horizontalAlignment = Alignment.End) {
             Text("Fin à $endsAt", style = MaterialTheme.typography.titleLarge)
             Text("encore ${formatClock(remaining)}", style = MaterialTheme.typography.labelLarge, color = ArrColors.TextSecondary)
         }
 
         // ── En bas : progression, onglets, contenu ──
         Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(bottom = 22.dp)) {
-            Column(Modifier.padding(horizontal = 48.dp)) {
-                ProgressBar(if (duration > 0) position.toFloat() / duration else 0f, Modifier.fillMaxWidth(), height = 5.dp)
+            Column(Modifier.padding(horizontal = gutter)) {
+                val progress = if (duration > 0) position.toFloat() / duration else 0f
+                if (touch) {
+                    // Au doigt : toucher la barre y saute
+                    Box(
+                        Modifier.fillMaxWidth().height(28.dp).pointerInput(duration) {
+                            detectTapGestures { offset ->
+                                if (duration > 0) onSeek(offset.x / size.width * duration / 1000.0)
+                            }
+                        },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        ProgressBar(progress, Modifier.fillMaxWidth(), height = 6.dp)
+                    }
+                } else {
+                    ProgressBar(progress, Modifier.fillMaxWidth(), height = 5.dp)
+                }
                 Row(Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 14.dp)) {
                     Text(formatClock(position / 1000), style = MaterialTheme.typography.labelLarge)
                     Spacer(Modifier.weight(1f))
                     Text(formatClock(duration / 1000), style = MaterialTheme.typography.labelLarge, color = ArrColors.TextSecondary)
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    Modifier.then(if (touch) Modifier.horizontalScroll(rememberScrollState()) else Modifier),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (touch) ArrButton("−10 s", { onSkip(-10) })
                     ArrButton("Reprendre", onResume, primary = true, leading = "▶", modifier = Modifier.focusRequester(resumeFocus))
+                    if (touch) ArrButton("+30 s", { onSkip(30) })
                     ArrButton("Audio", { showAudio = true }, leading = "♪", modifier = Modifier.focusRequester(audioFocus))
                     Spacer(Modifier.width(8.dp))
                     tabs.forEach { option ->
                         TabButton(option.label, selected = option == tab, onFocus = { tab = option })
                     }
-                    Spacer(Modifier.weight(1f))
-                    Text("Retour : quitter la lecture", style = MaterialTheme.typography.labelMedium, color = ArrColors.TextSecondary, maxLines = 1)
+                    if (touch) {
+                        Spacer(Modifier.width(8.dp))
+                        ArrButton("Quitter", onQuit, leading = "✕")
+                    } else {
+                        Spacer(Modifier.weight(1f))
+                        Text("Retour : quitter la lecture", style = MaterialTheme.typography.labelMedium, color = ArrColors.TextSecondary, maxLines = 1)
+                    }
                 }
             }
 
-            Box(Modifier.fillMaxWidth().height(150.dp).padding(top = 14.dp)) {
+            Box(Modifier.fillMaxWidth().height(if (LocalScreen.current.isPhone) 118.dp else 150.dp).padding(top = 14.dp)) {
                 when (tab) {
                     PauseTab.CHAPTERS -> ChaptersPanel(info.chapters, position, absolute, onSeek)
                     PauseTab.INFO -> InfoPanel(meta, info)
@@ -215,7 +251,7 @@ fun PauseMenu(
 private fun TabButton(label: String, selected: Boolean, onFocus: () -> Unit) {
     Surface(
         onClick = onFocus,
-        modifier = Modifier.height(36.dp).onFocusChanged { if (it.isFocused) onFocus() },
+        modifier = Modifier.height(36.dp).onFocusChanged { if (it.isFocused) onFocus() }.tapToClick(onFocus),
         shape = ClickableSurfaceDefaults.shape(ChipShape),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.06f),
         colors = ClickableSurfaceDefaults.colors(
@@ -239,7 +275,7 @@ private fun ChaptersPanel(chapters: List<Chapter>, position: Long, absolute: (St
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = (current - 1).coerceAtLeast(0))
     LazyRow(
         state = listState,
-        contentPadding = PaddingValues(horizontal = 48.dp),
+        contentPadding = PaddingValues(horizontal = gutter),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         items(chapters, key = { it.index }) { chapter ->
@@ -247,7 +283,7 @@ private fun ChaptersPanel(chapters: List<Chapter>, position: Long, absolute: (St
             Column(Modifier.width(168.dp)) {
                 Surface(
                     onClick = { onSeek(chapter.start) },
-                    modifier = Modifier.width(168.dp).height(94.dp),
+                    modifier = Modifier.width(168.dp).height(94.dp).tapToClick({ onSeek(chapter.start) }),
                     shape = ClickableSurfaceDefaults.shape(ChipShape),
                     scale = ClickableSurfaceDefaults.scale(focusedScale = 1.08f),
                     border = ClickableSurfaceDefaults.border(
@@ -275,7 +311,7 @@ private fun ChaptersPanel(chapters: List<Chapter>, position: Long, absolute: (St
 
 @Composable
 private fun InfoPanel(meta: PlaybackMeta?, info: PlayInfo) {
-    Column(Modifier.padding(horizontal = 48.dp).widthIn(max = 760.dp)) {
+    Column(Modifier.padding(horizontal = gutter).widthIn(max = 760.dp)) {
         meta?.metaLine?.takeIf { it.isNotBlank() }?.let {
             Text(it, style = MaterialTheme.typography.labelLarge, color = ArrColors.TextSecondary)
         }
@@ -291,7 +327,7 @@ private fun InfoPanel(meta: PlaybackMeta?, info: PlayInfo) {
 
 @Composable
 private fun CastPanel(meta: PlaybackMeta?) {
-    LazyRow(contentPadding = PaddingValues(horizontal = 48.dp), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+    LazyRow(contentPadding = PaddingValues(horizontal = gutter), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
         items(meta?.cast.orEmpty().take(20)) { person ->
             Column(Modifier.width(92.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 // Focusable (sans action) : c'est ce qui fait défiler la rangée à la télécommande
@@ -315,7 +351,7 @@ private fun CastPanel(meta: PlaybackMeta?) {
 }
 
 @Composable
-internal fun TracksPanel(choices: List<TrackChoice>, allowOff: Boolean, sidePadding: Dp = 48.dp, onSelect: (TrackChoice?) -> Unit) {
+internal fun TracksPanel(choices: List<TrackChoice>, allowOff: Boolean, sidePadding: Dp = gutter, onSelect: (TrackChoice?) -> Unit) {
     if (choices.isEmpty() && !allowOff) {
         Text("Aucune piste", style = MaterialTheme.typography.bodyLarge, color = ArrColors.TextSecondary, modifier = Modifier.padding(horizontal = sidePadding))
         return
@@ -341,7 +377,7 @@ internal fun TracksPanel(choices: List<TrackChoice>, allowOff: Boolean, sidePadd
 private fun OptionChip(title: String, detail: String, selected: Boolean, supported: Boolean, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
-        modifier = Modifier.width(220.dp).height(64.dp),
+        modifier = Modifier.width(220.dp).height(64.dp).tapToClick(onClick),
         shape = ClickableSurfaceDefaults.shape(ChipShape),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
         border = ClickableSurfaceDefaults.border(

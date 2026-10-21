@@ -1,5 +1,7 @@
 package fr.arrmada.app.ui.player
 
+import fr.arrmada.app.ui.components.gutter
+import fr.arrmada.app.ui.components.tapToClick
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -73,7 +75,7 @@ fun AudioSettings(
             .fillMaxSize()
             .background(Color(0xF00A0E16))
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 48.dp, vertical = 28.dp),
+            .padding(horizontal = gutter, vertical = 28.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -196,7 +198,7 @@ internal fun AmpChip(label: String, selected: Boolean, modifier: Modifier = Modi
     val shape = RoundedCornerShape(8.dp)
     Surface(
         onClick = onClick,
-        modifier = modifier.height(34.dp),
+        modifier = modifier.height(34.dp).tapToClick(onClick),
         shape = ClickableSurfaceDefaults.shape(shape),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.06f),
         border = ClickableSurfaceDefaults.border(

@@ -1,5 +1,10 @@
 package fr.arrmada.app.ui.request
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
+import fr.arrmada.app.ui.components.AdaptiveRow
+import fr.arrmada.app.ui.components.gutter
+import fr.arrmada.app.ui.components.tapToClick
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
@@ -159,7 +164,8 @@ fun DownloadContent(
 
     KenBurnsBackdrop(url = absolute(target.fanart ?: target.poster)) {
         Box(Modifier.fillMaxSize().background(Color(0x990A0E16)))
-        Row(Modifier.fillMaxSize().padding(horizontal = 48.dp, vertical = 30.dp), horizontalArrangement = Arrangement.spacedBy(32.dp)) {
+        // Téléphone : le titre au-dessus de la demande, le tout défile
+        AdaptiveRow(Modifier.fillMaxSize().padding(horizontal = gutter, vertical = 30.dp), spacing = 32.dp) { share ->
             // ── Le titre ──
             Column(Modifier.width(200.dp)) {
                 ArtImage(absolute(target.poster), target.title, Modifier.width(150.dp).height(225.dp).clip(RoundedCornerShape(8.dp)))
@@ -186,7 +192,7 @@ fun DownloadContent(
             }
 
             // ── La demande ──
-            Column(Modifier.weight(1f)) {
+            Column(share.of(1f)) {
                 Text(
                     if (target.isMovie) "Prêt à télécharger" else "Que veux-tu télécharger ?",
                     style = MaterialTheme.typography.headlineMedium,
@@ -201,7 +207,7 @@ fun DownloadContent(
                     }
                 } else {
                     // Portée
-                    Row(Modifier.padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(Modifier.padding(top = 14.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Scope.entries.forEachIndexed { i, option ->
                             Chip(
                                 title = option.label,
@@ -312,7 +318,7 @@ private fun Chip(title: String, subtitle: String, selected: Boolean, onClick: ()
     val shape = RoundedCornerShape(8.dp)
     Surface(
         onClick = onClick,
-        modifier = modifier.height(50.dp).widthIn(min = 120.dp),
+        modifier = modifier.height(50.dp).widthIn(min = 120.dp).tapToClick(onClick),
         shape = ClickableSurfaceDefaults.shape(shape),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
         border = ClickableSurfaceDefaults.border(
@@ -338,7 +344,7 @@ private fun EpisodeLine(code: String, title: String, state: String, checkable: B
     val shape = RoundedCornerShape(6.dp)
     Surface(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth().height(34.dp),
+        modifier = Modifier.fillMaxWidth().height(34.dp).tapToClick(onClick),
         shape = ClickableSurfaceDefaults.shape(shape),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.01f),
         colors = ClickableSurfaceDefaults.colors(

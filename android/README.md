@@ -1,14 +1,14 @@
-# ArrMada Android TV
+# ArrMada Android (TV, tablette, téléphone)
 
-Appli native ArrMada pour **Android TV** (Shield en tête), avec son propre
-lecteur vidéo. L'interface reprend celle de l'add-on Kodi : mêmes couleurs,
+Appli native ArrMada pour **Android TV** (Shield en tête), les **tablettes**
+et les **téléphones**, avec son propre lecteur vidéo. L'interface reprend celle de l'add-on Kodi : mêmes couleurs,
 police condensée, focus bleu qui grossit, fond qui zoome lentement. Les choix
 sont expliqués dans l'[ADR-007](../docs/adr/007-appli-android-native.md).
 
-> Téléphone et tablette viendront en phase 4. L'APK s'y installe, mais
-> l'interface est pensée pour la télécommande.
+> Une seule APK : elle reconnaît l'écran au lancement (TV, tablette ou
+> téléphone) et adapte la navigation. Voir [Téléphone et tablette](#téléphone-et-tablette).
 
-## Ce que fait la version 2.5 (phases 1 à 4 de l'ADR-007)
+## Ce que fait la version 2.6 (phases 1 à 4 de l'ADR-007)
 
 | Écran | Contenu |
 |---|---|
@@ -30,8 +30,43 @@ sont expliqués dans l'[ADR-007](../docs/adr/007-appli-android-native.md).
 | **Profils famille** (ADR-008) | **Qui regarde ?** au lancement, avatar dans le menu pour changer : chacun sa rangée Reprendre, ses vus, son « Pour toi », ses demandes (« Prêt à regarder » le suit sur n'importe quelle TV). Gestion dans la web app (*Réglages › Profils famille*) |
 | **Bande-annonce en fond** | Sur la fiche film, la bande-annonce rangée sur le NAS se lance sans le son après 2,5 s |
 
-Pas encore là (phase 4, voir l'ADR) : interface téléphone / tablette, option
-« écran d'accueil de la Shield ».
+Pas encore là (phase 4, voir l'ADR) : option « écran d'accueil de la Shield ».
+
+## Téléphone et tablette
+
+Même APK, même appairage (code validé dans la web app, *Réglages › Kodi ›
+Appareils*). Le nom envoyé à l'appairage dit « (téléphone) » ou
+« (tablette) » : ces appareils n'apparaissent pas dans les TV où envoyer un film.
+
+| | Téléphone | Tablette |
+|---|---|---|
+| Navigation | Barre en bas : Accueil, Films, Séries, Rechercher, Téléch., **Plus** (Ce soir, Découvrir, Tableau de bord, Changer de profil, Réglages) | Même chose en colonne à gauche |
+| Écrans | Affiches en grille adaptée à la largeur, blocs empilés, fiche film sans boîtier | Comme la TV, marges plus fines |
+| Lecteur | Paysage plein écran. Tap : menu pause ; double tap à gauche / à droite : −10 s / +30 s ; tap sur la barre pour aller à un moment ; bouton **Quitter** | Idem |
+| Son | Celui de l'appareil (pas de préréglage d'ampli ni de programme Yamaha depuis un téléphone) | Idem |
+| **Sur la TV** | Bouton 📺 de la fiche film, ou appui long sur un épisode › *Lire sur une TV* : la TV choisie lance le titre dans les 5 s (TV sous l'appli comme sous Kodi) | Idem |
+
+### Depuis l'extérieur : par ton VPN
+
+Les jetons d'appareil ne marchent que depuis le réseau local (ADR-002). Pour
+utiliser le téléphone hors de la maison, passe par ton VPN et déclare ses
+adresses au serveur, dans `.env` :
+
+```bash
+# Tailscale installé sur le NAS (adresses 100.x, IPv6 fd7a:…)
+DEVICE_TRUSTED_NETWORKS=100.64.0.0/10,fd7a:115c:a1e0::/48
+# WireGuard : le sous-réseau du tunnel, ex. 10.8.0.0/24 (déjà accepté : 10.x est privé)
+```
+
+puis `git pull && ./deploy.sh`. Un VPN qui fait du NAT vers le LAN (routeur de
+sous-réseau Tailscale, WireGuard sur la box) marche sans rien déclarer : le
+serveur voit une adresse locale. Dans l'appli, l'adresse du serveur reste
+celle du LAN (ex. `http://192.168.1.10:8420`) si le VPN route le LAN, sinon
+l'adresse VPN du NAS (ex. `http://100.101.102.103:8420`).
+
+> Piège : la lecture hors de la maison passe par l'upload de ta box. Un film
+> 4K remux (60 à 80 Mbit/s) ne tiendra pas en 4G ; c'est le fichier d'origine,
+> sans transcodage.
 
 ### Télécommande
 
@@ -162,7 +197,8 @@ autre clé**.
 |---|---|---|
 | *Ce serveur répond, mais ce n'est pas l'API ArrMada* | Port de la web app (3000) au lieu de l'API (8420) | Mettre le port 8420 (celui de l'add-on) |
 | *Pas de réponse en 5 secondes* | Mauvaise IP / port, TV sur un autre réseau | Tester `curl http://IP:8420/api/health` depuis le PC |
-| *Accès refusé par le serveur (réseau local uniquement)* | Jeton d'appareil utilisé hors du réseau local | Normal : les TV ne fonctionnent que sur le LAN (ADR-002) |
+| *Accès refusé par le serveur (réseau local uniquement)* | Jeton d'appareil utilisé hors du réseau local | Normal hors de la maison (ADR-002). Téléphone : passer par le VPN et déclarer ses adresses dans `DEVICE_TRUSTED_NETWORKS` (voir [Téléphone et tablette](#téléphone-et-tablette)) |
+| *Aucune TV appairée* dans « Lire sur une TV » | Aucune TV (appli ou Kodi) appairée, ou seulement des téléphones | Appairer la TV ; les téléphones / tablettes ne sont pas proposés |
 | *Cette TV n'est plus appairée* | TV supprimée dans la web app | L'appli revient seule à l'écran d'appairage |
 | *Film absent de Jellyfin* / *Jellyfin non configuré* | Titre non scanné par Jellyfin, ou Jellyfin pas déclaré | Lancer un scan Jellyfin ; déclarer Jellyfin dans ArrMada |
 | *Sortie audio impossible* | Format refusé par l'ampli en passthrough | Choisir une autre piste dans le menu pause (onglet Audio) ; vérifier le réglage « Format audio surround » |
@@ -188,7 +224,9 @@ android/
     │   │                           #   ImageSizes (taille des images TMDB)
     │   └── ui/
     │       ├── theme/              # charte de l'add-on (couleurs, police)
-    │       ├── components/         # affiches, boutons, rangées, fond « Ken Burns »
+    │       ├── components/         # affiches, boutons, rangées, fond « Ken Burns »,
+    │       │                       #   format d'écran (Screen.kt : TV / tablette / téléphone, tap)
+    │       ├── shell/              # navigation tactile (barre du bas, colonne, « Plus »)
     │       ├── setup/              # adresse du serveur, appairage
     │       ├── home/               # accueil, grilles Films / Séries, Découvrir
     │       ├── detail/             # fiche film (boîtier + disque animé), écran Série

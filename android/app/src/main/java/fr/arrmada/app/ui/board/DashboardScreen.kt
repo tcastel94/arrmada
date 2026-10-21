@@ -1,5 +1,8 @@
 package fr.arrmada.app.ui.board
 
+import fr.arrmada.app.ui.components.LocalScreen
+import fr.arrmada.app.ui.components.AdaptiveRow
+import fr.arrmada.app.ui.components.gutter
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
@@ -105,7 +108,7 @@ fun DashboardContent(
 
     LazyColumn(Modifier.fillMaxSize().background(ArrColors.Night)) {
         item {
-            Row(Modifier.fillMaxWidth().padding(start = 48.dp, end = 48.dp, top = 28.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().padding(start = gutter, end = gutter, top = 28.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("${Fr.greeting(now.hour)}.", style = MaterialTheme.typography.displayMedium)
                     Text(DashboardLogic.summary(dashboard), style = MaterialTheme.typography.bodyLarge, color = ArrColors.TextSecondary)
@@ -118,21 +121,31 @@ fun DashboardContent(
         }
         // ── Compteurs ──
         item {
-            Row(Modifier.padding(start = 48.dp, end = 48.dp, top = 20.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                Kpi("Films", stats.movies, "dans la médiathèque", Modifier.weight(1f))
-                Kpi("Séries", stats.series, Fr.plural(stats.episodes, "épisode"), Modifier.weight(1f))
-                Tile("Stockage", Modifier.weight(1f).height(104.dp)) {
-                    Text(storage.value, style = MaterialTheme.typography.headlineMedium, maxLines = 1)
-                    Text(storage.hint, style = MaterialTheme.typography.labelSmall, color = ArrColors.TextSecondary, maxLines = 1)
-                    ProgressBar(storage.usedPct / 100f, Modifier.fillMaxWidth().padding(top = 6.dp), height = 4.dp)
+            // Quatre compteurs sur une ligne (TV, tablette), deux par ligne sur téléphone
+            val tiles: List<@Composable (Modifier) -> Unit> = listOf(
+                { m -> Kpi("Films", stats.movies, "dans la médiathèque", m) },
+                { m -> Kpi("Séries", stats.series, Fr.plural(stats.episodes, "épisode"), m) },
+                { m ->
+                    Tile("Stockage", m.height(104.dp)) {
+                        Text(storage.value, style = MaterialTheme.typography.headlineMedium, maxLines = 1)
+                        Text(storage.hint, style = MaterialTheme.typography.labelSmall, color = ArrColors.TextSecondary, maxLines = 1)
+                        ProgressBar(storage.usedPct / 100f, Modifier.fillMaxWidth().padding(top = 6.dp), height = 4.dp)
+                    }
+                },
+                { m -> Kpi("En cours", downloads, if (downloads == 0) "file vide" else if (downloads == 1) "téléchargement" else "téléchargements", m) },
+            )
+            Column(Modifier.padding(start = gutter, end = gutter, top = 20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                tiles.chunked(if (LocalScreen.current.isPhone) 2 else 4).forEach { line ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                        line.forEach { tile -> tile(Modifier.weight(1f)) }
+                    }
                 }
-                Kpi("En cours", downloads, if (downloads == 0) "file vide" else if (downloads == 1) "téléchargement" else "téléchargements", Modifier.weight(1f))
             }
         }
         // ── Téléchargements + services ──
         item {
-            Row(Modifier.padding(start = 48.dp, end = 48.dp, top = 18.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                Tile("En cours de téléchargement", Modifier.weight(1.4f)) {
+            AdaptiveRow(Modifier.padding(start = gutter, end = gutter, top = 18.dp), scroll = false) { share ->
+                Tile("En cours de téléchargement", share.of(1.4f)) {
                     if (dashboard.downloads.isEmpty()) {
                         Text("Aucun téléchargement en cours", style = MaterialTheme.typography.bodyMedium, color = ArrColors.TextSecondary)
                     }
@@ -146,7 +159,7 @@ fun DashboardContent(
                     val more = downloads - dashboard.downloads.take(DashboardLogic.MAX_DOWNLOADS).size
                     if (more > 0) Text("+ $more autre(s)", style = MaterialTheme.typography.labelSmall, color = ArrColors.AccentText, modifier = Modifier.padding(top = 6.dp))
                 }
-                Tile("Services", Modifier.weight(1f)) {
+                Tile("Services", share.of(1f)) {
                     ServicePills(services)
                     val active = services.count { it.isEnabled }
                     val ago = fetchedAt?.let { java.time.Duration.between(it, now).toMinutes() }

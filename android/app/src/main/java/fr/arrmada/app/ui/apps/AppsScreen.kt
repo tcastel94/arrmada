@@ -1,5 +1,6 @@
 package fr.arrmada.app.ui.apps
 
+import fr.arrmada.app.ui.components.gutter
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -76,8 +77,8 @@ fun AppsContent(apps: List<InstalledApp>?, onLaunch: (InstalledApp) -> Unit) {
     Column(Modifier.fillMaxSize().background(ArrColors.Night)) {
         ScreenHeader("Applis", apps?.let { "${it.size} applis installées sur cet appareil" } ?: "Lecture des applis…")
         LazyVerticalGrid(
-            columns = GridCells.Fixed(5),
-            contentPadding = PaddingValues(horizontal = 48.dp, vertical = 20.dp),
+            columns = GridCells.Adaptive(150.dp),
+            contentPadding = PaddingValues(horizontal = gutter, vertical = 20.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {

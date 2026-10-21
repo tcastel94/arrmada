@@ -1,5 +1,7 @@
 package fr.arrmada.app.ui.downloads
 
+import fr.arrmada.app.ui.components.LocalScreen
+import fr.arrmada.app.ui.components.gutter
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -240,11 +242,11 @@ fun DownloadsContent(
                 }
             }
             item {
-                Text("Pour ce soir", style = MaterialTheme.typography.titleMedium, color = ArrColors.TextSecondary, modifier = Modifier.padding(start = 48.dp, top = 14.dp))
+                Text("Pour ce soir", style = MaterialTheme.typography.titleMedium, color = ArrColors.TextSecondary, modifier = Modifier.padding(start = gutter, top = 14.dp))
             }
             item {
                 if (board.tonight.isEmpty()) {
-                    Column(Modifier.padding(start = 48.dp, top = 6.dp, end = 300.dp)) {
+                    Column(Modifier.padding(start = gutter, top = 6.dp, end = if (LocalScreen.current.wide) 300.dp else gutter)) {
                         Text("Rien pour ce soir", style = MaterialTheme.typography.titleLarge)
                         Text(
                             "Lance un film ou un épisode depuis sa fiche, bouton Télécharger : il passera devant tous les autres téléchargements.",
@@ -253,13 +255,15 @@ fun DownloadsContent(
                         )
                     }
                 } else {
-                    LazyRow(contentPadding = PaddingValues(horizontal = 48.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    LazyRow(contentPadding = PaddingValues(horizontal = gutter, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         items(board.tonight, key = { "req:" + it.id }) { card ->
                             TonightCard(
                                 card, BoardLogic.card(card, now), absolute,
                                 onClick = { onCard(card) },
                                 onFocus = { backdrop = absolute(card.fanartUrl) },
-                                modifier = if (card == board.tonight.first()) Modifier.focusRequester(firstFocus) else Modifier,
+                                // Téléphone : une carte presque pleine largeur
+                                modifier = (if (LocalScreen.current.isPhone) Modifier.fillParentMaxWidth(0.92f) else Modifier.width(440.dp))
+                                    .then(if (card == board.tonight.first()) Modifier.focusRequester(firstFocus) else Modifier),
                             )
                         }
                     }
@@ -270,7 +274,7 @@ fun DownloadsContent(
                     if (board.queue.isEmpty()) "File d’attente vide" else "File d’attente",
                     style = MaterialTheme.typography.titleMedium,
                     color = ArrColors.TextSecondary,
-                    modifier = Modifier.padding(start = 48.dp, top = 10.dp),
+                    modifier = Modifier.padding(start = gutter, top = 10.dp),
                 )
             }
             items(board.queue, key = { "q:" + it.serviceType + it.id }) { item ->
@@ -306,7 +310,7 @@ private fun TonightCard(
         onClick = onClick,
         onFocus = { focused = it; if (it) onFocus() },
         ring = ring,
-        modifier = modifier.width(440.dp).height(160.dp),
+        modifier = modifier.height(160.dp),
     ) {
         Row(Modifier.fillMaxSize().padding(10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             ArtImage(absolute(card.posterUrl), card.title, Modifier.width(92.dp).fillMaxHeight().clip(RoundedCornerShape(6.dp)))
@@ -369,7 +373,7 @@ private fun QueueRow(
         onClick = onClick,
         onFocus = { focused = it; if (it) onFocus() },
         scale = 1.015f,
-        modifier = modifier.padding(horizontal = 48.dp).fillMaxWidth().height(58.dp),
+        modifier = modifier.padding(horizontal = gutter).fillMaxWidth().height(58.dp),
     ) {
         Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.width(5.dp).fillMaxHeight().background(color))
@@ -385,18 +389,26 @@ private fun QueueRow(
                 )
                 ProgressBar(row.progress, Modifier.fillMaxWidth().padding(top = 4.dp), height = 3.dp)
             }
-            Text(row.percent, style = MaterialTheme.typography.titleLarge, modifier = Modifier.width(64.dp))
-            Column(Modifier.width(170.dp)) {
-                Text(row.eta, style = MaterialTheme.typography.labelMedium, maxLines = 1)
-                Text(
-                    if (focused && row.actions.isNotEmpty()) BoardLogic.hint(row.actions) else row.sizes,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (focused) ArrColors.AccentText else ArrColors.TextSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+            if (LocalScreen.current.isPhone) {
+                // Téléphone : %, reste et état empilés à droite
+                Column(Modifier.padding(end = 10.dp), horizontalAlignment = Alignment.End) {
+                    Text(row.percent, style = MaterialTheme.typography.titleMedium)
+                    Text(row.label, style = MaterialTheme.typography.labelSmall, color = color, maxLines = 1)
+                }
+            } else {
+                Text(row.percent, style = MaterialTheme.typography.titleLarge, modifier = Modifier.width(64.dp))
+                Column(Modifier.width(170.dp)) {
+                    Text(row.eta, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                    Text(
+                        if (focused && row.actions.isNotEmpty()) BoardLogic.hint(row.actions) else row.sizes,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (focused) ArrColors.AccentText else ArrColors.TextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Pill(row.label, color.copy(alpha = 0.25f), Modifier.padding(end = 14.dp).width(110.dp))
             }
-            Pill(row.label, color.copy(alpha = 0.25f), Modifier.padding(end = 14.dp).width(110.dp))
         }
     }
 }

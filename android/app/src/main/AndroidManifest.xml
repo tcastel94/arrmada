@@ -45,14 +45,15 @@
         android:theme="@style/Theme.ArrMada">
 
         <!-- configChanges : la fenêtre n'est pas recréée si le mode d'affichage
-             change (passage en 24p au lancement d'un film, HDR…) : la lecture
-             continue sans coupure. -->
+             change (passage en 24p au lancement d'un film, HDR…) ou si l'on
+             tourne le téléphone : la lecture continue sans coupure. Pas
+             d'orientation imposée : la TV est toujours à l'horizontale, le
+             téléphone pivote (le lecteur passe à l'horizontale tout seul). -->
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density"
             android:exported="true"
-            android:launchMode="singleTask"
-            android:screenOrientation="landscape">
+            android:launchMode="singleTask">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

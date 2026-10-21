@@ -1,5 +1,8 @@
 package fr.arrmada.app.ui.intro
 
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
@@ -76,7 +79,14 @@ fun IntroAnimation(version: String, skip: Boolean, onDone: () -> Unit) {
             scaleY = s
         },
     ) {
-        IntroFrame(clock.value, version)
+        // Composée pour un écran 960 × 540 (la TV) : ramenée à l'écran du
+        // téléphone ou de la tablette, centrée, sans rien déformer
+        BoxWithConstraints(Modifier.fillMaxSize().background(ArrColors.Night), contentAlignment = Alignment.Center) {
+            val scale = minOf(maxWidth / 960.dp, maxHeight / 540.dp)
+            Box(Modifier.requiredSize(960.dp, 540.dp).graphicsLayer { scaleX = scale; scaleY = scale }) {
+                IntroFrame(clock.value, version)
+            }
+        }
     }
 }
 

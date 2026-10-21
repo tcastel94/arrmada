@@ -65,18 +65,19 @@ object SoundAdvisor {
         else -> "$channels canaux"
     }
 
-    fun advise(layout: Layout?, sound: Sound?): Advice {
+    /** [screenName] : ce qui joue le son sans ampli (« la TV », « l’appareil »). */
+    fun advise(layout: Layout?, sound: Sound?, screenName: String = "la TV"): Advice {
         if (sound == null) return Advice(null, "Son du film en cours de lecture…", "")
         val source = if (sound.objects) sound.name else "${sound.name} ${channelsLabel(sound.channels)}"
         if (layout == null) {
             val heavy = sound.objects || sound.channels > 6 || "TrueHD" in sound.name || "DTS-HD" in sound.name
             return Advice(
                 null,
-                "Son de la TV · stéréo",
+                "Son de $screenName · stéréo",
                 if (heavy) {
-                    "Pas d’ampli : la Shield réduit $source en stéréo pour la TV. Une piste Dolby Digital 5.1 donne le même résultat, plus légère."
+                    "Pas d’ampli : $source est réduit en stéréo pour $screenName. Une piste Dolby Digital 5.1 donne le même résultat, plus légère."
                 } else {
-                    "Pas d’ampli : la Shield envoie $source en stéréo aux haut-parleurs de la TV."
+                    "Pas d’ampli : $source est envoyé en stéréo aux haut-parleurs de $screenName."
                 },
             )
         }

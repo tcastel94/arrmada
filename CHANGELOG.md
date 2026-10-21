@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Android app on phones and tablets (ADR-007 phase 4, APK 2.6.0)
+
+#### Added
+- **Same APK on phone, tablet and TV**: the app detects the screen (Android TV / leanback, tablet when the smallest side is ≥ 600 dp, phone otherwise) and adapts: **bottom bar** on phones (Accueil, Films, Séries, Rechercher, Téléch., Plus), **side rail** on tablets, the add-on's top menu kept on the TV; tighter margins, adaptive poster grids, side-by-side blocks stacked on phones, movie case only on wide screens, dialogs sized to the screen. "Plus" holds Ce soir, Découvrir, Tableau de bord, Changer de profil, Réglages
+- **Touch**: every TV card and button reacts to a tap (Compose for TV components only listen to the remote), long press keeps the episode menu; screens scroll with the finger
+- **Touch player**: landscape and full screen during playback, tap opens the pause menu, double tap left / right = −10 s / +30 s, tap on the progress bar to seek, −10 s / +30 s and **Quitter** buttons. No amp preset or sound program from a phone: the advice is for the device's own sound
+- **"Sur la TV"** on the movie page and in the episode menu: pick a TV of the house and the title starts there within 5 s (same event as "Lire sur la TV" from the web app, works with Kodi TVs too)
+- **Server**: `GET /api/tv/targets` (TVs of the house, without the caller and without phones / tablets) and `POST /api/tv/targets/{id}/play`, allowed for device tokens; **`DEVICE_TRUSTED_NETWORKS`** (comma-separated CIDRs, e.g. Tailscale `100.64.0.0/10`) so paired devices also work through the home VPN. 5 tests
+- 8 phone / tablet CI screenshots
+
+#### Changed
+- The app no longer forces landscape outside the player (phones open in portrait)
+
 ### Family profiles (ADR-008, APK 2.5.0)
 
 #### Added
