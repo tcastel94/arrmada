@@ -204,6 +204,44 @@ async def movie(db: AsyncSession, tmdb_id: int) -> dict[str, Any]:
     return _found(item["id"], details, resume)
 
 
+async def movie_trailer(db: AsyncSession, tmdb_id: int) -> dict[str, Any]:
+    """Bande-annonce locale d'un film (fichier « -trailer » rangé par Radarr,
+    connu de Jellyfin), lue en fond sur la fiche par la TV.
+
+    TMDB ne donne que des liens YouTube, que la TV ne peut pas lire en fond :
+    seules les bandes-annonces présentes sur le NAS servent ici.
+    """
+    cfg = await jellyfin.get_config(db)
+    if not cfg:
+        return {"status": "none"}
+    base, key = cfg
+    item = await jellyfin.find_movie_item(db, tmdb_id)
+    if item is None:
+        return {"status": "none"}
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(
+                f"{base}/Items/{item['id']}/LocalTrailers?{urlencode({jellyfin.KEY_PARAM: key})}"
+            )
+            r.raise_for_status()
+            trailers = r.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.debug("Bandes-annonces locales de %s : %s", item["id"], exc)
+        return {"status": "none"}
+    if isinstance(trailers, dict):  # certaines versions emballent la liste
+        trailers = trailers.get("Items") or []
+    for trailer in trailers if isinstance(trailers, list) else []:
+        trailer_id = str(trailer.get("Id") or "")
+        if ITEM_ID.match(trailer_id):
+            return {
+                "status": "ok",
+                "item_id": trailer_id,
+                "stream": stream_path(trailer_id),
+                "duration": duration_seconds(trailer),
+            }
+    return {"status": "none"}
+
+
 async def episode(db: AsyncSession, tvdb_id: int, season: int, number: int) -> dict[str, Any]:
     """Tout ce qu'il faut pour lancer un épisode (TVDB de la série + numéros)."""
     cfg = await jellyfin.get_config(db)

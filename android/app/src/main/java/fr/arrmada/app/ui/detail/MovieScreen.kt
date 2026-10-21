@@ -1,6 +1,24 @@
 package fr.arrmada.app.ui.detail
 
 import android.content.ActivityNotFoundException
+import android.view.TextureView
+import androidx.annotation.OptIn
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import fr.arrmada.app.ui.components.Motion
+import kotlinx.coroutines.delay
+import okhttp3.OkHttpClient
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -102,10 +120,72 @@ fun MovieScreen(
         scope.launch { runCatching { repository.playMovie(id) }.getOrNull()?.let { play = it } }
     }
 
+    // Bande-annonce du NAS en fond, après 2,5 s sur la fiche (muette, une fois)
+    var trailer by remember { mutableStateOf<String?>(null) }
+    var trailerDone by remember { mutableStateOf(false) }
+    LaunchedEffect(movie?.tmdbId) {
+        val id = movie?.tmdbId ?: return@LaunchedEffect
+        if (!Motion.enabled) return@LaunchedEffect
+        val info = runCatching { repository.movieTrailer(id) }.getOrNull() ?: return@LaunchedEffect
+        if (info.status == "ok" && info.stream.isNotBlank()) {
+            delay(2_500)
+            trailer = api.baseUrl + info.stream
+        }
+    }
+
     val m = movie
     if (error != null) return MessageScreen("Fiche indisponible", error)
     if (m == null) return MessageScreen("Chargement…")
-    MovieContent(m, play, api::absolute, onPlay, onDownload)
+    val video = trailer?.takeIf { !trailerDone }
+    MovieContent(
+        m, play, api::absolute, onPlay, onDownload,
+        backdropVideo = video?.let { url -> @Composable { TrailerVideo(url, api.http) { trailerDone = true } } },
+    )
+}
+
+/**
+ * Bande-annonce en fond : lue sans le son, en fondu par-dessus le fond, puis
+ * l'image revient à la fin. Dessinée dans une TextureView (et non la
+ * SurfaceView habituelle) : c'est ce qui permet le fondu et les voiles
+ * par-dessus la vidéo.
+ */
+@OptIn(UnstableApi::class)
+@Composable
+private fun TrailerVideo(url: String, http: OkHttpClient, onEnded: () -> Unit) {
+    val context = LocalContext.current
+    var shown by remember { mutableStateOf(false) }
+    val player = remember {
+        ExoPlayer.Builder(context)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(OkHttpDataSource.Factory(http)))
+            .build()
+            .apply {
+                volume = 0f // muette : la fiche reste silencieuse
+                setMediaItem(MediaItem.fromUri(url))
+                prepare()
+                playWhenReady = true
+            }
+    }
+    val finish by rememberUpdatedState(onEnded)
+    DisposableEffect(player) {
+        val listener = object : Player.Listener {
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state == Player.STATE_READY) shown = true
+                if (state == Player.STATE_ENDED) finish()
+            }
+
+            override fun onPlayerError(error: PlaybackException) = finish()
+        }
+        player.addListener(listener)
+        onDispose {
+            player.removeListener(listener)
+            player.release()
+        }
+    }
+    val alpha by animateFloatAsState(if (shown) 1f else 0f, tween(900), label = "trailer")
+    AndroidView(
+        factory = { ctx -> TextureView(ctx).also { player.setVideoTextureView(it) } },
+        modifier = Modifier.fillMaxSize().graphicsLayer { this.alpha = alpha },
+    )
 }
 
 /** Affichage de la fiche (séparé du chargement pour les captures d'écran de test). */
@@ -116,13 +196,14 @@ fun MovieContent(
     absolute: (String?) -> String?,
     onPlay: (movie: MovieDetail, startSeconds: Int) -> Unit,
     onDownload: (MovieDetail) -> Unit = {},
+    backdropVideo: (@Composable () -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val playFocus = remember { FocusRequester() }
     val resumeAt = play?.resume?.takeIf { !it.watched && it.position > 0 }?.position
     val playable = play?.status == "ok"
 
-    KenBurnsBackdrop(url = absolute(m.images.fanart ?: m.images.landscape)) {
+    KenBurnsBackdrop(url = absolute(m.images.fanart ?: m.images.landscape), video = backdropVideo) {
         // Boîtier + disque, colonne de droite (comme l'add-on)
         DiscCase(
             format = CaseLogic.format(m.hasFile, m.file),

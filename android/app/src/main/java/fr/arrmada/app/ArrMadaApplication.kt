@@ -40,6 +40,14 @@ class ArrMadaApplication : Application(), ImageLoaderFactory {
      */
     var pendingDownload: fr.arrmada.app.data.DownloadTarget? = null
 
+    /** Événements du serveur (bulles, « Prêt à regarder », caméra), relevés toutes les 5 s. */
+    val events: fr.arrmada.app.notify.EventCenter by lazy {
+        fr.arrmada.app.notify.EventCenter(repository, prefs, appScope, api.json)
+    }
+
+    /** L'intro animée ne se joue qu'une fois par lancement de l'appli (comme l'add-on). */
+    var introSeen = false
+
     override fun onCreate() {
         super.onCreate()
         prefs = Prefs(this)

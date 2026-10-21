@@ -152,6 +152,13 @@ fun PlayerScreen(request: PlayRequest, app: ArrMadaApplication, onExit: () -> Un
         }
     }
 
+    // Pendant la lecture, les bulles attendent la fin (« Pendant ta séance »)
+    // et une détection de caméra s'affiche en petit en haut à gauche
+    DisposableEffect(Unit) {
+        app.events.setPlaying(true)
+        onDispose { app.events.setPlaying(false) }
+    }
+
     // Préréglage de l'ampli de la pièce (comme l'add-on), sans attendre
     LaunchedEffect(request) {
         app.appScope.launch {

@@ -70,28 +70,46 @@ class Api(private val prefs: Prefs) {
 
     suspend inline fun <reified T> get(path: String): T = decode(call(Request.Builder().url(baseUrl + path).get().build()))
 
-    suspend inline fun <reified T, reified B> post(path: String, body: B): T {
+    suspend inline fun <reified T, reified B> post(path: String, body: B, slow: Boolean = false): T {
         val payload = json.encodeToString(kotlinx.serialization.serializer<B>(), body)
         val request = Request.Builder()
             .url(baseUrl + path)
             .post(payload.toRequestBody(JSON))
             .build()
-        return decode(call(request))
+        return decode(call(request, if (slow) slowHttp else http))
     }
+
+    /**
+     * Même client, avec un délai de réponse de 45 s : pour les actions que le
+     * serveur met longtemps à finir (« Débloquer » relance Radarr / Sonarr).
+     */
+    val slowHttp: OkHttpClient by lazy { http.newBuilder().readTimeout(45, TimeUnit.SECONDS).build() }
 
     inline fun <reified T> decode(text: String): T =
         json.decodeFromString(kotlinx.serialization.serializer<T>(), text)
 
     /** Exécute la requête hors du fil de l'écran ; renvoie le corps de la réponse. */
-    suspend fun call(request: Request): String = withContext(Dispatchers.IO) {
-        http.newCall(request).execute().use { response ->
+    suspend fun call(request: Request, client: OkHttpClient = http): String = withContext(Dispatchers.IO) {
+        client.newCall(request).execute().use { response ->
             val text = response.body?.string().orEmpty()
             if (!response.isSuccessful) {
                 if (response.code == 401) prefs.forgetPairing() // TV révoquée dans la web app
-                throw ApiException(response.code, messageFor(response.code))
+                throw ApiException(response.code, serverMessage(response.code, text) ?: messageFor(response.code))
             }
             text
         }
+    }
+
+    /**
+     * Message lisible renvoyé par le serveur (« detail » de FastAPI), pour
+     * les refus métier (409 « Pas dans la file SABnzbd… », 403…).
+     */
+    private fun serverMessage(code: Int, body: String): String? {
+        if (code == 401 || code >= 500) return null
+        return runCatching {
+            val detail = json.parseToJsonElement(body).let { (it as? kotlinx.serialization.json.JsonObject)?.get("detail") }
+            (detail as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it.isString }?.content
+        }.getOrNull()?.takeIf { it.isNotBlank() }
     }
 
     private fun messageFor(code: Int): String = when (code) {

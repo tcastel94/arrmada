@@ -1,6 +1,20 @@
 package fr.arrmada.app
 
 import android.os.Bundle
+import android.view.KeyEvent
+import androidx.compose.foundation.layout.Box
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import fr.arrmada.app.data.PlayAnnounce
+import fr.arrmada.app.data.TonightLogic
+import fr.arrmada.app.notify.EventOverlays
+import fr.arrmada.app.ui.apps.AppsScreen
+import fr.arrmada.app.ui.board.DashboardScreen
+import fr.arrmada.app.ui.components.Motion
+import fr.arrmada.app.ui.downloads.DownloadsScreen
+import fr.arrmada.app.ui.home.TonightScreen
+import fr.arrmada.app.ui.intro.IntroAnimation
+import fr.arrmada.app.ui.salon.SalonScreen
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -70,12 +84,34 @@ class MainActivity : ComponentActivity() {
     /** Compteur incrémenté à chaque appui sur la touche recherche / micro. */
     private val searchRequests = MutableStateFlow(0)
 
+    /** Intro animée à l'écran : une touche la passe (sans agir sur l'écran dessous). */
+    private val intro = IntroKeys()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val app = application as ArrMadaApplication
         setContent {
-            ArrMadaTheme { ArrMadaNavigation(app, searchRequests) }
+            ArrMadaTheme { ArrMadaNavigation(app, searchRequests, intro) }
         }
+    }
+
+    // Relevé des événements du serveur : seulement quand l'appli est à l'écran
+    override fun onStart() {
+        super.onStart()
+        (application as ArrMadaApplication).events.start()
+    }
+
+    override fun onStop() {
+        (application as ArrMadaApplication).events.stop()
+        super.onStop()
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (intro.active.value) {
+            if (event.action == KeyEvent.ACTION_UP) intro.skip.value = true
+            return true // la touche n'atteint pas l'écran d'accueil
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     /**
@@ -99,6 +135,11 @@ private object Routes {
     const val SEARCH = "search?voice={voice}"
     const val DOWNLOAD = "download"
     const val SETTINGS = "settings"
+    const val DOWNLOADS = "downloads" // écran Téléchargements (file, « Pour ce soir »)
+    const val SALON = "salon"
+    const val BOARD = "board" // tableau de bord
+    const val APPS = "apps"
+    const val TONIGHT = "tonight"
     const val MOVIE = "movie/{radarrId}?tmdb={tmdb}"
     const val SHOW = "show/{sonarrId}"
     const val PLAY = "play/{kind}/{id}/{season}/{episode}/{start}?radarr={radarr}&sonarr={sonarr}"
@@ -109,6 +150,12 @@ private object Routes {
     fun show(sonarrId: String) = "show/$sonarrId"
     fun play(r: PlayRequest) = "play/${r.kind}/${r.id}/${r.season}/${r.episode}/${r.startSeconds}" +
         "?radarr=${r.radarrId.orEmpty()}&sonarr=${r.sonarrId.orEmpty()}"
+}
+
+/** Intro à l'écran ([active]) et demande de la passer ([skip]), partagées avec l'activité. */
+private class IntroKeys {
+    val active = MutableStateFlow(false)
+    val skip = MutableStateFlow(false)
 }
 
 private const val ENTER_MS = 180
@@ -133,7 +180,7 @@ private class Prefetcher(private val app: ArrMadaApplication) {
 }
 
 @Composable
-private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableStateFlow<Int>) {
+private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableStateFlow<Int>, intro: IntroKeys) {
     val nav = rememberNavController()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -195,11 +242,62 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
             "discover" -> nav.navigate(Routes.DISCOVER)
             "search" -> nav.navigate(Routes.search(voice = false))
             "settings" -> nav.navigate(Routes.SETTINGS)
+            "tonight" -> nav.navigate(Routes.TONIGHT)
+            "apps" -> nav.navigate(Routes.APPS)
+            "queue" -> nav.navigate(Routes.DOWNLOADS)
+            "salon" -> nav.navigate(Routes.SALON)
+            "board" -> nav.navigate(Routes.BOARD)
         }
     }
 
+    /**
+     * « Prêt à regarder » / « Lire sur la TV » → ce qu'il faut lancer, avec
+     * la position de reprise partagée si on reprend.
+     */
+    suspend fun announced(a: PlayAnnounce): PlayRequest? {
+        val id = a.externalId ?: return null
+        val season = a.season ?: 0
+        val episode = a.episode ?: 0
+        val start = if (!a.resume) {
+            0
+        } else {
+            runCatching {
+                if (a.isEpisode) app.repository.playEpisode(id, season, episode) else app.repository.playMovie(id, fresh = true)
+            }.getOrNull()?.resume?.takeIf { !it.watched }?.position ?: 0
+        }
+        return PlayRequest(
+            kind = if (a.isEpisode) "episode" else "movie",
+            id = id,
+            season = season,
+            episode = episode,
+            radarrId = a.arrId?.toString()?.takeIf { !a.isEpisode && a.serviceType != "sonarr" },
+            sonarrId = a.arrId?.toString()?.takeIf { a.isEpisode && a.serviceType == "sonarr" },
+            startSeconds = start,
+        )
+    }
+
+    fun playAnnounced(a: PlayAnnounce) {
+        scope.launch {
+            val request = announced(a)
+            if (request == null) {
+                Toast.makeText(context, "Titre introuvable : lance-le depuis sa fiche", Toast.LENGTH_LONG).show()
+            } else {
+                nav.navigate(Routes.play(request))
+            }
+        }
+    }
+
+    // « Lire sur la TV » depuis la web app
+    LaunchedEffect(Unit) { app.events.playRequests.collect { playAnnounced(it) } }
+
+    // Intro animée au lancement (une fois), seulement vers l'accueil
+    var showIntro by remember { mutableStateOf(!app.introSeen && start == Routes.HOME && Motion.enabled) }
+    val skipIntro by intro.skip.collectAsStateWithLifecycle()
+    LaunchedEffect(showIntro) { intro.active.value = showIntro }
+
     // Passage d'un écran à l'autre : fondu court (le fondu par défaut dure
     // 700 ms, ce qui donnait l'impression d'une appli lente)
+    Box(Modifier.fillMaxSize()) {
     NavHost(
         navController = nav,
         startDestination = start,
@@ -334,6 +432,26 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
                 },
             )
         }
+        composable(Routes.DOWNLOADS) {
+            DownloadsScreen(
+                repository = app.repository,
+                absolute = app.api::absolute,
+                onOpenMovie = { nav.navigate(Routes.movie(it.toString())) },
+                onOpenSeries = { nav.navigate(Routes.show(it.toString())) },
+            )
+        }
+        composable(Routes.SALON) {
+            SalonScreen(app.repository)
+        }
+        composable(Routes.BOARD) {
+            DashboardScreen(app.repository, app.api::absolute, ::openItem, onDownloads = { nav.navigate(Routes.DOWNLOADS) })
+        }
+        composable(Routes.APPS) {
+            AppsScreen()
+        }
+        composable(Routes.TONIGHT) {
+            TonightScreen(app.repository, app.api::absolute) { row -> nav.navigate(Routes.play(tonightRequest(row))) }
+        }
         composable(Routes.SETTINGS) {
             SettingsScreen(
                 app = app,
@@ -345,6 +463,35 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
             )
         }
     }
+
+    // Par-dessus tous les écrans : bulles, « Prêt à regarder », caméra
+    if (paired) EventOverlays(app.events, app.api::absolute, onWatch = ::playAnnounced)
+
+    if (showIntro) {
+        IntroAnimation(BuildConfig.VERSION_NAME, skip = skipIntro) {
+            if (showIntro) {
+                showIntro = false
+                app.introSeen = true
+            }
+        }
+    }
+    }
+}
+
+/** « Ce soir » : reprise du titre commencé, ou film depuis le début. */
+private fun tonightRequest(row: TonightLogic.Row): PlayRequest {
+    val s = row.state
+    if (s == null) return PlayRequest("movie", row.item?.tmdbId ?: 0, radarrId = row.item?.externalId)
+    val episode = s.mediaType == "episode"
+    return PlayRequest(
+        kind = if (episode) "episode" else "movie",
+        id = s.id.toLongOrNull() ?: 0,
+        season = s.season ?: 0,
+        episode = s.episode ?: 0,
+        radarrId = row.item?.externalId?.takeIf { !episode },
+        sonarrId = row.item?.externalId?.takeIf { episode },
+        startSeconds = s.position,
+    )
 }
 
 /** « Reprendre » : relance le film ou l'épisode là où il s'était arrêté. */

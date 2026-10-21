@@ -209,6 +209,50 @@ class Repository(private val api: Api) {
         )
     }
 
+    // ── Téléchargements (écran de l'add-on) ──
+    private val empty = kotlinx.serialization.json.JsonObject(emptyMap())
+    private fun seg(text: String) = java.net.URLEncoder.encode(text, "UTF-8").replace("+", "%20")
+
+    suspend fun board(): Board = api.get("/api/kodi/downloads/board")
+
+    /** « top » (passer en tête), « pause », « resume » sur un élément SABnzbd. */
+    suspend fun queueAction(downloadId: String, op: String): ActionResult =
+        api.post("/api/kodi/queue/${seg(downloadId)}/$op", empty)
+
+    suspend fun cancelRequest(requestId: Int): ActionResult = api.post("/api/kodi/tv-requests/$requestId/cancel", empty)
+
+    suspend fun retryRequest(requestId: Int): ActionResult = api.post("/api/kodi/tv-requests/$requestId/retry", empty)
+
+    suspend fun diagnose(service: String, downloadId: String): Diagnose =
+        api.get("/api/kodi/downloads/$service/${seg(downloadId)}/diagnose")
+
+    /** Débloque (import forcé, autre version…) : le serveur peut mettre 30 s à répondre. */
+    suspend fun unstick(service: String, downloadId: String): ActionResult =
+        api.post("/api/kodi/downloads/$service/${seg(downloadId)}/unstick", empty, slow = true)
+
+    /** « Pause sauf ce soir » / « Tout reprendre » : toute la file SABnzbd. */
+    suspend fun pauseAll(service: String): ActionResult = api.post("/api/kodi/downloads/$service/0/pause", empty)
+
+    suspend fun resumeAll(service: String): ActionResult = api.post("/api/kodi/downloads/$service/0/resume", empty)
+
+    // ── Salon (ampli Yamaha) ──
+    suspend fun ampState(): AmpState = api.get("/api/yamaha/state")
+
+    suspend fun ampProfiles(): Map<String, AmpProfile> = api.get("/api/yamaha/profiles")
+
+    suspend fun ampControl(action: String, value: kotlinx.serialization.json.JsonElement?): ActionResult =
+        api.post("/api/yamaha/control", AmpControl(action, value))
+
+    // ── Événements, caméra, tableau de bord, bande-annonce ──
+    suspend fun events(sinceId: Long): EventsPage = api.get("/api/events/recent?since_id=$sinceId")
+
+    suspend fun cameraSnapshot(id: Int): CameraSnapshot = api.get("/api/cameras/snapshot/$id")
+
+    suspend fun dashboard(): Dashboard = api.get("/api/kodi/dashboard")
+
+    suspend fun movieTrailer(tmdbId: Long): TrailerInfo =
+        cached("trailer:$tmdbId", DETAIL_TTL, false) { api.get<TrailerInfo>("/api/tv/trailer/movie/$tmdbId") }
+
     // ── Ampli ──
     @Serializable
     private data class PresetBody(
@@ -226,6 +270,14 @@ class Repository(private val api: Api) {
             PresetBody(device.room, mediaType, audioCodec, audioChannels),
         )
     }
+
+    /** Préréglage d'une pièce choisi dans l'écran Salon (« salon », « cinema »). */
+    suspend fun applyRoomPreset(room: String) {
+        api.post<kotlinx.serialization.json.JsonObject, PresetBody>("/api/yamaha/preset/apply", PresetBody(room, "movie"))
+    }
+
+    /** Cette TV (pièce, ampli, identifiant), relue toutes les 10 min au plus. */
+    suspend fun device(): Device = cached("me", 10 * 60_000L, false) { me() }
 
     companion object {
         private const val DETAIL_TTL = 2 * 60_000L

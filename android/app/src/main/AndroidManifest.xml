@@ -18,6 +18,19 @@
         android:name="android.hardware.touchscreen"
         android:required="false" />
 
+    <!-- Onglet « Applis » : lister les applis installées qu'on peut lancer
+         (Android 11+ cache la liste sans cette déclaration). -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
     <!-- networkSecurityConfig : autorise le HTTP du réseau local (voir le fichier).
          banner : la tuile 320×180 du lanceur Android TV. -->
     <application

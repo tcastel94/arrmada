@@ -20,6 +20,12 @@ async def play_movie(tmdb_id: int, db: AsyncSession = Depends(get_db)) -> dict:
     return await tv_playback.movie(db, tmdb_id)
 
 
+@router.get("/trailer/movie/{tmdb_id}")
+async def movie_trailer(tmdb_id: int, db: AsyncSession = Depends(get_db)) -> dict:
+    """Bande-annonce locale (NAS) d'un film, lue en fond sur sa fiche."""
+    return await tv_playback.movie_trailer(db, tmdb_id)
+
+
 @router.get("/play/episode/{tvdb_id}/{season}/{episode}")
 async def play_episode(
     tvdb_id: int, season: int, episode: int, db: AsyncSession = Depends(get_db)

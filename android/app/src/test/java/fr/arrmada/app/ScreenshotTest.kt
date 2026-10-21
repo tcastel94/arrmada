@@ -48,6 +48,33 @@ import fr.arrmada.app.data.Resume
 import fr.arrmada.app.data.ResumeEntry
 import fr.arrmada.app.data.TmdbItem
 import fr.arrmada.app.data.WatchState
+import fr.arrmada.app.data.AmpDevice
+import fr.arrmada.app.data.AmpProfile
+import fr.arrmada.app.data.AmpState
+import fr.arrmada.app.data.Board
+import fr.arrmada.app.data.BoardCard
+import fr.arrmada.app.data.DashDownload
+import fr.arrmada.app.data.DashService
+import fr.arrmada.app.data.DashStats
+import fr.arrmada.app.data.Dashboard
+import fr.arrmada.app.data.Device
+import fr.arrmada.app.data.Disk
+import fr.arrmada.app.data.EventLogic
+import fr.arrmada.app.data.PlayAnnounce
+import fr.arrmada.app.data.QueueItem
+import fr.arrmada.app.data.SabInfo
+import fr.arrmada.app.data.TonightLogic
+import fr.arrmada.app.notify.BubbleCard
+import fr.arrmada.app.notify.ReadyCard
+import fr.arrmada.app.notify.Toast
+import fr.arrmada.app.ui.apps.AppsContent
+import fr.arrmada.app.ui.apps.InstalledApp
+import fr.arrmada.app.ui.board.DashboardContent
+import fr.arrmada.app.ui.downloads.DownloadsContent
+import fr.arrmada.app.ui.home.TonightContent
+import fr.arrmada.app.ui.intro.IntroFrame
+import fr.arrmada.app.ui.salon.SalonContent
+import java.time.LocalDateTime
 import fr.arrmada.app.ui.components.Motion
 import fr.arrmada.app.ui.detail.MovieContent
 import fr.arrmada.app.ui.detail.SeriesContent
@@ -393,6 +420,108 @@ class ScreenshotTest {
         )
         captureRoboImage(shot("14-decouvrir")) {
             ArrMadaTheme { DiscoverContent(recos) {} }
+        }
+    }
+
+    // ── Phase 3 ──
+
+    private val evening = LocalDateTime.of(2026, 10, 21, 20, 47)
+
+    @Test
+    fun telechargements() {
+        val board = Board(
+            tonight = listOf(
+                BoardCard(id = 1, title = "Dune : Deuxième partie", phase = "downloading", progress = 62.0, timeLeftSeconds = 720,
+                    deviceName = "Salon TV", requestedAt = "2026-10-21T20:43:00", quality = "Bluray-2160p", sizeBytes = 64.0 * 1024 * 1024 * 1024,
+                    posterUrl = "https://img/p1", fanartUrl = "https://img/f1", arrId = 1, canCancel = true, protocol = "usenet"),
+                BoardCard(id = 2, title = "Severance S02E05", phase = "ready", progress = 100.0, subtitles = "fr", status = "done",
+                    deviceName = "Chambre", requestedAt = "2026-10-21T19:10:00", posterUrl = "https://img/p2", serviceType = "sonarr"),
+            ),
+            queue = listOf(
+                QueueItem(id = 801, title = "Oppenheimer", status = "downloading", trackedState = "downloading", progress = 41.0,
+                    sizeBytes = 80.0 * 1024 * 1024 * 1024, sizeLeftBytes = 47.0 * 1024 * 1024 * 1024, timeLeft = "00:38:00",
+                    serviceType = "radarr", downloadClient = "SABnzbd", quality = "Remux-2160p", indexer = "NZBgeek", protocol = "usenet", downloadId = "SAB_1", movieId = 3, posterUrl = "https://img/p3"),
+                QueueItem(id = 802, title = "Tenet", status = "paused", trackedState = "downloading", progress = 12.0, sizeBytes = 40.0 * 1024 * 1024 * 1024,
+                    sizeLeftBytes = 35.0 * 1024 * 1024 * 1024, serviceType = "radarr", downloadClient = "SABnzbd", quality = "Bluray-1080p", protocol = "usenet", downloadId = "SAB_2", posterUrl = "https://img/p4"),
+                QueueItem(id = 803, title = "The Bear S03", status = "completed", trackedState = "importBlocked", progress = 100.0,
+                    serviceType = "sonarr", error = "Fichier d'échantillon : import refusé", downloadId = "abc", protocol = "torrent", posterUrl = "https://img/p5"),
+            ),
+            sab = SabInfo(paused = false, kbpersec = 48230.0),
+        )
+        captureRoboImage(shot("17-telechargements")) {
+            ArrMadaTheme {
+                DownloadsContent(board, evening, mapOf("radarr:801" to 5.2 * 1024 * 1024), noAbsolute, {}, {}, {}, {})
+            }
+        }
+    }
+
+    @Test
+    fun salon() {
+        val state = AmpState(listOf(AmpDevice(name = "Yamaha RX-A6A", online = true, power = "on", volumePct = 42, actualDb = -38.5, input = "hdmi1", soundProgram = "surr_decoder")))
+        captureRoboImage(shot("18-salon")) {
+            ArrMadaTheme {
+                SalonContent(
+                    Device(id = 3, name = "Shield Salon", room = "salon", hasAmp = true), state,
+                    mapOf("salon" to AmpProfile("Salon"), "cinema" to AmpProfile("Salle de cinéma")),
+                    {}, {}, {}, {},
+                )
+            }
+        }
+    }
+
+    @Test
+    fun tableauDeBord() {
+        val tb = 1024L * 1024 * 1024 * 1024
+        val dashboard = Dashboard(
+            services = listOf("Radarr", "Sonarr", "SABnzbd", "Prowlarr", "Bazarr", "Jellyfin").map { DashService(it, it.lowercase(), true) } + DashService("qBittorrent", "qbittorrent", false),
+            stats = DashStats(movies = 3412, series = 186, episodes = 9120, totalSize = "42,1 To"),
+            disks = listOf(Disk("/mnt/user", 60 * tb, 13 * tb)),
+            downloads = listOf(DashDownload("Oppenheimer", 41.0, "00:38:00", "radarr"), DashDownload("Tenet", 12.0, null, "radarr")),
+            downloadsCount = 4,
+        )
+        captureRoboImage(shot("19-tableau-de-bord")) {
+            ArrMadaTheme { DashboardContent(dashboard, titles.mapIndexed { i, t -> movie(i + 1, t, 2010 + i) }, evening, evening, noAbsolute, {}, {}, {}) }
+        }
+    }
+
+    @Test
+    fun intro() {
+        captureRoboImage(shot("20-intro")) {
+            ArrMadaTheme { IntroFrame(1900f, "2.3.0") }
+        }
+    }
+
+    @Test
+    fun ceSoir() {
+        val library = titles.mapIndexed { i, t -> movie(i + 1, t, 2010 + i).copy(runtime = 85 + i * 9) }
+        val states = listOf(WatchState(mediaType = "movie", id = "1003", position = 5000, total = 10140, updatedAt = "2026-10-21T19:00:00"))
+        val rows = TonightLogic.candidates(states, library, emptyList())
+        captureRoboImage(shot("21-ce-soir")) {
+            ArrMadaTheme { TonightContent(rows, evening, noAbsolute) {} }
+        }
+    }
+
+    @Test
+    fun applis() {
+        val apps = listOf("Disney+", "Netflix", "Plex", "Prime Video", "TiviMate", "YouTube", "Kodi", "Spotify").map { InstalledApp(it, "app.$it", null, false) }
+        captureRoboImage(shot("22-applis")) {
+            ArrMadaTheme { AppsContent(apps) {} }
+        }
+    }
+
+    @Test
+    fun bullesEtPretARegarder() {
+        val ready = PlayAnnounce(deviceId = 3, title = "Severance", mediaType = "episode", season = 2, episode = 5, quality = "WEBDL-2160p", subtitles = "fr", poster = "https://img/sev")
+        captureRoboImage(shot("23-bulles")) {
+            ArrMadaTheme {
+                Box(Modifier.fillMaxSize().background(Color(0xFF0A0E16)).padding(24.dp)) {
+                    Column(Modifier.align(Alignment.BottomEnd), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp)) {
+                        ReadyCard(ready, noAbsolute, canPlay = true, onWatch = {}, onLater = {})
+                        BubbleCard(Toast(EventLogic.Bubble("Importé sur le NAS", "Dune · Bluray-2160p · 64 Go", "https://img/dune")), noAbsolute)
+                        BubbleCard(Toast(EventLogic.Bubble("Import bloqué", "The Bear : à régler dans Sonarr (web app)", error = true)), noAbsolute)
+                    }
+                }
+            }
         }
     }
 }

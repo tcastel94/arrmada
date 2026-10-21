@@ -89,6 +89,17 @@ def _hls(params: dict, m: Any) -> httpx.Response:
     return httpx.Response(200, text=text, headers={"Content-Type": "application/x-mpegURL"})
 
 
+TRAILER_ID = "c" * 32
+
+
+def _trailers(params: dict, m: Any) -> Any:
+    """Dune a une bande-annonce sur le NAS ; les autres films non."""
+    SEEN["trailers"] = {"item": m.group(1), "params": params}
+    if m.group(1) == MOVIE_ID:
+        return [{"Id": TRAILER_ID, "Name": "Dune trailer", "RunTimeTicks": 150 * T}]
+    return []
+
+
 def _chapter(params: dict, m: Any) -> httpx.Response:
     SEEN["chapter"] = {"item": m.group(1), "index": m.group(2), "params": params}
     return httpx.Response(200, content=b"\xff\xd8jpeg", headers={"Content-Type": "image/jpeg"})
@@ -133,6 +144,7 @@ async def jellyfin(
         (r"/Items", _items),
         (r"/Shows/([^/]+)/Episodes", _episodes),
         (r"/MediaSegments/([^/]+)", _segments),
+        (r"/Items/([^/]+)/LocalTrailers", _trailers),
         (r"/Videos/([^/]+)/stream", _stream),
         (r"/Videos/([^/]+)/((?:master|main)\.m3u8|hls1/.+)", _hls),
         (r"/Items/([^/]+)/Images/Chapter/(\d+)", _chapter),
@@ -178,6 +190,7 @@ async def _tv(client: AsyncClient, admin: dict[str, str]) -> dict[str, str]:
         ("GET", "/api/tv/stream/abc", False),
         ("POST", f"/api/tv/stream/{MOVIE_ID}", False),
         ("GET", f"/api/tv/hls/{MOVIE_ID}/master.m3u8", True),
+        ("GET", "/api/tv/trailer/movie/438631", True),
         ("GET", f"/api/tv/hls/{MOVIE_ID}/hls1/main/-1.mp4", True),
         ("GET", f"/api/tv/hls/{MOVIE_ID}/hls1/main/12.mp4", True),
         ("POST", f"/api/tv/hls/{MOVIE_ID}/stop", True),
@@ -412,3 +425,23 @@ async def test_hls_stop(client: AsyncClient, jellyfin: dict[str, str]) -> None:
     fake_arr.POSTS.clear()
     assert (await client.post(f"/api/tv/hls/{REMUX_ID}/stop", headers=tv)).status_code == 200
     assert any(path == "/Videos/ActiveEncodings" for _host, path, _b in fake_arr.POSTS)
+
+
+# ── Bande-annonce locale (fond de la fiche) ───────────────────
+
+
+async def test_movie_trailer(client: AsyncClient, jellyfin: dict[str, str]) -> None:
+    tv = await _tv(client, jellyfin)
+    data = (await client.get("/api/tv/trailer/movie/438631", headers=tv)).json()
+    assert data == {
+        "status": "ok", "item_id": TRAILER_ID, "stream": f"/api/tv/stream/{TRAILER_ID}", "duration": 150
+    }  # fmt: skip
+    assert SEEN["trailers"]["params"] == {"ApiKey": "j-key"}
+
+
+async def test_movie_without_trailer(client: AsyncClient, jellyfin: dict[str, str]) -> None:
+    tv = await _tv(client, jellyfin)
+    assert (await client.get("/api/tv/trailer/movie/453405", headers=tv)).json() == {
+        "status": "none"
+    }
+    assert (await client.get("/api/tv/trailer/movie/1", headers=tv)).json() == {"status": "none"}

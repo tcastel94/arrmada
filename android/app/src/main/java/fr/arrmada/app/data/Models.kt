@@ -35,6 +35,7 @@ data class PairPoll(
 
 @Serializable
 data class Device(
+    val id: Int = 0, // cible des annonces « Prêt à regarder » / « Lire sur la TV »
     val paired: Boolean = true,
     val name: String = "",
     val room: String = "",

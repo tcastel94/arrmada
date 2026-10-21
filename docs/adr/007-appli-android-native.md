@@ -159,3 +159,10 @@ Chaque phase est livrée en APK testable sur la Shield.
 > secours par le lecteur. Navigation accélérée (transitions, taille des
 > images TMDB, caches, préchargement) ; boîtier et disque animé de l'add-on
 > sur la fiche film.
+>
+> **Mise à jour (21/10/2026, APK 2.3.0)** : phase 3 livrée : écrans
+> Téléchargements (Pour ce soir, Débloquer), Salon, Tableau de bord, Ce soir,
+> Applis ; bulles, « Prêt à regarder », alerte caméra, « Lire sur la TV » ;
+> intro animée ; bande-annonce en fond (fichiers « -trailer » du NAS,
+> nouvelle route `/api/tv/trailer/movie/{tmdb}` ; pas de repli YouTube).
+> À valider sur la Shield avant de retirer l'add-on.

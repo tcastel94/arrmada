@@ -9,7 +9,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -145,8 +147,9 @@ fun HomeScreen(viewModel: HomeViewModel, api: Api, actions: HomeActions) {
 
 /** Menu du haut, commun à l'accueil et aux grilles (comme la coquille de l'add-on). */
 val TOP_MENU = listOf(
-    "home" to "Accueil", "movies" to "Films", "series" to "Séries",
-    "discover" to "Découvrir", "search" to "Rechercher", "settings" to "Réglages",
+    "home" to "Accueil", "movies" to "Films", "series" to "Séries", "tonight" to "Ce soir",
+    "apps" to "Applis", "discover" to "Découvrir", "search" to "Rechercher", "queue" to "Téléchargements",
+    "salon" to "Salon", "board" to "Tableau de bord", "settings" to "Réglages",
 )
 
 /** Affichage de l'accueil à partir d'un état (séparé pour les captures d'écran de test). */
@@ -170,13 +173,14 @@ fun HomeContent(state: HomeState, absolute: (String?) -> String?, onRetry: () ->
     KenBurnsBackdrop(url = shown?.backdrop) {
         Column(Modifier.fillMaxSize()) {
             // ── Menu du haut (comme la coquille de l'add-on) ──
+            // Défile si besoin : l'entrée qui prend le focus est toujours amenée à l'écran
             Row(
-                Modifier.padding(start = 48.dp, top = 20.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                Modifier.padding(top = 20.dp).horizontalScroll(rememberScrollState()).padding(horizontal = 48.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TOP_MENU.forEach { (route, label) ->
-                    ArrButton(label, { if (route != "home") actions.go(route) }, primary = route == "home")
+                    ArrButton(label, { if (route != "home") actions.go(route) }, primary = route == "home", compact = true)
                 }
             }
 

@@ -217,10 +217,11 @@ fun ArrButton(
     modifier: Modifier = Modifier,
     primary: Boolean = false,
     leading: String? = null,
+    compact: Boolean = false, // menu du haut : 11 entrées sur la largeur de l'écran
 ) {
     Surface(
         onClick = onClick,
-        modifier = modifier.height(40.dp),
+        modifier = modifier.height(if (compact) 34.dp else 40.dp),
         shape = ClickableSurfaceDefaults.shape(ButtonShape),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.06f),
         colors = ClickableSurfaceDefaults.colors(
@@ -231,7 +232,7 @@ fun ArrButton(
         ),
     ) {
         Row(
-            Modifier.fillMaxHeight().padding(horizontal = 18.dp),
+            Modifier.fillMaxHeight().padding(horizontal = if (compact) 11.dp else 18.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -273,7 +274,12 @@ fun <T> ContentRow(
  * texte reste lisible par-dessus.
  */
 @Composable
-fun KenBurnsBackdrop(url: String?, modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit = {}) {
+fun KenBurnsBackdrop(
+    url: String?,
+    modifier: Modifier = Modifier,
+    video: (@Composable () -> Unit)? = null, // bande-annonce par-dessus l'image, sous les voiles
+    content: @Composable BoxScope.() -> Unit = {},
+) {
     val zoom = if (Motion.enabled) {
         val transition = rememberInfiniteTransition(label = "ken-burns")
         transition.animateFloat(
@@ -294,6 +300,7 @@ fun KenBurnsBackdrop(url: String?, modifier: Modifier = Modifier, content: @Comp
                 modifier = Modifier.fillMaxSize().graphicsLayer { scaleX = zoom; scaleY = zoom },
             )
         }
+        video?.invoke()
         // Voile gauche (texte du héros) et voile bas (rangées)
         Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to Color(0xF20A0E16), 0.65f to Color(0x660A0E16), 1f to Color(0x1A0A0E16))))
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.35f to Color.Transparent, 1f to ArrColors.Night)))
@@ -328,5 +335,109 @@ fun MessageScreen(title: String, detail: String? = null, action: String? = null,
             // Focus d'office sur le bouton : la télécommande n'a rien d'autre à viser
             LaunchedEffect(action) { runCatching { actionFocus.requestFocus() } }
         }
+    }
+}
+
+/**
+ * Menu de choix (OK sur un élément) : titre, sous-titre facultatif, une
+ * ligne de boutons par action, « Annuler » en dernier. Le premier choix a le
+ * focus. Équivalent du `Dialog().select()` de l'add-on.
+ */
+@Composable
+fun ChoiceDialog(
+    title: String,
+    choices: List<Pair<String, () -> Unit>>,
+    onDismiss: () -> Unit,
+    subtitle: String? = null,
+) {
+    val first = remember { FocusRequester() }
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Column(
+            Modifier
+                .width(420.dp)
+                .background(ArrColors.CardDeep, RoundedCornerShape(16.dp))
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(title, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (!subtitle.isNullOrBlank()) {
+                Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = ArrColors.TextSecondary)
+            }
+            choices.forEachIndexed { index, (label, action) ->
+                ArrButton(
+                    label,
+                    { onDismiss(); action() },
+                    primary = index == 0,
+                    modifier = Modifier.fillMaxWidth().then(if (index == 0) Modifier.focusRequester(first) else Modifier),
+                )
+            }
+            ArrButton("Annuler", onDismiss, modifier = Modifier.fillMaxWidth().then(if (choices.isEmpty()) Modifier.focusRequester(first) else Modifier))
+        }
+    }
+    LaunchedEffect(title) { runCatching { first.requestFocus() } }
+}
+
+/** En-tête d'un écran de la coquille : titre, ligne de résumé, boutons à droite. */
+@Composable
+fun ScreenHeader(title: String, summary: String?, modifier: Modifier = Modifier, actions: @Composable () -> Unit = {}) {
+    Row(modifier.fillMaxWidth().padding(start = 48.dp, end = 48.dp, top = 28.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.headlineMedium)
+            if (!summary.isNullOrBlank()) {
+                Text(summary, style = MaterialTheme.typography.bodyMedium, color = ArrColors.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { actions() }
+    }
+}
+
+/**
+ * Panneau cliquable (carte « Pour ce soir », ligne de la file, tuile) :
+ * fond de carte, anneau bleu et léger zoom au focus, comme le skin.
+ */
+@Composable
+fun FocusPanel(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    onFocus: (Boolean) -> Unit = {},
+    ring: Color = ArrColors.Accent,
+    container: Color = ArrColors.CardDeep.copy(alpha = 0.92f),
+    scale: Float = 1.03f,
+    onLongClick: (() -> Unit)? = null,
+    content: @Composable BoxScope.() -> Unit,
+) {
+    val shape = RoundedCornerShape(12.dp)
+    Surface(
+        onClick = onClick,
+        onLongClick = onLongClick,
+        modifier = modifier.onFocusChanged { onFocus(it.isFocused) },
+        shape = ClickableSurfaceDefaults.shape(shape),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = scale),
+        border = ClickableSurfaceDefaults.border(
+            border = Border(BorderStroke(1.dp, Color(0x14FFFFFF)), shape = shape),
+            focusedBorder = Border(BorderStroke(2.dp, ring), shape = shape),
+        ),
+        glow = ClickableSurfaceDefaults.glow(focusedGlow = Glow(ring.copy(alpha = 0.45f), 12.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = container,
+            contentColor = ArrColors.Text,
+            focusedContainerColor = ArrColors.Card,
+            focusedContentColor = ArrColors.Text,
+        ),
+        content = content,
+    )
+}
+
+/** Petite pastille de couleur (état d'un téléchargement, étape, service). */
+@Composable
+fun Pill(text: String, color: Color, modifier: Modifier = Modifier, textColor: Color = ArrColors.Text) {
+    Box(
+        modifier
+            .clip(RoundedCornerShape(50))
+            .background(color)
+            .padding(horizontal = 9.dp, vertical = 3.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text, style = MaterialTheme.typography.labelSmall, color = textColor, maxLines = 1)
     }
 }
