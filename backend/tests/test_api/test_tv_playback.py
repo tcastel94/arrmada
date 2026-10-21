@@ -9,6 +9,7 @@ import pytest
 from httpx import AsyncClient
 
 from app.services import jellyfin as jf
+from app.services import tv_playback
 from app.services.devices import device_may_call, pairings
 from tests import fake_arr
 
@@ -16,6 +17,8 @@ JELLYFIN_URL = "http://jellyfin.test:8096"
 T = jf.TICKS_PER_SECOND
 MOVIE_ID = "0123456789abcdef0123456789abcdef"
 EPISODE_ID = "fedcba9876543210fedcba9876543210"
+# Film rangé en .m2ts (Blu-ray) : ExoPlayer ne l'ouvre pas, il passe par le remux
+REMUX_ID = "b" * 32
 VIDEO = bytes(range(256)) * 40  # « fichier » de 10 240 octets
 SEEN: dict[str, Any] = {}
 
@@ -30,11 +33,20 @@ def _items(params: dict, _m: Any) -> Any:
                 {"Name": "Sans vignette", "StartPositionTicks": 1800 * T},
             ],
         }]}  # fmt: skip
+    if params.get("ids") == REMUX_ID:
+        return {"Items": [{
+            "Id": REMUX_ID, "Name": "Gemini Man", "RunTimeTicks": 7020 * T, "VideoType": "VideoFile",
+            "MediaSources": [{"Path": "/movies/Gemini Man (2019)/Gemini.Man.2019.m2ts",
+                              "Container": "m2ts"}],
+        }]}  # fmt: skip
     if params.get("ids") == EPISODE_ID:
         return {"Items": [{"Id": EPISODE_ID, "Name": "Static", "RunTimeTicks": 2700 * T}]}
     if params.get("includeItemTypes") == "Series":
         return {"Items": [{"Id": "ser-expanse", "ProviderIds": {"Tvdb": "280619"}}]}
-    return {"Items": [{"Id": MOVIE_ID, "Name": "Dune", "ProviderIds": {"Tmdb": "438631"}}]}
+    return {"Items": [
+        {"Id": MOVIE_ID, "Name": "Dune", "ProviderIds": {"Tmdb": "438631"}},
+        {"Id": REMUX_ID, "Name": "Gemini Man", "ProviderIds": {"Tmdb": "453405"}},
+    ]}  # fmt: skip
 
 
 def _episodes(params: dict, _m: Any) -> Any:
@@ -58,6 +70,23 @@ def _stream(params: dict, m: Any) -> httpx.Response:
     return httpx.Response(
         200, stream=httpx.ByteStream(VIDEO), headers={"Content-Type": "video/x-matroska"}
     )
+
+
+def _hls(params: dict, m: Any) -> httpx.Response:
+    """Remux de Jellyfin : listes HLS (avec la clé dans les adresses) et morceaux."""
+    SEEN.setdefault("hls", []).append({"item": m.group(1), "path": m.group(2), "params": params})
+    path = m.group(2)
+    if path == "master.m3u8":
+        text = ("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=60000000\n"
+                "main.m3u8?DeviceId=arrmada-tv&ApiKey=j-key&PlaySessionId=x\n")  # fmt: skip
+    elif path == "main.m3u8":
+        text = ('#EXTM3U\n#EXT-X-MAP:URI="hls1/main/-1.mp4?ApiKey=j-key"\n'
+                "#EXTINF:6.0,\nhls1/main/0.mp4?api_key=j-key&runtimeTicks=0\n")  # fmt: skip
+    else:
+        return httpx.Response(
+            200, stream=httpx.ByteStream(b"fmp4"), headers={"Content-Type": "video/mp4"}
+        )
+    return httpx.Response(200, text=text, headers={"Content-Type": "application/x-mpegURL"})
 
 
 def _chapter(params: dict, m: Any) -> httpx.Response:
@@ -105,6 +134,7 @@ async def jellyfin(
         (r"/Shows/([^/]+)/Episodes", _episodes),
         (r"/MediaSegments/([^/]+)", _segments),
         (r"/Videos/([^/]+)/stream", _stream),
+        (r"/Videos/([^/]+)/((?:master|main)\.m3u8|hls1/.+)", _hls),
         (r"/Items/([^/]+)/Images/Chapter/(\d+)", _chapter),
         (r"/Items/([^/]+)/Images/Primary", _primary),
     ]
@@ -147,6 +177,12 @@ async def _tv(client: AsyncClient, admin: dict[str, str]) -> dict[str, str]:
         ("GET", "/api/tv/stream/../../System/Info", False),
         ("GET", "/api/tv/stream/abc", False),
         ("POST", f"/api/tv/stream/{MOVIE_ID}", False),
+        ("GET", f"/api/tv/hls/{MOVIE_ID}/master.m3u8", True),
+        ("GET", f"/api/tv/hls/{MOVIE_ID}/hls1/main/-1.mp4", True),
+        ("GET", f"/api/tv/hls/{MOVIE_ID}/hls1/main/12.mp4", True),
+        ("POST", f"/api/tv/hls/{MOVIE_ID}/stop", True),
+        ("GET", f"/api/tv/hls/{MOVIE_ID}/../../System/Info", False),
+        ("GET", f"/api/tv/hls/{MOVIE_ID}/stream", False),
     ],
 )
 def test_device_scope(method: str, path: str, allowed: bool) -> None:
@@ -188,6 +224,8 @@ async def test_play_movie(client: AsyncClient, jellyfin: dict[str, str]) -> None
     assert data["status"] == "ok"
     assert data["item_id"] == MOVIE_ID
     assert data["stream"] == f"/api/tv/stream/{MOVIE_ID}"
+    assert data["mode"] == "direct"
+    assert data["remux_stream"] == f"/api/tv/hls/{MOVIE_ID}/master.m3u8"
     assert data["duration"] == 9300
     assert data["resume"] == {"position": 4210, "watched": False}
     assert [c["name"] for c in data["chapters"]] == ["Ouverture", "Arrakis", "Sans vignette"]
@@ -299,3 +337,78 @@ async def test_item_image(client: AsyncClient, jellyfin: dict[str, str]) -> None
     assert SEEN["primary"]["params"]["ApiKey"] == "j-key"
     # Identifiant invalide : refusé dès la liste blanche des TV, avant tout appel à Jellyfin
     assert (await client.get("/api/tv/item-image/abc", headers=tv)).status_code == 403
+
+
+# ── Remux (formats que la TV ne lit pas directement) ──────────
+
+
+@pytest.mark.parametrize(
+    ("details", "mode", "container"),
+    [
+        ({"MediaSources": [{"Path": "/m/Dune.mkv", "Container": "mkv"}]}, "direct", "mkv"),
+        ({"MediaSources": [{"Path": "/m/I Robot.MP4"}]}, "direct", "mp4"),
+        ({"MediaSources": [{"Path": "/m/Gemini.Man.m2ts"}]}, "remux", "m2ts"),
+        ({"VideoType": "Iso", "MediaSources": [{"Path": "/m/Film.iso"}]}, "remux", "iso"),
+        ({"VideoType": "BluRay", "MediaSources": [{"Path": "/m/Film", "Container": "bluray"}]},
+         "remux", "bluray"),
+        ({}, "direct", ""),
+    ],
+)  # fmt: skip
+def test_source_info(details: dict, mode: str, container: str) -> None:
+    assert tv_playback.source_info(details) == {"mode": mode, "container": container}
+
+
+def test_strip_api_key() -> None:
+    text = 'main.m3u8?DeviceId=a&ApiKey=k&b=1\nURI="x.mp4?api_key=k"\ny.mp4?ApiKey=k&c=2\n'
+    assert tv_playback.strip_api_key(text) == 'main.m3u8?DeviceId=a&b=1\nURI="x.mp4"\ny.mp4?c=2\n'
+
+
+async def test_play_m2ts_uses_remux(client: AsyncClient, jellyfin: dict[str, str]) -> None:
+    tv = await _tv(client, jellyfin)
+    data = (await client.get("/api/tv/play/movie/453405", headers=tv)).json()
+    assert data["status"] == "ok"
+    assert data["mode"] == "remux"
+    assert data["container"] == "m2ts"
+    assert data["stream"] == f"/api/tv/hls/{REMUX_ID}/master.m3u8"
+
+
+async def test_hls_playlists_hide_the_key(client: AsyncClient, jellyfin: dict[str, str]) -> None:
+    tv = await _tv(client, jellyfin)
+    master = await client.get(f"/api/tv/hls/{REMUX_ID}/master.m3u8", headers=tv)
+    assert master.status_code == 200, master.text
+    assert "j-key" not in master.text and "ApiKey" not in master.text
+    assert "main.m3u8?DeviceId=arrmada-tv&PlaySessionId=x" in master.text
+    # Remux demandé à Jellyfin : image copiée, son copié ou en E-AC3, morceaux fMP4
+    params = SEEN["hls"][0]["params"]
+    assert params["ApiKey"] == "j-key"
+    assert params["AllowVideoStreamCopy"] == "true"
+    assert params["SegmentContainer"] == "mp4"
+    assert params["MediaSourceId"] == REMUX_ID
+
+    main = await client.get(
+        f"/api/tv/hls/{REMUX_ID}/main.m3u8?DeviceId=arrmada-tv&PlaySessionId=x", headers=tv
+    )
+    assert "j-key" not in main.text
+    assert 'URI="hls1/main/-1.mp4"' in main.text
+    # Les paramètres reçus de la TV sont repassés à Jellyfin, avec la clé
+    assert SEEN["hls"][1]["params"] == {
+        "DeviceId": "arrmada-tv", "PlaySessionId": "x", "ApiKey": "j-key"
+    }  # fmt: skip
+
+    seg = await client.get(f"/api/tv/hls/{REMUX_ID}/hls1/main/0.mp4?runtimeTicks=0", headers=tv)
+    assert seg.status_code == 200
+    assert seg.content == b"fmp4"
+    assert SEEN["hls"][2]["params"] == {"runtimeTicks": "0", "ApiKey": "j-key"}
+
+
+async def test_hls_rejects_other_paths(client: AsyncClient, jellyfin: dict[str, str]) -> None:
+    resp = await client.get(f"/api/tv/hls/{REMUX_ID}/stream", headers=jellyfin)
+    assert resp.status_code == 404
+    assert "hls" not in SEEN
+
+
+async def test_hls_stop(client: AsyncClient, jellyfin: dict[str, str]) -> None:
+    tv = await _tv(client, jellyfin)
+    fake_arr.POSTS.clear()
+    assert (await client.post(f"/api/tv/hls/{REMUX_ID}/stop", headers=tv)).status_code == 200
+    assert any(path == "/Videos/ActiveEncodings" for _host, path, _b in fake_arr.POSTS)

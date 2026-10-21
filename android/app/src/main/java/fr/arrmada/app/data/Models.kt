@@ -265,7 +265,12 @@ data class PlayInfo(
     val title: String? = null,
     val overview: String? = null, // résumé de l'épisode (menu pause)
     val duration: Int = 0,
+    // « direct » : fichier d'origine ; « remux » : conteneur changé à la volée
+    // par Jellyfin (.m2ts, .iso… qu'ExoPlayer n'ouvre pas)
+    val mode: String = "direct",
+    val container: String = "", // extension du fichier (« mkv », « m2ts »…)
     val stream: String = "",
+    @SerialName("remux_stream") val remuxStream: String = "", // secours si le direct échoue
     val chapters: List<Chapter> = emptyList(),
     val resume: Resume = Resume(),
     val segments: List<Segment> = emptyList(),

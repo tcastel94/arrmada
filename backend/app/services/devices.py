@@ -151,6 +151,12 @@ _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         ("GET", r"/api/tv/stream/[0-9a-f]{32}"),
         ("GET", r"/api/tv/chapter-image/[0-9a-f]{32}/\d+"),
         ("GET", r"/api/tv/item-image/[0-9a-f]{32}"),
+        # Remux HLS (.m2ts, .iso…) : listes et morceaux seulement, puis arrêt
+        (
+            "GET",
+            r"/api/tv/hls/[0-9a-f]{32}/((master|main)\.m3u8|hls1/[A-Za-z0-9_]+/-?\d+\.(mp4|m4s|ts))",
+        ),
+        ("POST", r"/api/tv/hls/[0-9a-f]{32}/stop"),
         ("GET", r"/api/tv/series/\d+/season/\d+"),  # épisodes Jellyfin (écran Série)
     )
 )

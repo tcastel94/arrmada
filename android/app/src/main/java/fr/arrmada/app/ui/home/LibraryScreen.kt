@@ -48,7 +48,7 @@ private val TOP_RATED = GridView("Mieux notés") { list -> list.filter { it.rati
  * [type] : « movie » ou « series ».
  */
 @Composable
-fun LibraryScreen(type: String, repository: Repository, api: Api, onOpen: (LibraryItem) -> Unit) {
+fun LibraryScreen(type: String, repository: Repository, api: Api, onOpen: (LibraryItem) -> Unit, onFocusItem: (LibraryItem) -> Unit = {}) {
     var items by remember { mutableStateOf<List<LibraryItem>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     val label = if (type == "movie") "Films" else "Séries"
@@ -66,12 +66,12 @@ fun LibraryScreen(type: String, repository: Repository, api: Api, onOpen: (Libra
         error != null -> return MessageScreen("$label indisponibles", error)
         all == null -> return MessageScreen("Chargement des ${label.lowercase()}…")
     }
-    LibraryContent(label, all!!, api::absolute, onOpen)
+    LibraryContent(label, all!!, api::absolute, onOpen, onFocusItem)
 }
 
 /** Affichage de la grille (séparé du chargement pour les captures d'écran de test). */
 @Composable
-fun LibraryContent(label: String, all: List<LibraryItem>, absolute: (String?) -> String?, onOpen: (LibraryItem) -> Unit) {
+fun LibraryContent(label: String, all: List<LibraryItem>, absolute: (String?) -> String?, onOpen: (LibraryItem) -> Unit, onFocusItem: (LibraryItem) -> Unit = {}) {
     val views = if (all.firstOrNull()?.isMovie != false) listOf(RECENT, TITLE, YEAR, FOUR_K) else listOf(RECENT, TITLE, YEAR, TOP_RATED)
     var view by remember { mutableStateOf(views.first()) }
     val firstFocus = remember { FocusRequester() }
@@ -89,7 +89,7 @@ fun LibraryContent(label: String, all: List<LibraryItem>, absolute: (String?) ->
             }
             Text("${sorted.size} titres", style = MaterialTheme.typography.labelMedium, color = ArrColors.TextSecondary, modifier = Modifier.padding(start = 12.dp))
         }
-        PosterGrid(sorted, absolute, onOpen, Modifier, firstFocus)
+        PosterGrid(sorted, absolute, onOpen, Modifier, firstFocus, onFocusItem)
     }
     LaunchedEffect(view) { runCatching { firstFocus.requestFocus() } }
 }
@@ -102,6 +102,7 @@ fun PosterGrid(
     onOpen: (LibraryItem) -> Unit,
     modifier: Modifier = Modifier,
     firstFocus: FocusRequester? = null,
+    onFocusItem: (LibraryItem) -> Unit = {},
 ) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(7),
@@ -116,6 +117,7 @@ fun PosterGrid(
                 title = item.title,
                 width = 108.dp,
                 onClick = { onOpen(item) },
+                onFocus = { onFocusItem(item) },
                 modifier = if (firstFocus != null && item == items.first()) Modifier.focusRequester(firstFocus) else Modifier,
             )
         }

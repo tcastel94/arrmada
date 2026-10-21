@@ -134,6 +134,7 @@ class HomeActions(
     val resume: (ResumeEntry) -> Unit = {},
     val request: (TmdbItem) -> Unit = {}, // titre absent : feuille « Télécharger »
     val go: (String) -> Unit = {},
+    val prefetch: (LibraryItem) -> Unit = {}, // carte survolée : fiche préchargée
 )
 
 @Composable
@@ -214,7 +215,10 @@ fun HomeContent(state: HomeState, absolute: (String?) -> String?, onRetry: () ->
                             imageUrl = absolute(item.posterUrl),
                             title = item.title,
                             onClick = { actions.open(item) },
-                            onFocus = { hero = heroOf(item, absolute) },
+                            onFocus = {
+                                hero = heroOf(item, absolute)
+                                actions.prefetch(item)
+                            },
                             modifier = if (state.resume.isEmpty() && item == state.recent.first()) Modifier.focusRequester(firstFocus) else Modifier,
                         )
                     }

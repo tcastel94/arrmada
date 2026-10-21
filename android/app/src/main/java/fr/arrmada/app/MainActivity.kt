@@ -4,6 +4,9 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -52,6 +55,8 @@ import fr.arrmada.app.ui.setup.PairScreen
 import fr.arrmada.app.ui.setup.ServerScreen
 import fr.arrmada.app.ui.theme.ArrColors
 import fr.arrmada.app.ui.theme.ArrMadaTheme
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
@@ -94,16 +99,37 @@ private object Routes {
     const val SEARCH = "search?voice={voice}"
     const val DOWNLOAD = "download"
     const val SETTINGS = "settings"
-    const val MOVIE = "movie/{radarrId}"
+    const val MOVIE = "movie/{radarrId}?tmdb={tmdb}"
     const val SHOW = "show/{sonarrId}"
     const val PLAY = "play/{kind}/{id}/{season}/{episode}/{start}?radarr={radarr}&sonarr={sonarr}"
 
     fun library(type: String) = "library/$type"
     fun search(voice: Boolean) = "search?voice=$voice"
-    fun movie(radarrId: String) = "movie/$radarrId"
+    fun movie(radarrId: String, tmdbId: Long? = null) = "movie/$radarrId" + (tmdbId?.let { "?tmdb=$it" } ?: "")
     fun show(sonarrId: String) = "show/$sonarrId"
     fun play(r: PlayRequest) = "play/${r.kind}/${r.id}/${r.season}/${r.episode}/${r.startSeconds}" +
         "?radarr=${r.radarrId.orEmpty()}&sonarr=${r.sonarrId.orEmpty()}"
+}
+
+private const val ENTER_MS = 180
+private const val EXIT_MS = 120
+
+/**
+ * Précharge la fiche du titre survolé dès que le focus s'y arrête un instant
+ * (0,35 s) : en appuyant sur OK, la fiche s'affiche sans attendre le serveur.
+ * Un défilement rapide le long d'une rangée ne déclenche rien.
+ */
+private class Prefetcher(private val app: ArrMadaApplication) {
+    private var pending: Job? = null
+
+    fun focus(item: LibraryItem) {
+        pending?.cancel()
+        pending = app.appScope.launch {
+            delay(350)
+            // Lancé à part : une fois partie, la requête va au bout (et remplit le cache)
+            app.appScope.launch { runCatching { app.repository.prefetch(item) } }
+        }
+    }
 }
 
 @Composable
@@ -131,8 +157,10 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
     }
 
     fun openItem(item: LibraryItem) {
-        nav.navigate(if (item.isMovie) Routes.movie(item.externalId) else Routes.show(item.externalId))
+        nav.navigate(if (item.isMovie) Routes.movie(item.externalId, item.tmdbId) else Routes.show(item.externalId))
     }
+
+    val prefetcher = remember { Prefetcher(app) }
 
     fun openDownload(target: DownloadTarget) {
         app.pendingDownload = target
@@ -170,7 +198,16 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
         }
     }
 
-    NavHost(navController = nav, startDestination = start) {
+    // Passage d'un écran à l'autre : fondu court (le fondu par défaut dure
+    // 700 ms, ce qui donnait l'impression d'une appli lente)
+    NavHost(
+        navController = nav,
+        startDestination = start,
+        enterTransition = { fadeIn(tween(ENTER_MS)) },
+        exitTransition = { fadeOut(tween(EXIT_MS)) },
+        popEnterTransition = { fadeIn(tween(ENTER_MS)) },
+        popExitTransition = { fadeOut(tween(EXIT_MS)) },
+    ) {
         composable(Routes.SERVER) {
             ServerScreen(app.prefs) { nav.navigate(Routes.PAIR) { popUpTo(0) } }
         }
@@ -194,11 +231,12 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
                     resume = { entry -> nav.navigate(Routes.play(resumeRequest(entry))) },
                     request = ::openTmdb,
                     go = ::go,
+                    prefetch = prefetcher::focus,
                 ),
             )
         }
         composable(Routes.LIBRARY, arguments = listOf(navArgument("type") { type = NavType.StringType })) { entry ->
-            LibraryScreen(entry.arguments?.getString("type") ?: "movie", app.repository, app.api, ::openItem)
+            LibraryScreen(entry.arguments?.getString("type") ?: "movie", app.repository, app.api, ::openItem, prefetcher::focus)
         }
         composable(Routes.DISCOVER) {
             DiscoverScreen(app.repository, ::openTmdb)
@@ -221,10 +259,17 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
                 DownloadScreen(target, app.repository, app.api::absolute) { nav.popBackStack() }
             }
         }
-        composable(Routes.MOVIE, arguments = listOf(navArgument("radarrId") { type = NavType.StringType })) { entry ->
+        composable(
+            Routes.MOVIE,
+            arguments = listOf(
+                navArgument("radarrId") { type = NavType.StringType },
+                navArgument("tmdb") { type = NavType.LongType; defaultValue = -1L },
+            ),
+        ) { entry ->
             val radarrId = entry.arguments?.getString("radarrId").orEmpty()
             MovieScreen(
                 radarrId = radarrId,
+                tmdbId = entry.arguments?.getLong("tmdb")?.takeIf { it > 0 },
                 repository = app.repository,
                 api = app.api,
                 onPlay = { movie, start ->

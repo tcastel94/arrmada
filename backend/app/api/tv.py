@@ -46,6 +46,27 @@ async def stream(item_id: str, request: Request, db: AsyncSession = Depends(get_
     return StreamingResponse(body, status_code=status_code, headers=headers)
 
 
+@router.get("/hls/{item_id}/{path:path}")
+async def hls(item_id: str, path: str, request: Request, db: AsyncSession = Depends(get_db)):
+    """Remux HLS de Jellyfin (formats que la TV ne lit pas directement)."""
+    try:
+        status_code, headers, body = await tv_playback.open_hls(
+            db, item_id, path, request.url.query, request.headers.get("range")
+        )
+    except tv_playback.UpstreamError as exc:
+        raise HTTPException(exc.status_code, exc.detail) from exc
+    if isinstance(body, bytes):
+        return Response(body, status_code=status_code, headers=headers)
+    return StreamingResponse(body, status_code=status_code, headers=headers)
+
+
+@router.post("/hls/{item_id}/stop")
+async def hls_stop(item_id: str, db: AsyncSession = Depends(get_db)) -> dict:
+    """La TV quitte la lecture : Jellyfin arrête le remux."""
+    await tv_playback.stop_hls(db, item_id)
+    return {"status": "ok"}
+
+
 @router.get("/chapter-image/{item_id}/{index}")
 async def chapter_image(item_id: str, index: int, db: AsyncSession = Depends(get_db)) -> Response:
     """Vignette d'un chapitre (menu pause)."""

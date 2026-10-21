@@ -151,4 +151,11 @@ Chaque phase est livrée en APK testable sur la Shield.
 > l'intro et épisode suivant). Compilées et vérifiées en CI (tests JVM +
 > captures d'écran) ; **pas encore validées sur la Shield** (son HD, 4K
 > remux relayée, navigation à la télécommande).
-
+>
+> **Mise à jour (21/10/2026, APK 2.2.0)** : premier essai sur la Shield. Un
+> film en `.m2ts` ne se lisait pas (conteneur Blu-ray inconnu d'ExoPlayer) :
+> ces fichiers passent désormais par un **remux HLS de Jellyfin** (image
+> copiée, son converti en E-AC3 si besoin), choisi par le serveur ou en
+> secours par le lecteur. Navigation accélérée (transitions, taille des
+> images TMDB, caches, préchargement) ; boîtier et disque animé de l'add-on
+> sur la fiche film.

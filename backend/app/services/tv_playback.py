@@ -11,6 +11,16 @@ un reverse proxy :
 Ce module rassemble ce que la TV doit savoir avant de lancer la lecture
 (identifiant Jellyfin, durée, chapitres, marqueurs, reprise) et ouvre le
 flux relayé.
+
+Deux façons de lire :
+
+  - **direct** : le fichier tel quel (Range pour l'avance rapide). Le cas
+    normal : MKV, MP4, TS… que le lecteur de la TV (ExoPlayer) sait ouvrir ;
+  - **remux** : pour les formats qu'ExoPlayer ne sait pas ouvrir (.m2ts de
+    Blu-ray, image .iso, dossier BDMV…), Jellyfin change le conteneur à la
+    volée sans réencoder l'image (HLS, morceaux fMP4). Le son peut être
+    converti en Dolby Digital Plus si le conteneur n'accepte pas l'original.
+    La TV bascule aussi d'elle-même en remux si le direct échoue.
 """
 
 from __future__ import annotations
@@ -46,7 +56,23 @@ _FORWARDED = (
 )
 
 # Champs demandés à Jellyfin pour un élément
-_FIELDS = "Chapters,Overview,MediaSources,ProviderIds"
+_FIELDS = "Chapters,Overview,MediaSources,ProviderIds,Path"
+
+# Extensions que le lecteur de la TV (ExoPlayer) ouvre directement. Les
+# autres (.m2ts, .mts, .iso, .vob, .img…) passent par le remux de Jellyfin.
+DIRECT_EXTENSIONS = {"mkv", "mk3d", "webm", "mp4", "m4v", "mov", "ts", "avi", "ogv"}
+
+# Morceaux du remux HLS que la TV peut demander : la liste de lecture
+# principale, celle des morceaux, et les morceaux eux-mêmes. Rien d'autre
+# n'est relayé vers Jellyfin.
+HLS_PATH = re.compile(r"^(master|main)\.m3u8$|^hls1/[A-Za-z0-9_]+/-?\d+\.(mp4|m4s|ts)$")
+
+# Identifiants de la session de remux chez Jellyfin (pour l'arrêter ensuite)
+HLS_DEVICE = "arrmada-tv"
+
+# Clé d'API glissée par Jellyfin dans les adresses de ses listes HLS : retirée
+# avant d'envoyer la liste à la TV (la clé ne sort jamais du serveur).
+_KEY_IN_URL = re.compile(r"(?i)([?&])(api_?key)=[^&\s\"]*(&?)")
 
 
 def stream_path(item_id: str) -> str:
@@ -59,6 +85,41 @@ def chapter_image_path(item_id: str, index: int) -> str:
 
 def item_image_path(item_id: str) -> str:
     return f"/api/tv/item-image/{item_id}"
+
+
+def hls_path(item_id: str) -> str:
+    return f"/api/tv/hls/{item_id}/master.m3u8"
+
+
+def source_info(details: dict[str, Any]) -> dict[str, Any]:
+    """Extension du fichier et mode de lecture conseillé (direct ou remux).
+
+    Un élément qui n'est pas un simple fichier vidéo (VideoType « Iso »,
+    « BluRay », « Dvd ») ou dont l'extension n'est pas lue par la TV passe
+    par le remux.
+    """
+    sources = details.get("MediaSources") or [{}]
+    source = sources[0] if isinstance(sources[0], dict) else {}
+    path = str(source.get("Path") or details.get("Path") or "")
+    ext = path.rsplit(".", 1)[-1].lower() if "." in path.rsplit("/", 1)[-1] else ""
+    video_type = str(details.get("VideoType") or source.get("VideoType") or "VideoFile")
+    direct = video_type == "VideoFile" and (ext in DIRECT_EXTENSIONS or not ext)
+    return {
+        "container": ext or str(source.get("Container") or ""),
+        "mode": "direct" if direct else "remux",
+    }
+
+
+def strip_api_key(playlist: str) -> str:
+    """Retire « ApiKey=… » / « api_key=… » des adresses d'une liste HLS."""
+
+    def repl(m: re.Match[str]) -> str:
+        # « ?ApiKey=x&a=1 » → « ?a=1 » ; « a=1&ApiKey=x&b=2 » → « a=1&b=2 » ;
+        # en fin d'adresse (« ?ApiKey=x », « &ApiKey=x ») → rien
+        sep, amp = m.group(1), m.group(3)
+        return sep if amp else ""
+
+    return _KEY_IN_URL.sub(repl, playlist)
 
 
 def parse_chapters(item_id: str, raw: Any) -> list[dict[str, Any]]:
@@ -112,13 +173,18 @@ async def _resume(db: AsyncSession, key: str) -> dict[str, Any]:
 
 def _found(item_id: str, details: dict[str, Any] | None, resume: dict[str, Any]) -> dict[str, Any]:
     details = details or {}
+    source = source_info(details)
     return {
         "status": "ok",
         "item_id": item_id,
         "title": details.get("Name"),
         "overview": details.get("Overview"),
         "duration": duration_seconds(details),
-        "stream": stream_path(item_id),
+        # Flux conseillé, et le remux en secours (la TV y bascule si le direct échoue)
+        "mode": source["mode"],
+        "container": source["container"],
+        "stream": stream_path(item_id) if source["mode"] == "direct" else hls_path(item_id),
+        "remux_stream": hls_path(item_id),
         "chapters": parse_chapters(item_id, details.get("Chapters")),
         "resume": resume,
     }
@@ -232,32 +298,25 @@ class UpstreamError(Exception):
         self.detail = detail
 
 
-async def open_stream(
-    db: AsyncSession, item_id: str, range_header: str | None
+async def _relay(
+    url: str, range_header: str | None, label: str
 ) -> tuple[int, dict[str, str], AsyncIterator[bytes]]:
-    """Ouvre le fichier d'origine chez Jellyfin et le relaie morceau par morceau.
+    """Ouvre une adresse Jellyfin et la relaie morceau par morceau.
 
     Rend (code HTTP, en-têtes à recopier, flux d'octets). Le « Range » de la
     TV est transmis tel quel : Jellyfin répond 206 avec le morceau demandé,
     c'est ce qui rend l'avance rapide instantanée.
     """
-    if not ITEM_ID.match(item_id):
-        raise UpstreamError(404, "Élément inconnu")
-    cfg = await jellyfin.get_config(db)
-    if not cfg:
-        raise UpstreamError(503, "Jellyfin non configuré")
-    base, key = cfg
-    url = f"{base}/Videos/{item_id}/stream?{urlencode({jellyfin.KEY_PARAM: key, 'static': 'true'})}"
     headers = {"Range": range_header} if range_header else {}
-
     # Pas de délai de lecture : un film en pause peut laisser la connexion
-    # inactive longtemps. Délai de connexion court : Jellyfin est sur le LAN.
+    # inactive longtemps (et un remux met quelques secondes à démarrer).
+    # Délai de connexion court : Jellyfin est sur le LAN.
     client = httpx.AsyncClient(timeout=httpx.Timeout(10.0, read=None))
     try:
         upstream = await client.send(client.build_request("GET", url, headers=headers), stream=True)
     except httpx.HTTPError as exc:
         await client.aclose()
-        logger.warning("Relais vidéo %s : Jellyfin injoignable (%s)", item_id, type(exc).__name__)
+        logger.warning("Relais vidéo %s : Jellyfin injoignable (%s)", label, type(exc).__name__)
         raise UpstreamError(502, "Jellyfin injoignable") from exc
 
     if upstream.status_code >= 400:
@@ -279,6 +338,100 @@ async def open_stream(
             await client.aclose()
 
     return upstream.status_code, forwarded, body()
+
+
+async def open_stream(
+    db: AsyncSession, item_id: str, range_header: str | None
+) -> tuple[int, dict[str, str], AsyncIterator[bytes]]:
+    """Fichier d'origine (lecture directe), relayé depuis Jellyfin."""
+    if not ITEM_ID.match(item_id):
+        raise UpstreamError(404, "Élément inconnu")
+    cfg = await jellyfin.get_config(db)
+    if not cfg:
+        raise UpstreamError(503, "Jellyfin non configuré")
+    base, key = cfg
+    url = f"{base}/Videos/{item_id}/stream?{urlencode({jellyfin.KEY_PARAM: key, 'static': 'true'})}"
+    return await _relay(url, range_header, item_id)
+
+
+# ── Remux HLS (formats que la TV ne lit pas directement) ─────────────────────
+
+
+def hls_master_params(item_id: str) -> dict[str, str]:
+    """Paramètres du remux : image copiée telle quelle (HEVC, HDR, Dolby
+    Vision gardés), son copié s'il tient dans le conteneur, sinon converti en
+    Dolby Digital Plus (jusqu'en 7.1)."""
+    return {
+        "MediaSourceId": item_id,
+        "DeviceId": HLS_DEVICE,
+        "PlaySessionId": f"arrmada-{item_id}",
+        "VideoCodec": "hevc,h264,av1,vp9",
+        "AudioCodec": "eac3,ac3,aac,flac,mp3,opus",
+        "AllowVideoStreamCopy": "true",
+        "AllowAudioStreamCopy": "true",
+        "EnableAutoStreamCopy": "true",
+        "RequireAvc": "false",
+        "SegmentContainer": "mp4",
+        "BreakOnNonKeyFrames": "true",
+        "TranscodingMaxAudioChannels": "8",
+        "MaxStreamingBitrate": "250000000",
+    }
+
+
+async def open_hls(
+    db: AsyncSession, item_id: str, path: str, query: str, range_header: str | None
+) -> tuple[int, dict[str, str], AsyncIterator[bytes] | bytes]:
+    """Relaie une liste HLS (clé retirée) ou un morceau du remux Jellyfin.
+
+    [query] : paramètres tels que la TV les a reçus dans les listes de
+    Jellyfin (sans la clé) ; la clé est ajoutée ici.
+    """
+    if not ITEM_ID.match(item_id) or not HLS_PATH.match(path):
+        raise UpstreamError(404, "Élément inconnu")
+    cfg = await jellyfin.get_config(db)
+    if not cfg:
+        raise UpstreamError(503, "Jellyfin non configuré")
+    base, key = cfg
+    if path == "master.m3u8":
+        params = urlencode({**hls_master_params(item_id), jellyfin.KEY_PARAM: key})
+    else:
+        clean = strip_api_key("?" + query).lstrip("?&") if query else ""
+        params = "&".join(p for p in (clean, urlencode({jellyfin.KEY_PARAM: key})) if p)
+    url = f"{base}/Videos/{item_id}/{path}?{params}"
+
+    if path.endswith(".m3u8"):
+        try:
+            async with httpx.AsyncClient(timeout=60) as client:
+                r = await client.get(url)
+        except httpx.HTTPError as exc:
+            raise UpstreamError(502, "Jellyfin injoignable") from exc
+        if r.status_code >= 400:
+            raise UpstreamError(
+                404 if r.status_code == 404 else 502, f"Jellyfin a répondu {r.status_code}"
+            )
+        playlist = strip_api_key(r.text).encode()
+        return 200, {"content-type": "application/vnd.apple.mpegurl"}, playlist
+    return await _relay(url, range_header, f"{item_id}/{path}")
+
+
+async def stop_hls(db: AsyncSession, item_id: str) -> None:
+    """Arrête le remux en cours chez Jellyfin (la TV a quitté la lecture)."""
+    if not ITEM_ID.match(item_id):
+        return
+    cfg = await jellyfin.get_config(db)
+    if not cfg:
+        return
+    base, key = cfg
+    params = {
+        jellyfin.KEY_PARAM: key,
+        "DeviceId": HLS_DEVICE,
+        "PlaySessionId": f"arrmada-{item_id}",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            await client.delete(f"{base}/Videos/ActiveEncodings?{urlencode(params)}")
+    except httpx.HTTPError as exc:
+        logger.debug("Arrêt du remux %s : %s", item_id, exc)
 
 
 async def _image(db: AsyncSession, path: str) -> tuple[bytes, str]:

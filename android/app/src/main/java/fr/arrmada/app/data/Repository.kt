@@ -76,29 +76,68 @@ class Repository(private val api: Api) {
 
     suspend fun upcoming(days: Int = 14): Calendar = api.get("/api/calendar?days=$days")
 
-    suspend fun movie(radarrId: String): MovieDetail = api.get("/api/media/movie/$radarrId")
+    // ── Fiches : gardées 2 min en mémoire ──
+    // Revenir sur une fiche, ou l'ouvrir après l'avoir survolée (préchargement),
+    // est alors instantané. Comme un cache disque côté système : on sert la
+    // copie récente, on ne relit le serveur qu'une fois la copie périmée.
+    private val details = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, Any>>()
 
-    suspend fun series(sonarrId: String): SeriesDetail = api.get("/api/media/series/$sonarrId")
+    @Suppress("UNCHECKED_CAST")
+    private suspend fun <T : Any> cached(key: String, ttlMs: Long, fresh: Boolean, load: suspend () -> T): T {
+        val hit = details[key]
+        if (!fresh && hit != null && System.currentTimeMillis() - hit.first < ttlMs) return hit.second as T
+        return load().also { details[key] = System.currentTimeMillis() to it }
+    }
+
+    suspend fun movie(radarrId: String, fresh: Boolean = false): MovieDetail =
+        cached("movie:$radarrId", DETAIL_TTL, fresh) { api.get<MovieDetail>("/api/media/movie/$radarrId") }
+
+    suspend fun series(sonarrId: String, fresh: Boolean = false): SeriesDetail =
+        cached("series:$sonarrId", DETAIL_TTL, fresh) { api.get<SeriesDetail>("/api/media/series/$sonarrId") }
+
+    /**
+     * Précharge la fiche d'un titre survolé (et, pour un film, s'il se lit
+     * dans Jellyfin) : quand on appuie sur OK, tout est déjà là.
+     */
+    suspend fun prefetch(item: LibraryItem) {
+        if (item.externalId.isBlank()) return
+        if (item.isMovie) {
+            movie(item.externalId)
+            item.tmdbId?.let { playMovie(it) }
+        } else {
+            series(item.externalId)
+        }
+    }
 
     /** Épisodes d'une saison présents dans Jellyfin (vignettes, durées). */
     suspend fun seasonEpisodes(tvdbId: Long, season: Int): SeasonEpisodes =
         api.get("/api/tv/series/$tvdbId/season/$season")
 
     // ── Vu / reprise ──
-    /** Tous les états partagés (relus page par page, 500 par page). */
-    suspend fun watchStates(): List<WatchState> {
-        val all = mutableListOf<WatchState>()
-        var cursor = ""
+    // États vu / reprise gardés en mémoire : le premier appel relit tout, les
+    // suivants ne demandent que ce qui a changé depuis (curseur du serveur,
+    // comme un « rsync » incrémental).
+    private val states = LinkedHashMap<String, WatchState>()
+    private var statesCursor = ""
+    private val statesLock = kotlinx.coroutines.sync.Mutex()
+
+    /** Tous les états partagés (premier passage page par page, 500 par page). */
+    suspend fun watchStates(): List<WatchState> = statesLock.withLock {
         do {
-            val page: WatchStates = api.get("/api/kodi/watch-state" + if (cursor.isNotEmpty()) "?since=" + java.net.URLEncoder.encode(cursor, "UTF-8") else "")
-            all += page.states
-            cursor = page.cursor
-        } while (page.more && cursor.isNotEmpty())
-        return all
+            val since = if (statesCursor.isNotEmpty()) "?since=" + java.net.URLEncoder.encode(statesCursor, "UTF-8") else ""
+            val page: WatchStates = api.get("/api/kodi/watch-state$since")
+            page.states.forEach { states[stateKey(it)] = it }
+            if (page.cursor.isNotEmpty()) statesCursor = page.cursor
+        } while (page.more && page.cursor.isNotEmpty())
+        states.values.toList()
     }
+
+    private fun stateKey(s: WatchState) = "${s.mediaType}|${s.idType}|${s.id}|${s.season}|${s.episode}"
 
     suspend fun saveWatchState(update: WatchStateUpdate) {
         api.post<kotlinx.serialization.json.JsonObject, WatchStatePost>("/api/kodi/watch-state", WatchStatePost(listOf(update)))
+        // La reprise d'un film a changé : sa prochaine lecture relit le serveur
+        if (update.mediaType == "movie") details.remove("play:${update.id}")
     }
 
     /**
@@ -155,10 +194,20 @@ class Repository(private val api: Api) {
     suspend fun download(request: DownloadRequest): ActionResult = api.post("/api/kodi/media/download", request)
 
     // ── Lecture ──
-    suspend fun playMovie(tmdbId: Long): PlayInfo = api.get("/api/tv/play/movie/$tmdbId")
+    /** Infos de lecture d'un film (gardées 30 s : le préchargement les sert à la fiche). */
+    suspend fun playMovie(tmdbId: Long, fresh: Boolean = false): PlayInfo =
+        cached("play:$tmdbId", PLAY_TTL, fresh) { api.get<PlayInfo>("/api/tv/play/movie/$tmdbId") }
 
     suspend fun playEpisode(tvdbId: Long, season: Int, episode: Int): PlayInfo =
         api.get("/api/tv/play/episode/$tvdbId/$season/$episode")
+
+    /** Fin de lecture d'un remux : Jellyfin arrête la conversion. */
+    suspend fun stopRemux(itemId: String) {
+        api.post<kotlinx.serialization.json.JsonObject, kotlinx.serialization.json.JsonObject>(
+            "/api/tv/hls/$itemId/stop",
+            kotlinx.serialization.json.JsonObject(emptyMap()),
+        )
+    }
 
     // ── Ampli ──
     @Serializable
@@ -179,6 +228,8 @@ class Repository(private val api: Api) {
     }
 
     companion object {
+        private const val DETAIL_TTL = 2 * 60_000L
+        private const val PLAY_TTL = 30_000L
         private val LAST_PLAYED = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
 
         /** Format attendu par le serveur (celui de Kodi) : « 2026-10-19 21:42:05 ». */

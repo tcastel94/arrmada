@@ -140,15 +140,20 @@ async def get_config(db: AsyncSession) -> tuple[str, str] | None:
     return _base(svc.url), decrypt_api_key(svc.api_key)
 
 
-async def find_movie_item(db: AsyncSession, tmdb_id: int) -> dict[str, Any] | None:
-    """Find the Jellyfin movie whose TMDB provider id matches, else None."""
-    cfg = await get_config(db)
-    if not cfg:
-        return None
-    base, key = cfg
+# Index {TMDB → film Jellyfin}, par serveur, gardé 10 min (comme celui des
+# séries) : la liste complète des films n'est relue qu'une fois, pas à chaque
+# fiche ouverte sur la TV.
+MOVIES_TTL = 600.0
+_movie_cache: dict[str, tuple[float, dict[str, dict[str, Any]]]] = {}
+
+
+async def _movie_index(base: str, key: str, refresh: bool = False) -> dict[str, dict[str, Any]]:
+    cached = _movie_cache.get(base)
+    if cached and not refresh and time.monotonic() - cached[0] < MOVIES_TTL:
+        return cached[1]
     # Jellyfin's AnyProviderIdEquals filter is unreliable, so we fetch the movie
     # list with provider ids and match client-side. Libraries are a few thousand
-    # items at most — one call, done on-demand when casting.
+    # items at most — one call, then cached.
     params = {
         KEY_PARAM: key,
         "recursive": "true",
@@ -161,10 +166,31 @@ async def find_movie_item(db: AsyncSession, tmdb_id: int) -> dict[str, Any] | No
         r = await client.get(f"{base}/Items?{urlencode(params)}")
         r.raise_for_status()
         items = r.json().get("Items", [])
-    for it in items:
-        if str((it.get("ProviderIds") or {}).get("Tmdb")) == str(tmdb_id):
-            return {"id": it["Id"], "name": it.get("Name"), "year": it.get("ProductionYear")}
-    return None
+    index = {
+        _provider(it, "Tmdb"): {
+            "id": it["Id"],
+            "name": it.get("Name"),
+            "year": it.get("ProductionYear"),
+        }
+        for it in items
+        if _provider(it, "Tmdb") and it.get("Id")
+    }
+    _movie_cache[base] = (time.monotonic(), index)
+    return index
+
+
+async def find_movie_item(db: AsyncSession, tmdb_id: int) -> dict[str, Any] | None:
+    """Find the Jellyfin movie whose TMDB provider id matches, else None."""
+    cfg = await get_config(db)
+    if not cfg:
+        return None
+    base, key = cfg
+    index = await _movie_index(base, key)
+    item = index.get(str(tmdb_id))
+    if item is None and base in _movie_cache:
+        # Film ajouté depuis la dernière lecture de l'index : on le relit une fois
+        item = (await _movie_index(base, key, refresh=True)).get(str(tmdb_id))
+    return item
 
 
 def stream_url(

@@ -1,6 +1,7 @@
 package fr.arrmada.app.ui.player
 
 import android.view.KeyEvent as AndroidKeyEvent
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
@@ -49,6 +50,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
@@ -100,6 +102,11 @@ data class UpNext(val request: PlayRequest, val code: String, val title: String,
  * ArrMada depuis Jellyfin. ExoPlayer choisit seul : passthrough du son vers
  * l'ampli quand la sortie HDMI le permet (TrueHD, DTS-HD…), décodeurs
  * matériels pour la 4K / HDR / Dolby Vision.
+ *
+ * Formats qu'ExoPlayer n'ouvre pas (.m2ts de Blu-ray, .iso…) : Jellyfin
+ * change le conteneur à la volée (« remux » HLS, image intacte). Le serveur
+ * le choisit d'office pour ces extensions ; si un fichier « normal » se
+ * révèle illisible, le lecteur y bascule seul, une fois, à la même position.
  *
  * Télécommande :
  *  - OK, Lecture/Pause ou Retour : pause et menu pause (façon Apple TV) ;
@@ -212,7 +219,7 @@ private fun PlayerSurface(
             .setSeekForwardIncrementMs(30_000)
             .build()
             .apply {
-                setMediaItem(MediaItem.fromUri(app.api.baseUrl + info.stream))
+                setMediaItem(mediaItem(app.api.baseUrl + info.stream, hls = info.mode == "remux"))
                 prepare()
                 if (request.startSeconds > 0) seekTo(request.startSeconds * 1000L)
                 playWhenReady = true
@@ -225,6 +232,7 @@ private fun PlayerSurface(
     var duration by remember { mutableLongStateOf(info.duration * 1000L) }
     var tracks by remember { mutableStateOf(Tracks.EMPTY) }
     var playbackError by remember { mutableStateOf<String?>(null) }
+    var remuxed by remember { mutableStateOf(info.mode == "remux") } // flux converti par Jellyfin
     var finished by remember { mutableStateOf(false) } // fin enregistrée (vu)
     var upNextDismissed by remember { mutableStateOf(false) }
     var countdown by remember { mutableIntStateOf(PlaybackLogic.UP_NEXT_SECONDS) }
@@ -288,7 +296,18 @@ private fun PlayerSurface(
             }
 
             override fun onPlayerError(e: PlaybackException) {
-                playbackError = describe(e)
+                // Fichier illisible en direct : on retente une fois en remux,
+                // là où on en était
+                if (!remuxed && info.remuxStream.isNotBlank() && e.errorCode in REMUX_RETRY) {
+                    remuxed = true
+                    val at = player.currentPosition.takeIf { it > 0 } ?: (request.startSeconds * 1000L)
+                    player.setMediaItem(mediaItem(app.api.baseUrl + info.remuxStream, hls = true), at)
+                    player.prepare()
+                    player.play()
+                    Toast.makeText(context, "Format ${info.container.ifBlank { "inconnu" }} : conversion par Jellyfin…", Toast.LENGTH_LONG).show()
+                    return
+                }
+                playbackError = describe(e, info.container, remuxed)
             }
         }
         player.addListener(listener)
@@ -296,6 +315,8 @@ private fun PlayerSurface(
             save(false)
             player.removeListener(listener)
             player.release()
+            // Remux : Jellyfin arrête la conversion (sinon elle tourne à vide)
+            if (remuxed) app.appScope.launch { runCatching { repository.stopRemux(info.itemId) } }
         }
     }
 
@@ -505,6 +526,31 @@ fun UpNextCard(next: UpNext, countdown: Int, absolute: (String?) -> String?) {
             Text("OK : maintenant  ·  Retour : non merci", style = MaterialTheme.typography.labelSmall, color = ArrColors.TextSecondary, modifier = Modifier.padding(top = 4.dp))
         }
     }
+}
+
+/** Erreurs de lecture directe qui justifient de retenter en remux. */
+private val REMUX_RETRY = setOf(
+    PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
+    PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
+    PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
+    PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED,
+)
+
+/** Élément à lire : fichier d'origine, ou liste HLS du remux. */
+private fun mediaItem(url: String, hls: Boolean): MediaItem =
+    MediaItem.Builder().setUri(url).apply { if (hls) setMimeType(MimeTypes.APPLICATION_M3U8) }.build()
+
+/**
+ * Message lisible, suivi du détail technique (code ExoPlayer, format du
+ * fichier, direct ou remux) : utile pour comprendre ce qui coince.
+ */
+private fun describe(e: PlaybackException, container: String, remuxed: Boolean): String {
+    val detail = listOfNotNull(
+        e.errorCodeName,
+        container.takeIf { it.isNotBlank() }?.let { "fichier .$it" },
+        if (remuxed) "converti par Jellyfin" else "lecture directe",
+    ).joinToString(" · ")
+    return describe(e) + "\n\n" + detail
 }
 
 /** Message lisible pour les erreurs de lecture les plus courantes. */

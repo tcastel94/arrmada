@@ -131,7 +131,7 @@ class ScreenshotTest {
         genres = listOf("Science-fiction", "Aventure", "Drame"), tmdbId = 438631, trailerId = "n9xhJrPXop4", hasFile = true,
         overview = "Paul Atréides, un jeune homme brillant au destin hors du commun, doit se rendre sur la planète la plus dangereuse de l’univers afin d’assurer l’avenir de sa famille et de son peuple. Alors que des forces maléfiques se disputent le contrôle de la plus précieuse ressource qui soit, seuls ceux qui parviendront à dominer leur peur pourront survivre.",
         ratings = Ratings(tmdb = 7.8, imdb = 8.0, rottenTomatoes = 83.0),
-        images = Images(fanart = "https://img/fanart-dune"),
+        images = Images(fanart = "https://img/fanart-dune", poster = "https://img/poster-dune"),
         file = FileInfo(quality = "Bluray-2160p", resolution = JsonPrimitive(2160), dynamicRangeType = "DV HDR10", audioCodec = "TrueHD Atmos", audioChannels = 7.1),
         cast = listOf(
             "Timothée Chalamet" to "Paul Atréides", "Rebecca Ferguson" to "Lady Jessica", "Oscar Isaac" to "Duc Leto",
@@ -173,6 +173,27 @@ class ScreenshotTest {
     fun fiche() {
         captureRoboImage(shot("02-fiche-film")) {
             ArrMadaTheme { MovieContent(dune, play, noAbsolute, onPlay = { _, _ -> }) }
+        }
+    }
+
+    @Test
+    fun ficheBlurayDiscart() {
+        // Blu-ray 1080p avec rond imprimé fanart.tv
+        val bluray = dune.copy(
+            file = FileInfo(quality = "Bluray-1080p", resolution = JsonPrimitive(1080), audioCodec = "DTS-HD MA", audioChannels = 5.1),
+            images = dune.images.copy(discart = "https://img/disc-dune"),
+        )
+        captureRoboImage(shot("15-fiche-film-bluray")) {
+            ArrMadaTheme { MovieContent(bluray, play, noAbsolute, onPlay = { _, _ -> }) }
+        }
+    }
+
+    @Test
+    fun ficheSansFichier() {
+        // Suivi par Radarr, pas encore téléchargé : boîtier transparent
+        val missing = dune.copy(hasFile = false, file = null)
+        captureRoboImage(shot("16-fiche-film-absent")) {
+            ArrMadaTheme { MovieContent(missing, null, noAbsolute, onPlay = { _, _ -> }) }
         }
     }
 
@@ -244,7 +265,7 @@ class ScreenshotTest {
     fun grilleFilms() {
         val items = (titles + titles.map { "$it II" } + titles.map { "$it III" }).mapIndexed { i, t -> movie(i + 1, t, 2000 + i % 25).copy(added = "2026-10-${10 + i % 9}") }
         captureRoboImage(shot("06-grille-films")) {
-            ArrMadaTheme { LibraryContent("Films", items, noAbsolute) {} }
+            ArrMadaTheme { LibraryContent("Films", items, noAbsolute, onOpen = {}) }
         }
     }
 

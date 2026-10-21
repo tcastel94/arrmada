@@ -24,6 +24,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,8 +38,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import coil.compose.AsyncImage
 import fr.arrmada.app.data.Api
+import fr.arrmada.app.data.CaseLogic
 import fr.arrmada.app.data.FileInfo
 import fr.arrmada.app.data.MovieDetail
 import fr.arrmada.app.data.PlayInfo
@@ -49,38 +53,53 @@ import fr.arrmada.app.ui.components.KenBurnsBackdrop
 import fr.arrmada.app.ui.components.MessageScreen
 import fr.arrmada.app.ui.components.formatClock
 import fr.arrmada.app.ui.theme.ArrColors
+import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
 
 /**
  * Fiche d'un film : fond, logo, notes, pastilles techniques (4K, HDR,
- * Atmos…), résumé, boutons de lecture, bande-annonce et distribution.
+ * Atmos…), résumé, boutons de lecture, bande-annonce et distribution ; à
+ * droite, le boîtier et son disque qui sort en roulant (comme l'add-on).
  *
- * [onPlay] reçoit la position de départ en secondes (0 = depuis le début).
+ * [tmdbId] (connu quand on vient d'une grille ou de l'accueil) permet de
+ * demander en même temps la fiche et les infos de lecture, au lieu de l'une
+ * après l'autre. [onPlay] reçoit la position de départ en secondes.
  */
 @Composable
 fun MovieScreen(
     radarrId: String,
+    tmdbId: Long?,
     repository: Repository,
     api: Api,
     onPlay: (movie: MovieDetail, startSeconds: Int) -> Unit,
     onDownload: (MovieDetail) -> Unit = {},
 ) {
+    val scope = rememberCoroutineScope()
     var movie by remember { mutableStateOf<MovieDetail?>(null) }
     var play by remember { mutableStateOf<PlayInfo?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(radarrId) {
         try {
+            // Les deux requêtes partent ensemble (souvent déjà en cache grâce
+            // au préchargement de la carte survolée)
+            val early = tmdbId?.let { id -> async { runCatching { repository.playMovie(id) }.getOrNull() } }
             val detail = repository.movie(radarrId)
             if (detail.error != null) {
                 error = detail.error
                 return@LaunchedEffect
             }
             movie = detail
-            // Disponible dans Jellyfin ? Où en était-on ? (une seule requête)
-            detail.tmdbId?.let { play = runCatching { repository.playMovie(it) }.getOrNull() }
+            play = early?.await() ?: detail.tmdbId?.let { runCatching { repository.playMovie(it) }.getOrNull() }
         } catch (e: Exception) {
             error = e.message ?: "Serveur injoignable"
         }
+    }
+
+    // Retour du lecteur : la position de reprise a changé, on la relit
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        val id = movie?.tmdbId ?: return@LifecycleEventEffect
+        scope.launch { runCatching { repository.playMovie(id) }.getOrNull()?.let { play = it } }
     }
 
     val m = movie
@@ -104,7 +123,16 @@ fun MovieContent(
     val playable = play?.status == "ok"
 
     KenBurnsBackdrop(url = absolute(m.images.fanart ?: m.images.landscape)) {
-        Column(Modifier.fillMaxSize().padding(start = 48.dp, top = 36.dp, end = 48.dp)) {
+        // Boîtier + disque, colonne de droite (comme l'add-on)
+        DiscCase(
+            format = CaseLogic.format(m.hasFile, m.file),
+            poster = absolute(m.images.poster),
+            discart = absolute(m.images.discart),
+            title = m.title,
+            modifier = Modifier.align(Alignment.TopEnd).padding(top = 46.dp, end = 40.dp),
+        )
+        // Texte et boutons à gauche : la place du disque sorti est laissée libre
+        Column(Modifier.fillMaxSize().padding(start = 48.dp, top = 36.dp, end = 360.dp)) {
             // ── Logo ou titre ──
             val logo = absolute(m.images.bestLogo)
             if (logo != null) {

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Android TV app: Blu-ray files, faster screens, case and disc (APK 2.2.0)
+
+#### Fixed
+- **Movies in `.m2ts` (Blu-ray), `.iso` or BDMV folders now play**: ExoPlayer cannot open these containers ("Fichier illisible"). The server detects them from the Jellyfin media source and asks Jellyfin for a **remux** (HLS, fMP4 segments, video copied untouched: 4K / HDR / Dolby Vision kept; audio copied when the container allows it, else Dolby Digital Plus). If a "normal" file still fails to parse, the player switches to the remux once, at the same position. The error screen now shows the ExoPlayer code, the file extension and the mode (direct / remux)
+- **Server**: `GET /api/tv/hls/{item}/{master|main.m3u8, hls1/…}` relays the remux with the Jellyfin key stripped from the playlists; `POST /api/tv/hls/{item}/stop` stops the encode when the TV leaves; `mode`, `container` and `remux_stream` in the play info; device whitelist updated. Movie lookup in Jellyfin uses a 10-minute TMDB index instead of a full library scan on each play. 17 tests
+
+#### Changed
+- **Faster navigation**: screen transitions 180 / 120 ms (the default fade lasted 700 ms); TMDB posters and backdrops downloaded at the displayed size (w342 / w780 / w1280) instead of the original 2000 × 3000 and 4K files; movie and series pages kept 2 minutes in memory and **preloaded when a card keeps the focus** for 0.35 s; movie page asks for its details and its play info at the same time; watch states read incrementally (only what changed since the last call)
+
+#### Added
+- **Movie page case and disc** from the Kodi add-on: Blu-ray (blue), 4K ULTRA HD (black), DVD or clear case chosen from the file; the disc (fanart.tv disc art, or the poster cut as a ring) rolls out of the case with a small bounce, then spins slowly. Same textures as the add-on. 3 CI screenshots
+
 ### Android TV app, phase 2: series, skip intro, up next, search, Discover, download (APK 2.1.0)
 
 #### Added

@@ -8,7 +8,7 @@ sont expliqués dans l'[ADR-007](../docs/adr/007-appli-android-native.md).
 > Téléphone et tablette viendront en phase 4. L'APK s'y installe, mais
 > l'interface est pensée pour la télécommande.
 
-## Ce que fait la version 2.1 (phases 1 et 2 de l'ADR-007)
+## Ce que fait la version 2.2 (phases 1 et 2 de l'ADR-007)
 
 | Écran | Contenu |
 |---|---|
@@ -19,8 +19,8 @@ sont expliqués dans l'[ADR-007](../docs/adr/007-appli-android-native.md).
 | **Découvrir** | Tendances TMDB (films, séries) et « Parce que tu as… » : OK ouvre la fiche si le titre est déjà là, sinon la feuille *Télécharger* |
 | **Rechercher** | Au clavier ou **à la voix** (bouton *Dicter*, ou touche recherche / micro de la télécommande quand elle arrive jusqu'à l'appli) : *Dans la médiathèque*, *Aussi dans Radarr / Sonarr*, *À demander* |
 | **Télécharger** | La feuille de l'add-on : un film en un bouton ; une série en entier, une saison ou des épisodes cochés ; **Pour ce soir** (passe devant les autres téléchargements). Le bouton dit ce qui part (« Télécharger S02E05 », « Télécharger 3 épisodes ») |
-| **Fiche film** | Logo, notes TMDB / IMDb / Rotten Tomatoes, pastilles **4K / Dolby Vision / Atmos / 7.1**, résumé, *Reprendre à…* / *Depuis le début*, bande-annonce (appli YouTube), distribution |
-| **Lecteur** | Fichier d'origine **sans transcodage**, son HD envoyé tel quel à l'ampli (passthrough), piste française préférée. Gauche / droite : −10 s / +30 s. Position enregistrée toutes les 30 s, en pause et en quittant ; « vu » à 90 %. Préréglage Yamaha de la pièce au lancement. **Passer l'intro / le récap** (chapitres nommés du fichier, sinon marqueurs Jellyfin), carte **Épisode suivant dans 10 s** au générique de fin (ou 30 s avant la fin) puis enchaînement |
+| **Fiche film** | Logo, notes TMDB / IMDb / Rotten Tomatoes, pastilles **4K / Dolby Vision / Atmos / 7.1**, résumé, *Reprendre à…* / *Depuis le début*, bande-annonce (appli YouTube), distribution. À droite, le **boîtier de l'add-on** (Blu-ray bleu, 4K ULTRA HD noir, DVD, transparent si le fichier n'est pas là) et son **disque qui sort en roulant** puis tourne (rond imprimé fanart.tv, sinon l'affiche en anneau) |
+| **Lecteur** | Fichier d'origine **sans transcodage**, son HD envoyé tel quel à l'ampli (passthrough), piste française préférée. Gauche / droite : −10 s / +30 s. Position enregistrée toutes les 30 s, en pause et en quittant ; « vu » à 90 %. Préréglage Yamaha de la pièce au lancement. Formats qu'ExoPlayer n'ouvre pas (**.m2ts** de Blu-ray, **.iso**…) : Jellyfin change le conteneur à la volée (**remux**, image intacte), automatiquement **Passer l'intro / le récap** (chapitres nommés du fichier, sinon marqueurs Jellyfin), carte **Épisode suivant dans 10 s** au générique de fin (ou 30 s avant la fin) puis enchaînement |
 | **Menu pause** (façon Apple TV) | Logo, pastilles, **heure de fin**, progression, onglets **Chapitres** (vignettes, saut direct), **Infos**, **Distribution**, **Audio** et **Sous-titres** (pistes nommées : langue, Dolby TrueHD, DTS-HD, 7.1, forcés, « non lisible ici ») |
 
 Pas encore là (phases 3 et 4, voir l'ADR) : écran Téléchargements
@@ -163,6 +163,8 @@ autre clé**.
 | Piste « non lisible ici » | Ni passthrough ni décodeur pour ce format sur cet appareil | Choisir une autre piste |
 | Pas de vignettes dans *Chapitres* | Jellyfin n'a pas extrait les images | Cocher « Extraire les images des chapitres » dans Jellyfin, relancer le scan |
 | Sous-titres ASS simplifiés | ExoPlayer ne gère pas les effets ASS avancés | Limite connue (ADR-007) |
+| Message *Format m2ts : conversion par Jellyfin…* | Fichier que la TV ne lit pas directement (Blu-ray .m2ts, .iso) | Normal : Jellyfin le remuxe (image intacte ; son TrueHD / DTS converti en Dolby Digital Plus 5.1). Démarrage de 2 à 5 s |
+| *Lecture interrompue* + code (`ERROR_CODE_…`, `fichier .xxx`) | Format que ni la TV ni le remux ne passent | Envoyer le message : le code et l'extension disent ce qui coince |
 
 ## Organisation du code
 
@@ -174,19 +176,21 @@ android/
     ├── main/java/fr/arrmada/app/
     │   ├── MainActivity.kt         # fenêtre unique + navigation entre écrans + Réglages
     │   ├── ArrMadaApplication.kt   # objets partagés (réglages, client HTTP, images)
-    │   ├── data/                   # API (client, modèles JSON, appels) + règles en Kotlin pur :
+    │   ├── data/                   # API (client, modèles JSON, appels, caches) + règles en Kotlin pur :
     │   │                           #   SeriesLogic (Lire la suite), PlaybackLogic (intro, générique),
-    │   │                           #   DownloadLogic (feuille Télécharger)
+    │   │                           #   DownloadLogic (feuille Télécharger), CaseLogic (boîtier),
+    │   │                           #   ImageSizes (taille des images TMDB)
     │   └── ui/
     │       ├── theme/              # charte de l'add-on (couleurs, police)
     │       ├── components/         # affiches, boutons, rangées, fond « Ken Burns »
     │       ├── setup/              # adresse du serveur, appairage
     │       ├── home/               # accueil, grilles Films / Séries, Découvrir
-    │       ├── detail/             # fiche film, écran Série
+    │       ├── detail/             # fiche film (boîtier + disque animé), écran Série
     │       ├── request/            # recherche (et dictée), feuille Télécharger
     │       └── player/             # lecteur ExoPlayer, menu pause, pistes
     └── test/                       # tests JVM + captures d'écran (Robolectric)
 ```
 
 Côté serveur : `backend/app/api/tv.py` et `backend/app/services/tv_playback.py`
-(infos de lecture, relais du flux Jellyfin, vignettes de chapitres).
+(infos de lecture, relais du flux Jellyfin, remux HLS des .m2ts / .iso,
+vignettes de chapitres).
