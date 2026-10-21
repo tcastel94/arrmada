@@ -281,3 +281,16 @@ data class TrailerInfo(
     val stream: String = "",
     val duration: Int = 0,
 )
+
+// ─── Mises à jour de l'appli (ADR-009) ──────────────────────────────────────
+
+/** Réponse de /api/android/update : version plus récente sur le serveur, ou rien. */
+@Serializable
+data class UpdateOffer(
+    val available: Boolean = false,
+    @SerialName("version_name") val versionName: String = "",
+    @SerialName("version_code") val versionCode: Int = 0,
+    val size: Long = 0,
+    val sha256: String = "",
+    val url: String = "",
+)

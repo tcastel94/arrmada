@@ -9,6 +9,8 @@ name: ArrMada Android
 # android/README.md), l'APK est signé avec la clé release et peut
 # mettre à jour l'appli installée. Sinon on produit un APK de test
 # (clé de debug jetable : à désinstaller avant chaque nouvelle version).
+# APK release : publiée aussi dans la release GitHub « android-latest »
+# (mises à jour automatiques des appareils, ADR-009).
 # ────────────────────────────────────────────────────────────────
 
 on:
@@ -81,6 +83,23 @@ jobs:
             android/dist/*.sha256
           if-no-files-found: error
           retention-days: 30
+
+      # Mises à jour automatiques (ADR-009) : l'APK signée avec la clé
+      # release est publiée dans la release GitHub « android-latest », que le
+      # serveur ArrMada rapatrie toutes les heures (empreinte SHA-256
+      # vérifiée) puis propose aux TV et téléphones. Jamais l'APK de test.
+      - name: Publish release APK (android-latest)
+        if: env.BUILD_TYPE == 'release' && github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          apk="$(ls dist/*-release.apk | head -1)"
+          name="$(basename "$apk")"
+          gh release delete android-latest --yes --cleanup-tag 2>/dev/null || true
+          gh release create android-latest "$apk" "dist/${name}.sha256" \
+            --prerelease --target "$GITHUB_SHA" \
+            --title "ArrMada Android (dernière version)" \
+            --notes "APK signée ${name}, compilée depuis ${GITHUB_SHA::7} (${GITHUB_REF_NAME}). Rapatriée automatiquement par le serveur ArrMada, puis proposée aux appareils (ADR-009)."
 
       - name: Upload screenshots
         if: always()

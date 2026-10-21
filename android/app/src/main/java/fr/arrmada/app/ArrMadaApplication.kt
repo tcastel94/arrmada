@@ -45,6 +45,9 @@ class ArrMadaApplication : Application(), ImageLoaderFactory {
         fr.arrmada.app.notify.EventCenter(repository, prefs, appScope, api.json)
     }
 
+    /** Mises à jour de l'appli proposées par le serveur (ADR-009). */
+    val updates: fr.arrmada.app.update.UpdateCenter by lazy { fr.arrmada.app.update.UpdateCenter(this) }
+
     /** La maison a des profils famille : avatar du profil dans le menu du haut. */
     var hasProfiles = false
 

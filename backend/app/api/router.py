@@ -9,6 +9,7 @@ from app.api.activity_timeline import router as activity_timeline_router
 from app.api.ai_search import router as ai_search_router
 from app.api.ambient import router as ambient_router
 from app.api.analytics import router as analytics_router
+from app.api.android import router as android_router
 from app.api.artwork import files_router as artwork_files_router
 from app.api.artwork import router as artwork_router
 from app.api.auth import router as auth_router
@@ -97,3 +98,4 @@ api_router.include_router(cleanup_router)
 api_router.include_router(ai_search_router)
 api_router.include_router(subtitles_router)
 api_router.include_router(cameras_router)  # Caméras Eufy : pop-up sur la TV
+api_router.include_router(android_router)  # Mises à jour de l'appli Android (ADR-009)

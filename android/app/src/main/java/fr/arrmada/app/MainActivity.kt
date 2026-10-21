@@ -6,6 +6,7 @@ import fr.arrmada.app.data.HomeLink
 import fr.arrmada.app.data.HomeRowsLogic
 import fr.arrmada.app.home.HomeRowsWorker
 import fr.arrmada.app.home.TvHomeRows
+import fr.arrmada.app.update.UpdateDialog
 import fr.arrmada.app.ui.components.gutter
 import android.os.Bundle
 import android.view.KeyEvent
@@ -372,6 +373,10 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
     // « Lire sur la TV » depuis la web app
     LaunchedEffect(Unit) { app.events.playRequests.collect { playAnnounced(it) } }
 
+    // Nouvelle version de l'appli sur le serveur (ADR-009) : vérifiée une fois par lancement
+    LaunchedEffect(paired) { if (paired) app.updates.checkOnce() }
+    val update by app.updates.offer.collectAsStateWithLifecycle()
+
     // Carte de l'accueil Android TV (« À suivre », chaîne ArrMada) : profil
     // en cours (celui des rangées), l'accueil d'ArrMada dessous pour Retour
     val link by links.collectAsStateWithLifecycle()
@@ -595,6 +600,11 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
     }
     }
 
+    // Mise à jour proposée : pas pendant un film, l'intro ou la mise en route
+    update?.let { offer ->
+        if (!showIntro && route !in listOf(Routes.PLAY, Routes.SERVER, Routes.PAIR)) UpdateDialog(app.updates, offer)
+    }
+
     // Par-dessus tous les écrans : bulles, « Prêt à regarder », caméra
     if (paired) EventOverlays(app.events, app.api::absolute, onWatch = ::playAnnounced)
 
@@ -646,10 +656,18 @@ private fun SettingsScreen(app: ArrMadaApplication, onChangeServer: () -> Unit, 
         Text("Réglages", style = MaterialTheme.typography.headlineMedium)
         Text("Serveur : ${app.prefs.serverUrl.orEmpty()}", style = MaterialTheme.typography.bodyLarge, color = ArrColors.TextSecondary, modifier = Modifier.padding(top = 18.dp))
         Text("Cette TV : ${app.prefs.deviceName ?: "—"}", style = MaterialTheme.typography.bodyLarge, color = ArrColors.TextSecondary, modifier = Modifier.padding(top = 6.dp))
-        Text("Version : ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodyLarge, color = ArrColors.TextSecondary, modifier = Modifier.padding(top = 6.dp))
+        Text("Version : ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", style = MaterialTheme.typography.bodyLarge, color = ArrColors.TextSecondary, modifier = Modifier.padding(top = 6.dp))
+        val settingsContext = LocalContext.current
+        val settingsScope = rememberCoroutineScope()
         Row(Modifier.padding(top = 28.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             ArrButton("Changer de serveur", onChangeServer, modifier = Modifier.focusRequester(focus))
             ArrButton("Refaire l’appairage", onRepair)
+            // Mise à jour (ADR-009) : la fenêtre « disponible » s'ouvre d'elle-même si besoin
+            ArrButton("Rechercher une mise à jour", {
+                settingsScope.launch {
+                    app.updates.checkNow()?.let { Toast.makeText(settingsContext, it, Toast.LENGTH_LONG).show() }
+                }
+            })
         }
         // Accueil Android TV : rangée « À suivre » et chaîne « ArrMada · Ajouts récents »
         val context = LocalContext.current

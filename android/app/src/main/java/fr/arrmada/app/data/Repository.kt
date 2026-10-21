@@ -297,6 +297,10 @@ class Repository(private val api: Api) {
     }
 
     /** Cette TV (pièce, ampli, identifiant), relue toutes les 10 min au plus. */
+    /** Version plus récente de l'appli sur le serveur (ADR-009) pour ce type d'APK. */
+    suspend fun updateOffer(versionCode: Int, buildType: String): UpdateOffer =
+        api.get("/api/android/update?version_code=$versionCode&build_type=${q(buildType)}")
+
     suspend fun device(): Device = cached("me", 10 * 60_000L, false) { me() }
 
     companion object {

@@ -8,6 +8,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Rangées sur l'accueil Android TV (« À suivre », chaîne ArrMada) -->
     <uses-permission android:name="com.android.providers.tv.permission.WRITE_EPG_DATA" />
+    <!-- Mises à jour proposées par le serveur ArrMada (ADR-009) : Android
+         demande une fois d'autoriser ArrMada, puis confirme chaque installation. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Android TV : sans ces deux lignes, l'appli n'apparaît pas dans le
          lanceur de la Shield (« leanback ») ou est déclarée incompatible
@@ -62,6 +65,11 @@
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Réponse de l'installeur d'Android pendant une mise à jour (interne). -->
+        <receiver
+            android:name=".update.UpdateReceiver"
+            android:exported="false" />
 
         <!-- Affiches des rangées de l'accueil Android TV, servies au lanceur
              (lecture seule, uniquement le cache des affiches : home/TvHomeRows.kt).

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Android app: automatic updates without adb (ADR-009, APK 2.8.0)
+
+#### Added
+- **CI**: the APK signed with the release key is published in the GitHub release **`android-latest`** (pre-release) with its `.sha256`, on every push to `main` / `android/apk`; never the debug APK
+- **Server mirror**: hourly job (first run 1 min after start) fetches that release into `data/apk/` when newer, **checks the SHA-256** before keeping it (`.part` renamed at the end), keeps the 2 latest per type; APKs built by hand can be dropped in the same folder (`arrmada-<version>-<code>-release.apk`). `GET /api/android/update`, `GET /api/android/apk/{file}` (device tokens, exact file names only), `GET /api/android/status`, `POST /api/android/refresh` (web app). Settings `ANDROID_UPDATE_REPO`, `ANDROID_UPDATE_TAG`, `ANDROID_APK_DIR`. 12 tests
+- **App**: checks the server once per launch (never during playback); "ArrMada X est disponible" window: download from the server with progress, SHA-256 checked again, then Android's installer (PackageInstaller session) with its confirmation; opens the "install unknown apps" permission screen the first time. *Réglages › Rechercher une mise à jour*; version code shown
+
 ### Android TV app: rows on the Shield home screen (ADR-007 phase 4, APK 2.7.0)
 
 #### Added

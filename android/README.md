@@ -8,7 +8,7 @@ sont expliqués dans l'[ADR-007](../docs/adr/007-appli-android-native.md).
 > Une seule APK : elle reconnaît l'écran au lancement (TV, tablette ou
 > téléphone) et adapte la navigation. Voir [Téléphone et tablette](#téléphone-et-tablette).
 
-## Ce que fait la version 2.7 (phases 1 à 4 de l'ADR-007)
+## Ce que fait la version 2.8 (phases 1 à 4 de l'ADR-007)
 
 | Écran | Contenu |
 |---|---|
@@ -145,6 +145,36 @@ réglages sont dans *Paramètres › Préférences de l'appareil › Écran et s
 > l'ancienne (`adb uninstall fr.arrmada.app.debug`) ; il faudra refaire
 > l'appairage. Une clé release (ci-dessous) supprime cette contrainte.
 
+### Mises à jour (sans adb, ADR-009)
+
+Une fois la **version release** installée (clé release dans les secrets
+GitHub, voir [Signature](#signature)), plus besoin d'adb :
+
+1. chaque push sur `android/apk` ou `main` publie l'APK signée dans la release
+   GitHub **`android-latest`** ;
+2. le serveur ArrMada la rapatrie dans l'heure (`data/apk/`, empreinte
+   SHA-256 vérifiée) ;
+3. au lancement suivant, chaque TV et téléphone affiche **« ArrMada X est
+   disponible »** : *Mettre à jour*, puis confirmer dans l'écran d'Android.
+
+La première fois, Android demande d'autoriser ArrMada à installer des applis
+(« sources inconnues ») : l'appli ouvre l'écran qui le permet. *Réglages ›
+Rechercher une mise à jour* vérifie tout de suite.
+
+```bash
+# Côté serveur : voir ce qui est en miroir, forcer la vérification GitHub
+# (clé = ARRMADA_AUTH_SECRET du .env, comme pour les scripts)
+KEY="$(grep '^ARRMADA_AUTH_SECRET=' .env | cut -d= -f2-)"
+curl -s -H "X-Api-Key: $KEY" http://NAS:8420/api/android/status | jq
+curl -s -X POST -H "X-Api-Key: $KEY" http://NAS:8420/api/android/refresh
+# APK compilée à la main : la déposer telle quelle (le nom porte la version)
+scp android/dist/arrmada-2.8.0-170-release.apk nas:/chemin/arrmada/data/apk/
+```
+
+> Piège : une APK **debug** (clé jetable de la CI) ne met jamais à jour une
+> appli **release**, et inversement : Android refuse une signature différente.
+> L'appli ne se voit proposer que des APK de son type.
+
 ## Captures d'écran (sans appareil)
 
 Chaque build dessine les écrans principaux avec des données factices
@@ -212,6 +242,8 @@ autre clé**.
 | *Ce serveur répond, mais ce n'est pas l'API ArrMada* | Port de la web app (3000) au lieu de l'API (8420) | Mettre le port 8420 (celui de l'add-on) |
 | *Pas de réponse en 5 secondes* | Mauvaise IP / port, TV sur un autre réseau | Tester `curl http://IP:8420/api/health` depuis le PC |
 | *Accès refusé par le serveur (réseau local uniquement)* | Jeton d'appareil utilisé hors du réseau local | Normal hors de la maison (ADR-002). Téléphone : passer par le VPN et déclarer ses adresses dans `DEVICE_TRUSTED_NETWORKS` (voir [Téléphone et tablette](#téléphone-et-tablette)) |
+| Jamais de « mise à jour disponible » | Appli de test (debug), pas de clé release dans les secrets GitHub, ou serveur sans accès à GitHub | Installer une fois la version release ; vérifier `/api/android/status` (champ `check.error`) ; à défaut, déposer l'APK dans `data/apk/` |
+| *Mise à jour refusée : APK signée par une autre clé* | Appli installée avec une autre clé (APK de test, ancienne clé) | Désinstaller ArrMada une fois, installer la version release par adb ; les suivantes passent seules |
 | Pas de rangée ArrMada sur l'accueil de la Shield | Option coupée, ou chaîne masquée dans les réglages d'Android TV | *Réglages* d'ArrMada : rangées affichées ; Android : *Écran d'accueil › Personnaliser les chaînes*. Les cartes arrivent après la première synchro (en quittant l'appli) |
 | *Aucune TV appairée* dans « Lire sur une TV » | Aucune TV (appli ou Kodi) appairée, ou seulement des téléphones | Appairer la TV ; les téléphones / tablettes ne sont pas proposés |
 | *Cette TV n'est plus appairée* | TV supprimée dans la web app | L'appli revient seule à l'écran d'appairage |
@@ -238,6 +270,7 @@ android/
     │   │                           #   DownloadLogic (feuille Télécharger), CaseLogic (boîtier),
     │   │                           #   ImageSizes (taille des images TMDB)
     │   ├── home/                   # rangées sur l'accueil Android TV (À suivre, chaîne), tâche de fond
+    │   ├── update/                 # mises à jour proposées par le serveur (téléchargement, installeur)
     │   └── ui/
     │       ├── theme/              # charte de l'add-on (couleurs, police)
     │       ├── components/         # affiches, boutons, rangées, fond « Ken Burns »,
@@ -251,6 +284,7 @@ android/
     └── test/                       # tests JVM + captures d'écran (Robolectric)
 ```
 
-Côté serveur : `backend/app/api/tv.py` et `backend/app/services/tv_playback.py`
+Côté serveur : `backend/app/api/tv.py` et `backend/app/services/tv_playback.py` ;
+mises à jour : `backend/app/api/android.py` et `backend/app/services/android_update.py`
 (infos de lecture, relais du flux Jellyfin, remux HLS des .m2ts / .iso,
 vignettes de chapitres).
