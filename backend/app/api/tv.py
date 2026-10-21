@@ -28,6 +28,12 @@ async def play_episode(
     return await tv_playback.episode(db, tvdb_id, season, episode)
 
 
+@router.get("/series/{tvdb_id}/season/{season}")
+async def season(tvdb_id: int, season: int, db: AsyncSession = Depends(get_db)) -> dict:
+    """Épisodes d'une saison présents dans Jellyfin (vignette, résumé, durée)."""
+    return await tv_playback.season_episodes(db, tvdb_id, season)
+
+
 @router.get("/stream/{item_id}")
 async def stream(item_id: str, request: Request, db: AsyncSession = Depends(get_db)):
     """Fichier vidéo d'origine, relayé depuis Jellyfin (avance rapide par « Range »)."""
@@ -48,6 +54,18 @@ async def chapter_image(item_id: str, index: int, db: AsyncSession = Depends(get
     except tv_playback.UpstreamError as exc:
         raise HTTPException(exc.status_code, exc.detail) from exc
     # Une vignette ne change pas : la TV peut la garder une journée.
+    return Response(
+        content, media_type=media_type, headers={"Cache-Control": "private, max-age=86400"}
+    )
+
+
+@router.get("/item-image/{item_id}")
+async def item_image(item_id: str, db: AsyncSession = Depends(get_db)) -> Response:
+    """Vignette d'un épisode (écran Série)."""
+    try:
+        content, media_type = await tv_playback.item_image(db, item_id)
+    except tv_playback.UpstreamError as exc:
+        raise HTTPException(exc.status_code, exc.detail) from exc
     return Response(
         content, media_type=media_type, headers={"Cache-Control": "private, max-age=86400"}
     )

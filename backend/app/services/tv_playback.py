@@ -57,6 +57,10 @@ def chapter_image_path(item_id: str, index: int) -> str:
     return f"/api/tv/chapter-image/{item_id}/{index}"
 
 
+def item_image_path(item_id: str) -> str:
+    return f"/api/tv/item-image/{item_id}"
+
+
 def parse_chapters(item_id: str, raw: Any) -> list[dict[str, Any]]:
     """Chapitres Jellyfin → [{index, name, start, image}] (début en secondes).
 
@@ -153,6 +157,69 @@ async def episode(db: AsyncSession, tvdb_id: int, season: int, number: int) -> d
     return result
 
 
+# ── Épisodes d'une saison (écran Série) ─────────────────────────────────────
+
+
+def parse_episodes(items: Any) -> list[dict[str, Any]]:
+    """Épisodes Jellyfin → [{season, episode, episode_end, item_id, title,
+    overview, runtime, image}] triés ; image = vignette relayée ou None."""
+    episodes = []
+    for it in items or []:
+        if not isinstance(it, dict) or not isinstance(it.get("IndexNumber"), int):
+            continue
+        item_id = str(it.get("Id") or "")
+        if not ITEM_ID.match(item_id):
+            continue
+        has_image = bool((it.get("ImageTags") or {}).get("Primary"))
+        end = it.get("IndexNumberEnd")
+        episodes.append({
+            "season": it.get("ParentIndexNumber"),
+            "episode": it["IndexNumber"],
+            "episode_end": end if isinstance(end, int) else None,
+            "item_id": item_id,
+            "title": it.get("Name"),
+            "overview": it.get("Overview"),
+            "runtime": duration_seconds(it),
+            "image": item_image_path(item_id) if has_image else None,
+        })  # fmt: skip
+    return sorted(episodes, key=lambda e: e["episode"])
+
+
+async def season_episodes(db: AsyncSession, tvdb_id: int, season: int) -> dict[str, Any]:
+    """Épisodes présents dans Jellyfin pour une saison : vignettes, résumés, durées.
+
+    L'écran Série croise cette liste avec Sonarr (épisodes manquants, à
+    venir) et les états vu / reprise partagés.
+    """
+    cfg = await jellyfin.get_config(db)
+    if not cfg:
+        return {"status": "unavailable", "episodes": []}
+    base, key = cfg
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            index = await jellyfin._series_index(client, base, key)
+            series_id = index.get(str(tvdb_id))
+            if series_id is None:
+                index = await jellyfin._series_index(client, base, key, refresh=True)
+                series_id = index.get(str(tvdb_id))
+            if series_id is None:
+                return {"status": "ok", "found": False, "episodes": []}
+            params = {
+                jellyfin.KEY_PARAM: key,
+                "season": season,
+                "fields": "Overview",
+                "enableImageTypes": "Primary",
+            }
+            r = await client.get(f"{base}/Shows/{series_id}/Episodes?{urlencode(params)}")
+            r.raise_for_status()
+            items = r.json().get("Items")
+    except httpx.HTTPError as exc:
+        logger.debug("Épisodes Jellyfin TVDB %s S%s : %s", tvdb_id, season, exc)
+        return {"status": "error", "episodes": []}
+    episodes = [e for e in parse_episodes(items) if e["season"] == season]
+    return {"status": "ok", "found": True, "episodes": episodes}
+
+
 # ── Relais du flux vidéo ─────────────────────────────────────────────────────
 
 
@@ -214,10 +281,7 @@ async def open_stream(
     return upstream.status_code, forwarded, body()
 
 
-async def chapter_image(db: AsyncSession, item_id: str, index: int) -> tuple[bytes, str]:
-    """Vignette d'un chapitre (JPEG), relayée depuis Jellyfin."""
-    if not ITEM_ID.match(item_id) or not 0 <= index <= 999:
-        raise UpstreamError(404, "Vignette inconnue")
+async def _image(db: AsyncSession, path: str) -> tuple[bytes, str]:
     cfg = await jellyfin.get_config(db)
     if not cfg:
         raise UpstreamError(503, "Jellyfin non configuré")
@@ -225,11 +289,23 @@ async def chapter_image(db: AsyncSession, item_id: str, index: int) -> tuple[byt
     params = {jellyfin.KEY_PARAM: key, "maxWidth": 480, "quality": 85}
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            r = await client.get(
-                f"{base}/Items/{item_id}/Images/Chapter/{index}?{urlencode(params)}"
-            )
+            r = await client.get(f"{base}{path}?{urlencode(params)}")
     except httpx.HTTPError as exc:
         raise UpstreamError(502, "Jellyfin injoignable") from exc
     if r.status_code >= 400:
         raise UpstreamError(404, "Vignette absente")
     return r.content, r.headers.get("content-type", "image/jpeg")
+
+
+async def chapter_image(db: AsyncSession, item_id: str, index: int) -> tuple[bytes, str]:
+    """Vignette d'un chapitre (JPEG), relayée depuis Jellyfin."""
+    if not ITEM_ID.match(item_id) or not 0 <= index <= 999:
+        raise UpstreamError(404, "Vignette inconnue")
+    return await _image(db, f"/Items/{item_id}/Images/Chapter/{index}")
+
+
+async def item_image(db: AsyncSession, item_id: str) -> tuple[bytes, str]:
+    """Image principale d'un élément (vignette d'un épisode), relayée depuis Jellyfin."""
+    if not ITEM_ID.match(item_id):
+        raise UpstreamError(404, "Vignette inconnue")
+    return await _image(db, f"/Items/{item_id}/Images/Primary")

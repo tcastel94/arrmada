@@ -37,9 +37,15 @@ def _items(params: dict, _m: Any) -> Any:
     return {"Items": [{"Id": MOVIE_ID, "Name": "Dune", "ProviderIds": {"Tmdb": "438631"}}]}
 
 
-def _episodes(_params: dict, _m: Any) -> Any:
-    return {"Items": [{"Id": EPISODE_ID, "Name": "Static", "SeriesName": "The Expanse",
-                       "ParentIndexNumber": 2, "IndexNumber": 2}]}  # fmt: skip
+def _episodes(params: dict, _m: Any) -> Any:
+    SEEN["episodes_params"] = params
+    return {"Items": [
+        {"Id": EPISODE_ID, "Name": "Static", "SeriesName": "The Expanse", "Overview": "Holden…",
+         "ParentIndexNumber": 2, "IndexNumber": 2, "IndexNumberEnd": 3, "RunTimeTicks": 2700 * T,
+         "ImageTags": {"Primary": "abc"}},
+        {"Id": "a" * 32, "Name": "Doors & Corners", "ParentIndexNumber": 2, "IndexNumber": 1},
+        {"Id": "pas-un-guid", "Name": "Ignoré", "ParentIndexNumber": 2, "IndexNumber": 4},
+    ]}  # fmt: skip
 
 
 def _segments(_params: dict, _m: Any) -> Any:
@@ -57,6 +63,11 @@ def _stream(params: dict, m: Any) -> httpx.Response:
 def _chapter(params: dict, m: Any) -> httpx.Response:
     SEEN["chapter"] = {"item": m.group(1), "index": m.group(2), "params": params}
     return httpx.Response(200, content=b"\xff\xd8jpeg", headers={"Content-Type": "image/jpeg"})
+
+
+def _primary(params: dict, m: Any) -> httpx.Response:
+    SEEN["primary"] = {"item": m.group(1), "params": params}
+    return httpx.Response(200, content=b"\xff\xd8ep", headers={"Content-Type": "image/jpeg"})
 
 
 def _with_range(handle: Any) -> Any:
@@ -95,6 +106,7 @@ async def jellyfin(
         (r"/MediaSegments/([^/]+)", _segments),
         (r"/Videos/([^/]+)/stream", _stream),
         (r"/Items/([^/]+)/Images/Chapter/(\d+)", _chapter),
+        (r"/Items/([^/]+)/Images/Primary", _primary),
     ]
     monkeypatch.setattr(fake_arr, "ROUTES", routes)
     monkeypatch.setattr(fake_arr, "handle", _with_range(fake_arr.handle))
@@ -129,6 +141,9 @@ async def _tv(client: AsyncClient, admin: dict[str, str]) -> dict[str, str]:
         ("GET", "/api/tv/play/episode/280619/2/2", True),
         ("GET", f"/api/tv/stream/{MOVIE_ID}", True),
         ("GET", f"/api/tv/chapter-image/{MOVIE_ID}/3", True),
+        ("GET", f"/api/tv/item-image/{MOVIE_ID}", True),
+        ("GET", "/api/tv/series/280619/season/2", True),
+        ("GET", "/api/tv/item-image/abc", False),
         ("GET", "/api/tv/stream/../../System/Info", False),
         ("GET", "/api/tv/stream/abc", False),
         ("POST", f"/api/tv/stream/{MOVIE_ID}", False),
@@ -251,3 +266,36 @@ async def test_chapter_image(client: AsyncClient, jellyfin: dict[str, str]) -> N
     assert resp.headers["content-type"] == "image/jpeg"
     assert SEEN["chapter"]["index"] == "1"
     assert SEEN["chapter"]["params"]["ApiKey"] == "j-key"
+
+
+# ── Écran Série : épisodes et vignettes ───────────────────────
+
+
+async def test_season_episodes(client: AsyncClient, jellyfin: dict[str, str]) -> None:
+    tv = await _tv(client, jellyfin)
+    data = (await client.get("/api/tv/series/280619/season/2", headers=tv)).json()
+    assert data["status"] == "ok" and data["found"] is True
+    assert [e["episode"] for e in data["episodes"]] == [1, 2]  # trié, identifiant invalide écarté
+    double = data["episodes"][1]
+    assert double == {
+        "season": 2, "episode": 2, "episode_end": 3, "item_id": EPISODE_ID, "title": "Static",
+        "overview": "Holden…", "runtime": 2700, "image": f"/api/tv/item-image/{EPISODE_ID}",
+    }  # fmt: skip
+    assert data["episodes"][0]["image"] is None  # pas d'image principale chez Jellyfin
+    assert SEEN["episodes_params"]["season"] == "2"
+
+
+async def test_season_unknown_series(client: AsyncClient, jellyfin: dict[str, str]) -> None:
+    tv = await _tv(client, jellyfin)
+    data = (await client.get("/api/tv/series/1/season/1", headers=tv)).json()
+    assert data == {"status": "ok", "found": False, "episodes": []}
+
+
+async def test_item_image(client: AsyncClient, jellyfin: dict[str, str]) -> None:
+    tv = await _tv(client, jellyfin)
+    resp = await client.get(f"/api/tv/item-image/{EPISODE_ID}", headers=tv)
+    assert resp.status_code == 200
+    assert resp.content == b"\xff\xd8ep"
+    assert SEEN["primary"]["params"]["ApiKey"] == "j-key"
+    # Identifiant invalide : refusé dès la liste blanche des TV, avant tout appel à Jellyfin
+    assert (await client.get("/api/tv/item-image/abc", headers=tv)).status_code == 403

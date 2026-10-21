@@ -150,6 +150,8 @@ _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         ("GET", r"/api/tv/play/(movie/\d+|episode/\d+/\d+/\d+)"),
         ("GET", r"/api/tv/stream/[0-9a-f]{32}"),
         ("GET", r"/api/tv/chapter-image/[0-9a-f]{32}/\d+"),
+        ("GET", r"/api/tv/item-image/[0-9a-f]{32}"),
+        ("GET", r"/api/tv/series/\d+/season/\d+"),  # épisodes Jellyfin (écran Série)
     )
 )
 
