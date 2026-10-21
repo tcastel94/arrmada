@@ -172,7 +172,7 @@ class ScreenshotTest {
     @Test
     fun fiche() {
         captureRoboImage(shot("02-fiche-film")) {
-            ArrMadaTheme { MovieContent(dune, play, noAbsolute) { _, _ -> } }
+            ArrMadaTheme { MovieContent(dune, play, noAbsolute, onPlay = { _, _ -> }) }
         }
     }
 
