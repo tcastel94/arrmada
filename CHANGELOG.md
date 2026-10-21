@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Android TV app, phase 2: series, skip intro, up next, search, Discover, download (APK 2.1.0)
+
+#### Added
+- **Series screen** (like the Kodi add-on): season chips ("3/10 vus", "4/10 sur le NAS"), episode thumbnails from Jellyfin with watched badge, resume bar, MANQUANT / À VENIR; **Lire la suite** button (resume the started episode, else the one after the last watched); long press: from the start, mark watched / unwatched; OK on a missing episode asks Sonarr to search it
+- **Player**: "Passer l'intro / le récap" (named file chapters first, then Jellyfin markers), **"Épisode suivant dans 10 s"** card at the end credits (or 30 s before the end), automatic chaining, Next key; pause menu shows the episode (SxxEyy · title, episode overview)
+- **Series grid**, **Discover** (TMDB trending, "Parce que tu as…"), full top menu
+- **Search** by keyboard or **voice** (Dicter button, remote search / mic key when Android forwards it): library, titles tracked by Radarr / Sonarr, titles to request
+- **Download sheet** from the add-on (ADR-005): movie in one button; series whole / one season / ticked episodes; "Pour ce soir" priority; the button says what is sent. Movie page shows "Télécharger" when the file is not there yet
+- **Server**: `GET /api/tv/series/{tvdb}/season/{n}` (Jellyfin episodes of a season: thumbnail, overview, runtime, double-episode files) and `GET /api/tv/item-image/{item}` (relayed thumbnail); device whitelist updated. 6 tests
+- Pure Kotlin rules with JVM tests (next up, episode status, chaining, intro / credits detection, download labels and request body); 7 more CI screenshots
+
 ### Native Android TV app with its own player (APK 2.0.0, phase 1 of ADR-007)
 
 #### Changed

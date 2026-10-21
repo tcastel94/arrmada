@@ -8,28 +8,35 @@ sont expliqués dans l'[ADR-007](../docs/adr/007-appli-android-native.md).
 > Téléphone et tablette viendront en phase 4. L'APK s'y installe, mais
 > l'interface est pensée pour la télécommande.
 
-## Ce que fait la version 2.0 (phase 1 : « regarder un film »)
+## Ce que fait la version 2.1 (phases 1 et 2 de l'ADR-007)
 
 | Écran | Contenu |
 |---|---|
 | **Mise en route** | Adresse du serveur (celle de l'add-on Kodi, port **8420**), testée sur `/api/health`. Puis appairage par **code + QR code**, validé dans la web app (*Réglages › Appareils*), exactement comme une TV sous Kodi |
 | **Accueil** | Menu du haut, héros (logo ou titre, méta, résumé, « Reprendre à… ») sur le fond de l'élément sélectionné, rangées **Reprendre** (états vu / reprise partagés avec les TV sous Kodi), **Ajouts récents**, **Pour toi**, **Bientôt** |
-| **Films** | Mur d'affiches de 7 colonnes : *Récents*, *A à Z*, *Année*, *4K* |
+| **Films / Séries** | Murs d'affiches de 7 colonnes : *Récents*, *A à Z*, *Année*, *4K* (films) ou *Mieux notés* (séries) |
+| **Série** | Saisons en pastilles (« 3/10 vus », « 4/10 sur le NAS »), épisodes en vignettes Jellyfin : **vu**, barre de reprise, **MANQUANT**, **À VENIR**. Bouton **Lire la suite** (reprend l'épisode commencé, sinon la suite du dernier vu). Appui long sur un épisode : *Lire depuis le début*, *Marquer comme vu / non vu*. OK sur un manquant : Sonarr le cherche |
+| **Découvrir** | Tendances TMDB (films, séries) et « Parce que tu as… » : OK ouvre la fiche si le titre est déjà là, sinon la feuille *Télécharger* |
+| **Rechercher** | Au clavier ou **à la voix** (bouton *Dicter*, ou touche recherche / micro de la télécommande quand elle arrive jusqu'à l'appli) : *Dans la médiathèque*, *Aussi dans Radarr / Sonarr*, *À demander* |
+| **Télécharger** | La feuille de l'add-on : un film en un bouton ; une série en entier, une saison ou des épisodes cochés ; **Pour ce soir** (passe devant les autres téléchargements). Le bouton dit ce qui part (« Télécharger S02E05 », « Télécharger 3 épisodes ») |
 | **Fiche film** | Logo, notes TMDB / IMDb / Rotten Tomatoes, pastilles **4K / Dolby Vision / Atmos / 7.1**, résumé, *Reprendre à…* / *Depuis le début*, bande-annonce (appli YouTube), distribution |
-| **Lecteur** | Fichier d'origine **sans transcodage**, son HD envoyé tel quel à l'ampli (passthrough), piste française préférée. Gauche / droite : −10 s / +30 s. Position enregistrée toutes les 30 s, en pause et en quittant ; « vu » à 90 %. Préréglage Yamaha de la pièce au lancement |
+| **Lecteur** | Fichier d'origine **sans transcodage**, son HD envoyé tel quel à l'ampli (passthrough), piste française préférée. Gauche / droite : −10 s / +30 s. Position enregistrée toutes les 30 s, en pause et en quittant ; « vu » à 90 %. Préréglage Yamaha de la pièce au lancement. **Passer l'intro / le récap** (chapitres nommés du fichier, sinon marqueurs Jellyfin), carte **Épisode suivant dans 10 s** au générique de fin (ou 30 s avant la fin) puis enchaînement |
 | **Menu pause** (façon Apple TV) | Logo, pastilles, **heure de fin**, progression, onglets **Chapitres** (vignettes, saut direct), **Infos**, **Distribution**, **Audio** et **Sous-titres** (pistes nommées : langue, Dolby TrueHD, DTS-HD, 7.1, forcés, « non lisible ici ») |
 
-Pas encore là (phases 2 et 3, voir l'ADR) : séries, recherche (et
-vocale), demander / télécharger, écran Téléchargements, Salon, notifications,
-bande-annonce en fond, profils famille.
+Pas encore là (phases 3 et 4, voir l'ADR) : écran Téléchargements
+(« Pour ce soir », Débloquer), Salon et ampli, notifications et bulles,
+« Prêt à regarder », bande-annonce en fond, profils famille.
 
 ### Télécommande
 
 | Touche | Pendant la lecture | Dans le menu pause |
 |---|---|---|
 | OK, Lecture/Pause | Pause + menu | Choisir (onglet, chapitre, piste) |
+| OK, bouton « Passer l'intro » affiché | Saute le passage | — |
+| OK, carte « Épisode suivant » affichée | Lance l'épisode tout de suite | — |
 | Gauche / droite | −10 s / +30 s | Se déplacer |
-| Retour | Pause + menu | **Quitter la lecture** (position enregistrée) |
+| Retour | Pause + menu (ou écarte la carte « Épisode suivant ») | **Quitter la lecture** (position enregistrée) |
+| Suivant (⏭) | Épisode suivant | — |
 | *Reprendre* | — | Relance la lecture |
 
 ## Prérequis côté serveur
@@ -41,6 +48,9 @@ bande-annonce en fond, profils famille.
   quitte jamais le serveur.
 - Pour les vignettes de chapitres : dans Jellyfin, bibliothèque Films ›
   *Gérer la bibliothèque* › cocher **Extraire les images des chapitres**.
+- Pour « Passer l'intro » sans chapitres nommés : plugin Jellyfin **Intro
+  Skipper** (Jellyfin 10.10 ou plus), comme pour l'add-on Kodi.
+- Pour Découvrir : clé TMDB dans les réglages du serveur.
 
 ## Réglages conseillés sur la Shield
 
@@ -164,13 +174,16 @@ android/
     ├── main/java/fr/arrmada/app/
     │   ├── MainActivity.kt         # fenêtre unique + navigation entre écrans + Réglages
     │   ├── ArrMadaApplication.kt   # objets partagés (réglages, client HTTP, images)
-    │   ├── data/                   # API : client HTTP, modèles JSON, réglages, appels
+    │   ├── data/                   # API (client, modèles JSON, appels) + règles en Kotlin pur :
+    │   │                           #   SeriesLogic (Lire la suite), PlaybackLogic (intro, générique),
+    │   │                           #   DownloadLogic (feuille Télécharger)
     │   └── ui/
     │       ├── theme/              # charte de l'add-on (couleurs, police)
     │       ├── components/         # affiches, boutons, rangées, fond « Ken Burns »
     │       ├── setup/              # adresse du serveur, appairage
-    │       ├── home/               # accueil, grille Films
-    │       ├── detail/             # fiche film
+    │       ├── home/               # accueil, grilles Films / Séries, Découvrir
+    │       ├── detail/             # fiche film, écran Série
+    │       ├── request/            # recherche (et dictée), feuille Télécharger
     │       └── player/             # lecteur ExoPlayer, menu pause, pistes
     └── test/                       # tests JVM + captures d'écran (Robolectric)
 ```

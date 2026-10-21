@@ -144,3 +144,11 @@ Chaque phase est livrée en APK testable sur la Shield.
   ASS avancé, ISO de Blu-ray) est un risque, à tester sur la Shield.
 - ➖ La lecture dépend de **Jellyfin** : un titre absent de Jellyfin ne se lit
   pas dans l'appli.
+
+> **Avancement (21/10/2026)** : phases 1 et 2 livrées dans l'APK 2.1.0
+> (accueil, grilles Films / Séries, fiche film, écran Série, Découvrir,
+> recherche et dictée, feuille Télécharger, lecteur avec menu pause, passer
+> l'intro et épisode suivant). Compilées et vérifiées en CI (tests JVM +
+> captures d'écran) ; **pas encore validées sur la Shield** (son HD, 4K
+> remux relayée, navigation à la télécommande).
+
