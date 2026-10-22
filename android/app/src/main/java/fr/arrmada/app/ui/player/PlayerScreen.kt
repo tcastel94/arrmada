@@ -58,6 +58,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.AudioAttributes
+import androidx.media3.common.Format
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
@@ -67,6 +68,7 @@ import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.ExoPlaybackException
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
@@ -76,6 +78,7 @@ import androidx.tv.material3.Text
 import fr.arrmada.app.ArrMadaApplication
 import fr.arrmada.app.data.AmpDevice
 import fr.arrmada.app.data.SoundAdvisor
+import fr.arrmada.app.data.DolbyVisionLogic
 import fr.arrmada.app.data.PlayInfo
 import fr.arrmada.app.data.LocalSeriesDetail
 import fr.arrmada.app.data.LocalSeriesLogic
@@ -272,6 +275,11 @@ private fun PlayerSurface(
         }
     }
 
+    // Dolby Vision profil 5 sur un écran sans Dolby Vision : image violette en
+    // lecture directe. On part alors d'emblée sur la conversion SDR de Jellyfin.
+    val screenDolbyVision = remember { ScreenCapabilities.dolbyVision(context) }
+    val sdrAtStart = remember { DolbyVisionLogic.startWithSdr(info, screenDolbyVision) }
+
     // ── Création du lecteur (une fois) ──
     val player = remember {
         val trackSelector = DefaultTrackSelector(context).apply {
@@ -284,7 +292,13 @@ private fun PlayerSurface(
                     .setPreferredAudioLanguages("fr", "en")
             )
         }
-        ExoPlayer.Builder(context, DefaultRenderersFactory(context))
+        // Décodeurs d'Android d'abord (passthrough vers l'ampli intact), FFmpeg
+        // ensuite : il ne sert que pour un son qu'Android ne sait pas décoder,
+        // ou en secours quand son décodeur plante (voir onPlayerError).
+        val renderers = DefaultRenderersFactory(context)
+            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+            .setEnableDecoderFallback(true) // autre décodeur Android si le premier ne démarre pas
+        ExoPlayer.Builder(context, renderers)
             .setMediaSourceFactory(DefaultMediaSourceFactory(OkHttpDataSource.Factory(app.api.http)))
             .setTrackSelector(trackSelector)
             .setAudioAttributes(
@@ -295,7 +309,11 @@ private fun PlayerSurface(
             .setSeekForwardIncrementMs(30_000)
             .build()
             .apply {
-                setMediaItem(mediaItem(app.api.baseUrl + info.stream, hls = info.mode == "remux", sideSubtitles(info, app.api.baseUrl)))
+                if (sdrAtStart) {
+                    setMediaItem(mediaItem(app.api.baseUrl + info.sdrStream, hls = true, sideSubtitles(info, app.api.baseUrl)))
+                } else {
+                    setMediaItem(mediaItem(app.api.baseUrl + info.stream, hls = info.mode == "remux", sideSubtitles(info, app.api.baseUrl)))
+                }
                 prepare()
                 if (request.startSeconds > 0) seekTo(request.startSeconds * 1000L)
                 playWhenReady = true
@@ -349,7 +367,10 @@ private fun PlayerSurface(
     var duration by remember { mutableLongStateOf(info.duration * 1000L) }
     var tracks by remember { mutableStateOf(Tracks.EMPTY) }
     var playbackError by remember { mutableStateOf<String?>(null) }
-    var remuxed by remember { mutableStateOf(info.mode == "remux") } // flux converti par Jellyfin
+    var remuxed by remember { mutableStateOf(info.mode == "remux" || sdrAtStart) } // flux converti par Jellyfin
+    var toneMapped by remember { mutableStateOf(sdrAtStart) } // image convertie en SDR (Dolby Vision profil 5)
+    var dolbyVisionWarned by remember { mutableStateOf(false) }
+    var softwareAudio by remember { mutableStateOf(false) } // son décodé par FFmpeg (secours)
     var finished by remember { mutableStateOf(false) } // fin enregistrée (vu)
     var upNextDismissed by remember { mutableStateOf(false) }
     var countdown by remember { mutableIntStateOf(PlaybackLogic.UP_NEXT_SECONDS) }
@@ -423,10 +444,36 @@ private fun PlayerSurface(
         if (next != null && !upNextDismissed) onPlayNext(next.request) else onExit()
     }
 
+    LaunchedEffect(Unit) {
+        if (sdrAtStart) Toast.makeText(context, DV_SDR_MESSAGE, Toast.LENGTH_LONG).show()
+    }
+
     DisposableEffect(player) {
         val listener = object : Player.Listener {
             override fun onTracksChanged(newTracks: Tracks) {
                 tracks = newTracks
+                // Filet de sécurité : la piste vidéo se révèle Dolby Vision profil 5
+                // alors que l'écran ne le gère pas (serveur Jellyfin trop ancien
+                // pour l'annoncer, ou remux) → conversion SDR là où on en était.
+                val video = selectedVideoFormat(newTracks) ?: return
+                if (toneMapped || screenDolbyVision || !DolbyVisionLogic.withoutFallback(video.sampleMimeType, video.codecs)) return
+                if (info.sdrStream.isNotBlank()) {
+                    toneMapped = true
+                    remuxed = true
+                    val at = player.currentPosition.takeIf { it > 0 } ?: (request.startSeconds * 1000L)
+                    player.setMediaItem(mediaItem(app.api.baseUrl + info.sdrStream, hls = true, sideSubtitles(info, app.api.baseUrl)), at)
+                    player.prepare()
+                    player.play()
+                    Toast.makeText(context, DV_SDR_MESSAGE, Toast.LENGTH_LONG).show()
+                } else if (!dolbyVisionWarned) {
+                    // Fichier de l'écran Vidéos : pas de Jellyfin pour le convertir
+                    dolbyVisionWarned = true
+                    Toast.makeText(
+                        context,
+                        "Dolby Vision profil 5 : couleurs fausses sur un écran sans Dolby Vision (préférer une version HDR10)",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
             }
 
             override fun onPlaybackStateChanged(state: Int) {
@@ -435,6 +482,23 @@ private fun PlayerSurface(
             }
 
             override fun onPlayerError(e: PlaybackException) {
+                // Décodeur audio d'Android en échec (ex. MP3 d'un vieil .avi, dont
+                // les blocs ne tombent pas sur les trames) : on le met de côté et
+                // FFmpeg, plus tolérant, reprend le son là où on en était.
+                if (!softwareAudio && audioDecoderFailed(e)) {
+                    val audio = (0 until player.rendererCount).filter { player.getRendererType(it) == C.TRACK_TYPE_AUDIO }
+                    val selector = player.trackSelector as? DefaultTrackSelector
+                    if (audio.size > 1 && selector != null) {
+                        softwareAudio = true
+                        val at = player.currentPosition.takeIf { it > 0 } ?: (request.startSeconds * 1000L)
+                        selector.setParameters(selector.buildUponParameters().setRendererDisabled(audio.first(), true))
+                        player.prepare()
+                        player.seekTo(at)
+                        player.play()
+                        Toast.makeText(context, "Son décodé par l’appli (format audio mal géré par Android)", Toast.LENGTH_LONG).show()
+                        return
+                    }
+                }
                 // Fichier illisible en direct : on retente une fois en remux,
                 // là où on en était
                 if (!remuxed && info.remuxStream.isNotBlank() && e.errorCode in REMUX_RETRY) {
@@ -446,7 +510,15 @@ private fun PlayerSurface(
                     Toast.makeText(context, "Format ${info.container.ifBlank { "inconnu" }} : conversion par Jellyfin…", Toast.LENGTH_LONG).show()
                     return
                 }
-                playbackError = describe(e, info.container, remuxed)
+                playbackError = describe(
+                    e,
+                    info.container,
+                    when {
+                        toneMapped -> "converti en SDR par Jellyfin"
+                        remuxed -> "converti par Jellyfin"
+                        else -> "lecture directe"
+                    },
+                )
             }
         }
         player.addListener(listener)
@@ -695,6 +767,34 @@ fun UpNextCard(next: UpNext, countdown: Int, absolute: (String?) -> String?) {
     }
 }
 
+/** Erreurs de décodeur audio : on retente avec FFmpeg (décodage par l'appli). */
+private val AUDIO_DECODER_ERRORS = setOf(
+    PlaybackException.ERROR_CODE_DECODING_FAILED,
+    PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+    PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED,
+    PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES,
+)
+
+/** L'erreur vient-elle du décodeur de la piste audio (et pas de la vidéo ou du réseau) ? */
+@OptIn(UnstableApi::class)
+private fun audioDecoderFailed(e: PlaybackException): Boolean {
+    val renderer = e as? ExoPlaybackException ?: return false
+    return renderer.type == ExoPlaybackException.TYPE_RENDERER &&
+        renderer.rendererFormat?.sampleMimeType?.startsWith("audio/") == true &&
+        e.errorCode in AUDIO_DECODER_ERRORS
+}
+
+/** Message affiché quand l'image Dolby Vision est convertie en SDR par Jellyfin. */
+private const val DV_SDR_MESSAGE =
+    "Dolby Vision sans HDR10 : image convertie en SDR par Jellyfin (écran sans Dolby Vision)"
+
+/** Format de la piste vidéo en cours de lecture (null tant qu'aucune n'est choisie). */
+@OptIn(UnstableApi::class)
+private fun selectedVideoFormat(tracks: Tracks): Format? {
+    val group = tracks.groups.firstOrNull { it.type == C.TRACK_TYPE_VIDEO && it.isSelected } ?: return null
+    return (0 until group.length).firstOrNull { group.isTrackSelected(it) }?.let(group::getTrackFormat)
+}
+
 /** Erreurs de lecture directe qui justifient de retenter en remux. */
 private val REMUX_RETRY = setOf(
     PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
@@ -730,11 +830,11 @@ private fun sideSubtitles(info: PlayInfo, baseUrl: String): List<MediaItem.Subti
  * Message lisible, suivi du détail technique (code ExoPlayer, format du
  * fichier, direct ou remux) : utile pour comprendre ce qui coince.
  */
-private fun describe(e: PlaybackException, container: String, remuxed: Boolean): String {
+private fun describe(e: PlaybackException, container: String, how: String): String {
     val detail = listOfNotNull(
         e.errorCodeName,
         container.takeIf { it.isNotBlank() }?.let { "fichier .$it" },
-        if (remuxed) "converti par Jellyfin" else "lecture directe",
+        how,
     ).joinToString(" · ")
     return describe(e) + "\n\n" + detail
 }

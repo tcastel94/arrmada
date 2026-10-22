@@ -294,6 +294,7 @@ autre clé**.
 | Pas de vignettes dans *Chapitres* | Jellyfin n'a pas extrait les images | Cocher « Extraire les images des chapitres » dans Jellyfin, relancer le scan |
 | Sous-titres ASS simplifiés | ExoPlayer ne gère pas les effets ASS avancés | Limite connue (ADR-007) |
 | Message *Format m2ts : conversion par Jellyfin…* | Fichier que la TV ne lit pas directement (Blu-ray .m2ts, .iso) | Normal : Jellyfin le remuxe (image intacte ; son TrueHD / DTS converti en Dolby Digital Plus 5.1). Démarrage de 2 à 5 s |
+| Image **violette / verte** (films 4K) | Dolby Vision **profil 5** (sans image de secours HDR10) sur un écran qui n'annonce pas le Dolby Vision | Automatique depuis 2.10.2 : Jellyfin convertit en SDR (message *image convertie en SDR*). Vérifier *Réglages › Écran* : sur la Shield, activer *Écran et son › Réglages avancés d'affichage › Faire correspondre la plage dynamique du contenu* (et le Dolby Vision) si la TV le gère. Côté Jellyfin : *Lecture › Transcodage* avec accélération matérielle et **mappage tonal** activés. Sinon, préférer une version HDR10 (format TRaSH « DV (w/o HDR fallback) » à score négatif) |
 | *Lecture interrompue* + code (`ERROR_CODE_…`, `fichier .xxx`) | Format que ni la TV ni le remux ne passent | Envoyer le message : le code et l'extension disent ce qui coince |
 
 ## Organisation du code

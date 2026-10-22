@@ -81,6 +81,7 @@ import fr.arrmada.app.ui.home.HomeViewModel
 import fr.arrmada.app.ui.home.LibraryScreen
 import fr.arrmada.app.ui.player.PlayRequest
 import fr.arrmada.app.ui.player.PlayerScreen
+import fr.arrmada.app.ui.player.ScreenCapabilities
 import fr.arrmada.app.ui.request.DownloadScreen
 import fr.arrmada.app.ui.request.SearchScreen
 import fr.arrmada.app.ui.setup.PairScreen
@@ -710,6 +711,10 @@ private fun SettingsScreen(app: ArrMadaApplication, onChangeServer: () -> Unit, 
         Text("Cette TV : ${app.prefs.deviceName ?: "—"}", style = MaterialTheme.typography.bodyLarge, color = ArrColors.TextSecondary, modifier = Modifier.padding(top = 6.dp))
         Text("Version : ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", style = MaterialTheme.typography.bodyLarge, color = ArrColors.TextSecondary, modifier = Modifier.padding(top = 6.dp))
         val settingsContext = LocalContext.current
+        // Formats HDR de l'écran : sans « Dolby Vision », les films en Dolby Vision
+        // profil 5 sont convertis en SDR par Jellyfin (sinon image violette)
+        val screen = remember { ScreenCapabilities.label(settingsContext) }
+        Text("Écran : $screen", style = MaterialTheme.typography.bodyLarge, color = ArrColors.TextSecondary, modifier = Modifier.padding(top = 6.dp))
         val settingsScope = rememberCoroutineScope()
         Row(Modifier.padding(top = 28.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             ArrButton("Changer de serveur", onChangeServer, modifier = Modifier.focusRequester(focus))

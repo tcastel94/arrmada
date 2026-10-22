@@ -20,7 +20,13 @@ Deux façons de lire :
     Blu-ray, image .iso, dossier BDMV…), Jellyfin change le conteneur à la
     volée sans réencoder l'image (HLS, morceaux fMP4). Le son peut être
     converti en Dolby Digital Plus si le conteneur n'accepte pas l'original.
-    La TV bascule aussi d'elle-même en remux si le direct échoue.
+    La TV bascule aussi d'elle-même en remux si le direct échoue ;
+  - **sdr** : pour le Dolby Vision « profil 5 » (aucune image de secours
+    HDR10), sur un écran qui ne gère pas le Dolby Vision. Décodé comme du
+    HEVC ordinaire, ce format donne une image violette et verte : Jellyfin
+    le convertit alors en H.264 SDR 1080p avec « mappage tonal » (les
+    couleurs Dolby Vision ramenées dans l'espace d'une TV ordinaire).
+    C'est la TV qui décide (elle seule sait si son écran gère le DV).
 """
 
 from __future__ import annotations
@@ -66,7 +72,7 @@ DIRECT_EXTENSIONS = {"mkv", "mk3d", "webm", "mp4", "m4v", "mov", "ts", "avi", "o
 # Morceaux du remux HLS que la TV peut demander : la liste de lecture
 # principale, celle des morceaux, et les morceaux eux-mêmes. Rien d'autre
 # n'est relayé vers Jellyfin.
-HLS_PATH = re.compile(r"^(master|main)\.m3u8$|^hls1/[A-Za-z0-9_]+/-?\d+\.(mp4|m4s|ts)$")
+HLS_PATH = re.compile(r"^(master|main|sdr)\.m3u8$|^hls1/[A-Za-z0-9_]+/-?\d+\.(mp4|m4s|ts)$")
 
 # Identifiants de la session de remux chez Jellyfin (pour l'arrêter ensuite)
 HLS_DEVICE = "arrmada-tv"
@@ -90,6 +96,42 @@ def item_image_path(item_id: str) -> str:
 
 def hls_path(item_id: str) -> str:
     return f"/api/tv/hls/{item_id}/master.m3u8"
+
+
+def sdr_path(item_id: str) -> str:
+    """Conversion SDR (mappage tonal) : Dolby Vision profil 5 sur un écran sans DV."""
+    return f"/api/tv/hls/{item_id}/sdr.m3u8"
+
+
+def video_range(details: dict[str, Any]) -> dict[str, Any]:
+    """Plage dynamique de l'image : « SDR », « HDR10 », « DOVI »… (VideoRangeType
+    de Jellyfin 10.9+) et Dolby Vision sans image de secours (profil 5).
+
+    Profil 5 : l'image de base est codée dans un espace de couleurs propre à
+    Dolby (IPT), lisible seulement par une puce Dolby Vision. Les profils 7 et
+    8 portent une image HDR10 de secours, lisible partout : pas de souci.
+    Jellyfin plus ancien (sans VideoRangeType) : on lit DvProfile et
+    DvBlSignalCompatibilityId (0 = aucune image de secours).
+    """
+    sources = details.get("MediaSources") or [{}]
+    source = sources[0] if isinstance(sources[0], dict) else {}
+    video = next(
+        (
+            s
+            for s in source.get("MediaStreams") or []
+            if isinstance(s, dict) and s.get("Type") == "Video"
+        ),
+        {},
+    )
+    range_type = str(video.get("VideoRangeType") or video.get("VideoRange") or "")
+    profile = video.get("DvProfile")
+    compat = video.get("DvBlSignalCompatibilityId")
+    dovi_only = (
+        range_type == "DOVI"
+        or profile == 5
+        or (isinstance(profile, int) and profile > 0 and compat == 0)
+    )
+    return {"video_range": range_type, "dovi_only": dovi_only}
 
 
 def source_info(details: dict[str, Any]) -> dict[str, Any]:
@@ -175,6 +217,7 @@ async def _resume(db: AsyncSession, key: str) -> dict[str, Any]:
 def _found(item_id: str, details: dict[str, Any] | None, resume: dict[str, Any]) -> dict[str, Any]:
     details = details or {}
     source = source_info(details)
+    image = video_range(details)
     return {
         "status": "ok",
         "item_id": item_id,
@@ -186,6 +229,12 @@ def _found(item_id: str, details: dict[str, Any] | None, resume: dict[str, Any])
         "container": source["container"],
         "stream": stream_path(item_id) if source["mode"] == "direct" else hls_path(item_id),
         "remux_stream": hls_path(item_id),
+        # Dolby Vision sans secours HDR10 : la TV sans DV lit plutôt sdr_stream.
+        # Proposé pour tout élément : la TV y bascule aussi si elle découvre
+        # elle-même un profil 5 que Jellyfin n'a pas signalé.
+        "video_range": image["video_range"],
+        "dovi_only": image["dovi_only"],
+        "sdr_stream": sdr_path(item_id),
         "chapters": parse_chapters(item_id, details.get("Chapters")),
         "resume": resume,
     }
@@ -424,6 +473,30 @@ def hls_master_params(item_id: str) -> dict[str, str]:
     }
 
 
+def hls_sdr_params(item_id: str) -> dict[str, str]:
+    """Paramètres de la conversion SDR : image réencodée en H.264 SDR 1080p.
+
+    Le H.264 n'existe qu'en SDR : Jellyfin applique donc son mappage tonal
+    (Tableau de bord › Lecture › Transcodage › « Activer le mappage tonal »).
+    Pour le Dolby Vision profil 5, ce mappage demande l'accélération
+    matérielle (Intel QSV / VAAPI, NVIDIA…) : sans elle, l'image resterait
+    violette. 1080p : quatre fois moins de calcul que la 4K, conversion
+    tenable en temps réel. Le son est copié tel quel quand c'est possible.
+    """
+    return {
+        **hls_master_params(item_id),
+        "VideoCodec": "h264",
+        "AllowVideoStreamCopy": "false",
+        "h264-rangetype": "SDR",
+        "h264-profile": "high",
+        "h264-level": "51",
+        "MaxWidth": "1920",
+        "MaxHeight": "1080",
+        "VideoBitrate": "20000000",
+        "MaxStreamingBitrate": "30000000",
+    }
+
+
 async def open_hls(
     db: AsyncSession, item_id: str, path: str, query: str, range_header: str | None
 ) -> tuple[int, dict[str, str], AsyncIterator[bytes] | bytes]:
@@ -438,8 +511,13 @@ async def open_hls(
     if not cfg:
         raise UpstreamError(503, "Jellyfin non configuré")
     base, key = cfg
-    if path == "master.m3u8":
-        params = urlencode({**hls_master_params(item_id), jellyfin.KEY_PARAM: key})
+    if path in ("master.m3u8", "sdr.m3u8"):
+        # Liste principale : paramètres décidés ici, jamais par la TV.
+        # « sdr.m3u8 » n'existe pas chez Jellyfin : c'est sa master.m3u8,
+        # demandée avec les paramètres de la conversion SDR.
+        chosen = hls_sdr_params(item_id) if path == "sdr.m3u8" else hls_master_params(item_id)
+        params = urlencode({**chosen, jellyfin.KEY_PARAM: key})
+        path = "master.m3u8"
     else:
         clean = strip_api_key("?" + query).lstrip("?&") if query else ""
         params = "&".join(p for p in (clean, urlencode({jellyfin.KEY_PARAM: key})) if p)

@@ -108,6 +108,10 @@ dependencies {
     implementation("androidx.media3:media3-ui:$media3") // surface vidéo + sous-titres
     implementation("androidx.media3:media3-datasource-okhttp:$media3") // jeton d'appareil sur le flux
     implementation("androidx.media3:media3-exoplayer-hls:$media3") // remux Jellyfin (.m2ts, .iso…)
+    // Décodeur audio FFmpeg (build Jellyfin de l'extension Media3, LGPL) : secours
+    // quand le décodeur d'Android refuse un son (MP3 d'un vieil .avi, DTS / TrueHD
+    // sur un téléphone sans passthrough). Construit pour Media3 1.5.0, compatible 1.5.x.
+    implementation("org.jellyfin.media3:media3-ffmpeg-decoder:1.5.0+1")
 
     // ── Réseau, JSON, images ──
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
