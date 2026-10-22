@@ -96,6 +96,11 @@ def playing_view(state: dict[str, Any] | None) -> dict[str, Any] | None:
         "subtitle_tracks": state.get("subtitle_tracks") or [],
         "audio_tracks": state.get("audio_tracks") or [],
         "remote": bool(state.get("remote")),
+        # Outils sous-titres de la tablette (Bazarr, resynchro, décalage)
+        "subtitle_tools": bool(state.get("subtitle_tools")),
+        "subtitle_busy": bool(state.get("subtitle_busy")),
+        "subtitle_note": state.get("subtitle_note") or "",
+        "subtitle_shift_ms": int(state.get("subtitle_shift_ms") or 0),
     }
 
 

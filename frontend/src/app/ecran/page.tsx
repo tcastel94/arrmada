@@ -39,8 +39,11 @@ import {
     Download,
     Info,
     Loader2,
+    Minus,
     Pause,
     Play,
+    Plus,
+    RefreshCw,
     RotateCcw,
     RotateCw,
     SkipForward,
@@ -57,6 +60,7 @@ import { getToken } from "@/lib/api-client";
 import {
     activeSkip,
     getScreenToken,
+    shiftLabel,
     hasFully,
     hhmm,
     longDay,
@@ -686,7 +690,7 @@ function RemoteBar({
                     </RemoteButton>
                 )}
                 <span className="flex-1" />
-                {playing.subtitle_tracks.length > 0 && (
+                {(playing.subtitle_tracks.length > 0 || playing.subtitle_tools) && (
                     <RemoteButton label="Sous-titres" round onClick={() => setSheet("subtitles")}>
                         <Subtitles style={{ width: u(3.8), height: u(3.8) }} />
                     </RemoteButton>
@@ -733,6 +737,7 @@ function RemoteBar({
                                     <X style={{ width: u(4.4), height: u(4.4) }} />
                                 </button>
                             </div>
+                            {sheet === "subtitles" && <SubtitleTools playing={playing} run={run} />}
                             {sheet === "info" ? (
                                 <InfoSheet playing={playing} />
                             ) : (
@@ -814,6 +819,46 @@ function RemoteButton({
             {children}
             <span>{label}</span>
         </button>
+    );
+}
+
+/**
+ * Outils de la feuille Sous-titres : Bazarr (télécharger les sous-titres FR,
+ * les recaler sur le son) et décalage manuel −/+ 0,5 s de la piste affichée.
+ * La TV fait le travail et renvoie l'état (en cours, résultat, décalage).
+ */
+function SubtitleTools({ playing, run }: { playing: AmbientPlaying; run: (command: RemoteAction) => Promise<void> }) {
+    const busy = playing.subtitle_busy;
+    const shift = playing.subtitle_shift_ms;
+    return (
+        <div className="flex flex-col" style={{ gap: u(1.6), marginBottom: u(3) }}>
+            <div className="flex flex-wrap items-center" style={{ gap: u(1.2) }}>
+                {playing.subtitle_tools && (
+                    <>
+                        <RemoteButton label={busy ? "Bazarr…" : "Sous-titres FR"} onClick={() => !busy && run({ action: "subtitle_download" })}>
+                            {busy ? <Loader2 className="animate-spin" style={{ width: u(3.6), height: u(3.6) }} /> : <Download style={{ width: u(3.6), height: u(3.6) }} />}
+                        </RemoteButton>
+                        <RemoteButton label="Resynchro auto" onClick={() => !busy && run({ action: "subtitle_sync" })}>
+                            <RefreshCw style={{ width: u(3.6), height: u(3.6) }} />
+                        </RemoteButton>
+                    </>
+                )}
+                <span className="flex-1" />
+                <RemoteButton label="0,5 s plus tôt" onClick={() => run({ action: "subtitle_shift", value: -500 })}>
+                    <Minus style={{ width: u(3.6), height: u(3.6) }} />
+                </RemoteButton>
+                <span className="tabular-nums text-slate-300" style={{ fontSize: u(3), minWidth: u(12), textAlign: "center" }}>
+                    {shift === 0 ? "0 s" : shiftLabel(shift)}
+                </span>
+                <RemoteButton label="0,5 s plus tard" onClick={() => run({ action: "subtitle_shift", value: 500 })}>
+                    <Plus style={{ width: u(3.6), height: u(3.6) }} />
+                </RemoteButton>
+            </div>
+            <p className="text-slate-500" style={{ fontSize: u(2.6) }}>
+                {playing.subtitle_note ||
+                    "Resynchro auto : Bazarr recale le fichier sur le son. Décalage apparu en plein film : − / + 0,5 s (− = plus tôt)."}
+            </p>
+        </div>
     );
 }
 

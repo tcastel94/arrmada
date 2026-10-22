@@ -283,6 +283,8 @@ data class PlayInfo(
     // Écran Vidéos : identifiant de vu / reprise du fichier, sous-titres posés à côté
     @SerialName("watch_id") val watchId: String = "",
     val subtitles: List<SideSubtitle> = emptyList(),
+    // Pistes texte intégrées au MKV (extraites par Jellyfin) : seulement pour les décaler
+    @SerialName("embedded_subtitles") val embeddedSubtitles: List<SideSubtitle> = emptyList(),
 )
 
 /** Menu pause → « Sous-titres FR » : ce que Bazarr doit chercher (TMDB du film, ou TVDB + numéros). */

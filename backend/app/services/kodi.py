@@ -720,6 +720,8 @@ async def handle_addon_sync_subtitles(db: AsyncSession, data: dict[str, Any]) ->
     season = data.get("season")
     episode = data.get("episode")
     language = (data.get("language") or "fr").lower()
+    # Qui demande : l'add-on Kodi, ou le menu pause de l'appli Android
+    origin = "appli ArrMada" if data.get("origin") == "android" else "Kodi Add-on"
 
     bazarr = await _get_bazarr_client(db)
     if not bazarr:
@@ -789,7 +791,7 @@ async def handle_addon_sync_subtitles(db: AsyncSession, data: dict[str, Any]) ->
                 media_type="movie",
                 title=match.get("title", title),
                 tmdb_id=match.get("tmdbId"),
-                detail="Re-synchronisation audio (FFsubsync) via Kodi Add-on",
+                detail=f"Re-synchronisation audio (FFsubsync) via {origin}",
             )
 
             return {
@@ -875,7 +877,7 @@ async def handle_addon_sync_subtitles(db: AsyncSession, data: dict[str, Any]) ->
                 source="kodi",
                 media_type="series",
                 title=f"{match_series.get('title')} S{season:02d}E{episode:02d}",
-                detail="Re-synchronisation audio (FFsubsync) via Kodi Add-on",
+                detail=f"Re-synchronisation audio (FFsubsync) via {origin}",
             )
 
             return {

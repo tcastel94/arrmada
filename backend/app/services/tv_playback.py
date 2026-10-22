@@ -193,6 +193,37 @@ def external_subtitles(item_id: str, details: dict[str, Any]) -> list[dict[str, 
     return found
 
 
+def embedded_subtitles(item_id: str, details: dict[str, Any]) -> list[dict[str, str]]:
+    """Sous-titres texte INTÉGRÉS au fichier (MKV), même format qu'externes.
+
+    Le lecteur les lit déjà dans le fichier ; cette liste ne sert qu'au
+    décalage du menu pause : Jellyfin extrait la piste en .srt, le serveur
+    la décale, la TV l'ajoute à côté (« Français (décalé +1,5 s) »).
+    """
+    sources = details.get("MediaSources") or [{}]
+    source = sources[0] if isinstance(sources[0], dict) else {}
+    found = []
+    for stream in source.get("MediaStreams") or []:
+        if not isinstance(stream, dict) or stream.get("Type") != "Subtitle":
+            continue
+        if stream.get("IsExternal") or not isinstance(stream.get("Index"), int):
+            continue
+        fmt = _SUB_FORMATS.get(str(stream.get("Codec") or "").lower())
+        if fmt is None:
+            continue
+        code, name = _LANGS.get(str(stream.get("Language") or "").lower(), ("", ""))
+        label = name or str(stream.get("DisplayTitle") or stream.get("Title") or "Intégré")
+        if stream.get("IsForced"):
+            label += " (forcés)"
+        found.append({
+            "url": subtitle_path(item_id, stream["Index"], fmt[0]),
+            "label": label,
+            "language": code,
+            "mime": fmt[1],
+        })  # fmt: skip
+    return found
+
+
 def source_info(details: dict[str, Any]) -> dict[str, Any]:
     """Extension du fichier et mode de lecture conseillé (direct ou remux).
 
@@ -299,6 +330,8 @@ def _found(item_id: str, details: dict[str, Any] | None, resume: dict[str, Any])
         # Sous-titres posés à côté du fichier (.fr.srt de Bazarr…) : le lecteur
         # ne voit que les pistes du MKV, on les lui ajoute
         "subtitles": external_subtitles(item_id, details),
+        # Pistes intégrées, extraites par Jellyfin seulement pour être décalées
+        "embedded_subtitles": embedded_subtitles(item_id, details),
     }
 
 
@@ -623,8 +656,13 @@ async def stop_hls(db: AsyncSession, item_id: str) -> None:
 # ── Sous-titres externes (relais, téléchargement par Bazarr) ────────────────
 
 
-async def open_subtitle(db: AsyncSession, item_id: str, index: int, ext: str) -> tuple[bytes, str]:
-    """Sous-titre externe converti par Jellyfin (UTF-8), relayé à la TV."""
+async def open_subtitle(
+    db: AsyncSession, item_id: str, index: int, ext: str, shift_ms: int = 0
+) -> tuple[bytes, str]:
+    """Sous-titre (externe, ou intégré au fichier) converti par Jellyfin en
+    UTF-8, relayé à la TV ; [shift_ms] : copie décalée (réglage du menu pause)."""
+    from app.services import subtitle_shift
+
     if not ITEM_ID.match(item_id) or ext not in SUB_MIME or not 0 <= index <= 999:
         raise UpstreamError(404, "Sous-titre inconnu")
     cfg = await jellyfin.get_config(db)
@@ -639,7 +677,11 @@ async def open_subtitle(db: AsyncSession, item_id: str, index: int, ext: str) ->
         raise UpstreamError(502, "Jellyfin injoignable") from exc
     if r.status_code >= 400:
         raise UpstreamError(404, "Sous-titre absent")
-    return r.content, f"{SUB_MIME[ext]}; charset=utf-8"
+    content = r.content
+    if shift_ms:
+        text = subtitle_shift.shift(content.decode("utf-8-sig", errors="replace"), ext, shift_ms)
+        content = text.encode("utf-8")
+    return content, f"{SUB_MIME[ext]}; charset=utf-8"
 
 
 async def _refresh_item(base: str, key: str, item_id: str) -> None:
@@ -728,6 +770,50 @@ async def download_subtitles(
         "status": "none",
         "message": f"Aucun nouveau sous-titre {language.upper()} trouvé par Bazarr",
         "subtitles": after,
+    }
+
+
+# Resynchronisation par Bazarr (ffsubsync, calée sur le son) : 30 s à 2 min
+# pour un film. La TV attend 45 s au plus ; au-delà, Bazarr finit seul.
+SYNC_WAIT = 35.0
+
+
+async def sync_subtitles(db: AsyncSession, item_id: str, data: dict[str, Any]) -> dict[str, Any]:
+    """Menu pause → « Resynchro auto » : Bazarr recale le sous-titre externe
+    (français par défaut) sur la piste son, puis la TV le recharge.
+
+    ffsubsync corrige un décalage constant ou une dérive régulière ; un
+    décalage qui apparaît d'un coup en plein film (sous-titre d'une autre
+    version) se règle à la main (−/+ 0,5 s). Statuts : ok, pending, error.
+    """
+    from app.services import kodi
+
+    if not ITEM_ID.match(item_id):
+        return {"status": "error", "message": "Élément inconnu", "subtitles": []}
+    cfg = await jellyfin.get_config(db)
+    if not cfg:
+        return {"status": "error", "message": "Jellyfin non configuré", "subtitles": []}
+    base, key = cfg
+    language = str(data.get("language") or "fr").lower()[:3]
+    task = asyncio.create_task(
+        kodi.handle_addon_sync_subtitles(db, {**data, "language": language, "origin": "android"})
+    )
+    _PENDING.add(task)
+    task.add_done_callback(_PENDING.discard)
+    try:
+        result = await asyncio.wait_for(asyncio.shield(task), SYNC_WAIT)
+    except TimeoutError:
+        result = {"status": "pending"}
+    subtitles = external_subtitles(item_id, await _item_details(base, key, item_id) or {})
+    if result.get("status") == "error":
+        return {"status": "error", "message": result.get("message"), "subtitles": subtitles}
+    if result.get("status") == "pending":
+        message = "Resynchro en cours (Bazarr) : relance dans une minute pour la voir"
+        return {"status": "pending", "message": message, "subtitles": subtitles}
+    return {
+        "status": "ok",
+        "message": "Sous-titres resynchronisés sur le son",
+        "subtitles": subtitles,
     }
 
 

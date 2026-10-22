@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Android app 2.11.3
+
+#### Fixed
+- Subtitle actions (Sous-titres FR, Resynchro auto) said "Serveur injoignable" for any failure; they now tell an outdated server (403 / 404: "mets-le à jour"), a slow Bazarr (timeout) and a real network failure apart. Bazarr resync wait lowered to 35 s so the answer always beats the TV's 45 s timeout
+
+### Tablet: subtitle tools (APK 2.11.2)
+
+#### Added
+- The tablet's **Sous-titres** sheet gets the same tools as the pause menu: **Sous-titres FR** (Bazarr), **Resynchro auto** (ffsubsync) and the manual offset (**0,5 s plus tôt / plus tard**, current offset shown). New remote actions `subtitle_download`, `subtitle_sync`, `subtitle_shift` (±5 s per press); the TV reports `subtitle_tools`, `subtitle_busy`, `subtitle_note`, `subtitle_shift_ms` so the sheet shows progress and results. The Sous-titres button now appears even when the file has no subtitle track yet
+
+### Android app 2.11.1: subtitles out of sync
+
+#### Added
+- **Pause menu › Sous-titres**: **"⟲ Resynchro auto"** (Bazarr re-times the external subtitle on the audio with ffsubsync, `POST /api/tv/subtitles/{id}/sync`, then the player reloads it) and **"− 0,5 s" / "+ 0,5 s"** for a manual offset, like Kodi's subtitle delay. ffsubsync fixes a constant offset or a steady drift; a gap that appears suddenly mid-film (subtitle made for another cut) needs the manual offset. The offset works on external subtitles and on text tracks inside the MKV: the server serves a shifted copy (`?shift=ms` on `/api/tv/subtitle/…` and `/api/videos/subtitle/…`, SRT / VTT / ASS, ±10 min), Jellyfin extracts embedded tracks (`embedded_subtitles` in `/api/tv/play`), the player adds "Français (décalé +1,5 s)" and selects it. Image subtitles (PGS) cannot be shifted. 3 server tests, 2 JVM tests
+
 ### Home-made series in the web app (Médiathèque › Séries)
 
 #### Added

@@ -251,6 +251,17 @@ async def test_android_extras_are_shown_and_bounded(
     )
     again = (await client.get("/api/ambient?room=salon", headers=auth_headers)).json()["playing"]
     assert again["video"] == "4K · Dolby Vision"
+    # État des outils sous-titres renvoyé par la TV
+    tools = dict(ANDROID, event="progress", subtitle_tools=True, subtitle_busy=True,
+                 subtitle_note="Bazarr cherche…", subtitle_shift_ms=1500)  # fmt: skip
+    await client.post("/api/kodi/scrobble", json=tools, headers=auth_headers)
+    shown = (await client.get("/api/ambient?room=salon", headers=auth_headers)).json()["playing"]
+    assert (shown["subtitle_tools"], shown["subtitle_busy"], shown["subtitle_shift_ms"]) == (
+        True,
+        True,
+        1500,
+    )
+    assert shown["subtitle_note"] == "Bazarr cherche…"
 
 
 async def test_tablet_remote_reaches_the_tv(client: AsyncClient, auth_headers: dict) -> None:
@@ -302,6 +313,19 @@ async def test_tablet_remote_reaches_the_tv(client: AsyncClient, auth_headers: d
         ).status_code == 422
     ok = {"action": "track", "value": {"type": "text", "index": -1}}
     assert (await client.post("/api/ambient/command", json=ok, headers=screen)).status_code == 200
+    # Outils sous-titres : Bazarr, resynchro, décalage borné à ±5 s par appui
+    for good in (
+        {"action": "subtitle_download"},
+        {"action": "subtitle_sync"},
+        {"action": "subtitle_shift", "value": -500},
+    ):
+        assert (
+            await client.post("/api/ambient/command", json=good, headers=screen)
+        ).status_code == 200
+    too_far = {"action": "subtitle_shift", "value": 60_000}
+    assert (
+        await client.post("/api/ambient/command", json=too_far, headers=screen)
+    ).status_code == 422
 
 
 async def test_remote_wait_times_out_and_skips_old_commands() -> None:

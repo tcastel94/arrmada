@@ -54,6 +54,7 @@ def extras(data: dict[str, Any]) -> dict[str, Any]:
         ("video", 80),
         ("audio", 120),
         ("subtitle_track", 80),
+        ("subtitle_note", 160),
         ("chapter", 120),
         ("next_up", 160),
         ("meta_line", 200),
@@ -65,6 +66,15 @@ def extras(data: dict[str, Any]) -> dict[str, Any]:
         out["credits_at"] = _number(data.get("credits_at"))
     if "remote" in data:
         out["remote"] = bool(data.get("remote"))
+    # Outils sous-titres : Bazarr disponible pour ce titre, travail en cours, décalage
+    for key in ("subtitle_tools", "subtitle_busy"):
+        if key in data:
+            out[key] = bool(data.get(key))
+    if "subtitle_shift_ms" in data:
+        try:
+            out["subtitle_shift_ms"] = max(-600_000, min(600_000, int(data["subtitle_shift_ms"])))
+        except (TypeError, ValueError):
+            out["subtitle_shift_ms"] = 0
     if "skips" in data:
         out["skips"] = [
             {

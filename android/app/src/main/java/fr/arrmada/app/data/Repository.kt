@@ -225,6 +225,10 @@ class Repository(private val api: Api) {
         api.post<kotlinx.serialization.json.JsonObject, Scrobble>("/api/kodi/scrobble", payload)
     }
 
+    /** Menu pause : Bazarr recale le sous-titre sur le son (ffsubsync), 45 s au plus. */
+    suspend fun syncSubtitles(itemId: String, request: SubtitleRequest): SubtitleResult =
+        api.post("/api/tv/subtitles/$itemId/sync", request, slow = true)
+
     /** Fin de lecture d'un remux : Jellyfin arrête la conversion. */
     suspend fun stopRemux(itemId: String) {
         api.post<kotlinx.serialization.json.JsonObject, kotlinx.serialization.json.JsonObject>(
