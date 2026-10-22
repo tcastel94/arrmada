@@ -72,6 +72,13 @@ import fr.arrmada.app.ui.theme.ArrColors
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
+/**
+ * Bouton « Sous-titres FR » de l'onglet Sous-titres : Bazarr cherche, les
+ * sous-titres trouvés s'ajoutent aux pistes. [note] : résultat de la dernière
+ * recherche.
+ */
+data class SubtitleDownload(val busy: Boolean, val note: String?, val onClick: () -> Unit)
+
 /** Onglets du menu pause ; le contenu suit l'onglet qui a le focus. */
 private enum class PauseTab(val label: String) {
     CHAPTERS("Chapitres"), INFO("Infos"), CAST("Distribution"), SUBTITLES("Sous-titres")
@@ -109,6 +116,7 @@ fun PauseMenu(
     audioOpen: Boolean = false, // écran Réglages audio ouvert d'emblée (tests)
     onQuit: () -> Unit = {}, // tactile : bouton « Quitter » (à la TV, c'est la touche Retour)
     onSkip: (seconds: Int) -> Unit = {}, // tactile : −10 s / +30 s
+    subtitleDownload: SubtitleDownload? = null, // null : pas de recherche (vidéo hors médiathèque)
 ) {
     val touch = LocalScreen.current.isTouch
     // Bouton « Audio » → écran Réglages audio par-dessus le menu ; Retour y revient
@@ -236,7 +244,7 @@ fun PauseMenu(
                     PauseTab.CHAPTERS -> ChaptersPanel(info.chapters, position, absolute, onSeek)
                     PauseTab.INFO -> InfoPanel(meta, info)
                     PauseTab.CAST -> CastPanel(meta)
-                    PauseTab.SUBTITLES -> TracksPanel(trackChoices(tracks, C.TRACK_TYPE_TEXT), allowOff = true) {
+                    PauseTab.SUBTITLES -> TracksPanel(trackChoices(tracks, C.TRACK_TYPE_TEXT), allowOff = true, download = subtitleDownload) {
                         onSelectTrack(C.TRACK_TYPE_TEXT, it)
                     }
                 }
@@ -355,12 +363,29 @@ private fun CastPanel(meta: PlaybackMeta?) {
 }
 
 @Composable
-internal fun TracksPanel(choices: List<TrackChoice>, allowOff: Boolean, sidePadding: Dp = gutter, onSelect: (TrackChoice?) -> Unit) {
+internal fun TracksPanel(
+    choices: List<TrackChoice>,
+    allowOff: Boolean,
+    sidePadding: Dp = gutter,
+    download: SubtitleDownload? = null,
+    onSelect: (TrackChoice?) -> Unit,
+) {
     if (choices.isEmpty() && !allowOff) {
         Text("Aucune piste", style = MaterialTheme.typography.bodyLarge, color = ArrColors.TextSecondary, modifier = Modifier.padding(horizontal = sidePadding))
         return
     }
     LazyRow(contentPadding = PaddingValues(horizontal = sidePadding), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Recherche Bazarr en tête : visible même quand le fichier n'a aucune piste
+        if (download != null) {
+            item {
+                OptionChip(
+                    if (download.busy) "Recherche…" else "⬇ Sous-titres FR",
+                    download.note ?: if (download.busy) "Bazarr cherche (30 s environ)" else "Chercher avec Bazarr",
+                    selected = false,
+                    supported = !download.busy,
+                ) { if (!download.busy) download.onClick() }
+            }
+        }
         if (allowOff) {
             item {
                 OptionChip("Aucun", "Sous-titres désactivés", selected = choices.none { it.selected }, supported = true) { onSelect(null) }

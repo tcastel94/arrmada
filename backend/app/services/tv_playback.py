@@ -31,6 +31,7 @@ Deux façons de lire :
 
 from __future__ import annotations
 
+import asyncio
 import re
 from collections.abc import AsyncIterator
 from typing import Any
@@ -132,6 +133,64 @@ def video_range(details: dict[str, Any]) -> dict[str, Any]:
         or (isinstance(profile, int) and profile > 0 and compat == 0)
     )
     return {"video_range": range_type, "dovi_only": dovi_only}
+
+
+# Sous-titres externes que la TV sait afficher : format demandé à Jellyfin
+# (qui convertit au besoin, en UTF-8) et type MIME pour le lecteur. Les
+# sous-titres « image » (PGS, VobSub) ne se convertissent pas en texte.
+_SUB_FORMATS = {
+    "subrip": ("srt", "application/x-subrip"),
+    "srt": ("srt", "application/x-subrip"),
+    "ass": ("ass", "text/x-ssa"),
+    "ssa": ("ass", "text/x-ssa"),
+    "webvtt": ("vtt", "text/vtt"),
+    "vtt": ("vtt", "text/vtt"),
+}
+SUB_MIME = dict(_SUB_FORMATS.values())
+
+# Langues ISO 639-2 de Jellyfin → code court et nom affiché
+_LANGS = {
+    "fre": ("fr", "Français"), "fra": ("fr", "Français"), "fr": ("fr", "Français"),
+    "eng": ("en", "Anglais"), "en": ("en", "Anglais"),
+    "spa": ("es", "Espagnol"), "ger": ("de", "Allemand"), "deu": ("de", "Allemand"),
+    "ita": ("it", "Italien"), "jpn": ("ja", "Japonais"), "por": ("pt", "Portugais"),
+}  # fmt: skip
+
+
+def subtitle_path(item_id: str, index: int, ext: str) -> str:
+    return f"/api/tv/subtitle/{item_id}/{index}.{ext}"
+
+
+def external_subtitles(item_id: str, details: dict[str, Any]) -> list[dict[str, str]]:
+    """Sous-titres externes connus de Jellyfin → [{url, label, language, mime}].
+
+    Même format que les sous-titres de l'écran Vidéos : le lecteur les ajoute
+    aux pistes du fichier (onglet Sous-titres du menu pause).
+    """
+    sources = details.get("MediaSources") or [{}]
+    source = sources[0] if isinstance(sources[0], dict) else {}
+    found = []
+    for stream in source.get("MediaStreams") or []:
+        if not isinstance(stream, dict) or stream.get("Type") != "Subtitle":
+            continue
+        if not stream.get("IsExternal") or not isinstance(stream.get("Index"), int):
+            continue
+        fmt = _SUB_FORMATS.get(str(stream.get("Codec") or "").lower())
+        if fmt is None:
+            continue
+        code, name = _LANGS.get(str(stream.get("Language") or "").lower(), ("", ""))
+        label = name or str(stream.get("DisplayTitle") or stream.get("Title") or "Externe")
+        if stream.get("IsForced"):
+            label += " (forcés)"
+        elif stream.get("IsHearingImpaired"):
+            label += " (SDH)"
+        found.append({
+            "url": subtitle_path(item_id, stream["Index"], fmt[0]),
+            "label": f"{label} · fichier",
+            "language": code,
+            "mime": fmt[1],
+        })  # fmt: skip
+    return found
 
 
 def source_info(details: dict[str, Any]) -> dict[str, Any]:
@@ -237,6 +296,9 @@ def _found(item_id: str, details: dict[str, Any] | None, resume: dict[str, Any])
         "sdr_stream": sdr_path(item_id),
         "chapters": parse_chapters(item_id, details.get("Chapters")),
         "resume": resume,
+        # Sous-titres posés à côté du fichier (.fr.srt de Bazarr…) : le lecteur
+        # ne voit que les pistes du MKV, on les lui ajoute
+        "subtitles": external_subtitles(item_id, details),
     }
 
 
@@ -556,6 +618,117 @@ async def stop_hls(db: AsyncSession, item_id: str) -> None:
             await client.delete(f"{base}/Videos/ActiveEncodings?{urlencode(params)}")
     except httpx.HTTPError as exc:
         logger.debug("Arrêt du remux %s : %s", item_id, exc)
+
+
+# ── Sous-titres externes (relais, téléchargement par Bazarr) ────────────────
+
+
+async def open_subtitle(db: AsyncSession, item_id: str, index: int, ext: str) -> tuple[bytes, str]:
+    """Sous-titre externe converti par Jellyfin (UTF-8), relayé à la TV."""
+    if not ITEM_ID.match(item_id) or ext not in SUB_MIME or not 0 <= index <= 999:
+        raise UpstreamError(404, "Sous-titre inconnu")
+    cfg = await jellyfin.get_config(db)
+    if not cfg:
+        raise UpstreamError(503, "Jellyfin non configuré")
+    base, key = cfg
+    url = f"{base}/Videos/{item_id}/{item_id}/Subtitles/{index}/0/Stream.{ext}"
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            r = await client.get(f"{url}?{urlencode({jellyfin.KEY_PARAM: key})}")
+    except httpx.HTTPError as exc:
+        raise UpstreamError(502, "Jellyfin injoignable") from exc
+    if r.status_code >= 400:
+        raise UpstreamError(404, "Sous-titre absent")
+    return r.content, f"{SUB_MIME[ext]}; charset=utf-8"
+
+
+async def _refresh_item(base: str, key: str, item_id: str) -> None:
+    """Demande à Jellyfin de relire le dossier de l'élément (nouveaux .srt)."""
+    params = {
+        jellyfin.KEY_PARAM: key,
+        "MetadataRefreshMode": "Default",
+        "ImageRefreshMode": "None",
+        "ReplaceAllMetadata": "false",
+        "ReplaceAllImages": "false",
+    }
+    async with httpx.AsyncClient(timeout=10) as client:
+        await client.post(f"{base}/Items/{item_id}/Refresh?{urlencode(params)}")
+
+
+# Recherches Bazarr qui continuent après la réponse à la TV (gardées ici pour
+# qu'elles ne soient pas interrompues en route)
+_PENDING: set[asyncio.Task[Any]] = set()
+
+# Budget d'une demande de la TV (elle attend 45 s au plus) : recherche Bazarr,
+# puis relecture du dossier par Jellyfin
+BAZARR_WAIT = 25.0
+JELLYFIN_WAIT = 12.0
+POLL_EVERY = 2.0
+
+
+async def download_subtitles(
+    db: AsyncSession, item_id: str, data: dict[str, Any]
+) -> dict[str, Any]:
+    """Menu pause → « Sous-titres français » : Bazarr cherche et télécharge,
+    Jellyfin relit le dossier, la TV reçoit la liste des sous-titres externes.
+
+    [data] : {media_type: movie|episode, tmdb_id | tvdb_id, season, episode,
+    language}. Statuts : ok (nouveau sous-titre), none (rien trouvé),
+    pending (Bazarr cherche encore : réessayer dans une minute), error.
+    """
+    from app.services import kodi
+
+    if not ITEM_ID.match(item_id):
+        return {"status": "error", "message": "Élément inconnu", "subtitles": []}
+    cfg = await jellyfin.get_config(db)
+    if not cfg:
+        return {"status": "error", "message": "Jellyfin non configuré", "subtitles": []}
+    base, key = cfg
+    language = str(data.get("language") or "fr").lower()[:3]
+
+    before = external_subtitles(item_id, await _item_details(base, key, item_id) or {})
+    known = {s["url"] for s in before}
+
+    # Bazarr peut chercher longtemps (plusieurs fournisseurs) : on l'attend un
+    # temps raisonnable, il finit seul au-delà
+    task = asyncio.create_task(
+        kodi.handle_addon_subtitles(db, {**data, "language": language, "origin": "android"})
+    )
+    _PENDING.add(task)
+    task.add_done_callback(_PENDING.discard)
+    try:
+        result = await asyncio.wait_for(asyncio.shield(task), BAZARR_WAIT)
+    except TimeoutError:
+        result = {"status": "pending"}
+    if result.get("status") == "error":
+        return {"status": "error", "message": result.get("message"), "subtitles": before}
+
+    # Jellyfin relit le dossier : le nouveau .srt devient un sous-titre externe
+    after = before
+    try:
+        await _refresh_item(base, key, item_id)
+        waited = 0.0
+        while waited < JELLYFIN_WAIT:
+            await asyncio.sleep(POLL_EVERY)
+            waited += POLL_EVERY
+            after = external_subtitles(item_id, await _item_details(base, key, item_id) or {})
+            if any(s["url"] not in known for s in after):
+                break
+    except httpx.HTTPError as exc:
+        logger.debug("Relecture Jellyfin de %s : %s", item_id, exc)
+
+    added = [s for s in after if s["url"] not in known]
+    if added:
+        names = ", ".join(s["label"].removesuffix(" · fichier") for s in added)
+        return {"status": "ok", "message": f"Sous-titres ajoutés : {names}", "subtitles": after}
+    if result.get("status") == "pending":
+        message = "Bazarr cherche encore : réessaie dans une minute"
+        return {"status": "pending", "message": message, "subtitles": after}
+    return {
+        "status": "none",
+        "message": f"Aucun nouveau sous-titre {language.upper()} trouvé par Bazarr",
+        "subtitles": after,
+    }
 
 
 async def _image(db: AsyncSession, path: str) -> tuple[bytes, str]:

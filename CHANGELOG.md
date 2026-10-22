@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Android app 2.10.3: pause with OK, French subtitles from the pause menu
+
+#### Fixed
+- **OK (centre button) paused for a split second then resumed**: the pause menu opened on key press and the key release "clicked" its focused "Reprendre" button. The release is now swallowed (Play/Pause was not affected)
+- Dolby Vision toast shortened ("Image convertie en SDR (TV sans Dolby Vision)"): Android TV cuts toasts after two lines
+
+#### Added
+- **External subtitles in the player**: `.srt` / `.ass` / `.vtt` files next to the video (Bazarr downloads) are listed in the Subtitles tab ("Français · fichier"); before, the player only saw the tracks inside the MKV. `/api/tv/play` returns `subtitles`; new relay `GET /api/tv/subtitle/{id}/{index}.{srt|ass|vtt}` (Jellyfin converts to UTF-8; image subtitles such as PGS are skipped)
+- **"⬇ Sous-titres FR" in the pause menu** (movies and episodes of the library): Bazarr searches and downloads, Jellyfin re-reads the folder, the new subtitle is added to the tracks and French is selected, playback stays paused. `POST /api/tv/subtitles/{id}` waits 25 s for Bazarr (it keeps searching after that: "réessaie dans une minute") and 12 s for Jellyfin. 9 tests
+
 ### Android app 2.10.2: Dolby Vision profile 5 on a screen without Dolby Vision
 
 #### Fixed

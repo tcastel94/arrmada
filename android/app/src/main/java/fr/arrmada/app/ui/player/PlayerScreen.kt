@@ -80,6 +80,9 @@ import fr.arrmada.app.data.AmpDevice
 import fr.arrmada.app.data.SoundAdvisor
 import fr.arrmada.app.data.DolbyVisionLogic
 import fr.arrmada.app.data.PlayInfo
+import fr.arrmada.app.data.SideSubtitle
+import fr.arrmada.app.data.SubtitleRequest
+import fr.arrmada.app.data.SubtitleResult
 import fr.arrmada.app.data.LocalSeriesDetail
 import fr.arrmada.app.data.LocalSeriesLogic
 import fr.arrmada.app.data.PlaybackLogic
@@ -279,6 +282,8 @@ private fun PlayerSurface(
     // lecture directe. On part alors d'emblée sur la conversion SDR de Jellyfin.
     val screenDolbyVision = remember { ScreenCapabilities.dolbyVision(context) }
     val sdrAtStart = remember { DolbyVisionLogic.startWithSdr(info, screenDolbyVision) }
+    // Flux lu (adresse, HLS ?) : change si l'on bascule en remux ou en SDR
+    val initialSource = if (sdrAtStart) info.sdrStream to true else info.stream to (info.mode == "remux")
 
     // ── Création du lecteur (une fois) ──
     val player = remember {
@@ -309,11 +314,7 @@ private fun PlayerSurface(
             .setSeekForwardIncrementMs(30_000)
             .build()
             .apply {
-                if (sdrAtStart) {
-                    setMediaItem(mediaItem(app.api.baseUrl + info.sdrStream, hls = true, sideSubtitles(info, app.api.baseUrl)))
-                } else {
-                    setMediaItem(mediaItem(app.api.baseUrl + info.stream, hls = info.mode == "remux", sideSubtitles(info, app.api.baseUrl)))
-                }
+                setMediaItem(mediaItem(app.api.baseUrl + initialSource.first, initialSource.second, sideSubtitles(info.subtitles, app.api.baseUrl)))
                 prepare()
                 if (request.startSeconds > 0) seekTo(request.startSeconds * 1000L)
                 playWhenReady = true
@@ -370,6 +371,14 @@ private fun PlayerSurface(
     var remuxed by remember { mutableStateOf(info.mode == "remux" || sdrAtStart) } // flux converti par Jellyfin
     var toneMapped by remember { mutableStateOf(sdrAtStart) } // image convertie en SDR (Dolby Vision profil 5)
     var dolbyVisionWarned by remember { mutableStateOf(false) }
+    var source by remember { mutableStateOf(initialSource) }
+    // Sous-titres posés à côté du fichier (Bazarr…), complétés depuis le menu pause
+    var sideSubs by remember { mutableStateOf(info.subtitles) }
+    var subtitleBusy by remember { mutableStateOf(false) }
+    var subtitleNote by remember { mutableStateOf<String?>(null) }
+    // Le bouton central ouvre le menu à l'appui : son relâchement est avalé
+    // (sinon il « clique » sur « Reprendre », qui a le focus, et relance aussitôt)
+    var swallowOkUp by remember { mutableStateOf(false) }
     var softwareAudio by remember { mutableStateOf(false) } // son décodé par FFmpeg (secours)
     var finished by remember { mutableStateOf(false) } // fin enregistrée (vu)
     var upNextDismissed by remember { mutableStateOf(false) }
@@ -444,6 +453,46 @@ private fun PlayerSurface(
         if (next != null && !upNextDismissed) onPlayNext(next.request) else onExit()
     }
 
+    /** Recharge le flux [url] (remux, SDR, nouveaux sous-titres) à la position [at]. */
+    fun load(url: String, hls: Boolean, at: Long) {
+        source = url to hls
+        player.setMediaItem(mediaItem(app.api.baseUrl + url, hls, sideSubtitles(sideSubs, app.api.baseUrl)), at)
+        player.prepare()
+    }
+
+    // Menu pause → « Sous-titres FR » : film ou épisode de la médiathèque
+    // seulement (Bazarr ne connaît pas les vidéos de l'écran Vidéos)
+    val subtitleRequest = remember(request) {
+        when (request.kind) {
+            "movie" -> SubtitleRequest("movie", tmdbId = request.id)
+            "episode" -> SubtitleRequest("episode", tvdbId = request.id, season = request.season, episode = request.episode)
+            else -> null
+        }?.takeIf { info.itemId.isNotBlank() }
+    }
+
+    fun downloadSubtitles() {
+        val body = subtitleRequest ?: return
+        if (subtitleBusy) return
+        subtitleBusy = true
+        subtitleNote = null
+        uiScope.launch {
+            val result = runCatching { repository.downloadSubtitles(info.itemId, body) }
+                .getOrElse { SubtitleResult(message = "Serveur injoignable (${it.message.orEmpty()})") }
+            subtitleBusy = false
+            subtitleNote = result.message
+            result.message?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
+            if (result.subtitles.isNotEmpty() && result.subtitles.map { it.url } != sideSubs.map { it.url }) {
+                sideSubs = result.subtitles
+                // Même flux, sous-titres en plus ; la lecture reste en pause, le
+                // français est choisi d'office
+                load(source.first, source.second, player.currentPosition)
+                (player.trackSelector as? DefaultTrackSelector)?.let {
+                    it.setParameters(it.buildUponParameters().setPreferredTextLanguage("fr"))
+                }
+            }
+        }
+    }
+
     LaunchedEffect(Unit) {
         if (sdrAtStart) Toast.makeText(context, DV_SDR_MESSAGE, Toast.LENGTH_LONG).show()
     }
@@ -461,8 +510,7 @@ private fun PlayerSurface(
                     toneMapped = true
                     remuxed = true
                     val at = player.currentPosition.takeIf { it > 0 } ?: (request.startSeconds * 1000L)
-                    player.setMediaItem(mediaItem(app.api.baseUrl + info.sdrStream, hls = true, sideSubtitles(info, app.api.baseUrl)), at)
-                    player.prepare()
+                    load(info.sdrStream, hls = true, at = at)
                     player.play()
                     Toast.makeText(context, DV_SDR_MESSAGE, Toast.LENGTH_LONG).show()
                 } else if (!dolbyVisionWarned) {
@@ -470,7 +518,7 @@ private fun PlayerSurface(
                     dolbyVisionWarned = true
                     Toast.makeText(
                         context,
-                        "Dolby Vision profil 5 : couleurs fausses sur un écran sans Dolby Vision (préférer une version HDR10)",
+                        "Dolby Vision profil 5 : couleurs fausses sur cet écran",
                         Toast.LENGTH_LONG,
                     ).show()
                 }
@@ -504,8 +552,7 @@ private fun PlayerSurface(
                 if (!remuxed && info.remuxStream.isNotBlank() && e.errorCode in REMUX_RETRY) {
                     remuxed = true
                     val at = player.currentPosition.takeIf { it > 0 } ?: (request.startSeconds * 1000L)
-                    player.setMediaItem(mediaItem(app.api.baseUrl + info.remuxStream, hls = true), at)
-                    player.prepare()
+                    load(info.remuxStream, hls = true, at = at)
                     player.play()
                     Toast.makeText(context, "Format ${info.container.ifBlank { "inconnu" }} : conversion par Jellyfin…", Toast.LENGTH_LONG).show()
                     return
@@ -564,6 +611,7 @@ private fun PlayerSurface(
     }
 
     fun resume() {
+        swallowOkUp = false
         showMenu = false
         player.play()
         runCatching { keyFocus.requestFocus() }
@@ -604,16 +652,20 @@ private fun PlayerSurface(
                 },
             )
             .onPreviewKeyEvent { event ->
-                if (showMenu || playbackError != null || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 val code = event.key.nativeKeyCode
                 val ok = code == AndroidKeyEvent.KEYCODE_DPAD_CENTER || code == AndroidKeyEvent.KEYCODE_ENTER
+                if (ok && event.type == KeyEventType.KeyUp && swallowOkUp) {
+                    swallowOkUp = false
+                    return@onPreviewKeyEvent true
+                }
+                if (showMenu || playbackError != null || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when {
                     ok && showUpNext -> { playNext(); true }
                     ok && activeSkip != null -> { player.seekTo((activeSkip.end * 1000).toLong()); true }
                     else -> when (code) {
                         AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER,
                         AndroidKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, AndroidKeyEvent.KEYCODE_MEDIA_PAUSE,
-                        AndroidKeyEvent.KEYCODE_SPACE -> { pause(); true }
+                        AndroidKeyEvent.KEYCODE_SPACE -> { swallowOkUp = ok; pause(); true }
                         AndroidKeyEvent.KEYCODE_MEDIA_PLAY -> { player.play(); true }
                         AndroidKeyEvent.KEYCODE_DPAD_LEFT, AndroidKeyEvent.KEYCODE_MEDIA_REWIND -> {
                             player.seekBack(); osdUntil = System.currentTimeMillis() + 3000; true
@@ -710,6 +762,7 @@ private fun PlayerSurface(
                     app.prefs.autoSound = on
                 },
                 onApplyAdvice = { advice.program?.let { ampCommand("sound_program", JsonPrimitive(it)) } },
+                subtitleDownload = subtitleRequest?.let { SubtitleDownload(subtitleBusy, subtitleNote, ::downloadSubtitles) },
             )
         }
 
@@ -785,8 +838,8 @@ private fun audioDecoderFailed(e: PlaybackException): Boolean {
 }
 
 /** Message affiché quand l'image Dolby Vision est convertie en SDR par Jellyfin. */
-private const val DV_SDR_MESSAGE =
-    "Dolby Vision sans HDR10 : image convertie en SDR par Jellyfin (écran sans Dolby Vision)"
+// Court : Android TV coupe ses messages après deux lignes
+private const val DV_SDR_MESSAGE = "Image convertie en SDR (TV sans Dolby Vision)"
 
 /** Format de la piste vidéo en cours de lecture (null tant qu'aucune n'est choisie). */
 @OptIn(UnstableApi::class)
@@ -816,8 +869,8 @@ private fun mediaItem(url: String, hls: Boolean, subtitles: List<MediaItem.Subti
  * fichier, choisis dans l'onglet Sous-titres du menu pause. Téléchargés par
  * le même client HTTP que la vidéo (jeton d'appareil), en UTF-8.
  */
-private fun sideSubtitles(info: PlayInfo, baseUrl: String): List<MediaItem.SubtitleConfiguration> =
-    info.subtitles.map { sub ->
+private fun sideSubtitles(subtitles: List<SideSubtitle>, baseUrl: String): List<MediaItem.SubtitleConfiguration> =
+    subtitles.map { sub ->
         MediaItem.SubtitleConfiguration.Builder(android.net.Uri.parse(baseUrl + sub.url))
             .setMimeType(sub.mime)
             .setLanguage(sub.language.ifBlank { null })

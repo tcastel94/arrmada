@@ -98,6 +98,7 @@ import fr.arrmada.app.data.FamilyProfile
 import fr.arrmada.app.ui.player.AudioContext
 import fr.arrmada.app.ui.profiles.ProfilesContent
 import fr.arrmada.app.ui.player.PauseMenu
+import fr.arrmada.app.ui.player.SubtitleDownload
 import fr.arrmada.app.ui.player.selectedSound
 import fr.arrmada.app.data.SoundAdvisor
 import fr.arrmada.app.ui.player.PlayRequest
@@ -302,6 +303,20 @@ class ScreenshotTest {
                     absolute = noAbsolute, onResume = {}, onSeek = {}, onSelectTrack = { _, _ -> },
                     audio = AudioContext("Salle de cinéma · enceintes 7.2.2", true, advice, auto = true),
                     amp = amp, audioOpen = true,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun menuPauseSousTitres() {
+        captureRoboImage(shot("39-menu-pause-sous-titres")) {
+            ArrMadaTheme {
+                PauseMenu(
+                    info = play, meta = dune.toMeta(), position = 2_530_000, duration = 9_300_000, tracks = sampleTracks(),
+                    absolute = noAbsolute, onResume = {}, onSeek = {}, onSelectTrack = { _, _ -> },
+                    initialTab = "Sous-titres",
+                    subtitleDownload = SubtitleDownload(busy = false, note = "Sous-titres ajoutés : Français", onClick = {}),
                 )
             }
         }
