@@ -131,14 +131,22 @@ async def season(tvdb_id: int, season: int, db: AsyncSession = Depends(get_db)) 
 
 @router.get("/subtitle/{item_id}/{index}.{ext}")
 async def subtitle(
-    item_id: str, index: int, ext: str, db: AsyncSession = Depends(get_db)
+    item_id: str, index: int, ext: str, shift: int = 0, db: AsyncSession = Depends(get_db)
 ) -> Response:
-    """Sous-titre externe (.srt / .ass / .vtt posé à côté du fichier), en UTF-8."""
+    """Sous-titre (externe ou intégré) en UTF-8 ; `shift` : décalé de N ms (±10 min)."""
     try:
-        content, media_type = await tv_playback.open_subtitle(db, item_id, index, ext)
+        content, media_type = await tv_playback.open_subtitle(db, item_id, index, ext, shift)
     except tv_playback.UpstreamError as exc:
         raise HTTPException(exc.status_code, exc.detail) from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
     return Response(content, headers={"Content-Type": media_type})
+
+
+@router.post("/subtitles/{item_id}/sync")
+async def sync_subtitles(item_id: str, data: dict, db: AsyncSession = Depends(get_db)) -> dict:
+    """Menu pause : Bazarr recale le sous-titre sur le son (ffsubsync), 45 s au plus."""
+    return await tv_playback.sync_subtitles(db, item_id, data or {})
 
 
 @router.post("/subtitles/{item_id}")

@@ -77,7 +77,14 @@ import java.time.format.DateTimeFormatter
  * sous-titres trouvés s'ajoutent aux pistes. [note] : résultat de la dernière
  * recherche.
  */
-data class SubtitleDownload(val busy: Boolean, val note: String?, val onClick: () -> Unit)
+data class SubtitleDownload(
+    val busy: Boolean,
+    val note: String?,
+    val onClick: (() -> Unit)?, // « Sous-titres FR » (Bazarr) ; null : vidéo hors médiathèque
+    val onSync: (() -> Unit)? = null, // « Resynchro auto » (Bazarr, ffsubsync)
+    val onShift: ((Int) -> Unit)? = null, // −/+ 0,5 s sur la piste affichée
+    val shiftMs: Int = 0, // décalage en cours
+)
 
 /** Onglets du menu pause ; le contenu suit l'onglet qui a le focus. */
 private enum class PauseTab(val label: String) {
@@ -375,15 +382,37 @@ internal fun TracksPanel(
         return
     }
     LazyRow(contentPadding = PaddingValues(horizontal = sidePadding), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        // Recherche Bazarr en tête : visible même quand le fichier n'a aucune piste
+        // Outils en tête : visibles même quand le fichier n'a aucune piste
         if (download != null) {
-            item {
-                OptionChip(
-                    if (download.busy) "Recherche…" else "⬇ Sous-titres FR",
-                    download.note ?: if (download.busy) "Bazarr cherche (30 s environ)" else "Chercher avec Bazarr",
-                    selected = false,
-                    supported = !download.busy,
-                ) { if (!download.busy) download.onClick() }
+            download.onClick?.let { onClick ->
+                item {
+                    OptionChip(
+                        if (download.busy) "Bazarr…" else "⬇ Sous-titres FR",
+                        download.note ?: if (download.busy) "Bazarr travaille (30 s à 1 min)" else "Chercher avec Bazarr",
+                        selected = false,
+                        supported = !download.busy,
+                    ) { if (!download.busy) onClick() }
+                }
+            }
+            download.onSync?.let { onSync ->
+                item {
+                    OptionChip("⟲ Resynchro auto", "Recaler sur le son (Bazarr)", selected = false, supported = !download.busy) {
+                        if (!download.busy) onSync()
+                    }
+                }
+            }
+            download.onShift?.let { onShift ->
+                val now = if (download.shiftMs == 0) "Pas de décalage" else "Décalage ${fr.arrmada.app.data.SubtitleShiftLogic.format(download.shiftMs)}"
+                item {
+                    OptionChip("− 0,5 s", "$now · plus tôt", selected = false, supported = true) {
+                        onShift(-fr.arrmada.app.data.SubtitleShiftLogic.STEP_MS)
+                    }
+                }
+                item {
+                    OptionChip("+ 0,5 s", "$now · plus tard", selected = false, supported = true) {
+                        onShift(fr.arrmada.app.data.SubtitleShiftLogic.STEP_MS)
+                    }
+                }
             }
         }
         if (allowOff) {

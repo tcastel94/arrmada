@@ -316,7 +316,7 @@ class ScreenshotTest {
                     info = play, meta = dune.toMeta(), position = 2_530_000, duration = 9_300_000, tracks = sampleTracks(),
                     absolute = noAbsolute, onResume = {}, onSeek = {}, onSelectTrack = { _, _ -> },
                     initialTab = "Sous-titres",
-                    subtitleDownload = SubtitleDownload(busy = false, note = "Sous-titres ajoutés : Français", onClick = {}),
+                    subtitleDownload = SubtitleDownload(busy = false, note = "Sous-titres ajoutés : Français", onClick = {}, onSync = {}, onShift = {}, shiftMs = 1500),
                 )
             }
         }

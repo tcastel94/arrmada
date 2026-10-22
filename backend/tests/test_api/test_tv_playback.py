@@ -668,3 +668,64 @@ async def test_download_subtitles_bazarr_still_searching(
         "subtitles": data["subtitles"],
     }
     await asyncio.sleep(0.5)  # la recherche lente se termine sans bruit
+
+
+# ── Sous-titres décalés (menu pause) et resynchro Bazarr ──────
+
+
+def test_shift_srt_vtt_ass() -> None:
+    from app.services import subtitle_shift as sh
+
+    srt = "1\r\n00:00:01,000 --> 00:00:02,500\r\nÀ 10:00:00,000 on part\r\n"
+    out = sh.shift(srt, "srt", 1500)
+    assert "00:00:02,500 --> 00:00:04,000" in out
+    assert "À 10:00:00,000 on part" in out  # le texte n'est jamais touché
+    assert "00:00:00,000 --> 00:00:00,500" in sh.shift(srt, "srt", -2000)  # ramené à zéro
+    vtt = "WEBVTT\n\n01:02.000 --> 01:04.500\nSalut\n"
+    assert "01:03.500 --> 01:06.000" in sh.shift(vtt, "vtt", 1500)
+    ass = "[Events]\nDialogue: 0,0:01:02.34,0:01:05.67,Default,,0,0,0,,Bonjour, toi\n"
+    assert "Dialogue: 0,0:01:01.84,0:01:05.17,Default,,0,0,0,,Bonjour, toi" in sh.shift(
+        ass, "ass", -500
+    )
+    assert sh.shift(srt, "srt", 0) == srt
+    with pytest.raises(ValueError):
+        sh.shift(srt, "srt", 3_600_000)
+
+
+async def test_shifted_and_embedded_subtitles(
+    client: AsyncClient, jellyfin: dict[str, str]
+) -> None:
+    tv = await _tv(client, jellyfin)
+    data = (await client.get("/api/tv/play/movie/438631", headers=tv)).json()
+    # Piste intégrée en ASS (texte) proposée pour le décalage ; le PGS (image) non
+    assert data["embedded_subtitles"] == [
+        {
+            "url": f"/api/tv/subtitle/{MOVIE_ID}/4.ass",
+            "label": "Français",
+            "language": "fr",
+            "mime": "text/x-ssa",
+        }
+    ]
+    shifted = await client.get(f"/api/tv/subtitle/{MOVIE_ID}/2.srt?shift=1500", headers=tv)
+    assert shifted.status_code == 200
+    assert "00:00:02,500 --> 00:00:03,500" in shifted.text
+    too_far = await client.get(f"/api/tv/subtitle/{MOVIE_ID}/2.srt?shift=9999999", headers=tv)
+    assert too_far.status_code == 422
+
+
+async def test_sync_subtitles_from_pause_menu(
+    client: AsyncClient, jellyfin: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.services import kodi
+
+    async def fake_sync(_db: Any, data: dict) -> dict:
+        SEEN["sync"] = data
+        return {"status": "ok"}
+
+    monkeypatch.setattr(kodi, "handle_addon_sync_subtitles", fake_sync)
+    tv = await _tv(client, jellyfin)
+    body = {"media_type": "movie", "tmdb_id": 438631}
+    data = (await client.post(f"/api/tv/subtitles/{MOVIE_ID}/sync", json=body, headers=tv)).json()
+    assert data["status"] == "ok" and len(data["subtitles"]) == 1
+    assert SEEN["sync"]["language"] == "fr" and SEEN["sync"]["origin"] == "android"
+    assert device_may_call("POST", f"/api/tv/subtitles/{MOVIE_ID}/sync")

@@ -86,13 +86,20 @@ async def image(token: str, db: AsyncSession = Depends(get_db)) -> FileResponse:
 
 
 @router.get("/subtitle/{token}")
-async def subtitle(token: str, db: AsyncSession = Depends(get_db)) -> Response:
-    """Sous-titre posé à côté d'une vidéo, converti en UTF-8."""
+async def subtitle(token: str, shift: int = 0, db: AsyncSession = Depends(get_db)) -> Response:
+    """Sous-titre posé à côté d'une vidéo, converti en UTF-8 ; `shift` : décalé de N ms."""
+    from app.services import subtitle_shift
+
     _, real, _ = await _resolve(db, token)
     try:
         content, mime = video_files.subtitle_bytes(real)
+        if shift:
+            ext = real.suffix.lower().lstrip(".")
+            content = subtitle_shift.shift(content.decode("utf-8"), ext, shift).encode("utf-8")
     except NotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return Response(content, media_type=f"{mime}; charset=utf-8")
 
 

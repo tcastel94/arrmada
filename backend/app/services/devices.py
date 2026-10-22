@@ -188,7 +188,7 @@ _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         ("GET", r"/api/tv/remote"),
         # Sous-titres externes (Bazarr) : lecture, et recherche depuis le menu pause
         ("GET", r"/api/tv/subtitle/[0-9a-f]{32}/\d+\.(srt|ass|vtt)"),
-        ("POST", r"/api/tv/subtitles/[0-9a-f]{32}"),
+        ("POST", r"/api/tv/subtitles/[0-9a-f]{32}(/sync)?"),
         # Mises à jour de l'appli Android (ADR-009) : version proposée, APK
         ("GET", r"/api/android/update"),
         ("GET", r"/api/android/apk/arrmada-[A-Za-z0-9.+_-]+\.apk"),
