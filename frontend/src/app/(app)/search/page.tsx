@@ -98,7 +98,6 @@ function SearchHub() {
                 <PageHeader
                     icon={SearchCheck}
                     accent="brand"
-                    eyebrow="Bibliothèque"
                     title="Rechercher & Ajouter"
                     description="Trouve un film ou une série, ajoute-le en un clic à Radarr ou Sonarr, puis suis son arrivée jusqu'à ta médiathèque."
                     actions={

@@ -69,7 +69,6 @@ export default function HealthPage() {
                 <PageHeader
                     icon={HeartPulse}
                     accent="fuchsia"
-                    eyebrow="Maintenance"
                     title="Santé médiathèque"
                     description="Qualité des fichiers, doublons et place perdue : tout ce qui mérite un coup de propre dans ta collection."
                     actions={

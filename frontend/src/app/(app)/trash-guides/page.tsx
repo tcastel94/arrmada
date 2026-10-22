@@ -55,7 +55,6 @@ export default function TrashGuidesPage() {
                 <PageHeader
                     icon={BookMarked}
                     accent="orange"
-                    eyebrow="Maintenance"
                     title="TRaSH Guides"
                     description="Les réglages recommandés par la communauté TRaSH, appliqués à Sonarr, Radarr et SABnzbd en quelques clics."
                     actions={

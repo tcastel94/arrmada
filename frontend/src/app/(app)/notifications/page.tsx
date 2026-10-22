@@ -98,7 +98,6 @@ export default function NotificationsPage() {
                 <PageHeader
                     icon={Bell}
                     accent="rose"
-                    eyebrow="Activité"
                     title="Notifications"
                     description={
                         unreadCount > 0

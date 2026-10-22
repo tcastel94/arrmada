@@ -62,7 +62,6 @@ export default function AnalyticsPage() {
                 <PageHeader
                     icon={BarChart3}
                     accent="emerald"
-                    eyebrow="Système"
                     title="Statistiques"
                     description="La radiographie de ta médiathèque : volumes, qualité, genres, années et poids lourds."
                 >

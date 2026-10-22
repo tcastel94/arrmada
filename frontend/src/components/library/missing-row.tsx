@@ -20,15 +20,15 @@ import type { RowSearchState } from "./use-bulk-search";
 export function releaseStatus(item: MediaItem): { label: string; className: string } | null {
     const s = (item.status || "").toLowerCase();
     const map: Record<string, { label: string; className: string }> = {
-        released: { label: "Sorti", className: "bg-success/10 text-success ring-success/25" },
-        incinemas: { label: "Au cinéma", className: "bg-primary/10 text-primary ring-primary/25" },
-        announced: { label: "Annoncé", className: "bg-warning/10 text-warning ring-warning/25" },
-        tba: { label: "À venir", className: "bg-white/[0.04] text-muted-foreground ring-white/10" },
-        continuing: { label: "En cours", className: "bg-success/10 text-success ring-success/25" },
-        upcoming: { label: "À venir", className: "bg-warning/10 text-warning ring-warning/25" },
-        ended: { label: "Terminée", className: "bg-white/[0.04] text-muted-foreground ring-white/10" },
+        released: { label: "Sorti", className: "text-success" },
+        incinemas: { label: "Au cinéma", className: "text-primary" },
+        announced: { label: "Annoncé", className: "text-warning" },
+        tba: { label: "À venir", className: "text-muted-foreground" },
+        continuing: { label: "En cours", className: "text-success" },
+        upcoming: { label: "À venir", className: "text-warning" },
+        ended: { label: "Terminée", className: "text-muted-foreground" },
     };
-    return map[s] ?? (s ? { label: item.status, className: "bg-white/[0.04] text-muted-foreground ring-white/10" } : null);
+    return map[s] ?? (s ? { label: item.status, className: "text-muted-foreground" } : null);
 }
 
 /** Bouton de recherche d'une ligne, avec ses 4 états. */
@@ -150,28 +150,28 @@ export function MissingRow({
             </Link>
 
             <div className="min-w-0 flex-1">
-                <Link href={mediaHref(item)} className="block truncate text-sm font-semibold transition-colors hover:text-primary">
+                <Link href={mediaHref(item)} className="block truncate text-[15px] font-medium">
                     {item.title}
                     {item.year && <span className="ml-1.5 font-normal text-muted-foreground">{item.year}</span>}
                 </Link>
-                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.05] px-2 py-0.5 text-muted-foreground ring-1 ring-white/[0.08]">
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[12px]">
+                    <span className="inline-flex items-center gap-1 text-muted-foreground">
                         <TypeIcon className="h-3 w-3" />
                         {item.type === "movie" ? "Film" : "Série"}
                     </span>
                     {item.monitored ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-success ring-1 ring-success/25">
+                        <span className="inline-flex items-center gap-1 text-muted-foreground">
                             <Eye className="h-3 w-3" /> Surveillé
                         </span>
                     ) : (
                         <span
-                            className="inline-flex items-center gap-1 rounded-full bg-white/[0.04] px-2 py-0.5 text-muted-foreground ring-1 ring-white/10"
+                            className="inline-flex items-center gap-1 text-muted-foreground/70"
                             title="Non surveillé : la recherche peut ne rien récupérer"
                         >
                             <EyeOff className="h-3 w-3" /> Non surveillé
                         </span>
                     )}
-                    {st && <span className={cn("hidden rounded-full px-2 py-0.5 ring-1 sm:inline", st.className)}>{st.label}</span>}
+                    {st && <span className={cn("hidden sm:inline", st.className)}>{st.label}</span>}
                     {added && (
                         <span className="hidden items-center gap-1 text-muted-foreground/70 sm:inline-flex">
                             <CalendarPlus className="h-3 w-3" /> ajouté le {added}

@@ -104,7 +104,6 @@ export default function ProwlarrPage() {
                 <PageHeader
                     icon={Radar}
                     accent="rose"
-                    eyebrow="Maintenance"
                     title="Indexers"
                     description="Santé et performances de tes indexers Prowlarr, avec tests et activation en un clic."
                     actions={

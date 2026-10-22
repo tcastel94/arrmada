@@ -51,7 +51,6 @@ export default function SystemPage() {
                 <PageHeader
                     icon={HardDrive}
                     accent="sky"
-                    eyebrow="Système"
                     title="Serveur & Docker"
                     description="Ressources du serveur, espace disque et conteneurs de tes services, en direct."
                 >

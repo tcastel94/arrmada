@@ -115,7 +115,6 @@ export default function ActivityPage() {
                 <PageHeader
                     icon={Activity}
                     accent="emerald"
-                    eyebrow="Activité"
                     title="Journal"
                     description="Téléchargements, imports, sous-titres, lectures, ajouts : tout ce qui se passe dans ta stack, au fil de l'eau."
                     actions={

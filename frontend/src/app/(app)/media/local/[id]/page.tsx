@@ -34,7 +34,6 @@ import {
 } from "@/hooks/use-local-series";
 import { clockLabel, episodeCode, type PlayTarget } from "@/hooks/use-watch";
 import { plural } from "@/lib/format";
-import { cn } from "@/lib/utils";
 
 /** Ce que la TV doit lancer pour cet épisode (avec la reprise connue). */
 function target(series: LocalSeriesDetail, episode: LocalEpisode): PlayTarget & { resumeAt: number } {
@@ -102,7 +101,6 @@ export default function LocalSeriesPage() {
                     </div>
                 ) : (
                     <>
-                        <BackLink />
                         {/* En-tête : affiche, titre, pastille, résumé, « Sur la TV » */}
                         <section className="mt-2 flex flex-col gap-6 sm:flex-row">
                             {localImage(series.poster_url) && (
@@ -117,7 +115,7 @@ export default function LocalSeriesPage() {
                                 <div className="flex flex-wrap items-center gap-2">
                                     <h1 className="text-2xl font-semibold sm:text-3xl">{series.title}</h1>
                                     {series.badge && (
-                                        <span className="rounded bg-[#4A9EFF] px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-[#0b1220]">
+                                        <span className="rounded-[5px] bg-primary px-1.5 py-0.5 text-[11px] font-semibold uppercase text-white">
                                             {series.badge}
                                         </span>
                                     )}
@@ -148,18 +146,14 @@ export default function LocalSeriesPage() {
 
                         {/* Arcs (sous-dossiers) en onglets */}
                         {series.seasons.length > 1 && (
-                            <div className="mt-8 flex gap-2 overflow-x-auto pb-1">
+                            <div className="scrollbar-none -mx-4 mt-8 flex gap-2 overflow-x-auto px-4 pb-1 md:mx-0 md:px-0">
                                 {series.seasons.map((s) => (
                                     <button
                                         key={s.season_number}
                                         type="button"
                                         onClick={() => setPicked(s.season_number)}
-                                        className={cn(
-                                            "shrink-0 rounded-full px-3.5 py-1.5 text-sm transition-colors",
-                                            s.season_number === shown?.season_number
-                                                ? "bg-[#4A9EFF] text-[#0b1220]"
-                                                : "bg-white/[0.06] text-muted-foreground hover:bg-white/[0.1] hover:text-foreground",
-                                        )}
+                                        data-active={s.season_number === shown?.season_number}
+                                        className="chip shrink-0"
                                     >
                                         {s.name || `Saison ${s.season_number}`}
                                     </button>
@@ -167,7 +161,7 @@ export default function LocalSeriesPage() {
                             </div>
                         )}
 
-                        <ul className="mt-4 flex flex-col gap-2 pb-10">
+                        <ul className="mt-4 overflow-hidden rounded-xl bg-card [&>*+*]:shadow-[inset_0_0.5px_0_hsl(0_0%_100%/0.1)]">
                             {(shown?.episodes ?? []).map((ep) => (
                                 <EpisodeRow key={ep.token} series={series} episode={ep} />
                             ))}
@@ -185,7 +179,7 @@ function EpisodeRow({ series, episode }: { series: LocalSeriesDetail; episode: L
     const thumb = localImage(episode.image);
     const play = target(series, episode);
     return (
-        <li className="flex items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] p-2.5 sm:gap-4">
+        <li className="flex items-center gap-3 p-2.5 sm:gap-4">
             <div className="relative aspect-video w-28 shrink-0 overflow-hidden rounded-md bg-muted sm:w-40">
                 {thumb && (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -193,7 +187,7 @@ function EpisodeRow({ series, episode }: { series: LocalSeriesDetail; episode: L
                 )}
                 {progress > 0 && (
                     <div className="absolute inset-x-0 bottom-0 h-1 bg-black/60">
-                        <div className="h-full bg-[#4A9EFF]" style={{ width: `${progress}%` }} />
+                        <div className="h-full bg-white" style={{ width: `${progress}%` }} />
                     </div>
                 )}
             </div>
@@ -204,14 +198,14 @@ function EpisodeRow({ series, episode }: { series: LocalSeriesDetail; episode: L
                     </span>
                     <span className="truncate font-medium">{episode.title}</span>
                     {state?.watched && (
-                        <span className="flex shrink-0 items-center gap-0.5 text-xs text-success">
+                        <span className="flex shrink-0 items-center gap-0.5 text-xs text-muted-foreground">
                             <Check className="h-3.5 w-3.5" /> vu
                         </span>
                     )}
                 </p>
                 {episode.overview && <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{episode.overview}</p>}
                 {progress > 0 && state && (
-                    <p className="mt-0.5 text-xs text-[#8CC4FF]">
+                    <p className="mt-0.5 text-xs text-primary">
                         Arrêté à {clockLabel(state.position)}
                         {state.total > 0 ? ` sur ${clockLabel(state.total)}` : ""}
                     </p>

@@ -219,7 +219,7 @@ export function PosterBadge({
         success: "bg-success text-white",
         warning: "bg-warning text-black",
         danger: "bg-destructive text-white",
-        violet: "bg-[hsl(var(--chart-4))] text-white",
+        violet: "bg-black/70 text-white",
     };
     return (
         <span

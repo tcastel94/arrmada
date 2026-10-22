@@ -68,7 +68,9 @@ export function PageHeader({ title, description, eyebrow, actions, children, cla
                 </div>
                 {actions && <div className="flex max-w-[65%] shrink-0 flex-wrap items-center justify-end gap-1 pb-0.5 md:gap-2">{actions}</div>}
             </div>
-            {description && <p className="mt-1 max-w-2xl text-[15px] leading-snug text-muted-foreground text-balance">{description}</p>}
+            {/* Description : ordinateur seulement (sur mobile, elle repousserait
+                le contenu ; le grand titre suffit, comme dans les apps iOS). */}
+            {description && <p className="mt-1 hidden max-w-2xl text-[15px] leading-snug text-muted-foreground text-balance md:block">{description}</p>}
 
             {children && (
                 // Mobile : les capsules défilent horizontalement plutôt que de s'empiler

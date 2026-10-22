@@ -74,7 +74,6 @@ export default function DownloadsPage() {
                 <PageHeader
                     icon={Download}
                     accent="primary"
-                    eyebrow="Activité"
                     title="Téléchargements"
                     description="La file Radarr & Sonarr en direct, et les imports à débloquer quand un téléchargement reste coincé."
                     actions={

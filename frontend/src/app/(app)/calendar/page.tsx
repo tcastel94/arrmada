@@ -153,7 +153,6 @@ export default function CalendarPage() {
                 <PageHeader
                     icon={CalendarDays}
                     accent="sky"
-                    eyebrow="Bibliothèque"
                     title="Calendrier"
                     description="Les épisodes et films attendus par Sonarr et Radarr, jour par jour. Clique une sortie pour ouvrir sa fiche."
                     actions={
