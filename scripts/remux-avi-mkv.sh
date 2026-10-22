@@ -1,39 +1,51 @@
 #!/usr/bin/env bash
 # =============================================================================
-# remux-avi-mkv.sh — Convertit les .avi d'un dossier en .mkv, SANS réencodage
+# remux-avi-mkv.sh — Rend les vieux .avi (XviD + MP3) lisibles par l'appli
 # -----------------------------------------------------------------------------
-# Pourquoi : le lecteur de l'appli ArrMada (Media3 / ExoPlayer) gère mal le
-# conteneur AVI (index en fin de fichier, « packed B-frames » des XviD, MP3
-# découpé) → ERROR_CODE_IO_UNSPECIFIED ou DECODING_FAILED sur la Shield.
-# Le MKV, lui, est parfaitement géré. On change seulement « l'emballage » :
-# image et son sont copiés bit à bit (-c copy), aucune perte, ~5 s par épisode.
+# Pourquoi : le lecteur de l'appli ArrMada (Media3 / ExoPlayer) gère mal :
+#   - le conteneur AVI (index en fin de fichier, « packed B-frames » des XviD)
+#     → ERROR_CODE_IO_UNSPECIFIED ;
+#   - le son MP3 de ces AVI, découpé en blocs qui ne tombent pas sur les
+#     trames MP3 → DECODING_FAILED, ou vidéo SANS SON une fois en MKV.
+# Kodi s'en sortait car ffmpeg recolle tout ; le décodeur d'Android, non.
+#
+# Remède :
+#   - conteneur → MKV, image copiée bit à bit (aucune perte, aucun calcul) ;
+#   - son MP3 / MP2 → AAC 192 kb/s (lu partout ; perte imperceptible pour ces
+#     sources) ; tout autre son (AC3, AAC, DTS…) est copié tel quel.
 #
 # Où tourne ffmpeg : dans un conteneur jetable lancé depuis l'image de ton
 # conteneur Jellyfin (jellyfin-ffmpeg y est déjà) : rien à installer sur
-# l'Unraid, et aucune correspondance de chemins à gérer (le dossier traité
-# est monté sur /work).
+# l'Unraid. Le dossier traité est monté sur /work.
 #
-# Ce que fait le script, pour chaque .avi du dossier (et sous-dossiers) :
-#   1. saute l'épisode si le .mkv existe déjà (relance sans risque) ;
-#   2. remuxe vers « <nom>.mkv.part », puis renomme en .mkv une fois fini ;
-#   3. vérifie que la durée du .mkv = durée du .avi (± 2 s), sinon l'efface ;
-#   4. range l'.avi d'origine dans « .avi-originaux/ » du même dossier
-#      (dossier caché : ni l'écran Vidéos ni les séries maison ne le
-#      montrent → pas d'épisode en double). --garder : laisse l'.avi en place.
+# Deux usages :
+#   1. (défaut) chaque .avi du dossier → .mkv ; l'.avi est rangé dans
+#      « .avi-originaux/ » (dossier caché : ni l'écran Vidéos ni les séries
+#      maison ne le montrent → pas d'épisode en double). --garder : laisse
+#      l'.avi en place.
+#   2. --reparer-son : chaque .mkv dont le son est en MP3 / MP2 (fichiers déjà
+#      remuxés par l'ancienne version de ce script, ou MKV d'origine) voit
+#      son son converti en AAC. L'ancien .mkv est supprimé si son .avi
+#      d'origine est dans .avi-originaux/, sinon rangé dans « .mkv-originaux/ ».
 #
-# ⚠️ Piège torrent : si ce dossier est celui où qBittorrent partage encore
-#    (downloads/completed), déplacer l'.avi casse le partage. Dans ce cas :
-#    --garder, ou traite plutôt la copie / le lien physique rangé ailleurs.
+# Sécurités : fichier écrit en « .part » puis renommé ; durée du résultat
+# comparée à l'original (± 2 s), sinon résultat supprimé et original gardé ;
+# relance sans risque (ce qui est déjà fait est ignoré).
+#
+# ⚠️ Piège torrent : si le dossier est celui où le client torrent partage
+#    encore (downloads/completed), déplacer l'original casse le partage :
+#    --garder, ou traite la copie rangée ailleurs.
 #
 # Usage :
-#   ./remux-avi-mkv.sh [--dry-run] [--garder] [--conteneur NOM] DOSSIER
+#   ./remux-avi-mkv.sh [--dry-run] [--garder] [--reparer-son] [--conteneur NOM] DOSSIER
 #
 # Exemples :
 #   ./remux-avi-mkv.sh --dry-run "/mnt/user/medias/mangas/series/Naruto Shippuden Kai Intégrale VOSTFR"
 #   ./remux-avi-mkv.sh "/mnt/user/medias/mangas/series/Naruto Shippuden Kai Intégrale VOSTFR"
+#   ./remux-avi-mkv.sh --reparer-son "/mnt/user/medias/mangas/series/Naruto Shippuden Kai Intégrale VOSTFR"
 #
-# Retour arrière : les .avi sont dans « .avi-originaux/ » ; il suffit de les
-# remettre à leur place et de supprimer les .mkv.
+# Retour arrière : les originaux sont dans « .avi-originaux/ » ou
+# « .mkv-originaux/ » ; il suffit de les remettre à leur place.
 #
 # Codes retour : 0 = tout est bon, 1 = au moins un fichier en échec,
 #                2 = mauvais usage / prérequis manquant.
@@ -45,18 +57,20 @@ set -Eeuo pipefail
 JELLYFIN_CONTAINER="binhex-jellyfin-1"         # conteneur dont on emprunte l'image
 FFMPEG="/usr/lib/jellyfin-ffmpeg/ffmpeg"       # chemin dans l'image Jellyfin
 FFPROBE="/usr/lib/jellyfin-ffmpeg/ffprobe"
-ORIG_DIR_NAME=".avi-originaux"                 # caché pour ArrMada (commence par « . »)
+AVI_ORIG=".avi-originaux"                      # cachés pour ArrMada (commencent par « . »)
+MKV_ORIG=".mkv-originaux"
 DURATION_TOLERANCE=2                           # écart de durée accepté (secondes)
+AAC_BITRATE="192k"                             # débit du son AAC (stéréo)
 UNRAID_OWNER="99:100"                          # nobody:users, propriétaire habituel sur Unraid
 
 DRY_RUN=0
-KEEP_AVI=0
+KEEP_ORIG=0
+FIX_AUDIO=0
 TARGET_DIR=""
 
 # ── Journalisation ────────────────────────────────────────────────────────────
 log()  { printf '%s [%s] %s\n' "$(date '+%F %T')" "$1" "$2"; }
 info() { log "INFO" "$*"; }
-warn() { log "WARN" "$*" >&2; }
 err()  { log "ERREUR" "$*" >&2; }
 
 usage() {
@@ -67,12 +81,13 @@ usage() {
 # ── Lecture des options ───────────────────────────────────────────────────────
 while (( $# > 0 )); do
     case "$1" in
-        --dry-run)    DRY_RUN=1 ;;
-        --garder)     KEEP_AVI=1 ;;
-        --conteneur)  shift; JELLYFIN_CONTAINER="${1:-}" ;;
-        -h|--help)    usage ;;
-        -*)           err "Option inconnue : $1"; usage ;;
-        *)            TARGET_DIR="$1" ;;
+        --dry-run)      DRY_RUN=1 ;;
+        --garder)       KEEP_ORIG=1 ;;
+        --reparer-son)  FIX_AUDIO=1 ;;
+        --conteneur)    shift; JELLYFIN_CONTAINER="${1:-}" ;;
+        -h|--help)      usage ;;
+        -*)             err "Option inconnue : $1"; usage ;;
+        *)              TARGET_DIR="$1" ;;
     esac
     shift
 done
@@ -102,87 +117,156 @@ duration_of() {
         -of default=noprint_wrappers=1:nokey=1 "/work/$1" 2>/dev/null | cut -d. -f1
 }
 
-# Codec de la première piste vidéo (« mpeg4 » = XviD / DivX)
-video_codec_of() {
-    run_tool "$FFPROBE" -v error -select_streams v:0 -show_entries stream=codec_name \
+# Codec de la première piste d'un type (v = vidéo, a = son) : « mpeg4 », « mp3 »…
+codec_of() {
+    run_tool "$FFPROBE" -v error -select_streams "$2:0" -show_entries stream=codec_name \
         -of default=noprint_wrappers=1:nokey=1 "/work/$1" 2>/dev/null | head -1
 }
 
-# ── Traitement d'un fichier (chemin relatif au dossier traité) ───────────────
-remux_one() {
+# Son à convertir en AAC ? (MP3 / MP2 : le décodeur d'Android s'y casse les dents)
+needs_aac() { [[ "$1" == "mp3" || "$1" == "mp2" ]]; }
+
+# Durées comparables à DURATION_TOLERANCE près ?
+same_duration() {
+    local a="$1" b="$2"
+    [[ -n "$a" && -n "$b" ]] && (( a - b <= DURATION_TOLERANCE && b - a <= DURATION_TOLERANCE ))
+}
+
+# Rend un fichier au propriétaire Unraid (le conteneur tourne en root)
+give_back() {
+    chown "$UNRAID_OWNER" "$1" 2>/dev/null || true
+    chmod 666 "$1" 2>/dev/null || true
+}
+
+# Range un original dans un dossier caché à côté de lui
+stash() {
+    local file="$1" dir_name="$2" dir
+    dir="$(dirname "$file")/$dir_name"
+    mkdir -p "$dir"
+    chown "$UNRAID_OWNER" "$dir" 2>/dev/null || true
+    mv -n "$file" "$dir/"
+}
+
+# Écrit <sortie>.part avec ffmpeg, contrôle la durée, puis renomme.
+#   $1 = entrée (relative), $2 = sortie (relative), $3… = options d'encodage
+# Retour 0 si la sortie est en place et valide.
+transcode() {
+    local rel_in="$1" rel_out="$2"; shift 2
+    # -fflags +genpts : l'AVI n'a pas d'horodatage par image, ffmpeg les recrée
+    # -map 0          : toutes les pistes (vidéo, son, sous-titres)
+    if ! run_tool "$FFMPEG" -nostdin -hide_banner -loglevel error -y \
+            -fflags +genpts -i "/work/$rel_in" -map 0 "$@" \
+            -f matroska "/work/$rel_out.part"; then
+        err "Échec ffmpeg : $rel_in"
+        rm -f "$TARGET_DIR/$rel_out.part"
+        return 1
+    fi
+    local d_in d_out
+    d_in="$(duration_of "$rel_in")"
+    d_out="$(duration_of "$rel_out.part")"
+    if ! same_duration "$d_in" "$d_out"; then
+        err "Durées différentes (original ${d_in:-?} s / résultat ${d_out:-?} s) : fichier abîmé ? Résultat supprimé, original gardé : $rel_in"
+        rm -f "$TARGET_DIR/$rel_out.part"
+        return 1
+    fi
+    mv -f "$TARGET_DIR/$rel_out.part" "$TARGET_DIR/$rel_out"
+    give_back "$TARGET_DIR/$rel_out"
+    LAST_DURATION="$d_out"
+}
+
+# Options d'encodage : image copiée (XviD : B-frames dépliées), son AAC si MP3
+encode_options() {
+    local vcodec="$1" acodec="$2"
+    local -a opts=(-c copy)
+    [[ "$vcodec" == "mpeg4" ]] && opts+=(-bsf:v mpeg4_unpack_bframes)
+    # aresample=async=1 : comble les trous laissés par les trames MP3 abîmées
+    # (sinon le son se décale peu à peu de l'image)
+    needs_aac "$acodec" && opts+=(-c:a aac -b:a "$AAC_BITRATE" -af aresample=async=1)
+    printf '%s\0' "${opts[@]}"
+}
+
+# ── Usage 1 : .avi → .mkv ─────────────────────────────────────────────────────
+convert_avi() {
     local rel_avi="$1"
     local rel_mkv="${rel_avi%.*}.mkv"
-    local abs_avi="$TARGET_DIR/$rel_avi"
-    local abs_mkv="$TARGET_DIR/$rel_mkv"
-
-    if [[ -e "$abs_mkv" ]]; then
+    if [[ -e "$TARGET_DIR/$rel_mkv" ]]; then
         info "Déjà fait, ignoré : $rel_mkv"
         return 0
     fi
-
-    # XviD / DivX : « packed B-frames » à déplier, sinon le MKV saccade
-    local codec bsf=()
-    codec="$(video_codec_of "$rel_avi")"
-    [[ "$codec" == "mpeg4" ]] && bsf=(-bsf:v mpeg4_unpack_bframes)
-
+    local vcodec acodec
+    vcodec="$(codec_of "$rel_avi" v)"
+    acodec="$(codec_of "$rel_avi" a)"
+    local what="image ${vcodec:-?} copiée, son ${acodec:-?}"
+    if needs_aac "$acodec"; then what+=" → AAC"; else what+=" copié"; fi
     if (( DRY_RUN )); then
-        info "[simulation] $rel_avi → $rel_mkv (vidéo : ${codec:-?}${bsf:+, packed B-frames dépliées})"
+        info "[simulation] $rel_avi → $rel_mkv ($what)"
         return 0
     fi
-
-    info "Remux : $rel_avi (vidéo : ${codec:-?})"
-    # -fflags +genpts : l'AVI n'a pas d'horodatage par image, ffmpeg les recrée
-    # -map 0 -c copy  : toutes les pistes, copiées sans réencodage
-    # .part           : un fichier interrompu n'est jamais pris pour un épisode
-    if ! run_tool "$FFMPEG" -nostdin -hide_banner -loglevel error -y \
-            -fflags +genpts -i "/work/$rel_avi" \
-            -map 0 -c copy "${bsf[@]}" \
-            -f matroska "/work/$rel_mkv.part"; then
-        err "Échec ffmpeg : $rel_avi"
-        rm -f "$abs_mkv.part"
-        return 1
-    fi
-    mv -f "$abs_mkv.part" "$abs_mkv"
-
-    # Contrôle : même durée que l'original
-    local d_avi d_mkv
-    d_avi="$(duration_of "$rel_avi")"
-    d_mkv="$(duration_of "$rel_mkv")"
-    if [[ -z "$d_avi" || -z "$d_mkv" ]] || (( ${d_avi:-0} - ${d_mkv:-0} > DURATION_TOLERANCE || ${d_mkv:-0} - ${d_avi:-0} > DURATION_TOLERANCE )); then
-        err "Durées différentes (avi ${d_avi:-?} s / mkv ${d_mkv:-?} s) : MKV supprimé, AVI conservé"
-        rm -f "$abs_mkv"
-        return 1
-    fi
-
-    # Le conteneur tourne en root : on rend le fichier au propriétaire Unraid
-    chown "$UNRAID_OWNER" "$abs_mkv" 2>/dev/null || true
-    chmod 666 "$abs_mkv" 2>/dev/null || true
-
-    if (( KEEP_AVI )); then
-        info "OK ($d_mkv s), AVI laissé en place : $rel_mkv"
+    info "Remux : $rel_avi ($what)"
+    local -a opts
+    mapfile -d '' -t opts < <(encode_options "$vcodec" "$acodec")
+    transcode "$rel_avi" "$rel_mkv" "${opts[@]}" || return 1
+    if (( KEEP_ORIG )); then
+        info "OK (${LAST_DURATION} s), AVI laissé en place : $rel_mkv"
     else
-        local orig_dir
-        orig_dir="$(dirname "$abs_avi")/$ORIG_DIR_NAME"
-        mkdir -p "$orig_dir"
-        chown "$UNRAID_OWNER" "$orig_dir" 2>/dev/null || true
-        mv -n "$abs_avi" "$orig_dir/"
-        info "OK ($d_mkv s), AVI rangé dans $ORIG_DIR_NAME/ : $rel_mkv"
+        stash "$TARGET_DIR/$rel_avi" "$AVI_ORIG"
+        info "OK (${LAST_DURATION} s), AVI rangé dans $AVI_ORIG/ : $rel_mkv"
     fi
 }
 
+# ── Usage 2 : .mkv au son MP3 → son AAC ──────────────────────────────────────
+fix_mkv_audio() {
+    local rel_mkv="$1"
+    local vcodec acodec
+    acodec="$(codec_of "$rel_mkv" a)"
+    if ! needs_aac "$acodec"; then
+        info "Son ${acodec:-absent} : rien à faire : $rel_mkv"
+        return 0
+    fi
+    vcodec="$(codec_of "$rel_mkv" v)"
+    if (( DRY_RUN )); then
+        info "[simulation] son $acodec → AAC : $rel_mkv"
+        return 0
+    fi
+    info "Son $acodec → AAC : $rel_mkv"
+    local tmp="${rel_mkv%.*}.aac-tmp.mkv"
+    local -a opts
+    mapfile -d '' -t opts < <(encode_options "$vcodec" "$acodec")
+    transcode "$rel_mkv" "$tmp" "${opts[@]}" || return 1
+
+    # L'ancien .mkv : inutile si l'.avi d'origine est déjà de côté
+    local base avi_kept
+    base="$(basename "${rel_mkv%.*}")"
+    avi_kept="$TARGET_DIR/$(dirname "$rel_mkv")/$AVI_ORIG/$base.avi"
+    if [[ -e "$avi_kept" ]]; then
+        rm -f "$TARGET_DIR/$rel_mkv"
+    elif (( KEEP_ORIG )); then
+        mv -f "$TARGET_DIR/$rel_mkv" "$TARGET_DIR/${rel_mkv%.*}.mp3-original.mkv.bak"
+    else
+        stash "$TARGET_DIR/$rel_mkv" "$MKV_ORIG"
+    fi
+    mv -f "$TARGET_DIR/$tmp" "$TARGET_DIR/$rel_mkv"
+    info "OK (${LAST_DURATION} s) : $rel_mkv"
+}
+
 # ── Boucle principale ─────────────────────────────────────────────────────────
-total=0; failed=0
+total=0; failed=0; LAST_DURATION=""
+if (( FIX_AUDIO )); then
+    pattern='*.mkv'; action=fix_mkv_audio
+else
+    pattern='*.avi'; action=convert_avi
+fi
 # -print0 / read -d '' : noms avec espaces, apostrophes, accents sans souci.
-# Les .avi déjà rangés dans .avi-originaux/ ne sont pas retraités.
+# Les originaux rangés et les fichiers temporaires ne sont jamais retraités.
 while IFS= read -r -d '' file; do
     rel="${file#"$TARGET_DIR"/}"
     total=$((total + 1))
-    remux_one "$rel" || failed=$((failed + 1))
-done < <(find "$TARGET_DIR" -type d -name "$ORIG_DIR_NAME" -prune -o \
-              -type f -iname '*.avi' -print0 | sort -z)
+    "$action" "$rel" || failed=$((failed + 1))
+done < <(find "$TARGET_DIR" -type d \( -name "$AVI_ORIG" -o -name "$MKV_ORIG" \) -prune -o \
+              -type f -iname "$pattern" ! -name '*.aac-tmp.mkv' -print0 | sort -z)
 
 if (( total == 0 )); then
-    info "Aucun .avi dans $TARGET_DIR"
+    info "Aucun fichier ${pattern#\*} dans $TARGET_DIR"
     exit 0
 fi
 info "Terminé : $total fichier(s), $failed échec(s)$( (( DRY_RUN )) && echo ' (simulation)')"

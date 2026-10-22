@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Fixed
 - **OK (centre button) paused for a split second then resumed**: the pause menu opened on key press and the key release "clicked" its focused "Reprendre" button. The release is now swallowed (Play/Pause was not affected)
-- Old **`.avi`** (Naruto Shippuden Kai 01–06) failing with `ERROR_CODE_IO_UNSPECIFIED`: Media3's AVI support is limited (index at the end, XviD packed B-frames). New `scripts/remux-avi-mkv.sh` rewraps a folder's `.avi` into `.mkv` without re-encoding (jellyfin-ffmpeg borrowed from the Jellyfin container image, `mpeg4_unpack_bframes` for XviD, duration check, originals moved to the hidden `.avi-originaux/`); the player's error screen points to it for `.avi` files
+- Old **`.avi`** (Naruto Shippuden Kai 01–06) failing with `ERROR_CODE_IO_UNSPECIFIED`: Media3's AVI support is limited (index at the end, XviD packed B-frames). New `scripts/remux-avi-mkv.sh` rewraps a folder's `.avi` into `.mkv` (picture copied untouched; MP3 / MP2 sound re-encoded to AAC, since Android's decoder gave **no sound** on MP3 split across AVI chunks; `--reparer-son` fixes `.mkv` files that still carry MP3) (jellyfin-ffmpeg borrowed from the Jellyfin container image, `mpeg4_unpack_bframes` for XviD, duration check, originals moved to the hidden `.avi-originaux/`); the player's error screen points to it for `.avi` files
 - Dolby Vision toast shortened ("Image convertie en SDR (TV sans Dolby Vision)"): Android TV cuts toasts after two lines
 
 #### Added
