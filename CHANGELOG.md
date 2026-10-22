@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Android app 2.10.2: Dolby Vision profile 5 on a screen without Dolby Vision
+
+#### Fixed
+- **Purple / green picture** on some 4K files (e.g. Tulsa King S02E01): **Dolby Vision profile 5** has no HDR10 fallback (`dv_bl_signal_compatibility_id=0`); on a screen that does not report Dolby Vision, the player hands it to the plain HEVC decoder and the colours go wrong. The app now checks the screen (HDR formats it reports) and the device (Dolby Vision decoder): if Dolby Vision is missing, a profile 5 item **starts on a Jellyfin conversion to H.264 SDR 1080p with tone mapping** (toast "image convertie en SDR"). Safety net: if the player itself finds a profile 5 track that the server did not flag, it switches to the conversion at the same position; for a file of the Vidéos screen (no Jellyfin) it shows a warning instead
+- Settings show the screen's HDR formats ("Écran : HDR10 · HLG · Dolby Vision")
+
+#### Added
+- **Server**: `/api/tv/play` returns `video_range` (Jellyfin `VideoRangeType`), `dovi_only` (Dolby Vision without fallback, also from `DvProfile` / `DvBlSignalCompatibilityId` on older Jellyfin) and `sdr_stream`; new relayed playlist `/api/tv/hls/{id}/sdr.m3u8` (Jellyfin master playlist asked as H.264 SDR, `h264-rangetype=SDR`, max 1920×1080, sound copied; same play session as the remux, stopped the same way). Tone mapping of profile 5 needs **Jellyfin tone mapping enabled with hardware acceleration** (Intel QSV / VAAPI, NVIDIA). 11 tests
+
 ### Android app 2.10.1: sound that Android cannot decode
 
 #### Fixed

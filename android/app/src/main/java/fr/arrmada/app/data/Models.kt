@@ -272,6 +272,11 @@ data class PlayInfo(
     val container: String = "", // extension du fichier (« mkv », « m2ts »…)
     val stream: String = "",
     @SerialName("remux_stream") val remuxStream: String = "", // secours si le direct échoue
+    // Plage dynamique (« SDR », « HDR10 », « DOVI »…) ; Dolby Vision profil 5
+    // (sans secours HDR10) : flux converti en SDR par Jellyfin, pour un écran sans DV
+    @SerialName("video_range") val videoRange: String = "",
+    @SerialName("dovi_only") val doviOnly: Boolean = false,
+    @SerialName("sdr_stream") val sdrStream: String = "",
     val chapters: List<Chapter> = emptyList(),
     val resume: Resume = Resume(),
     val segments: List<Segment> = emptyList(),

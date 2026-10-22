@@ -19,6 +19,9 @@ MOVIE_ID = "0123456789abcdef0123456789abcdef"
 EPISODE_ID = "fedcba9876543210fedcba9876543210"
 # Film rangé en .m2ts (Blu-ray) : ExoPlayer ne l'ouvre pas, il passe par le remux
 REMUX_ID = "b" * 32
+# Épisode en Dolby Vision profil 5 (sans image de secours HDR10) : violet sur
+# un écran sans Dolby Vision, la TV peut demander la conversion SDR
+DOVI_ID = "d" * 32
 VIDEO = bytes(range(256)) * 40  # « fichier » de 10 240 octets
 SEEN: dict[str, Any] = {}
 
@@ -39,6 +42,15 @@ def _items(params: dict, _m: Any) -> Any:
             "MediaSources": [{"Path": "/movies/Gemini Man (2019)/Gemini.Man.2019.m2ts",
                               "Container": "m2ts"}],
         }]}  # fmt: skip
+    if params.get("ids") == DOVI_ID:
+        return {"Items": [{
+            "Id": DOVI_ID, "Name": "Tulsa King", "RunTimeTicks": 2900 * T,
+            "MediaSources": [{"Path": "/tv/Tulsa King/S02E01.mkv", "MediaStreams": [
+                {"Type": "Video", "Codec": "hevc", "VideoRange": "HDR", "VideoRangeType": "DOVI",
+                 "DvProfile": 5, "DvBlSignalCompatibilityId": 0},
+                {"Type": "Audio", "Codec": "eac3"},
+            ]}],
+        }]}  # fmt: skip
     if params.get("ids") == EPISODE_ID:
         return {"Items": [{"Id": EPISODE_ID, "Name": "Static", "RunTimeTicks": 2700 * T}]}
     if params.get("includeItemTypes") == "Series":
@@ -46,6 +58,7 @@ def _items(params: dict, _m: Any) -> Any:
     return {"Items": [
         {"Id": MOVIE_ID, "Name": "Dune", "ProviderIds": {"Tmdb": "438631"}},
         {"Id": REMUX_ID, "Name": "Gemini Man", "ProviderIds": {"Tmdb": "453405"}},
+        {"Id": DOVI_ID, "Name": "Tulsa King", "ProviderIds": {"Tmdb": "777"}},
     ]}  # fmt: skip
 
 
@@ -196,6 +209,8 @@ async def _tv(client: AsyncClient, admin: dict[str, str]) -> dict[str, str]:
         ("POST", f"/api/tv/hls/{MOVIE_ID}/stop", True),
         ("GET", f"/api/tv/hls/{MOVIE_ID}/../../System/Info", False),
         ("GET", f"/api/tv/hls/{MOVIE_ID}/stream", False),
+        ("GET", f"/api/tv/hls/{MOVIE_ID}/sdr.m3u8", True),
+        ("GET", f"/api/tv/hls/{MOVIE_ID}/hdr.m3u8", False),
     ],
 )
 def test_device_scope(method: str, path: str, allowed: bool) -> None:
@@ -412,6 +427,61 @@ async def test_hls_playlists_hide_the_key(client: AsyncClient, jellyfin: dict[st
     assert seg.status_code == 200
     assert seg.content == b"fmp4"
     assert SEEN["hls"][2]["params"] == {"runtimeTicks": "0", "ApiKey": "j-key"}
+
+
+# ── Dolby Vision profil 5 : conversion SDR pour un écran sans DV ──
+
+
+@pytest.mark.parametrize(
+    ("stream", "expected"),
+    [
+        ({"VideoRangeType": "DOVI", "DvProfile": 5}, ("DOVI", True)),
+        ({"VideoRangeType": "DOVIWithHDR10", "DvProfile": 8, "DvBlSignalCompatibilityId": 1},
+         ("DOVIWithHDR10", False)),
+        ({"VideoRangeType": "HDR10"}, ("HDR10", False)),
+        ({"VideoRangeType": "SDR"}, ("SDR", False)),
+        # Jellyfin ancien : pas de VideoRangeType, mais le profil et la compatibilité
+        ({"VideoRange": "HDR", "DvProfile": 5, "DvBlSignalCompatibilityId": 0}, ("HDR", True)),
+        ({"VideoRange": "HDR", "DvProfile": 7, "DvBlSignalCompatibilityId": 6}, ("HDR", False)),
+        ({}, ("", False)),
+    ],
+)  # fmt: skip
+def test_video_range(stream: dict, expected: tuple[str, bool]) -> None:
+    details = {"MediaSources": [{"MediaStreams": [{"Type": "Audio"}, {"Type": "Video", **stream}]}]}
+    assert tv_playback.video_range(details) == {
+        "video_range": expected[0], "dovi_only": expected[1]
+    }  # fmt: skip
+    assert tv_playback.video_range({}) == {"video_range": "", "dovi_only": False}
+
+
+async def test_play_dovi_profile5_offers_sdr(client: AsyncClient, jellyfin: dict[str, str]) -> None:
+    tv = await _tv(client, jellyfin)
+    data = (await client.get("/api/tv/play/movie/777", headers=tv)).json()
+    assert data["mode"] == "direct"  # un écran Dolby Vision le lit tel quel
+    assert data["video_range"] == "DOVI" and data["dovi_only"] is True
+    assert data["sdr_stream"] == f"/api/tv/hls/{DOVI_ID}/sdr.m3u8"
+    # Film ordinaire : lu tel quel (conversion disponible en secours seulement)
+    dune = (await client.get("/api/tv/play/movie/438631", headers=tv)).json()
+    assert dune["dovi_only"] is False
+    assert dune["sdr_stream"] == f"/api/tv/hls/{MOVIE_ID}/sdr.m3u8"
+
+
+async def test_hls_sdr_conversion(client: AsyncClient, jellyfin: dict[str, str]) -> None:
+    tv = await _tv(client, jellyfin)
+    master = await client.get(f"/api/tv/hls/{DOVI_ID}/sdr.m3u8", headers=tv)
+    assert master.status_code == 200, master.text
+    assert "j-key" not in master.text
+    # Demandé à Jellyfin : sa master.m3u8, image réencodée en H.264 SDR 1080p
+    sent = SEEN["hls"][0]
+    assert sent["path"] == "master.m3u8"
+    params = sent["params"]
+    assert params["VideoCodec"] == "h264"
+    assert params["AllowVideoStreamCopy"] == "false"
+    assert params["h264-rangetype"] == "SDR"
+    assert (params["MaxWidth"], params["MaxHeight"]) == ("1920", "1080")
+    assert params["AllowAudioStreamCopy"] == "true"  # son intact
+    # Même session que le remux : « stop » arrête aussi cette conversion
+    assert params["PlaySessionId"] == f"arrmada-{DOVI_ID}"
 
 
 async def test_hls_rejects_other_paths(client: AsyncClient, jellyfin: dict[str, str]) -> None:
