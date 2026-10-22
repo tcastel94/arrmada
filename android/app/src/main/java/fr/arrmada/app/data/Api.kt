@@ -72,7 +72,8 @@ class Api(private val prefs: Prefs) {
         else -> null
     }
 
-    suspend inline fun <reified T> get(path: String): T = decode(call(Request.Builder().url(baseUrl + path).get().build()))
+    suspend inline fun <reified T> get(path: String, slow: Boolean = false): T =
+        decode(call(Request.Builder().url(baseUrl + path).get().build(), if (slow) slowHttp else http))
 
     suspend inline fun <reified T, reified B> post(path: String, body: B, slow: Boolean = false): T {
         val payload = json.encodeToString(kotlinx.serialization.serializer<B>(), body)

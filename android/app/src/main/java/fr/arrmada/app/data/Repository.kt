@@ -214,6 +214,12 @@ class Repository(private val api: Api) {
     suspend fun downloadSubtitles(itemId: String, request: SubtitleRequest): SubtitleResult =
         api.post("/api/tv/subtitles/$itemId", request, slow = true)
 
+    /**
+     * Commandes de la tablette de la pièce (télécommande tactile) : le serveur
+     * ne répond qu'à l'arrivée d'une commande, ou au bout de 15 s.
+     */
+    suspend fun remote(after: Long): RemotePage = api.get("/api/tv/remote?after=$after", slow = true)
+
     /** Lecture en cours → écran d'appoint de la pièce (tablette sous la TV). */
     suspend fun scrobble(payload: Scrobble) {
         api.post<kotlinx.serialization.json.JsonObject, Scrobble>("/api/kodi/scrobble", payload)

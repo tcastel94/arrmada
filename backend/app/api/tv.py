@@ -18,6 +18,18 @@ router = APIRouter(
 )
 
 
+@router.get("/remote")
+async def remote(after: int = -1, user: dict = Depends(get_current_user)) -> dict:
+    """Commandes de la tablette pour la TV de cette pièce (attente jusqu'à 15 s).
+
+    Appelée en boucle par la TV pendant une lecture ; `after` : dernier
+    numéro de commande reçu (−1 au premier appel : juste le curseur).
+    """
+    from app.services.tv_remote import remote_queue
+
+    return await remote_queue.wait(user.get("room") or "salon", after)
+
+
 @router.get("/play/movie/{tmdb_id}")
 async def play_movie(
     tmdb_id: int, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)

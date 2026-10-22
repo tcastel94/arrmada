@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Tablet under the TV: richer screen and touch remote (APK 2.11.0)
+
+#### Added
+- **Richer ambient screen** while the Android app plays (the Kodi add-on keeps the previous screen): picture format ("4K · Dolby Vision", "SDR (converti)"), sound track ("Français · TrueHD Atmos · 7.1"), subtitles shown, current chapter, "Générique dans 12 min", "Ensuite : S02E04 · …", and a **Fiche** sheet (overview, genres / director, main cast with photos). The layout tightens so everything still fits a landscape tablet
+- **Touch remote** on the tablet: play / pause, −10 s / +30 s, "Passer l'intro" / "Passer le récap" while one is on screen, "Épisode suivant" during the credits, subtitle and sound track pickers. The tablet posts `POST /api/ambient/command` (screen token: its own room only; actions and values bounded, 409 when nothing remote-capable is playing); the TV long-polls `GET /api/tv/remote?after=N` (answer on the next command or after 15 s, commands older than 15 s never replayed) and applies it at once, then reports its new state. The tablet polls every 5 s during playback (10 s otherwise). 6 server tests, 4 JVM tests
+
 ### Android app 2.10.4: the tablet under the TV works again
 
 #### Fixed

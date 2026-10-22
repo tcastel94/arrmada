@@ -80,7 +80,12 @@ import fr.arrmada.app.data.AmpDevice
 import fr.arrmada.app.data.SoundAdvisor
 import fr.arrmada.app.data.DolbyVisionLogic
 import fr.arrmada.app.data.PlayInfo
+import fr.arrmada.app.data.RemoteCommand
+import fr.arrmada.app.data.ScrobbleCast
 import fr.arrmada.app.data.ScrobbleLogic
+import fr.arrmada.app.data.ScrobbleSkip
+import fr.arrmada.app.data.ScrobbleTrack
+import fr.arrmada.app.ui.detail.techBadges
 import fr.arrmada.app.data.SideSubtitle
 import fr.arrmada.app.data.SubtitleRequest
 import fr.arrmada.app.data.SubtitleResult
@@ -512,8 +517,28 @@ private fun PlayerSurface(
                 localSeries = request.localSeries > 0,
             )
             val total = (player.duration.takeIf { it > 0 } ?: duration) / 1000.0
+            val positionS = player.currentPosition / 1000.0
+            val audioChoices = trackChoices(tracks, C.TRACK_TYPE_AUDIO)
+            val textChoices = trackChoices(tracks, C.TRACK_TYPE_TEXT)
+            // Ce que la tablette affiche en plus pendant la séance
+            val rich = what.copy(
+                video = ScrobbleLogic.videoLabel(selectedVideoFormat(tracks)?.height, techBadges(meta?.file), info.videoRange, toneMapped),
+                audio = audioChoices.firstOrNull { it.selected }
+                    ?.let { listOf(it.label, it.detail).filter { part -> part.isNotBlank() }.joinToString(" · ") }.orEmpty(),
+                subtitleTrack = textChoices.firstOrNull { it.selected }?.label.orEmpty(),
+                chapter = ScrobbleLogic.chapterAt(info.chapters, positionS),
+                creditsAt = if (total > 0) PlaybackLogic.creditsStart(info, total) ?: 0.0 else 0.0,
+                nextUp = upNext?.let { "${it.code} · ${it.title}" }.orEmpty(),
+                skips = skips.map { ScrobbleSkip(it.kind, PlaybackLogic.skipLabel(it), it.start, it.end) },
+                overview = meta?.overview ?: info.overview.orEmpty(),
+                metaLine = meta?.metaLine.orEmpty(),
+                cast = meta?.cast.orEmpty().take(8).map { ScrobbleCast(it.name, it.character, it.photo.orEmpty()) },
+                subtitleTracks = textChoices.mapIndexed { i, c -> ScrobbleTrack(i, c.label, c.detail, c.selected) },
+                audioTracks = audioChoices.mapIndexed { i, c -> ScrobbleTrack(i, c.label, c.detail, c.selected) },
+                remote = true,
+            )
             val payload = ScrobbleLogic.payload(
-                event, what, player.currentPosition / 1000.0, total, paused = !player.playWhenReady, ended = ended,
+                event, rich, positionS, total, paused = !player.playWhenReady, ended = ended,
             )
             app.appScope.launch { runCatching { repository.scrobble(payload) } }
         }
@@ -523,6 +548,8 @@ private fun PlayerSurface(
         val listener = object : Player.Listener {
             override fun onTracksChanged(newTracks: Tracks) {
                 tracks = newTracks
+                // Piste changée (menu pause ou tablette) : la tablette suit aussitôt
+                if (scrobbleStarted) sendScrobble("progress", false)
                 // Filet de sécurité : la piste vidéo se révèle Dolby Vision profil 5
                 // alors que l'écran ne le gère pas (serveur Jellyfin trop ancien
                 // pour l'annoncer, ou remux) → conversion SDR là où on en était.
@@ -655,6 +682,48 @@ private fun PlayerSurface(
         showMenu = false
         player.play()
         runCatching { keyFocus.requestFocus() }
+    }
+
+    // ── Télécommande tactile : commandes de la tablette de la pièce ──
+    val onRemote by rememberUpdatedState<(RemoteCommand) -> Unit> { command ->
+        when (command.action) {
+            "toggle" -> if (player.playWhenReady) pause() else resume()
+            "pause" -> if (player.playWhenReady) pause()
+            "play" -> if (!player.playWhenReady) resume()
+            "seek" -> command.seconds?.let {
+                player.seekTo((player.currentPosition + it * 1000L).coerceAtLeast(0))
+                osdUntil = System.currentTimeMillis() + 3000
+            }
+            // Intro / récap en cours → sa fin ; sinon carte « Épisode suivant » → l'enchaîner
+            "skip" -> {
+                val at = player.currentPosition / 1000.0
+                val segment = skips.firstOrNull { at >= it.start && at < it.end }
+                if (segment != null) player.seekTo((segment.end * 1000).toLong()) else if (showUpNext) playNext()
+            }
+            "next" -> if (upNext != null) playNext()
+            "track" -> command.track?.let { (kind, index) ->
+                val type = if (kind == "audio") C.TRACK_TYPE_AUDIO else C.TRACK_TYPE_TEXT
+                if (index < 0) {
+                    if (type == C.TRACK_TYPE_TEXT) selectTrack(player, type, null)
+                } else {
+                    trackChoices(tracks, type).getOrNull(index)?.takeIf { it.supported }?.let { selectTrack(player, type, it) }
+                }
+            }
+        }
+        if (scrobbleStarted) sendScrobble("progress", false)
+    }
+    LaunchedEffect(Unit) {
+        if (touch) return@LaunchedEffect // téléphone : pas de tablette qui le pilote
+        var after = -1L
+        while (true) {
+            val page = runCatching { repository.remote(after) }.getOrNull()
+            if (page == null) {
+                delay(5_000) // serveur injoignable : on réessaie sans insister
+                continue
+            }
+            after = page.lastId
+            page.commands.forEach { onRemote(it) }
+        }
     }
 
     // Retour : carte « Épisode suivant » → l'écarter ; pendant la lecture →
