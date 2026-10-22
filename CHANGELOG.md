@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Tablet: subtitle tools (APK 2.11.2)
+
+#### Added
+- The tablet's **Sous-titres** sheet gets the same tools as the pause menu: **Sous-titres FR** (Bazarr), **Resynchro auto** (ffsubsync) and the manual offset (**0,5 s plus tôt / plus tard**, current offset shown). New remote actions `subtitle_download`, `subtitle_sync`, `subtitle_shift` (±5 s per press); the TV reports `subtitle_tools`, `subtitle_busy`, `subtitle_note`, `subtitle_shift_ms` so the sheet shows progress and results. The Sous-titres button now appears even when the file has no subtitle track yet
+
 ### Android app 2.11.1: subtitles out of sync
 
 #### Added

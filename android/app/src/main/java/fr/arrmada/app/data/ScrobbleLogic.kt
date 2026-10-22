@@ -51,6 +51,11 @@ data class Scrobble(
     @SerialName("subtitle_tracks") val subtitleTracks: List<ScrobbleTrack> = emptyList(),
     @SerialName("audio_tracks") val audioTracks: List<ScrobbleTrack> = emptyList(),
     val remote: Boolean = false,
+    // Outils sous-titres de la tablette : Bazarr disponible, travail en cours, message, décalage
+    @SerialName("subtitle_tools") val subtitleTools: Boolean = false,
+    @SerialName("subtitle_busy") val subtitleBusy: Boolean = false,
+    @SerialName("subtitle_note") val subtitleNote: String = "",
+    @SerialName("subtitle_shift_ms") val subtitleShiftMs: Int = 0,
 )
 
 /** Passage à sauter (intro, récap) : la tablette affiche « Passer l'intro » dedans. */

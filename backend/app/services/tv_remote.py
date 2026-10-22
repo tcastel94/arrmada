@@ -16,7 +16,10 @@ Commandes (action, valeur) :
   - seek : décalage en secondes (−600 à +600) ;
   - skip : passer l'intro / le récap / le générique en cours ;
   - next : épisode suivant ;
-  - track : {"type": "text" | "audio", "index": n} (−1 : sous-titres coupés).
+  - track : {"type": "text" | "audio", "index": n} (−1 : sous-titres coupés) ;
+  - subtitle_download : sous-titres FR par Bazarr ;
+  - subtitle_sync : resynchro des sous-titres sur le son (Bazarr, ffsubsync) ;
+  - subtitle_shift : décalage manuel en ms (−5 000 à +5 000 par appui).
 """
 
 from __future__ import annotations
@@ -28,7 +31,10 @@ import time
 from collections import deque
 from typing import Any
 
-ACTIONS = {"toggle", "play", "pause", "seek", "skip", "next", "track"}
+ACTIONS = {
+    "toggle", "play", "pause", "seek", "skip", "next", "track",
+    "subtitle_download", "subtitle_sync", "subtitle_shift",
+}  # fmt: skip
 MAX_AGE = 15.0  # secondes : au-delà, une commande n'est plus rejouée
 WAIT = 15.0  # attente maximale d'une question de la TV
 KEEP = 20  # commandes gardées par pièce
@@ -51,6 +57,14 @@ def clean_command(action: Any, value: Any) -> dict[str, Any]:
         if not -600 <= seconds <= 600 or seconds == 0:
             raise InvalidCommand("Décalage hors bornes")
         return {"action": action, "value": seconds}
+    if action == "subtitle_shift":
+        try:
+            ms = int(value)
+        except (TypeError, ValueError) as exc:
+            raise InvalidCommand("Décalage invalide") from exc
+        if not -5000 <= ms <= 5000 or ms == 0:
+            raise InvalidCommand("Décalage hors bornes")
+        return {"action": action, "value": ms}
     if action == "track":
         if not isinstance(value, dict) or value.get("type") not in ("text", "audio"):
             raise InvalidCommand("Piste invalide")

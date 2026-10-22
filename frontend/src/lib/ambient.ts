@@ -54,6 +54,14 @@ export interface AmbientPlaying {
     audio_tracks: AmbientTrack[];
     /** La TV accepte la télécommande tactile. */
     remote: boolean;
+    /** Bazarr disponible pour ce titre (télécharger / resynchroniser). */
+    subtitle_tools: boolean;
+    /** Bazarr travaille (téléchargement ou resynchro en cours). */
+    subtitle_busy: boolean;
+    /** Dernier résultat (« Sous-titres ajoutés : Français »). */
+    subtitle_note: string;
+    /** Décalage manuel en cours (ms). */
+    subtitle_shift_ms: number;
 }
 
 export interface AmbientSkip {
@@ -80,7 +88,15 @@ export interface AmbientTrack {
 export type RemoteAction =
     | { action: "toggle" | "play" | "pause" | "skip" | "next" }
     | { action: "seek"; value: number }
-    | { action: "track"; value: { type: "text" | "audio"; index: number } };
+    | { action: "track"; value: { type: "text" | "audio"; index: number } }
+    | { action: "subtitle_download" | "subtitle_sync" }
+    | { action: "subtitle_shift"; value: number };
+
+/** « +1,5 s », « −0,5 s » (décalage des sous-titres). */
+export function shiftLabel(ms: number): string {
+    const sign = ms < 0 ? "−" : "+";
+    return `${sign}${(Math.abs(ms) / 1000).toFixed(1).replace(".", ",")} s`;
+}
 
 /** Passage à sauter en cours à cette position, s'il y en a un. */
 export function activeSkip(playing: AmbientPlaying, position: number): AmbientSkip | null {

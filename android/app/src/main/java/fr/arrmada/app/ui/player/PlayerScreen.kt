@@ -596,6 +596,10 @@ private fun PlayerSurface(
                 subtitleTracks = textChoices.mapIndexed { i, c -> ScrobbleTrack(i, c.label, c.detail, c.selected) },
                 audioTracks = audioChoices.mapIndexed { i, c -> ScrobbleTrack(i, c.label, c.detail, c.selected) },
                 remote = true,
+                subtitleTools = subtitleRequest != null,
+                subtitleBusy = subtitleBusy,
+                subtitleNote = subtitleNote.orEmpty(),
+                subtitleShiftMs = subtitleShiftMs,
             )
             val payload = ScrobbleLogic.payload(
                 event, rich, positionS, total, paused = !player.playWhenReady, ended = ended,
@@ -770,6 +774,10 @@ private fun PlayerSurface(
                 if (segment != null) player.seekTo((segment.end * 1000).toLong()) else if (showUpNext) playNext()
             }
             "next" -> if (upNext != null) playNext()
+            // Outils sous-titres (feuille Sous-titres de la tablette)
+            "subtitle_download" -> downloadSubtitles()
+            "subtitle_sync" -> syncSubtitles()
+            "subtitle_shift" -> command.seconds?.let { shiftSubtitles(it) } // valeur en ms
             "track" -> command.track?.let { (kind, index) ->
                 val type = if (kind == "audio") C.TRACK_TYPE_AUDIO else C.TRACK_TYPE_TEXT
                 if (index < 0) {
@@ -779,6 +787,10 @@ private fun PlayerSurface(
                 }
             }
         }
+        if (scrobbleStarted) sendScrobble("progress", false)
+    }
+    // Bazarr travaille / a répondu, décalage changé : la tablette suit aussitôt
+    LaunchedEffect(subtitleBusy, subtitleNote, subtitleShiftMs) {
         if (scrobbleStarted) sendScrobble("progress", false)
     }
     LaunchedEffect(Unit) {
