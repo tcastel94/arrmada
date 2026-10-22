@@ -19,6 +19,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Mini player** restyled like the Music app's, just above the tab bar; short fade between pages; new login screen (app icon, password, blue button)
 - **Installable app**: web app manifest (standalone, black theme) for "Add to Home Screen"
 
+### Web app redesign, parts 2–5: every page
+
+#### Changed
+- **Accueil rethought** (like the Apple TV app's Home): large greeting title and date, alerts only when something is wrong (service down, disk ≥ 90 %), "À l'écran" (what a TV is playing, with pause / stop), **new "Reprendre" row** (landscape cards with progress, time left, TV, ▶ to resume on a TV), "Ajoutés récemment" poster row, "À venir" and "Transferts" as iOS grouped lists, four key-figure tiles (films, séries, storage, services), "Activité récente". The TRaSH compliance panel, disk details and the radar banner left the home screen (still in TRaSH Guides / Serveur)
+- **Médiathèque**: iOS search field, Tout / Films / Séries segmented control with counts, filters in a bottom sheet (window on desktop), sort + view + actions in one "⋯" menu, "Sélectionner" like Photos, 3 posters per row on iPhone; posters only show what matters (Manquant, a watched check mark, progress) and reveal the tech details on hover; home-made series as a scrolling row
+- **Media page** in the Apple TV app style: full-bleed backdrop fading to black, centred logo / title and one info line on mobile, grey tech labels (4K, Dolby Vision, Atmos…), full-width play button, plain-text ratings, underlined tab strip that sticks under the navigation bar; the Blu-ray case animation stays on desktop (without the glow)
+- **Reprendre** page in landscape cards; **Manquants** with a compact "Rechercher (n)" button and plain-text statuses
+- **Rechercher** (was "Rechercher & Ajouter") without the card around the field; **Transferts** (was "Téléchargements", same name in the tab bar, sidebar and title)
+- Settings pages are titled after their section; page descriptions show on desktop only; large titles are never truncated (actions move under the title when space runs out)
+- Colours unified across ~100 files: pastel greens / ambers / reds / violets of the old theme mapped to the iOS system colours (857 classes), decorative halos and coloured gradients removed (progress bars, sliders, rings)
+- New shared components: `Section`, `Shelf` (scrolling row with arrows on desktop), `GroupedList` / `ListRow` (iOS Settings lists), `StatTile`, `ContinueCard`
+
+
 ### Tablet: volume and actor filmography (APK 2.11.4)
 
 #### Added
