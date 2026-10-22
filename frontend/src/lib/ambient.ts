@@ -75,6 +75,34 @@ export interface AmbientCast {
     name: string;
     character: string;
     photo: string;
+    /** Identifiant TMDB (films) : sa filmographie au toucher. */
+    tmdb_id: number | null;
+}
+
+/** GET /api/ambient/person/{id} : filmographie croisée avec la médiathèque. */
+export interface PersonFilmography {
+    error?: string;
+    person: {
+        tmdb_id: number;
+        name: string;
+        photo: string | null;
+        biography: string;
+        birthday: string | null;
+        place_of_birth: string | null;
+    } | null;
+    /** Ses films présents dans Radarr (`has_file` : téléchargé, prêt à voir). */
+    in_library: PersonMovie[];
+    /** Ses autres films (TMDB, par popularité). */
+    discover: PersonMovie[];
+}
+
+export interface PersonMovie {
+    tmdb_id: number;
+    title: string;
+    year: number | null;
+    character: string;
+    poster: string | null;
+    has_file?: boolean;
 }
 
 export interface AmbientTrack {
@@ -90,7 +118,9 @@ export type RemoteAction =
     | { action: "seek"; value: number }
     | { action: "track"; value: { type: "text" | "audio"; index: number } }
     | { action: "subtitle_download" | "subtitle_sync" }
-    | { action: "subtitle_shift"; value: number };
+    | { action: "subtitle_shift"; value: number }
+    | { action: "volume_step"; value: number }
+    | { action: "mute"; value: boolean };
 
 /** « +1,5 s », « −0,5 s » (décalage des sous-titres). */
 export function shiftLabel(ms: number): string {

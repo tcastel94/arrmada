@@ -63,7 +63,12 @@ data class Scrobble(
 data class ScrobbleSkip(val kind: String, val label: String, val start: Double, val end: Double)
 
 @Serializable
-data class ScrobbleCast(val name: String, val character: String = "", val photo: String = "")
+data class ScrobbleCast(
+    val name: String,
+    val character: String = "",
+    val photo: String = "",
+    @SerialName("tmdb_id") val tmdbId: Long? = null, // la tablette ouvre sa filmographie au toucher
+)
 
 /** Piste proposée sur la tablette ; [index] : rang dans la liste du menu pause. */
 @Serializable

@@ -220,6 +220,7 @@ data class Person(
     val character: String = "",
     val job: String = "",
     val photo: String? = null,
+    @SerialName("tmdb_id") val tmdbId: Long? = null, // films : filmographie sur la tablette
 )
 
 @Serializable
