@@ -219,7 +219,7 @@ export function ReleasesTab({ media }: { media: MediaDetail }) {
                                                 <motion.span
                                                     layoutId="release-mode-pill"
                                                     transition={SPRING}
-                                                    className="absolute inset-0 rounded-lg bg-primary/15 shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.3)]"
+                                                    className="absolute inset-0 rounded-lg bg-primary/15"
                                                 />
                                             )}
                                             <span className="relative">{m === "season" ? "Pack saison" : "Épisode"}</span>
@@ -449,7 +449,7 @@ function ReleaseRow({
             variants={animate ? fadeUp : undefined}
             className={cn(
                 "glass glass-hover rounded-2xl p-3 sm:p-4",
-                grabbed && "border-emerald-500/40 shadow-[0_0_30px_-12px_rgb(16_185_129/0.7)]",
+                grabbed && "border-emerald-500/40",
                 r.rejected && !grabbed && "opacity-80",
             )}
         >

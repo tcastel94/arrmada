@@ -430,7 +430,7 @@ function Player({ np, fetchedAt }: { np: KodiNowPlaying; fetchedAt: number }) {
                                 transition={SPRING}
                                 onClick={() => send({ action: "playpause" }, { paused: !np.paused })}
                                 aria-label={np.paused ? "Reprendre la lecture" : "Mettre en pause"}
-                                className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white shadow-[0_0_32px_-4px_rgb(168_85_247/0.85)] transition-[filter] hover:brightness-110"
+                                className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white transition-[filter] hover:brightness-110"
                             >
                                 <AnimatePresence mode="wait" initial={false}>
                                     <motion.span
@@ -515,7 +515,7 @@ function Player({ np, fetchedAt }: { np: KodiNowPlaying; fetchedAt: number }) {
             {/* Barre de progression lumineuse en bas de carte */}
             <div className="relative h-[3px] bg-white/[0.06]">
                 <motion.div
-                    className="h-full bg-gradient-to-r from-violet-500 via-fuchsia-500 to-pink-400 shadow-[0_0_14px_rgb(217_70_239/0.8)]"
+                    className="h-full bg-gradient-to-r from-violet-500 via-fuchsia-500 to-pink-400"
                     animate={{ width: `${Math.min(100, pct)}%` }}
                     transition={{ duration: 0.9, ease: "linear" }}
                 />

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Web app redesign, part 1: clean design system and iOS-style navigation
+
+#### Changed
+- **New design system ("Épuré")**, inspired by Apple's dark-mode apps: pure black background, neutral grey surfaces (#1C1C1E / #2C2C2E), a single accent (#4A9EFF), iOS system colours for status (green, orange, red), Apple's system font (SF Pro on iPhone / Mac, Geist elsewhere). The "Neon Armada" effects are gone everywhere: aurora background, glows, gradient borders, rotating beams, mouse spotlight, 3D tilt, animated gradient text (64 hard-coded glows and the decorative halos removed from the pages; the old CSS class names are kept but now render plainly, so pages not yet redesigned already look sober)
+- **Mobile navigation like a native iOS app**: a full-width blurred tab bar at the bottom (Accueil, Médiathèque, Rechercher, Transferts, Plus) with red count badges; tapping the active tab scrolls back to the top. A new **Plus** screen (`/more`) lists every other page as grouped lists with coloured icon tiles, like the iPhone Settings app, plus Déconnexion
+- **iOS navigation bar**: transparent at the top of the page, blurred once you scroll, with the page's small title fading in when the large title leaves the screen; "‹ Parent" back button on sub-pages (it returns to the previous screen with its filters and scroll position when you came from the app) and "‹ Plus" on pages reached from the Plus tab
+- **Large titles**: page headers are now iOS large titles (no more neon banner); stats become grey capsules that scroll horizontally on mobile; section headers are bold titles with a blue "Tout voir ›"
+- **Desktop sidebar** restyled like macOS: attached to the edge, compact rows, grey highlight that slides to the active row, plain counters
+- **Components**: buttons (solid blue, grey "filled", tinted), segmented-control tabs, filled inputs (16 px on mobile so Safari does not zoom), iOS green switches, borderless badges, simple progress bars and activity rings; dialogs become bottom sheets with a grab handle on mobile; the ⌘K search becomes a full-height sheet with "Annuler" on mobile; posters show the title under the artwork (Apple TV style) with a light lift on hover
+- **Mini player** restyled like the Music app's, just above the tab bar; short fade between pages; new login screen (app icon, password, blue button)
+- **Installable app**: web app manifest (standalone, black theme) for "Add to Home Screen"
+
 ### Tablet: volume and actor filmography (APK 2.11.4)
 
 #### Added

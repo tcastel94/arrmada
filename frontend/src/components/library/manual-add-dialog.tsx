@@ -276,7 +276,7 @@ export function ManualAddDialog({
                         )}
                     </AnimatePresence>
 
-                    <DialogFooter className="gap-2 sm:gap-0">
+                    <DialogFooter>
                         <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={submitting}>
                             Annuler
                         </Button>

@@ -31,7 +31,7 @@ import {
     MonitorPlay,
     type LucideIcon,
 } from "lucide-react";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogClose } from "@/components/ui/dialog";
 import { useMediaSearch } from "@/hooks/use-media";
 import { useDebounce } from "@/hooks/use-debounce";
 import { ALL_NAV_ITEMS, findGroupTitle } from "@/lib/nav";
@@ -190,25 +190,26 @@ export function CommandPalette() {
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
-            <DialogContent className="top-[12vh] max-w-2xl translate-y-0 gap-0 overflow-hidden p-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-4 sm:rounded-3xl [&>button]:hidden">
+            <DialogContent className="top-[calc(env(safe-area-inset-top)+0.75rem)] max-h-none gap-0 overflow-hidden p-0 pb-[env(safe-area-inset-bottom)] pt-0 sm:top-[12vh] sm:max-w-2xl sm:translate-y-0 sm:p-0 sm:data-[state=open]:slide-in-from-top-2 sm:data-[state=closed]:slide-out-to-top-2 [&>button]:hidden [&>span:first-child]:hidden">
                 <DialogTitle className="sr-only">Palette de commandes</DialogTitle>
                 <CommandPrimitive shouldFilter={false} loop className="flex flex-col">
                     {/* Champ de saisie */}
-                    <div className="relative flex items-center gap-3 border-b border-white/[0.06] px-5">
-                        <Search className="h-5 w-5 shrink-0 text-primary" />
+                    <div className="relative flex items-center gap-3 border-b border-white/[0.07] px-4 sm:px-5">
+                        <Search className="h-5 w-5 shrink-0 text-muted-foreground" />
                         <CommandPrimitive.Input
                             value={query}
                             onValueChange={setQuery}
                             placeholder="Chercher un média, une page, une action…"
-                            className="h-16 flex-1 bg-transparent text-base outline-none placeholder:text-muted-foreground/70"
+                            className="h-14 flex-1 bg-transparent text-[17px] outline-none placeholder:text-muted-foreground/70"
                         />
                         {isFetching && debounced.length >= 2 && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-                        <span className="kbd">Échap</span>
+                        <span className="kbd hidden sm:inline-flex">Échap</span>
+                        {/* Mobile : « Annuler » à droite du champ, comme la recherche iOS */}
+                        <DialogClose className="text-[17px] text-primary active:opacity-50 sm:hidden">Annuler</DialogClose>
                         {/* Liseré lumineux sous le champ */}
-                        <div className="pointer-events-none absolute inset-x-8 -bottom-px h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
                     </div>
 
-                    <CommandPrimitive.List className="max-h-[min(60vh,480px)] overflow-y-auto p-2">
+                    <CommandPrimitive.List className="max-h-[calc(100dvh-8rem)] overflow-y-auto p-2 sm:max-h-[min(60vh,480px)]">
                         <CommandPrimitive.Empty className="py-12 text-center text-sm text-muted-foreground">
                             Aucun résultat pour « {query} »
                         </CommandPrimitive.Empty>
@@ -287,7 +288,7 @@ export function CommandPalette() {
                     </CommandPrimitive.List>
 
                     {/* Pied : aide clavier */}
-                    <div className="flex items-center gap-4 border-t border-white/[0.06] px-5 py-2.5 text-[11px] text-muted-foreground">
+                    <div className="hidden items-center gap-4 border-t border-white/[0.07] px-5 py-2.5 text-[11px] text-muted-foreground sm:flex">
                         <span className="flex items-center gap-1.5">
                             <span className="kbd">↑</span>
                             <span className="kbd">↓</span> naviguer
@@ -312,7 +313,7 @@ function Group({ heading, children }: { heading: string; children: React.ReactNo
     return (
         <CommandPrimitive.Group
             heading={heading}
-            className="mb-1 [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:pb-1.5 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.18em] [&_[cmdk-group-heading]]:text-muted-foreground/60"
+            className="mb-1 [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:pb-1.5 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:text-[13px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-muted-foreground"
         >
             {children}
         </CommandPrimitive.Group>
@@ -324,7 +325,7 @@ function Item({ children, value, onSelect }: { children: React.ReactNode; value:
         <CommandPrimitive.Item
             value={value}
             onSelect={onSelect}
-            className="group relative flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm outline-none transition-colors data-[selected=true]:bg-primary/10 data-[selected=true]:shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.22)]"
+            className="group relative flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm outline-none transition-colors data-[selected=true]:bg-white/[0.08] data-[selected="
         >
             {children}
         </CommandPrimitive.Item>
@@ -337,7 +338,7 @@ function IconTile({ icon: Icon, tone = "default" }: { icon: LucideIcon; tone?: "
             className={cn(
                 "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ring-1 transition-all group-data-[selected=true]:scale-105",
                 tone === "primary"
-                    ? "bg-primary/15 text-primary ring-primary/30 shadow-[0_0_16px_-4px_hsl(var(--primary)/0.7)]"
+                    ? "bg-primary/15 text-primary ring-primary/30"
                     : "bg-white/[0.04] text-muted-foreground ring-white/[0.08] group-data-[selected=true]:text-primary group-data-[selected=true]:ring-primary/30",
             )}
         >

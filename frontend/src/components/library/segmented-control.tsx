@@ -88,7 +88,7 @@ export function SegmentedControl<T extends string>({
                                 layoutId={layoutId}
                                 transition={SPRING}
                                 aria-hidden
-                                className="absolute inset-0 rounded-lg bg-primary/15 shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.3),0_0_20px_-6px_hsl(var(--primary)/0.6)]"
+                                className="absolute inset-0 rounded-lg bg-primary/15"
                             />
                         )}
                         <span className="relative z-[1] inline-flex items-center gap-1.5">

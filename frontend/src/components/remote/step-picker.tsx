@@ -96,7 +96,7 @@ export function StepPicker({
                             <motion.span
                                 layoutId={layoutId}
                                 transition={SPRING}
-                                className="absolute inset-0 rounded-lg bg-primary/15 shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.45),0_0_18px_-6px_hsl(var(--primary)/0.8)]"
+                                className="absolute inset-0 rounded-lg bg-primary/15"
                             />
                         )}
                         <span className="relative">{format(s)}</span>

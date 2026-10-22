@@ -5,36 +5,37 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 /**
- * Bouton — variantes alignées sur le design system « Neon Armada ».
- * - default : dégradé bleu→cyan lumineux (action principale)
- * - outline / secondary / ghost : verre discret
- * - destructive : rouge avec halo
- * Micro-interaction commune : léger enfoncement au clic (active:scale).
+ * Bouton — design system « Épuré » (façon iOS).
+ * - default     : aplat bleu #4A9EFF, texte blanc (action principale, une par écran)
+ * - secondary   : gris « rempli » iOS (actions courantes)
+ * - outline     : même gris avec filet (compat ancien thème)
+ * - ghost       : transparent, gris au survol (barres d'outils)
+ * - tinted      : bleu translucide, texte bleu (action mise en avant sans crier)
+ * - destructive : rouge système
+ * - link        : texte bleu seul
+ * Retour d'appui commun : léger enfoncement + atténuation, comme sur iPhone.
  */
 const buttonVariants = cva(
-  "relative inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-medium transition-all duration-200 ease-smooth active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  "relative inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-xl text-[15px] font-semibold transition-[transform,background-color,opacity,color] duration-200 ease-smooth active:scale-[0.97] active:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-40 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
-        default:
-          "bg-gradient-to-r from-primary to-[hsl(200_100%_62%)] text-primary-foreground font-semibold shadow-[0_0_0_1px_hsl(var(--primary)/0.5),0_8px_24px_-8px_hsl(var(--primary)/0.7)] hover:shadow-[0_0_0_1px_hsl(var(--primary)/0.7),0_10px_32px_-6px_hsl(var(--primary)/0.9)] hover:brightness-110",
-        destructive:
-          "bg-gradient-to-r from-red-500 to-rose-500 text-white font-semibold shadow-[0_0_0_1px_rgb(239_68_68/0.5),0_8px_24px_-8px_rgb(239_68_68/0.7)] hover:brightness-110",
-        outline:
-          "border border-white/[0.09] bg-white/[0.03] backdrop-blur hover:bg-white/[0.07] hover:border-white/[0.16] hover:text-foreground",
-        secondary:
-          "bg-secondary/80 text-secondary-foreground border border-white/[0.05] hover:bg-secondary",
-        ghost: "hover:bg-white/[0.06] hover:text-foreground",
-        link: "text-primary underline-offset-4 hover:underline active:scale-100",
-        glow:
-          "border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 hover:shadow-[0_0_24px_-4px_hsl(var(--primary)/0.7)]",
+        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+        outline: "border border-white/[0.08] bg-secondary text-foreground hover:bg-accent",
+        secondary: "bg-secondary text-foreground hover:bg-accent",
+        tinted: "bg-primary/15 text-primary hover:bg-primary/20",
+        ghost: "font-medium text-foreground/90 hover:bg-white/[0.08] hover:text-foreground",
+        link: "font-medium text-primary hover:opacity-80 active:scale-100",
+        // Ancien nom (« lumineux ») : devient la variante teintée.
+        glow: "bg-primary/15 text-primary hover:bg-primary/20",
       },
       size: {
-        default: "h-9 px-4 py-2",
-        sm: "h-8 rounded-lg px-3 text-xs",
-        lg: "h-11 rounded-xl px-6 text-base",
-        icon: "h-9 w-9",
-        "icon-sm": "h-8 w-8 rounded-lg",
+        default: "h-10 px-4",
+        sm: "h-8 rounded-lg px-3 text-[13px]",
+        lg: "h-12 rounded-2xl px-6 text-[17px]",
+        icon: "h-10 w-10 rounded-full",
+        "icon-sm": "h-8 w-8 rounded-full",
       },
     },
     defaultVariants: {

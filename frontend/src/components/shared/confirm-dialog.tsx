@@ -74,10 +74,8 @@ export function ConfirmDialog({
                     <div className="flex items-start gap-4">
                         <div
                             className={cn(
-                                "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ring-1",
-                                destructive
-                                    ? "bg-red-500/15 text-red-400 ring-red-500/30 shadow-[0_0_24px_-6px] shadow-red-500/50"
-                                    : "bg-primary/15 text-primary ring-primary/30 shadow-[0_0_24px_-6px] shadow-primary/50",
+                                "flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
+                                destructive ? "bg-destructive/15 text-destructive" : "bg-primary/15 text-primary",
                             )}
                         >
                             <Icon className="h-5 w-5" />
@@ -89,7 +87,7 @@ export function ConfirmDialog({
                     </div>
                 </DialogHeader>
                 {children && <div className="space-y-3">{children}</div>}
-                <DialogFooter className="gap-2 sm:gap-0">
+                <DialogFooter>
                     <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
                         {cancelLabel}
                     </Button>

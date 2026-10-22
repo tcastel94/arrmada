@@ -260,10 +260,10 @@ export default function CalendarPage() {
                         {/* ── Légende ── */}
                         <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-[11px] text-muted-foreground" aria-label="Légende">
                             <span className="inline-flex items-center gap-1.5">
-                                <span className="h-2 w-2 rounded-full bg-sky-400 shadow-[0_0_8px_hsl(199_89%_60%)]" /> Séries
+                                <span className="h-2 w-2 rounded-full bg-sky-400" /> Séries
                             </span>
                             <span className="inline-flex items-center gap-1.5">
-                                <span className="h-2 w-2 rounded-full bg-violet-400 shadow-[0_0_8px_hsl(262_83%_65%)]" /> Films
+                                <span className="h-2 w-2 rounded-full bg-violet-400" /> Films
                             </span>
                             <span className="inline-flex items-center gap-1.5">
                                 <Check className="h-3 w-3 text-emerald-300" strokeWidth={3} /> Déjà téléchargé
@@ -274,7 +274,7 @@ export default function CalendarPage() {
                                 </span>
                             )}
                             <span className="inline-flex items-center gap-1.5">
-                                <span className="h-2.5 w-2.5 rounded-full bg-sky-400 shadow-[0_0_8px_hsl(199_89%_60%)]" /> Aujourd&apos;hui
+                                <span className="h-2.5 w-2.5 rounded-full bg-sky-400" /> Aujourd&apos;hui
                             </span>
                         </div>
 
@@ -320,7 +320,7 @@ export default function CalendarPage() {
                             todayKey={todayKey}
                             typeFilter={typeFilter}
                             monitoredOnly={monitoredOnly}
-                            className="min-[1800px]:sticky min-[1800px]:top-20 min-[1800px]:self-start"
+                            className="min-[1800px]:sticky min-[1800px]:top-16 min-[1800px]:self-start"
                         />
                     )}
                 </div>

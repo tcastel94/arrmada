@@ -142,8 +142,8 @@ export function Scrubber({
 
     const fill =
         tone === "violet"
-            ? "from-violet-500 via-fuchsia-400 to-violet-300 shadow-[0_0_12px_hsl(262_83%_65%/0.8)]"
-            : "from-primary via-sky-400 to-brand shadow-[0_0_12px_hsl(var(--primary)/0.8)]";
+            ? "from-violet-500 via-fuchsia-400 to-violet-300"
+            : "from-primary via-sky-400 to-brand ";
 
     return (
         <div
@@ -187,7 +187,7 @@ export function Scrubber({
                 {/* Poignée : visible au survol, au focus et pendant le glisser */}
                 <div
                     className={cn(
-                        "absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_0_0_4px_rgb(255_255_255/0.15),0_2px_8px_rgb(0_0_0/0.5)] transition-[opacity,transform] duration-200",
+                        "absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white transition-[opacity,transform] duration-200",
                         drag !== null ? "scale-110 opacity-100" : "scale-75 opacity-0 group-hover:scale-100 group-hover:opacity-100 group-focus-visible:scale-100 group-focus-visible:opacity-100",
                         drag === null && "transition-[left,opacity,transform]",
                     )}

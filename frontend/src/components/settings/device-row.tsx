@@ -23,9 +23,9 @@ import { cn } from "@/lib/utils";
 
 /** Teintes disponibles pour la tuile d'icône (une par famille d'appareil). */
 const TONES = {
-    violet: "from-violet-500/30 to-fuchsia-500/10 text-violet-300 ring-violet-400/25 shadow-[0_0_24px_-8px] shadow-violet-500/60",
-    orange: "from-orange-500/30 to-amber-500/10 text-orange-300 ring-orange-400/25 shadow-[0_0_24px_-8px] shadow-orange-500/60",
-    sky: "from-sky-500/30 to-cyan-500/10 text-sky-300 ring-sky-400/25 shadow-[0_0_24px_-8px] shadow-sky-500/60",
+    violet: "from-violet-500/30 to-fuchsia-500/10 text-violet-300 ring-violet-400/25 shadow-violet-500/60",
+    orange: "from-orange-500/30 to-amber-500/10 text-orange-300 ring-orange-400/25 shadow-orange-500/60",
+    sky: "from-sky-500/30 to-cyan-500/10 text-sky-300 ring-sky-400/25 shadow-sky-500/60",
     slate: "from-slate-400/25 to-slate-500/10 text-slate-300 ring-slate-400/25",
 } as const;
 

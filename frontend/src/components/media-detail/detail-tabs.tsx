@@ -79,7 +79,7 @@ export function DetailTabs({
     return (
         <Tabs value={active} onValueChange={(v) => onTabChange(v as DetailTab)} className="space-y-4">
             {/* Barre collée sous l'en-tête (h-14 + marge) pendant le défilement */}
-            <div id="media-tabs" className="sticky top-[4.75rem] z-20 -mx-1 scroll-mt-24 px-1">
+            <div id="media-tabs" className="sticky top-[calc(var(--navbar-h)+env(safe-area-inset-top))] z-20 -mx-1 scroll-mt-24 px-1">
                 <TabsList className="w-full justify-start bg-background/70 shadow-[0_10px_30px_-12px_rgb(0_0_0/0.8)] backdrop-blur-xl sm:w-auto">
                     {tabs.map((t) => {
                         const { label, icon: Icon } = META[t];
@@ -96,7 +96,7 @@ export function DetailTabs({
                                     <motion.span
                                         layoutId="media-tab-pill"
                                         transition={SPRING}
-                                        className="absolute inset-0 rounded-lg bg-primary/15 shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.3),0_0_20px_-6px_hsl(var(--primary)/0.6)]"
+                                        className="absolute inset-0 rounded-lg bg-primary/15"
                                     />
                                 )}
                                 <span className="relative z-[1] flex items-center gap-1.5">
@@ -113,7 +113,7 @@ export function DetailTabs({
                                         </span>
                                     )}
                                     {t === "subtitles" && missingFr > 0 && (
-                                        <span className="h-1.5 w-1.5 rounded-full bg-amber-400 shadow-[0_0_8px] shadow-amber-400" aria-label={`${missingFr} sans sous-titre FR`} />
+                                        <span className="h-1.5 w-1.5 rounded-full bg-amber-400 shadow-amber-400" aria-label={`${missingFr} sans sous-titre FR`} />
                                     )}
                                 </span>
                             </TabsTrigger>

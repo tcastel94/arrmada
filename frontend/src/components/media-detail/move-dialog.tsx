@@ -134,7 +134,7 @@ export function MoveMediaDialog({
                     </div>
                 )}
 
-                <DialogFooter className="gap-2 sm:gap-0">
+                <DialogFooter>
                     <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={updatePath.isPending}>
                         Annuler
                     </Button>

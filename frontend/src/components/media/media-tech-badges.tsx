@@ -169,7 +169,7 @@ export function cardTechBadges(specs?: MediaTechSpecs | null, max = 3): TechBadg
  * la 4K a un fond en dégradé de marque (c'est l'info qui « claque »).
  */
 const CARD_TONES: Record<TechTone, string> = {
-    premium: "bg-gradient-to-r from-primary/90 to-brand/80 text-white ring-white/25 shadow-[0_0_14px_-4px_hsl(var(--primary)/0.9)]",
+    premium: "bg-gradient-to-r from-primary/90 to-brand/80 text-white ring-white/25",
     sky: "bg-black/65 text-sky-200 ring-sky-300/30",
     neutral: "bg-black/65 text-white/90 ring-white/15",
     muted: "bg-black/65 text-white/60 ring-white/10",
@@ -183,7 +183,7 @@ const CARD_TONES: Record<TechTone, string> = {
 /** Fiche : verre teinté, même grammaire que les pastilles de statut du hero. */
 const HERO_TONES: Record<TechTone, string> = {
     premium:
-        "border-primary/40 bg-gradient-to-r from-primary/20 to-brand/15 text-sky-100 shadow-[0_0_20px_-6px_hsl(var(--primary)/0.8)]",
+        "border-primary/40 bg-gradient-to-r from-primary/20 to-brand/15 text-sky-100",
     sky: "border-sky-400/30 bg-sky-500/10 text-sky-200",
     neutral: "border-white/10 bg-white/[0.05] text-foreground/85",
     muted: "border-white/[0.08] bg-white/[0.03] text-muted-foreground",

@@ -80,7 +80,7 @@ export function BridgeHero({ facts }: { facts: BridgeFact[] }) {
                                         (!f.tone || f.tone === "default") && "border-white/10 bg-white/[0.04] text-foreground/80",
                                     )}
                                 >
-                                    <span className="h-1.5 w-1.5 rounded-full bg-current shadow-[0_0_6px_currentColor]" />
+                                    <span className="h-1.5 w-1.5 rounded-full bg-current" />
                                     {f.label}
                                 </span>
                             ))}
@@ -148,7 +148,7 @@ function RadarEmblem() {
             ].map((p) => (
                 <span
                     key={p.top}
-                    className="absolute h-1.5 w-1.5 rounded-full bg-brand shadow-[0_0_10px_hsl(var(--brand))]"
+                    className="absolute h-1.5 w-1.5 rounded-full bg-brand"
                     style={{ top: p.top, left: p.left, animation: `pulse-glow 2.5s ease-in-out ${p.d}s infinite` }}
                 />
             ))}
@@ -160,7 +160,7 @@ function RadarEmblem() {
                 className="absolute inset-[27%]"
             >
                 <div className="absolute -inset-4 rounded-full bg-primary/30 blur-2xl animate-pulse-glow" />
-                <div className="relative h-full w-full overflow-hidden rounded-[28%] ring-1 ring-brand/40 shadow-[0_0_40px_-6px_hsl(var(--brand)/0.8)] animate-float">
+                <div className="relative h-full w-full overflow-hidden rounded-[28%] ring-1 ring-brand/40 animate-float">
                     <BrandIcon animated delay={0.45} />
                 </div>
             </motion.div>

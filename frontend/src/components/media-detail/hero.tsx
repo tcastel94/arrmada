@@ -220,7 +220,7 @@ function RatingPill({
     if (!value) return null;
     return (
         <div className="glass flex items-center gap-2 rounded-xl px-3 py-1.5">
-            <Star className="h-4 w-4 fill-amber-400 text-amber-400 drop-shadow-[0_0_6px_rgb(251_191_36/0.7)]" aria-hidden />
+            <Star className="h-4 w-4 fill-amber-400 text-amber-400 drop-" aria-hidden />
             <span className="text-sm font-bold">
                 <AnimatedNumber value={value} decimals={percent ? 0 : 1} suffix={percent ? " %" : ""} />
             </span>
@@ -288,7 +288,7 @@ function Overview({ text }: { text: string }) {
 
 /** Classes du grand titre texte (aussi utilisé en repli du ClearLogo). */
 const TITLE_CLASS =
-    "text-balance bg-gradient-to-b from-white via-white to-white/65 bg-clip-text pb-1 text-3xl font-bold leading-[1.05] tracking-tight text-transparent drop-shadow-[0_4px_24px_rgb(0_0_0/0.6)] sm:text-4xl lg:text-5xl xl:text-6xl";
+    "text-balance bg-gradient-to-b from-white via-white to-white/65 bg-clip-text pb-1 text-3xl font-bold leading-[1.05] tracking-tight text-transparent sm:text-4xl lg:text-5xl xl:text-6xl";
 
 /**
  * Titre du média : le ClearLogo (logo-titre transparent) s'il existe, sinon
@@ -328,7 +328,7 @@ function HeroTitle({ media }: { media: MediaDetail }) {
                     transition={{ duration: 0.8, ease: EASE_OUT }}
                     // object-contain + ancrage en bas à gauche : un logo très large
                     // rétrécit dans la boîte au lieu de déborder.
-                    className="h-full w-auto max-w-full object-contain object-left-bottom drop-shadow-[0_6px_24px_rgb(0_0_0/0.75)]"
+                    className="h-full w-auto max-w-full object-contain object-left-bottom"
                 />
             </span>
         </h1>

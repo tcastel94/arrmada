@@ -402,7 +402,7 @@ function JumpButton({ unseen, onClick }: { unseen: number; onClick: () => void }
         <button
             type="button"
             onClick={onClick}
-            className="glass-strong pointer-events-auto flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium text-foreground shadow-[0_8px_24px_-8px_hsl(var(--primary)/0.6)] ring-1 ring-primary/30 transition-colors hover:text-primary"
+            className="glass-strong pointer-events-auto flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium text-foreground ring-1 ring-primary/30 transition-colors hover:text-primary"
         >
             <ArrowDown className="h-3.5 w-3.5" />
             {unseen > 0 ? plural(unseen, "nouvelle ligne", "nouvelles lignes") : "Revenir au direct"}

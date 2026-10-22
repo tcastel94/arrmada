@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * État vide animé (icône flottante dans un halo) + action optionnelle.
+ * État vide façon iOS (« Aucun contenu ») : grande icône grise, titre,
+ * explication, bouton teinté optionnel.
  * Variante `tone="error"` pour les erreurs API (avec bouton Réessayer).
  */
 import Link from "next/link";
@@ -25,10 +26,10 @@ interface EmptyStateProps {
     compact?: boolean;
 }
 
-const TONE_STYLES = {
-    default: { tile: "from-primary/25 to-brand/5 text-primary ring-primary/25", glow: "hsl(var(--primary) / 0.45)" },
-    success: { tile: "from-emerald-500/25 to-teal-500/5 text-emerald-300 ring-emerald-400/25", glow: "hsl(152 69% 47% / 0.45)" },
-    error: { tile: "from-red-500/25 to-orange-500/5 text-red-300 ring-red-400/25", glow: "hsl(0 84% 62% / 0.45)" },
+const TONE_ICON = {
+    default: "text-muted-foreground/70",
+    success: "text-success",
+    error: "text-destructive",
 };
 
 export function EmptyState({
@@ -40,47 +41,25 @@ export function EmptyState({
     className,
     compact = false,
 }: EmptyStateProps) {
-    const t = TONE_STYLES[tone];
     return (
         <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, ease: EASE_OUT }}
-            className={cn(
-                "flex flex-col items-center justify-center text-center",
-                compact ? "py-8" : "py-14",
-                className,
-            )}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3, ease: EASE_OUT }}
+            className={cn("flex flex-col items-center justify-center px-6 text-center", compact ? "py-8" : "py-16", className)}
         >
-            <div className="relative mb-5">
-                <div
-                    aria-hidden
-                    className="absolute inset-0 -m-6 rounded-full opacity-70 blur-2xl"
-                    style={{ background: `radial-gradient(closest-side, ${t.glow}, transparent)` }}
-                />
-                <div
-                    className={cn(
-                        "relative flex animate-float items-center justify-center rounded-2xl bg-gradient-to-br ring-1",
-                        compact ? "h-12 w-12" : "h-16 w-16",
-                        t.tile,
-                    )}
-                >
-                    <Icon className={compact ? "h-6 w-6" : "h-8 w-8"} strokeWidth={1.6} />
-                </div>
-            </div>
-            <h3 className={cn("font-semibold tracking-tight", compact ? "text-sm" : "text-lg")}>{title}</h3>
+            <Icon className={cn("mb-3", compact ? "h-8 w-8" : "h-12 w-12", TONE_ICON[tone])} strokeWidth={1.5} />
+            <h3 className={cn("font-semibold tracking-tight", compact ? "text-[15px]" : "text-[20px]")}>{title}</h3>
             {description && (
-                <p className={cn("mt-1.5 max-w-sm text-muted-foreground text-balance", compact ? "text-xs" : "text-sm")}>
-                    {description}
-                </p>
+                <p className={cn("mt-1 max-w-sm text-muted-foreground text-balance", compact ? "text-[13px]" : "text-[15px]")}>{description}</p>
             )}
             {action &&
                 (action.href ? (
-                    <Button asChild className="mt-5" size={compact ? "sm" : "default"}>
+                    <Button asChild variant="tinted" className="mt-5" size={compact ? "sm" : "default"}>
                         <Link href={action.href}>{action.label}</Link>
                     </Button>
                 ) : (
-                    <Button onClick={action.onClick} className="mt-5" size={compact ? "sm" : "default"}>
+                    <Button onClick={action.onClick} variant="tinted" className="mt-5" size={compact ? "sm" : "default"}>
                         {action.label}
                     </Button>
                 ))}

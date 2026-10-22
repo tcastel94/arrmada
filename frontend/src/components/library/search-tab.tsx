@@ -102,8 +102,6 @@ export function SearchTab({
         <motion.div variants={stagger(0, 0.08)} initial="hidden" animate="show" className="space-y-6">
             {/* ── Champ « hero » ── */}
             <motion.div variants={fadeUp} className="glass border-gradient relative overflow-hidden rounded-3xl p-4 md:p-6">
-                <div aria-hidden className="pointer-events-none absolute -left-20 -top-24 h-64 w-64 rounded-full bg-brand/20 blur-3xl" />
-                <div aria-hidden className="pointer-events-none absolute -bottom-24 right-0 h-56 w-72 rounded-full bg-primary/15 blur-3xl" />
                 <div className="relative space-y-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                         <SegmentedControl

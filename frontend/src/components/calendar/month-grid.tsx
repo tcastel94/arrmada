@@ -80,7 +80,7 @@ export function MonthGrid({ days, month, byDay, todayKey, onOpenDay, direction }
                                 i >= days.length - 7 && "border-b-0",
                                 !inMonth && "bg-black/20",
                                 inMonth && col >= 5 && !isToday && "bg-white/[0.012]",
-                                isToday && "bg-gradient-to-b from-sky-500/[0.14] via-sky-500/[0.05] to-transparent shadow-[inset_0_0_0_1px_hsl(199_89%_60%/0.35)]",
+                                isToday && "bg-gradient-to-b from-sky-500/[0.14] via-sky-500/[0.05] to-transparent",
                                 "hover:bg-white/[0.025]",
                             )}
                         >
@@ -100,7 +100,7 @@ export function MonthGrid({ days, month, byDay, todayKey, onOpenDay, direction }
                                             entries.length > 0 && !isToday && "group-hover/day:bg-white/10",
                                             !inMonth && "text-muted-foreground/35",
                                             inMonth && isPast && !isToday && "text-muted-foreground/70",
-                                            isToday && "bg-sky-400 text-slate-950 shadow-[0_0_18px_hsl(199_89%_60%/0.85)]",
+                                            isToday && "bg-sky-400 text-slate-950",
                                         )}
                                     >
                                         {day.getDate()}

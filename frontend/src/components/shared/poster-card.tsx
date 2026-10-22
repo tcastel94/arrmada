@@ -1,9 +1,16 @@
 "use client";
 
 /**
- * Carte poster unique pour toute l'app (médiathèque, recherche, manquants,
- * filmographie…). Effets : inclinaison 3D, zoom de l'affiche, reflet,
- * halo coloré au survol, sélection animée.
+ * Carte affiche unique pour toute l'app (médiathèque, recherche, manquants,
+ * filmographie…), style app Apple TV :
+ *   - affiche nette aux coins arrondis, titre et sous-titre EN DESSOUS
+ *     (lisibles même sur une affiche chargée, contrairement à un texte
+ *     posé sur l'image) ;
+ *   - au survol (souris) : léger agrandissement + ombre portée, et les
+ *     infos détaillées (`meta`) apparaissent en bas de l'affiche ;
+ *   - au toucher (mobile) : léger enfoncement, comme un bouton iOS ;
+ *   - mode sélection : pastille ronde cochée en haut à droite.
+ * L'affiche apparaît en fondu une fois chargée (pas de saut visuel).
  */
 /* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
@@ -12,7 +19,6 @@ import { Check, Film, Tv } from "lucide-react";
 import { useState, type ReactNode, type MouseEvent } from "react";
 import { cn } from "@/lib/utils";
 import { scaleIn } from "@/lib/motion";
-import { TiltCard } from "@/components/fx/tilt-card";
 
 export interface PosterCardProps {
     title: string;
@@ -25,17 +31,17 @@ export interface PosterCardProps {
     badges?: ReactNode;
     /** Badge en haut à droite. */
     corner?: ReactNode;
-    /** Ligne d'infos sous le titre (dans l'overlay). */
+    /** Infos détaillées, affichées sur l'affiche au survol. */
     meta?: ReactNode;
     /** Barre de progression en bas de l'affiche (0-100). */
     progress?: number;
-    /** Bouton flottant (ex: « + Ajouter »). */
+    /** Bouton flottant (ex : « + Ajouter »). */
     action?: ReactNode;
     /** Mode sélection (cases à cocher). */
     selectable?: boolean;
     selected?: boolean;
     onToggleSelect?: () => void;
-    /** Affiche grisée (ex: média manquant). */
+    /** Affiche grisée (ex : média manquant). */
     dimmed?: boolean;
     className?: string;
     /** Désactive l'animation d'entrée (si le parent n'utilise pas stagger). */
@@ -75,13 +81,12 @@ export function PosterCard({
     };
 
     const body = (
-        <TiltCard className="rounded-2xl" max={7}>
+        <div className="group/poster">
             <div
                 className={cn(
-                    "shine relative aspect-[2/3] overflow-hidden rounded-2xl bg-muted/40 ring-1 transition-all duration-500 ease-smooth",
-                    selected
-                        ? "ring-2 ring-primary shadow-[0_0_0_4px_hsl(var(--primary)/0.15),0_20px_50px_-15px_hsl(var(--primary)/0.6)]"
-                        : "ring-white/[0.07] group-hover:ring-primary/40 group-hover:shadow-[0_24px_60px_-20px_hsl(var(--primary)/0.55)]",
+                    "relative aspect-[2/3] overflow-hidden rounded-[10px] bg-white/[0.06] transition-[transform,box-shadow] duration-300 ease-smooth",
+                    "group-hover/poster:scale-[1.03] group-hover/poster:shadow-[0_16px_40px_-12px_rgb(0_0_0/0.9)] group-active/poster:scale-[0.98]",
+                    selected && "ring-[3px] ring-primary ring-offset-2 ring-offset-background",
                 )}
             >
                 {/* Affiche */}
@@ -90,46 +95,40 @@ export function PosterCard({
                         src={posterUrl}
                         alt={title}
                         loading="lazy"
+                        decoding="async"
                         onLoad={() => setLoaded(true)}
                         onError={() => setFailed(true)}
                         className={cn(
-                            "h-full w-full object-cover transition-all duration-700 ease-smooth group-hover:scale-[1.08]",
-                            loaded ? "opacity-100 blur-0" : "opacity-0 blur-md",
-                            dimmed && "grayscale-[60%] opacity-60 group-hover:grayscale-0 group-hover:opacity-100",
+                            "h-full w-full object-cover transition-opacity duration-500",
+                            loaded ? "opacity-100" : "opacity-0",
+                            dimmed && "opacity-50 grayscale-[50%]",
                         )}
                     />
                 ) : (
-                    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-muted/60 via-muted/30 to-primary/10">
-                        <Placeholder className="h-10 w-10 text-muted-foreground/30" strokeWidth={1.5} />
+                    <div className="flex h-full w-full flex-col items-center justify-center gap-2 p-3 text-center">
+                        <Placeholder className="h-8 w-8 text-white/20" strokeWidth={1.5} />
+                        <span className="line-clamp-3 text-[12px] font-medium text-white/40">{title}</span>
                     </div>
                 )}
                 {posterUrl && !loaded && !failed && <div className="shimmer absolute inset-0" />}
 
-                {/* Dégradé bas + titre */}
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/95 via-black/45 to-transparent" />
-                <div className="absolute inset-x-0 bottom-0 z-[3] p-3" style={{ transform: "translateZ(30px)" }}>
-                    <p className="line-clamp-2 text-sm font-semibold leading-tight text-white drop-shadow-lg">{title}</p>
-                    {subtitle && <div className="mt-0.5 text-[11px] text-white/65">{subtitle}</div>}
-                    {meta && (
-                        <div className="mt-1.5 max-h-0 overflow-hidden opacity-0 transition-all duration-500 ease-smooth group-hover:max-h-16 group-hover:opacity-100">
-                            {meta}
-                        </div>
-                    )}
-                </div>
+                {/* Infos détaillées au survol (souris uniquement) */}
+                {meta && (
+                    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[3] bg-gradient-to-t from-black/90 via-black/60 to-transparent p-2.5 pt-8 opacity-0 transition-opacity duration-200 [@media(hover:hover)]:group-hover/poster:opacity-100">
+                        {meta}
+                    </div>
+                )}
 
                 {/* Progression (épisodes, lecture…) */}
                 {typeof progress === "number" && (
-                    <div className="absolute inset-x-0 bottom-0 z-[4] h-1 bg-white/10">
-                        <div
-                            className="h-full bg-gradient-to-r from-primary to-brand shadow-[0_0_10px_hsl(var(--primary))]"
-                            style={{ width: `${Math.max(0, Math.min(100, progress))}%` }}
-                        />
+                    <div className="absolute inset-x-2 bottom-2 z-[4] h-1 overflow-hidden rounded-full bg-black/50">
+                        <div className="h-full rounded-full bg-white" style={{ width: `${Math.max(0, Math.min(100, progress))}%` }} />
                     </div>
                 )}
 
                 {/* Badges */}
-                {badges && <div className="absolute left-2 top-2 z-[11] flex flex-col items-start gap-1">{badges}</div>}
-                {corner && !selectable && <div className="absolute right-2 top-2 z-[11]">{corner}</div>}
+                {badges && <div className="absolute left-1.5 top-1.5 z-[11] flex flex-col items-start gap-1">{badges}</div>}
+                {corner && !selectable && <div className="absolute right-1.5 top-1.5 z-[11]">{corner}</div>}
 
                 {/* Case de sélection */}
                 {selectable && (
@@ -137,20 +136,25 @@ export function PosterCard({
                         initial={false}
                         animate={{ scale: selected ? 1 : 0.9 }}
                         className={cn(
-                            "absolute right-2 top-2 z-[11] flex h-6 w-6 items-center justify-center rounded-full border-2 backdrop-blur",
-                            selected ? "border-primary bg-primary text-primary-foreground" : "border-white/60 bg-black/40",
+                            "absolute right-2 top-2 z-[11] flex h-6 w-6 items-center justify-center rounded-full border-2",
+                            selected ? "border-primary bg-primary text-white" : "border-white/80 bg-black/30",
                         )}
                     >
                         {selected && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
                     </motion.div>
                 )}
-
             </div>
-        </TiltCard>
+
+            {/* Titre et sous-titre sous l'affiche */}
+            <div className="mt-2 min-w-0 px-0.5">
+                <p className={cn("truncate text-[13px] font-medium leading-tight", dimmed && "text-foreground/60")}>{title}</p>
+                {subtitle && <div className="mt-0.5 truncate text-[12px] text-muted-foreground">{subtitle}</div>}
+            </div>
+        </div>
     );
 
     const wrapped = href ? (
-        <Link href={href} onClick={handleClick} className="block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+        <Link href={href} onClick={handleClick} className="block rounded-[10px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
             {body}
         </Link>
     ) : (
@@ -165,19 +169,26 @@ export function PosterCard({
                     else onClick?.();
                 }
             }}
-            className={cn("block rounded-2xl", (onClick || selectable) && "cursor-pointer")}
+            className={cn("block rounded-[10px]", (onClick || selectable) && "cursor-pointer")}
         >
             {body}
         </div>
     );
 
-    // L'action flottante (ex: « + Ajouter ») est une SŒUR du lien, pas un
+    // L'action flottante (ex : « + Ajouter ») est une SŒUR du lien, pas un
     // enfant : un <button> imbriqué dans un <a> est invalide et casse la
-    // navigation clavier / lecteurs d'écran.
+    // navigation clavier / lecteurs d'écran. Elle se pose sur l'affiche
+    // (bas droit), au-dessus du titre.
     const withAction = (
         <div className="relative">
             {wrapped}
-            {action && !selectable && <div className="absolute bottom-2 right-2 z-[12]">{action}</div>}
+            {action && !selectable && (
+                // Boîte calée sur l'affiche (même largeur, ratio 2:3) pour poser
+                // l'action dans son coin bas droit, quelle que soit la taille.
+                <div className="pointer-events-none absolute inset-x-0 top-0 z-[12] aspect-[2/3]">
+                    <div className="pointer-events-auto absolute bottom-1.5 right-1.5">{action}</div>
+                </div>
+            )}
         </div>
     );
 
@@ -203,21 +214,17 @@ export function PosterBadge({
     title?: string;
 }) {
     const tones = {
-        dark: "bg-black/65 text-white ring-white/15",
-        primary: "bg-primary/85 text-primary-foreground ring-primary/40",
-        success: "bg-emerald-500/85 text-white ring-emerald-300/30",
-        warning: "bg-amber-500/90 text-black ring-amber-300/30",
-        danger: "bg-red-500/85 text-white ring-red-300/30",
-        violet: "bg-violet-500/85 text-white ring-violet-300/30",
+        dark: "bg-black/70 text-white",
+        primary: "bg-primary text-white",
+        success: "bg-success text-white",
+        warning: "bg-warning text-black",
+        danger: "bg-destructive text-white",
+        violet: "bg-[hsl(var(--chart-4))] text-white",
     };
     return (
         <span
             title={title}
-            className={cn(
-                "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold leading-none ring-1 backdrop-blur-md",
-                tones[tone],
-                className,
-            )}
+            className={cn("inline-flex items-center gap-1 rounded-[5px] px-1.5 py-[3px] text-[10px] font-semibold leading-none backdrop-blur-md", tones[tone], className)}
         >
             {children}
         </span>

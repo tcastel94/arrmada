@@ -285,8 +285,6 @@ function BasedOnSection({ items, onPreview }: { items: LibrarySelectItem[]; onPr
 
     return (
         <motion.section variants={fadeUp} className="glass border-gradient relative overflow-hidden rounded-3xl p-4 md:p-6">
-            <div aria-hidden className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-violet-500/15 blur-3xl" />
-            <div aria-hidden className="pointer-events-none absolute -bottom-28 -left-10 h-56 w-72 rounded-full bg-primary/10 blur-3xl" />
 
             <div className="relative space-y-4">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -544,7 +542,6 @@ function BasedOnResults({
 function TmdbGuide() {
     return (
         <motion.div variants={fadeUp} className="glass border-gradient relative overflow-hidden rounded-2xl p-5 md:p-6">
-            <div aria-hidden className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-amber-500/20 blur-3xl" />
             <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start">
                 <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500/30 to-orange-500/10 text-amber-300 ring-1 ring-amber-400/30">
                     <KeyRound className="h-6 w-6" />

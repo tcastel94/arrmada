@@ -344,7 +344,7 @@ function FullDeviceControl({ device }: { device: YamahaDevice }) {
                     className={cn(
                         "flex h-12 w-12 shrink-0 items-center justify-center rounded-full border transition-all duration-300 disabled:opacity-40",
                         on
-                            ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-300 shadow-[0_0_28px_-4px_rgb(52_211_153/0.7)]"
+                            ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-300"
                             : "border-white/10 bg-white/[0.04] text-muted-foreground hover:text-foreground",
                     )}
                 >
@@ -439,7 +439,7 @@ function FullDeviceControl({ device }: { device: YamahaDevice }) {
                                                 <motion.span
                                                     layoutId={`yamaha-input-${device.id}`}
                                                     transition={SPRING}
-                                                    className="absolute inset-0 rounded-full border border-amber-400/40 bg-amber-500/15 shadow-[0_0_18px_-6px_rgb(251_191_36/0.8)]"
+                                                    className="absolute inset-0 rounded-full border border-amber-400/40 bg-amber-500/15"
                                                 />
                                             )}
                                             <span className="relative">{inputLabel(i)}</span>

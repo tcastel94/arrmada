@@ -39,7 +39,6 @@ import {
     Zap,
     type LucideIcon,
 } from "lucide-react";
-import { AuroraBackground } from "@/components/fx/aurora-background";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -272,7 +271,6 @@ export default function SetupPage() {
     /* ── Rendu ──────────────────────────────────────────────── */
     return (
         <div className="relative min-h-screen overflow-x-hidden">
-            <AuroraBackground intense />
             <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col items-center px-4 pb-10 pt-8 sm:pt-12">
                 <BrandMark />
 
@@ -454,7 +452,7 @@ function Stepper({ step }: { step: number }) {
                                 className={cn(
                                     "relative flex h-10 w-10 items-center justify-center rounded-full border transition-colors duration-300",
                                     done && "border-primary/60 bg-primary text-primary-foreground",
-                                    active && "border-primary/60 bg-primary/15 text-primary shadow-[0_0_24px_-4px_hsl(var(--primary)/0.8)]",
+                                    active && "border-primary/60 bg-primary/15 text-primary",
                                     !done && !active && "border-white/10 bg-white/[0.04] text-muted-foreground",
                                 )}
                             >
@@ -743,7 +741,7 @@ function ServiceRow({
             transition={{ duration: 0.35, ease: EASE_OUT }}
             className={cn(
                 "glass space-y-4 rounded-2xl p-4 transition-shadow",
-                hasErrors && "shadow-[inset_0_0_0_1px_rgb(239_68_68/0.35)]",
+                hasErrors && "",
             )}
         >
             <div className="flex items-center gap-3">
@@ -866,7 +864,7 @@ function DoneStep({ added, onLogin }: { added: number; onLogin: () => void }) {
                     initial={{ scale: 0, rotate: -40 }}
                     animate={{ scale: 1, rotate: 0 }}
                     transition={{ type: "spring", stiffness: 260, damping: 16 }}
-                    className="relative flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400/30 to-teal-500/10 ring-1 ring-emerald-400/40 shadow-[0_0_48px_-6px_rgb(52_211_153/0.7)]"
+                    className="relative flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400/30 to-teal-500/10 ring-1 ring-emerald-400/40"
                 >
                     <CheckCircle2 className="h-12 w-12 text-emerald-300" strokeWidth={1.6} />
                 </motion.div>

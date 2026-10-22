@@ -146,7 +146,7 @@ function KodiRemote({ np }: { np: KodiNowPlaying }) {
                     <div className="flex flex-wrap items-center gap-2">
                         <span className="relative flex h-2 w-2">
                             {!np.paused && <span className="absolute inset-0 animate-pulse-ring rounded-full bg-violet-400" />}
-                            <span className="relative h-2 w-2 rounded-full bg-violet-400 shadow-[0_0_10px] shadow-violet-400" />
+                            <span className="relative h-2 w-2 rounded-full bg-violet-400 shadow-violet-400" />
                         </span>
                         <span className="flex items-center gap-1.5 text-xs font-medium text-violet-300">
                             <MonitorPlay className="h-3.5 w-3.5" aria-hidden />
@@ -188,7 +188,7 @@ function KodiRemote({ np }: { np: KodiNowPlaying }) {
                             size="icon"
                             aria-label={np.paused ? "Reprendre la lecture" : "Mettre en pause"}
                             onClick={() => send("playpause")}
-                            className="h-11 w-11 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white shadow-[0_0_24px_-4px_hsl(262_83%_60%/0.9)] [&_svg]:size-5"
+                            className="h-11 w-11 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white [&_svg]:size-5"
                         >
                             {np.paused ? <Play className="fill-current" /> : <Pause className="fill-current" />}
                         </Button>

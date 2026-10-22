@@ -152,7 +152,7 @@ export function NowPlayingCard() {
                                 <div className="mt-4 space-y-1.5">
                                     <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-white/10">
                                         <motion.div
-                                            className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-primary via-sky-400 to-brand shadow-[0_0_14px_hsl(var(--primary))]"
+                                            className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-primary via-sky-400 to-brand"
                                             animate={{ width: `${pct}%` }}
                                             transition={{ duration: 1, ease: "linear" }}
                                         />

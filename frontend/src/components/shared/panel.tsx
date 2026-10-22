@@ -1,8 +1,10 @@
 "use client";
 
 /**
- * Panneau de contenu standard (carte en verre + en-tête optionnel).
- * Remplace les dizaines de variantes `Card border-0 ring-1 ring-white/5…`.
+ * Section de contenu standard, façon iOS : titre de section au-dessus,
+ * contenu dans une carte gris foncé.
+ * Les props `icon` / `iconClassName` de l'ancien en-tête sont acceptées
+ * mais plus affichées (les titres de section iOS n'ont pas d'icône).
  */
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
@@ -29,8 +31,6 @@ interface PanelProps {
 
 export function Panel({
     title,
-    icon: Icon,
-    iconClassName = "text-primary",
     action,
     href,
     hrefLabel = "Tout voir",
@@ -40,32 +40,25 @@ export function Panel({
     interactive = false,
 }: PanelProps) {
     return (
-        <SpotlightCard interactive={interactive} className={cn("overflow-hidden", className)}>
+        <section className={cn("min-w-0", className)}>
+            {/* En-tête de section iOS : titre gras à gauche, « Tout voir › » en bleu à droite */}
             {(title || action || href) && (
-                <div className="relative z-[2] flex items-center justify-between gap-3 border-b border-white/[0.05] px-5 py-3.5">
-                    <div className="flex min-w-0 items-center gap-2.5">
-                        {Icon && (
-                            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/[0.04] ring-1 ring-white/[0.06]">
-                                <Icon className={cn("h-3.5 w-3.5", iconClassName)} />
-                            </span>
-                        )}
-                        {title && <h2 className="truncate text-sm font-semibold tracking-tight">{title}</h2>}
-                    </div>
+                <div className="mb-2.5 flex items-end justify-between gap-3 px-0.5">
+                    {title ? <h2 className="truncate text-[20px] font-bold tracking-tight">{title}</h2> : <span />}
                     <div className="flex shrink-0 items-center gap-2">
                         {action}
                         {href && (
-                            <Link
-                                href={href}
-                                className="group flex items-center gap-0.5 text-xs text-muted-foreground transition-colors hover:text-primary"
-                            >
+                            <Link href={href} className="flex items-center text-[15px] text-primary transition-opacity hover:opacity-80 active:opacity-50">
                                 {hrefLabel}
-                                <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+                                <ChevronRight className="h-4 w-4" />
                             </Link>
                         )}
                     </div>
                 </div>
             )}
-            <div className={cn("relative z-[2] p-5", bodyClassName)}>{children}</div>
-        </SpotlightCard>
+            <SpotlightCard interactive={interactive} className="overflow-hidden">
+                <div className={cn("p-4 md:p-5", bodyClassName)}>{children}</div>
+            </SpotlightCard>
+        </section>
     );
 }

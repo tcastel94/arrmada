@@ -5,6 +5,11 @@ import * as TabsPrimitive from "@radix-ui/react-tabs"
 
 import { cn } from "@/lib/utils"
 
+/**
+ * Onglets — rendus en « segmented control » iOS : une piste grise,
+ * l'onglet actif est une pastille plus claire. Défile horizontalement
+ * s'il y a trop d'onglets pour la largeur (mobile).
+ */
 const Tabs = TabsPrimitive.Root
 
 const TabsList = React.forwardRef<
@@ -14,7 +19,7 @@ const TabsList = React.forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      "inline-flex h-10 max-w-full items-center justify-start gap-0.5 overflow-x-auto scrollbar-none rounded-xl border border-white/[0.06] bg-background/50 p-1 text-muted-foreground backdrop-blur",
+      "inline-flex h-9 max-w-full items-center justify-start gap-0.5 overflow-x-auto scrollbar-none rounded-[10px] bg-white/[0.09] p-[3px] text-foreground/80",
       className
     )}
     {...props}
@@ -29,7 +34,7 @@ const TabsTrigger = React.forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      "inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium ring-offset-background transition-all duration-300 ease-smooth hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-primary/15 data-[state=active]:text-primary data-[state=active]:shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.3),0_0_20px_-6px_hsl(var(--primary)/0.6)]",
+      "inline-flex h-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-[7px] px-3 text-[13px] font-medium transition-[background-color,color,box-shadow] duration-200 ease-smooth hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-[#636366] data-[state=active]:font-semibold data-[state=active]:text-white data-[state=active]:shadow-[0_3px_8px_rgb(0_0_0/0.25)] [&_svg]:size-3.5",
       className
     )}
     {...props}
@@ -44,7 +49,7 @@ const TabsContent = React.forwardRef<
   <TabsPrimitive.Content
     ref={ref}
     className={cn(
-      "mt-2 ring-offset-background data-[state=active]:animate-in data-[state=active]:fade-in-0 data-[state=active]:slide-in-from-bottom-1 duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+      "mt-3 focus-visible:outline-none data-[state=active]:animate-in data-[state=active]:fade-in-0 data-[state=active]:duration-200",
       className
     )}
     {...props}

@@ -93,7 +93,7 @@ export function Segmented<T extends string>({
                             <motion.span
                                 layoutId={layoutId}
                                 transition={SPRING}
-                                className="absolute inset-0 rounded-lg bg-primary/15 shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.3),0_0_18px_-6px_hsl(var(--primary)/0.7)]"
+                                className="absolute inset-0 rounded-lg bg-primary/15"
                             />
                         )}
                         {Icon && <Icon className={cn("relative h-3.5 w-3.5", active && (o.tone ?? "text-primary"))} />}

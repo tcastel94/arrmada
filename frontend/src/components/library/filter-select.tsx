@@ -40,7 +40,7 @@ export function FilterSelect<T extends string>({
             <Select value={value} onValueChange={(v) => onChange(v as T)} disabled={disabled}>
                 <SelectTrigger
                     id={id}
-                    className={cn(active && "border-primary/40 bg-primary/[0.07] text-primary shadow-[0_0_18px_-8px_hsl(var(--primary)/0.8)]")}
+                    className={cn(active && "border-primary/40 bg-primary/[0.07] text-primary")}
                 >
                     <SelectValue />
                 </SelectTrigger>

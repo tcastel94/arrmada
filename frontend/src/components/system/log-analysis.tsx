@@ -134,7 +134,7 @@ function AnalysisIntro({ onRun, aborted }: { onRun: () => void; aborted: boolean
     return (
         <div className="space-y-4">
             <div className="flex items-start gap-3">
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500/30 to-fuchsia-500/10 text-violet-300 ring-1 ring-violet-400/25 shadow-[0_0_24px_-8px] shadow-violet-500/60">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500/30 to-fuchsia-500/10 text-violet-300 ring-1 ring-violet-400/25 shadow-violet-500/60">
                     <BrainCircuit className="h-5 w-5" />
                 </span>
                 <p className="text-sm leading-relaxed text-muted-foreground">

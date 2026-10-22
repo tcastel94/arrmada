@@ -92,7 +92,7 @@ export function SmartPagination({
                                     layoutId={layoutId}
                                     transition={SPRING}
                                     aria-hidden
-                                    className="absolute inset-0 rounded-lg bg-gradient-to-r from-primary to-[hsl(200_100%_62%)] shadow-[0_6px_20px_-6px_hsl(var(--primary)/0.8)]"
+                                    className="absolute inset-0 rounded-lg bg-gradient-to-r from-primary to-[hsl(200_100%_62%)]"
                                 />
                             )}
                             <span className="relative z-[1]">{token}</span>

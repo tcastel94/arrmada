@@ -130,7 +130,7 @@ export function SettingsNav({ badges = {} }: { badges?: Record<string, React.Rea
                                     <motion.span
                                         layoutId="settings-pill-mobile"
                                         transition={SPRING}
-                                        className="absolute inset-0 rounded-full border border-primary/35 bg-primary/10 shadow-[0_0_20px_-6px_hsl(var(--primary)/0.6)]"
+                                        className="absolute inset-0 rounded-full border border-primary/35 bg-primary/10"
                                     />
                                 )}
                                 <s.icon className="relative h-3.5 w-3.5" />
@@ -143,7 +143,7 @@ export function SettingsNav({ badges = {} }: { badges?: Record<string, React.Rea
 
             {/* ── Desktop : colonne latérale ─────────────────────── */}
             <nav aria-label="Sections des paramètres" className="hidden lg:block">
-                <div className="glass sticky top-24 space-y-1 rounded-2xl p-2">
+                <div className="glass sticky top-16 space-y-1 rounded-2xl p-2">
                     <p className="eyebrow px-3 pb-1 pt-2">Configuration</p>
                     {SETTINGS_SECTIONS.map((s) => {
                         const isActive = s.href === active.href;
@@ -161,10 +161,10 @@ export function SettingsNav({ badges = {} }: { badges?: Record<string, React.Rea
                                     <motion.span
                                         layoutId="settings-pill-desktop"
                                         transition={SPRING}
-                                        className="absolute inset-0 rounded-xl border border-primary/25 bg-gradient-to-r from-primary/15 to-primary/[0.03] shadow-[0_0_24px_-10px_hsl(var(--primary)/0.8)]"
+                                        className="absolute inset-0 rounded-xl border border-primary/25 bg-gradient-to-r from-primary/15 to-primary/[0.03]"
                                     >
                                         {/* Liseré lumineux à gauche */}
-                                        <span className="absolute inset-y-2 left-0 w-[3px] rounded-full bg-primary shadow-[0_0_10px_hsl(var(--primary))]" />
+                                        <span className="absolute inset-y-2 left-0 w-[3px] rounded-full bg-primary" />
                                     </motion.span>
                                 )}
                                 <s.icon

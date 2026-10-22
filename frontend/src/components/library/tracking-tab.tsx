@@ -293,7 +293,7 @@ function FilterChip({
                     layoutId="tracking-filter-pill"
                     transition={SPRING}
                     aria-hidden
-                    className="absolute inset-0 rounded-full bg-primary/15 shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.35),0_0_20px_-6px_hsl(var(--primary)/0.55)]"
+                    className="absolute inset-0 rounded-full bg-primary/15"
                 />
             )}
             {!active && <span aria-hidden className="absolute inset-0 rounded-full border border-white/[0.06] bg-muted/40" />}

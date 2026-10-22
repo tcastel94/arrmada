@@ -98,8 +98,8 @@ export function MovieSubtitlePanel({ media, block }: { media: MediaDetail; block
                         className={cn(
                             "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ring-1",
                             hasFr
-                                ? "bg-emerald-500/15 text-emerald-300 ring-emerald-400/30 shadow-[0_0_24px_-6px_rgb(16_185_129/0.6)]"
-                                : "bg-amber-500/15 text-amber-300 ring-amber-400/30 shadow-[0_0_24px_-6px_rgb(245_158_11/0.6)]",
+                                ? "bg-emerald-500/15 text-emerald-300 ring-emerald-400/30"
+                                : "bg-amber-500/15 text-amber-300 ring-amber-400/30",
                         )}
                     >
                         {hasFr ? <CircleCheck className="h-5 w-5" /> : <CircleAlert className="h-5 w-5" />}

@@ -265,7 +265,7 @@ function StuckRow({
                 className={cn(
                     "flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 transition-all",
                     selected
-                        ? "border-primary bg-primary text-primary-foreground shadow-[0_0_12px_-2px_hsl(var(--primary))]"
+                        ? "border-primary bg-primary text-primary-foreground"
                         : "border-muted-foreground/40 hover:border-primary",
                 )}
             >

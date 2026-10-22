@@ -109,7 +109,7 @@ export function RoomProfilesPanel({ hasAmp }: { hasAmp: boolean }) {
                                         <motion.span
                                             layoutId="room-profile-tab"
                                             transition={SPRING}
-                                            className="absolute inset-0 rounded-xl border border-primary/35 bg-primary/[0.08] shadow-[0_0_28px_-10px_hsl(var(--primary)/0.9)]"
+                                            className="absolute inset-0 rounded-xl border border-primary/35 bg-primary/[0.08]"
                                         />
                                     )}
                                     <span className={cn("relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ring-1 sm:h-10 sm:w-10", meta.tile)}>
