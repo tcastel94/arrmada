@@ -214,6 +214,11 @@ class Repository(private val api: Api) {
     suspend fun downloadSubtitles(itemId: String, request: SubtitleRequest): SubtitleResult =
         api.post("/api/tv/subtitles/$itemId", request, slow = true)
 
+    /** Lecture en cours → écran d'appoint de la pièce (tablette sous la TV). */
+    suspend fun scrobble(payload: Scrobble) {
+        api.post<kotlinx.serialization.json.JsonObject, Scrobble>("/api/kodi/scrobble", payload)
+    }
+
     /** Fin de lecture d'un remux : Jellyfin arrête la conversion. */
     suspend fun stopRemux(itemId: String) {
         api.post<kotlinx.serialization.json.JsonObject, kotlinx.serialization.json.JsonObject>(

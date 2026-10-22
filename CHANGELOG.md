@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Android app 2.10.4: the tablet under the TV works again
+
+#### Fixed
+- **Ambient screen (Pixel tablet under the TV) stayed on the clock during playback** since the switch from Kodi to the app: the "now playing" feed came from the Kodi add-on (`POST /api/kodi/scrobble`), which the app never sent. The TV app now sends the same events (play, pause, resume, progress every 30 s, stop with the percentage reached): poster, end time, progress bar and Fully Kiosk "séance" brightness come back. Phones and tablets running the app do not report (the living-room screen would show what is watched elsewhere). 3 JVM tests
+
 ### Android app 2.10.3: pause with OK, French subtitles from the pause menu
 
 #### Fixed

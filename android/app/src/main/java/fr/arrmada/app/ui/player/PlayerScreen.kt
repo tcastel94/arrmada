@@ -80,6 +80,7 @@ import fr.arrmada.app.data.AmpDevice
 import fr.arrmada.app.data.SoundAdvisor
 import fr.arrmada.app.data.DolbyVisionLogic
 import fr.arrmada.app.data.PlayInfo
+import fr.arrmada.app.data.ScrobbleLogic
 import fr.arrmada.app.data.SideSubtitle
 import fr.arrmada.app.data.SubtitleRequest
 import fr.arrmada.app.data.SubtitleResult
@@ -497,6 +498,27 @@ private fun PlayerSurface(
         if (sdrAtStart) Toast.makeText(context, DV_SDR_MESSAGE, Toast.LENGTH_LONG).show()
     }
 
+    // Écran d'appoint (tablette sous la TV) : « lecture en cours » envoyée au
+    // serveur, comme le faisait l'add-on Kodi (affiche, heure de fin, mode
+    // séance de Fully Kiosk). Pas depuis un téléphone : la tablette du salon
+    // afficherait ce qu'on regarde ailleurs.
+    var scrobbleStarted by remember { mutableStateOf(false) }
+    val sendScrobble by rememberUpdatedState<(String, Boolean) -> Unit> { event, ended ->
+        if (!touch) {
+            val what = ScrobbleLogic.identity(
+                request.kind, request.id, request.season, request.episode,
+                title = meta?.title ?: info.title.orEmpty(),
+                subtitle = meta?.subtitle,
+                localSeries = request.localSeries > 0,
+            )
+            val total = (player.duration.takeIf { it > 0 } ?: duration) / 1000.0
+            val payload = ScrobbleLogic.payload(
+                event, what, player.currentPosition / 1000.0, total, paused = !player.playWhenReady, ended = ended,
+            )
+            app.appScope.launch { runCatching { repository.scrobble(payload) } }
+        }
+    }
+
     DisposableEffect(player) {
         val listener = object : Player.Listener {
             override fun onTracksChanged(newTracks: Tracks) {
@@ -526,7 +548,18 @@ private fun PlayerSurface(
 
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == Player.STATE_READY && player.duration > 0) duration = player.duration
+                // Première image prête : la séance commence (une seule fois, même
+                // si l'on bascule ensuite en remux ou en SDR)
+                if (state == Player.STATE_READY && !scrobbleStarted) {
+                    scrobbleStarted = true
+                    sendScrobble("play", false)
+                }
                 if (state == Player.STATE_ENDED) onEnded()
+            }
+
+            // Pause / reprise demandées (et non les attentes de chargement)
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                if (scrobbleStarted) sendScrobble(if (playWhenReady) "resume" else "pause", false)
             }
 
             override fun onPlayerError(e: PlaybackException) {
@@ -571,6 +604,7 @@ private fun PlayerSurface(
         player.addListener(listener)
         onDispose {
             save(false)
+            if (scrobbleStarted) sendScrobble("stop", finished)
             player.removeListener(listener)
             player.release()
             // Remux : Jellyfin arrête la conversion (sinon elle tourne à vide)
@@ -581,11 +615,17 @@ private fun PlayerSurface(
     // Position affichée + sauvegarde toutes les 30 s pendant la lecture
     LaunchedEffect(player) {
         var lastSave = System.currentTimeMillis()
+        var lastScrobble = System.currentTimeMillis()
         while (true) {
             position = player.currentPosition
             if (player.isPlaying && System.currentTimeMillis() - lastSave > 30_000) {
                 save(false)
                 lastSave = System.currentTimeMillis()
+            }
+            // Relevé pour l'écran d'appoint (il fait avancer la barre entre deux)
+            if (player.isPlaying && scrobbleStarted && System.currentTimeMillis() - lastScrobble > ScrobbleLogic.PROGRESS_EVERY_MS) {
+                sendScrobble("progress", false)
+                lastScrobble = System.currentTimeMillis()
             }
             delay(500)
         }
