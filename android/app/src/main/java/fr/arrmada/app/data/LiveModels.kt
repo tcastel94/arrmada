@@ -180,6 +180,10 @@ data class PlayAnnounce(
     val at: String = "",
     val poster: String? = null,
     val resume: Boolean = true,
+    // Vidéo d'une série maison (Naruto Kai…) : jeton du fichier, série, reprise (s)
+    val file: String? = null,
+    @SerialName("local_series") val localSeries: Int = 0,
+    val start: Int = 0,
 ) {
     val externalId: Long? get() = (id as? JsonPrimitive)?.contentOrNull?.toLongOrNull()
     val isEpisode: Boolean get() = mediaType == "episode"

@@ -354,6 +354,13 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
      * la position de reprise partagée si on reprend.
      */
     suspend fun announced(a: PlayAnnounce): PlayRequest? {
+        // Série maison (web app › Séries) : le fichier lui-même, la reprise vient avec
+        a.file?.takeIf { a.mediaType == "file" && it.isNotBlank() }?.let { token ->
+            return PlayRequest(
+                kind = "file", id = 0, season = a.season ?: 0, episode = a.episode ?: 0,
+                startSeconds = if (a.resume) a.start else 0, file = token, localSeries = a.localSeries,
+            )
+        }
         val id = a.externalId ?: return null
         val season = a.season ?: 0
         val episode = a.episode ?: 0

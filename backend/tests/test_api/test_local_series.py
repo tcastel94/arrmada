@@ -190,6 +190,40 @@ async def test_local_series_end_to_end(
     index = (await client.get("/api/videos/series/index", headers=tv)).json()["items"]
     assert {(i["season"], i["episode"]) for i in index} == {(1, 1), (1, 2), (2, 15), (2, 16)}
 
+    # Web app : vu / reprise par épisode (même clé que l'écran Vidéos et la TV)
+    state = {"media_type": "file", "id_type": "sha1", "id": first["watch_id"], "title": "Ep 1",
+             "watched": False, "position": 420, "total": 1400, "last_played": "2026-10-22 20:00:00"}  # fmt: skip
+    saved = await client.post("/api/kodi/watch-state", json={"states": [state]}, headers=tv)
+    assert saved.status_code == 200, saved.text
+    with_states = (
+        await client.get(f"/api/videos/series/{series['id']}?states=true", headers=auth_headers)
+    ).json()
+    eps = [ep for season in with_states["seasons"] for ep in season["episodes"]]
+    assert eps[0]["state"] == {"watched": False, "position": 420, "total": 1400}
+    assert eps[1]["state"] is None
+    assert "state" not in detail["seasons"][0]["episodes"][0]  # sans ?states : inchangé
+
+    # « Sur la TV » depuis la web app : la TV reçoit le jeton du fichier et la reprise
+    tv_id = (await client.get("/api/devices/me", headers=tv)).json()["id"]
+    sent = await client.post(
+        "/api/kodi/play-on-device",
+        json={"media_type": "file", "id_type": "sha1", "id": first["watch_id"], "title": "Naruto Kai",
+              "season": 1, "episode": 1, "file": first["token"], "local_series": series["id"],
+              "start": 420, "device_id": tv_id},
+        headers=auth_headers,
+    )  # fmt: skip
+    assert sent.status_code == 200, sent.text
+    events = (await client.get("/api/events/recent?since_id=0", headers=tv)).json()
+    request = next(e["data"] for e in events["events"] if e["type"] == "play_request")
+    assert (request["media_type"], request["file"], request["local_series"], request["start"]) == (
+        "file", first["token"], series["id"], 420,
+    )  # fmt: skip
+    forged = {"media_type": "file", "id_type": "sha1", "id": first["watch_id"], "file": "../etc",
+              "device_id": tv_id}  # fmt: skip
+    assert (
+        await client.post("/api/kodi/play-on-device", json=forged, headers=auth_headers)
+    ).status_code == 422
+
     thumb = await client.get(first["image"], headers=tv)
     assert thumb.status_code == 200 and thumb.headers["content-type"] == "image/jpeg"
     video_as_image = f"/api/videos/image/{first['token']}"

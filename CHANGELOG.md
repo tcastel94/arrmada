@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Home-made series in the web app (Médiathèque › Séries)
+
+#### Added
+- **"Séries maison" row** above the library grid (types "Tout" and "Séries"): poster, badge ("Kai"), arcs and episodes count. Fan edits are not in Sonarr, so they get their own row instead of being mixed into the server-paginated grid
+- **Series page** `/media/local/{id}`: backdrop, poster, overview, arcs as tabs, episodes with thumbnail, watched ✓ and resume bar ("Arrêté à 25:30 sur 1:56:10"), a main **"S01E02 sur la TV"** (episode in progress, else the next one) and one per episode (resume or from the start)
+- **Server**: `GET /api/videos/series/{id}?states=true` adds each episode's watched / resume state (same shared keys as the TVs, family profile aware); `play_request` accepts `media_type: "file"` with the video token, the series and the resume position (token format checked; the TV still resolves it under its root folder). The app (2.11.0) plays such requests like a Vidéos-screen file. Images of the NAS are loaded with the session token in the URL, like the live event stream
+
 ### Tablet under the TV: richer screen and touch remote (APK 2.11.0)
 
 #### Added

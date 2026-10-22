@@ -21,6 +21,7 @@ l'ignore. Jamais de lecture surprise.
 
 from __future__ import annotations
 
+import re
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -145,6 +146,10 @@ def summarize(states: list[dict[str, Any]], library: list[dict[str, Any]]) -> di
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+# Jeton d'une vidéo de l'écran Vidéos (base64 d'URL, voir video_files)
+FILE_TOKEN = re.compile(r"[A-Za-z0-9_-]{1,2000}")
+
+
 def play_request(device: dict[str, Any], raw: Any, now: datetime) -> dict[str, Any] | None:
     """Demande de la web app → données de l'événement `play_request` ; None si invalide.
 
@@ -167,7 +172,22 @@ def play_request(device: dict[str, Any], raw: Any, now: datetime) -> dict[str, A
     )
     if state is None:
         return None
+    extra: dict[str, Any] = {}
+    if state["media_type"] == "file":
+        # Vidéo d'un dossier (série maison) : la TV la lit par son jeton
+        # (chemin opaque, vérifié par le serveur à la lecture) ; l'empreinte
+        # ne sert qu'au vu / à la reprise
+        token = str(raw.get("file") or "")
+        if not FILE_TOKEN.fullmatch(token):
+            return None
+        extra["file"] = token
+        try:
+            extra["local_series"] = max(0, int(raw.get("local_series") or 0))
+            extra["start"] = max(0, min(int(raw.get("start") or 0), 86_400))
+        except (TypeError, ValueError):
+            return None
     return {
+        **extra,
         "device_id": int(device["id"]),
         "device": str(device.get("name") or ""),
         "room": str(device.get("room") or ""),

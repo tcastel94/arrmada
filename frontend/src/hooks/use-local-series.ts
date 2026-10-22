@@ -9,7 +9,8 @@
  * poster.jpg / tvshow.nfo posés dans le dossier.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/api-client";
+import { apiFetch, getToken } from "@/lib/api-client";
+import { API_URL } from "@/lib/constants";
 
 export interface LocalSeries {
     id: number;
@@ -53,7 +54,67 @@ export interface VideoListing {
     files: { name: string }[];
 }
 
+/** Épisode d'une série maison, avec son vu / sa reprise (fiche de la web app). */
+export interface LocalEpisode {
+    season_number: number;
+    episode_number: number;
+    title: string;
+    overview: string | null;
+    air_date: string | null;
+    /** Jeton du fichier : la TV le lit avec (« Sur la TV »). */
+    token: string;
+    /** Empreinte du chemin : clé du vu / de la reprise partagés. */
+    watch_id: string;
+    image: string | null;
+    state?: { watched: boolean; position: number; total: number } | null;
+}
+
+export interface LocalSeason {
+    season_number: number;
+    /** Nom du dossier de l'arc (« Arc 02 - Examen Chunin »). */
+    name: string;
+    episodes: LocalEpisode[];
+}
+
+/** Fiche : comme la grille, mais `seasons` liste les arcs (et non leur nombre). */
+export interface LocalSeriesDetail extends Omit<LocalSeries, "seasons"> {
+    seasons: LocalSeason[];
+}
+
 const LOCAL_SERIES_KEY = ["local-series"] as const;
+
+/**
+ * Image d'une série maison : TMDB (adresse complète) telle quelle ; image du
+ * NAS (« /api/videos/image/… ») servie par le serveur, jeton dans l'adresse
+ * (une balise <img> ne sait pas envoyer d'en-tête, comme le flux temps réel).
+ */
+export function localImage(url: string | null | undefined): string | null {
+    if (!url) return null;
+    if (!url.startsWith("/api/")) return url;
+    const token = getToken();
+    return `${API_URL}${url}${token ? `?token=${encodeURIComponent(token)}` : ""}`;
+}
+
+/** Fiche d'une série maison, avec le vu / la reprise de chaque épisode. */
+export function useLocalSeriesDetail(id: number | null) {
+    return useQuery<LocalSeriesDetail>({
+        queryKey: ["local-series", id],
+        queryFn: () => apiFetch(`/api/videos/series/${id}?states=true`),
+        enabled: id !== null && id > 0,
+    });
+}
+
+/**
+ * Épisode à proposer : celui commencé, sinon le premier non vu après le
+ * dernier vu, sinon le premier (série revue depuis le début).
+ */
+export function nextLocalEpisode(detail: Pick<LocalSeriesDetail, "seasons">): LocalEpisode | null {
+    const episodes = detail.seasons.flatMap((s) => s.episodes);
+    const started = episodes.find((e) => e.state && !e.state.watched && e.state.position > 0);
+    if (started) return started;
+    const lastWatched = episodes.reduce((last, e, i) => (e.state?.watched ? i : last), -1);
+    return episodes.slice(lastWatched + 1).find((e) => !e.state?.watched) ?? episodes[0] ?? null;
+}
 
 /** Jeton de l'écran Vidéos (« n° du dossier / chemin » en base64 d'URL) → dossier et chemin. */
 export function decodeVideoToken(token: string): { rootId: number; path: string } {
