@@ -348,3 +348,69 @@ def test_screen_may_only_send_remote_commands() -> None:
     assert not device_may_call("POST", "/api/yamaha/control", "screen")
     assert device_may_call("GET", "/api/tv/remote", "tv")
     assert not device_may_call("GET", "/api/tv/remote", "screen")
+
+
+async def test_tablet_volume_goes_to_the_room_amp(
+    client: AsyncClient, auth_headers: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.services import yamaha
+
+    sent: list[tuple] = []
+
+    async def fake_control(_db, action, value=None, service_id=None, zone="main"):
+        sent.append((action, value))
+        return {"status": "ok", "action": action}
+
+    monkeypatch.setattr(yamaha, "control", fake_control)
+    screen = await _screen(client, auth_headers)
+    # Pas besoin d'une lecture en cours pour régler le volume
+    for body in ({"action": "volume_step", "value": 3}, {"action": "mute", "value": True}):
+        ok = await client.post("/api/ambient/command", json=body, headers=screen)
+        assert ok.status_code == 200, ok.text
+    assert sent == [("volume_step", 3), ("mute", True)]
+    # Pas de saut de volume brutal, pas d'autre réglage de l'ampli
+    for bad in ({"action": "volume_step", "value": 80}, {"action": "power", "value": "standby"}):
+        assert (
+            await client.post("/api/ambient/command", json=bad, headers=screen)
+        ).status_code in (409, 422)
+    # Bureau : pas d'ampli
+    office = await _screen(client, auth_headers, room="bureau")
+    no_amp = await client.post(
+        "/api/ambient/command", json={"action": "mute", "value": True}, headers=office
+    )
+    assert no_amp.status_code == 409
+
+
+async def test_actor_filmography_for_the_tablet(
+    client: AsyncClient, auth_headers: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.services import people
+    from app.utils.cache import cache
+
+    async def fake(_db, person_id: int) -> dict:
+        return {
+            "person": {"tmdb_id": person_id, "name": "Zendaya", "biography": "x" * 2000},
+            "in_library": [
+                {"tmdb_id": 693134, "title": "Dune : Deuxième partie", "has_file": True}
+            ],
+            "discover": [{"tmdb_id": 1, "title": "Challengers"}],
+        }
+
+    monkeypatch.setattr(people, "get_person_filmography", fake)
+    cache.invalidate("ambient:person:505710")
+    screen = await _screen(client, auth_headers)
+    data = (await client.get("/api/ambient/person/505710", headers=screen)).json()
+    assert data["person"]["name"] == "Zendaya" and len(data["person"]["biography"]) == 700
+    assert data["in_library"][0]["has_file"] is True
+    assert device_may_call("GET", "/api/ambient/person/505710", "screen")
+    assert not device_may_call("GET", "/api/people/505710", "screen")
+    # L'identifiant TMDB de l'acteur passe de la TV à la tablette
+    await client.post(
+        "/api/kodi/scrobble",
+        json=dict(ANDROID, cast=[{"name": "Zendaya", "character": "Chani", "tmdb_id": 505710}]),
+        headers=auth_headers,
+    )
+    cast = (await client.get("/api/ambient?room=salon", headers=auth_headers)).json()["playing"][
+        "cast"
+    ]
+    assert cast[0]["tmdb_id"] == 505710

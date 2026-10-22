@@ -35,6 +35,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
     AudioLines,
     CalendarClock,
+    ChevronLeft,
     ChevronsRight,
     Download,
     Info,
@@ -76,7 +77,9 @@ import {
     untilCredits,
     type Ambient,
     type AmbientPlaying,
+    type AmbientCast,
     type AmbientTrack,
+    type PersonFilmography,
     type RemoteAction,
     type ScreenOptions,
 } from "@/lib/ambient";
@@ -103,6 +106,13 @@ class HttpError extends Error {
 
 function authHeaders(auth: Auth): HeadersInit {
     return auth.kind === "screen" ? { "X-Device-Token": auth.token } : { Authorization: `Bearer ${auth.token}` };
+}
+
+/** GET d'une route de l'écran (filmographie d'un acteur…) avec le jeton de la tablette. */
+async function fetchJson<T>(auth: Auth, path: string): Promise<T> {
+    const response = await fetch(`${API_URL}${path}`, { headers: authHeaders(auth), cache: "no-store" });
+    if (!response.ok) throw new HttpError(response.status, `HTTP ${response.status}`);
+    return response.json();
 }
 
 async function fetchAmbient(auth: Auth, room: string): Promise<Ambient> {
@@ -374,6 +384,7 @@ function AmbientView({
 
     // Télécommande : envoi, puis relecture rapide de l'état renvoyé par la TV
     const queryClient = useQueryClient();
+    const loadPerson = useCallback((id: number) => fetchJson<PersonFilmography>(auth, `/api/ambient/person/${id}`), [auth]);
     const onCommand = useCallback(
         async (command: RemoteAction) => {
             await sendCommand(auth, room, command);
@@ -435,7 +446,14 @@ function AmbientView({
                 )}
             >
                 {playing ? (
-                    <SessionView playing={playing} now={now} offset={offset} amp={data?.amp ?? null} onCommand={onCommand} />
+                    <SessionView
+                        playing={playing}
+                        now={now}
+                        offset={offset}
+                        amp={data?.amp ?? null}
+                        onCommand={onCommand}
+                        loadPerson={loadPerson}
+                    />
                 ) : (
                     <RestView now={now} data={data} />
                 )}
@@ -480,14 +498,19 @@ function SessionView({
     offset,
     amp,
     onCommand,
+    loadPerson,
 }: {
     playing: AmbientPlaying;
     now: Date;
     offset: number;
     amp: Ambient["amp"];
     onCommand: (command: RemoteAction) => Promise<void>;
+    loadPerson: (id: number) => Promise<PersonFilmography>;
 }) {
     const session = sessionAt(playing, now.getTime(), offset);
+    // Feuille ouverte (sous-titres, son, fiche, volume) : ici, car le volume
+    // s'ouvre depuis le bandeau du haut et le reste depuis la télécommande
+    const [sheet, setSheet] = useState<Sheet>(null);
     const status = session.paused ? "En pause" : playing.kind === "episode" ? "Épisode en cours" : "Film en cours";
     const badges = [playing.video, playing.audio, playing.subtitle_track ? `Sous-titres ${playing.subtitle_track}` : ""].filter(Boolean);
     const credits = untilCredits(playing, session.position);
@@ -538,14 +561,21 @@ function SessionView({
                     </p>
                     <div className="flex items-center tabular-nums" style={{ gap: u(3.5) }}>
                         {amp?.power === "on" && (
-                            <span className="flex items-center text-slate-400" style={{ fontSize: u(3.8), gap: u(1) }}>
+                            // Toucher le volume : réglage de l'ampli de la pièce
+                            <button
+                                type="button"
+                                onClick={() => setSheet("volume")}
+                                className="flex items-center rounded-full text-slate-300 transition-colors hover:bg-white/[0.08] active:scale-95"
+                                style={{ fontSize: u(3.8), gap: u(1), padding: `${u(0.8)} ${u(2)}`, background: "rgba(255,255,255,0.05)" }}
+                                aria-label="Régler le volume"
+                            >
                                 {amp.mute ? (
                                     <VolumeX className="text-amber-300" style={{ width: u(4), height: u(4) }} />
                                 ) : (
                                     <Volume2 style={{ width: u(4), height: u(4) }} />
                                 )}
                                 {amp.volume_pct ?? "—"} %
-                            </span>
+                            </button>
                         )}
                         <span className="leading-none text-slate-200" style={{ fontSize: u(6.5) }}>
                             {hhmm(now)}
@@ -620,7 +650,24 @@ function SessionView({
                     </p>
                 )}
 
-                {playing.remote && <RemoteBar playing={playing} position={session.position} paused={session.paused} onCommand={onCommand} />}
+                {playing.remote && (
+                    <RemoteBar
+                        playing={playing}
+                        position={session.position}
+                        paused={session.paused}
+                        onCommand={onCommand}
+                        amp={amp}
+                        loadPerson={loadPerson}
+                        sheet={sheet}
+                        setSheet={setSheet}
+                    />
+                )}
+                {/* TV sous Kodi (pas de télécommande) : le volume reste réglable */}
+                {!playing.remote && sheet === "volume" && amp && (
+                    <SheetFrame title="Volume" onClose={() => setSheet(null)}>
+                        <VolumeSheet amp={amp} run={onCommand} />
+                    </SheetFrame>
+                )}
             </div>
         </motion.section>
     );
@@ -628,20 +675,29 @@ function SessionView({
 
 /* ── Télécommande tactile (appli Android) ─────────────────────── */
 
-type Sheet = "subtitles" | "audio" | "info" | null;
+type Sheet = "subtitles" | "audio" | "info" | "volume" | null;
 
 function RemoteBar({
     playing,
     position,
     paused,
     onCommand,
+    amp,
+    loadPerson,
+    sheet,
+    setSheet,
 }: {
     playing: AmbientPlaying;
     position: number;
     paused: boolean;
     onCommand: (command: RemoteAction) => Promise<void>;
+    amp: Ambient["amp"];
+    loadPerson: (id: number) => Promise<PersonFilmography>;
+    sheet: Sheet;
+    setSheet: (sheet: Sheet) => void;
 }) {
-    const [sheet, setSheet] = useState<Sheet>(null);
+    // Acteur ouvert depuis la fiche : sa filmographie remplace la fiche
+    const [person, setPerson] = useState<AmbientCast | null>(null);
     const [busy, setBusy] = useState(false);
     const [failed, setFailed] = useState(false);
     const skip = activeSkip(playing, position);
@@ -712,49 +768,251 @@ function RemoteBar({
                 </p>
             )}
 
-            <AnimatePresence>
-                {sheet && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-20 flex items-end justify-center bg-black/80 backdrop-blur-sm"
-                        onClick={() => setSheet(null)}
-                    >
-                        <motion.div
-                            initial={{ y: 40 }}
-                            animate={{ y: 0 }}
-                            exit={{ y: 40 }}
-                            className="w-full max-w-[min(100%,calc(var(--u)*150))] overflow-y-auto border border-white/10 bg-[#0d1117]"
-                            style={{ maxHeight: "85dvh", padding: u(4), borderRadius: `${u(3)} ${u(3)} 0 0` }}
-                            onClick={(event) => event.stopPropagation()}
-                        >
-                            <div className="flex items-center justify-between" style={{ marginBottom: u(2.5) }}>
-                                <p className="font-semibold text-white" style={{ fontSize: u(4.4) }}>
-                                    {sheet === "subtitles" ? "Sous-titres" : sheet === "audio" ? "Son" : playing.title}
-                                </p>
-                                <button type="button" onClick={() => setSheet(null)} className="rounded-full p-2 text-slate-400 hover:bg-white/10" aria-label="Fermer">
-                                    <X style={{ width: u(4.4), height: u(4.4) }} />
-                                </button>
-                            </div>
-                            {sheet === "subtitles" && <SubtitleTools playing={playing} run={run} />}
-                            {sheet === "info" ? (
-                                <InfoSheet playing={playing} />
-                            ) : (
-                                <TrackSheet
-                                    tracks={sheet === "subtitles" ? playing.subtitle_tracks : playing.audio_tracks}
-                                    allowOff={sheet === "subtitles"}
-                                    onPick={(index) => {
-                                        void run({ action: "track", value: { type: sheet === "subtitles" ? "text" : "audio", index } });
-                                        setSheet(null);
-                                    }}
-                                />
-                            )}
-                        </motion.div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            {sheet && (
+                <SheetFrame
+                    title={
+                        sheet === "subtitles"
+                            ? "Sous-titres"
+                            : sheet === "audio"
+                              ? "Son"
+                              : sheet === "volume"
+                                ? "Volume"
+                                : person
+                                  ? person.name
+                                  : playing.title
+                    }
+                    onBack={sheet === "info" && person ? () => setPerson(null) : undefined}
+                    onClose={() => {
+                        setSheet(null);
+                        setPerson(null);
+                    }}
+                >
+                    {sheet === "subtitles" && <SubtitleTools playing={playing} run={run} />}
+                    {(sheet === "subtitles" || sheet === "audio") && (
+                        <TrackSheet
+                            tracks={sheet === "subtitles" ? playing.subtitle_tracks : playing.audio_tracks}
+                            allowOff={sheet === "subtitles"}
+                            onPick={(index) => {
+                                void run({ action: "track", value: { type: sheet === "subtitles" ? "text" : "audio", index } });
+                                setSheet(null);
+                            }}
+                        />
+                    )}
+                    {sheet === "volume" && amp && <VolumeSheet amp={amp} run={run} />}
+                    {sheet === "info" &&
+                        (person?.tmdb_id ? (
+                            <PersonSheet id={person.tmdb_id} loadPerson={loadPerson} />
+                        ) : (
+                            <InfoSheet playing={playing} onPerson={setPerson} />
+                        ))}
+                </SheetFrame>
+            )}
         </>
+    );
+}
+
+/** Feuille qui monte du bas de l'écran ; toucher à côté la ferme. */
+function SheetFrame({
+    title,
+    onClose,
+    onBack,
+    children,
+}: {
+    title: string;
+    onClose: () => void;
+    onBack?: () => void;
+    children: React.ReactNode;
+}) {
+    return (
+        <AnimatePresence>
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-20 flex items-end justify-center bg-black/80 backdrop-blur-sm"
+                onClick={onClose}
+            >
+                <motion.div
+                    initial={{ y: 40 }}
+                    animate={{ y: 0 }}
+                    exit={{ y: 40 }}
+                    className="w-full max-w-[min(100%,calc(var(--u)*150))] overflow-y-auto border border-white/10 bg-[#0d1117]"
+                    style={{ maxHeight: "85dvh", padding: u(4), borderRadius: `${u(3)} ${u(3)} 0 0` }}
+                    onClick={(event) => event.stopPropagation()}
+                >
+                    <div className="flex items-center justify-between" style={{ marginBottom: u(2.5), gap: u(2) }}>
+                        <div className="flex min-w-0 items-center" style={{ gap: u(1.5) }}>
+                            {onBack && (
+                                <button type="button" onClick={onBack} className="rounded-full p-2 text-slate-400 hover:bg-white/10" aria-label="Retour à la fiche">
+                                    <ChevronLeft style={{ width: u(4.4), height: u(4.4) }} />
+                                </button>
+                            )}
+                            <p className="truncate font-semibold text-white" style={{ fontSize: u(4.4) }}>
+                                {title}
+                            </p>
+                        </div>
+                        <button type="button" onClick={onClose} className="rounded-full p-2 text-slate-400 hover:bg-white/10" aria-label="Fermer">
+                            <X style={{ width: u(4.4), height: u(4.4) }} />
+                        </button>
+                    </div>
+                    {children}
+                </motion.div>
+            </motion.div>
+        </AnimatePresence>
+    );
+}
+
+/** Volume de l'ampli de la pièce : gros boutons, sourdine. Le serveur pilote l'ampli. */
+function VolumeSheet({ amp, run }: { amp: NonNullable<Ambient["amp"]>; run: (command: RemoteAction) => Promise<void> }) {
+    const big = { width: u(16), height: u(16) };
+    return (
+        <div className="flex flex-col items-center" style={{ gap: u(3), paddingBottom: u(2) }}>
+            <div className="flex items-center" style={{ gap: u(5) }}>
+                <button
+                    type="button"
+                    onClick={() => run({ action: "volume_step", value: -3 })}
+                    className="flex items-center justify-center rounded-full bg-white/[0.07] text-slate-100 active:scale-95"
+                    style={big}
+                    aria-label="Baisser le volume"
+                >
+                    <Minus style={{ width: u(6), height: u(6) }} />
+                </button>
+                <p className="tabular-nums text-white" style={{ fontSize: u(14), minWidth: u(30), textAlign: "center" }}>
+                    {amp.volume_pct ?? "—"}
+                    <span className="text-slate-500" style={{ fontSize: u(5) }}>
+                        {" "}
+                        %
+                    </span>
+                </p>
+                <button
+                    type="button"
+                    onClick={() => run({ action: "volume_step", value: 3 })}
+                    className="flex items-center justify-center rounded-full bg-[#4A9EFF] text-[#0b1220] active:scale-95"
+                    style={big}
+                    aria-label="Monter le volume"
+                >
+                    <Plus style={{ width: u(6), height: u(6) }} />
+                </button>
+            </div>
+            <RemoteButton label={amp.mute ? "Remettre le son" : "Couper le son"} accent={amp.mute} onClick={() => run({ action: "mute", value: !amp.mute })}>
+                {amp.mute ? <Volume2 style={{ width: u(3.8), height: u(3.8) }} /> : <VolumeX style={{ width: u(3.8), height: u(3.8) }} />}
+            </RemoteButton>
+            <p className="text-slate-500" style={{ fontSize: u(2.6) }}>
+                {amp.name}
+                {amp.sound_program ? ` · ${prettyName(amp.sound_program)}` : ""}
+            </p>
+        </div>
+    );
+}
+
+/**
+ * Filmographie d'un acteur : ses films de la médiathèque en premier, mis en
+ * avant (liseré bleu, « Disponible » s'il est téléchargé), puis ses autres
+ * films, plus discrets.
+ */
+function PersonSheet({ id, loadPerson }: { id: number; loadPerson: (id: number) => Promise<PersonFilmography> }) {
+    const { data, isLoading, isError } = useQuery({
+        queryKey: ["person", id],
+        queryFn: () => loadPerson(id),
+        staleTime: 3_600_000,
+    });
+    if (isLoading) {
+        return <Loader2 className="mx-auto animate-spin text-slate-400" style={{ width: u(6), height: u(6), margin: `${u(6)} auto` }} />;
+    }
+    if (isError || !data?.person) {
+        return (
+            <p className="text-slate-400" style={{ fontSize: u(3) }}>
+                {data?.error ?? "Filmographie indisponible pour le moment."}
+            </p>
+        );
+    }
+    const p = data.person;
+    const facts = [p.birthday ? `Né(e) le ${new Date(p.birthday).toLocaleDateString("fr-FR")}` : "", p.place_of_birth ?? ""].filter(Boolean);
+    return (
+        <div className="flex flex-col" style={{ gap: u(3) }}>
+            <div className="flex" style={{ gap: u(3) }}>
+                {p.photo && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={p.photo} alt="" className="shrink-0 rounded-xl object-cover" style={{ width: u(18), height: u(24) }} />
+                )}
+                <div className="min-w-0">
+                    {facts.length > 0 && (
+                        <p className="text-slate-400" style={{ fontSize: u(2.8) }}>
+                            {facts.join(" · ")}
+                        </p>
+                    )}
+                    {p.biography && (
+                        <p className="line-clamp-5 leading-relaxed text-slate-300" style={{ fontSize: u(2.9), marginTop: u(1) }}>
+                            {p.biography}
+                        </p>
+                    )}
+                </div>
+            </div>
+
+            {data.in_library.length > 0 && (
+                <section>
+                    <p className="font-medium uppercase text-[#8CC4FF]" style={{ fontSize: u(2.6), letterSpacing: "0.14em", marginBottom: u(1.6) }}>
+                        Dans ta médiathèque · {data.in_library.length}
+                    </p>
+                    <ul className="grid grid-cols-6 portrait:grid-cols-4" style={{ gap: u(2) }}>
+                        {data.in_library.map((movie) => (
+                            <MoviePoster key={movie.tmdb_id} movie={movie} owned />
+                        ))}
+                    </ul>
+                </section>
+            )}
+
+            {data.discover.length > 0 && (
+                <section>
+                    <p className="font-medium uppercase text-slate-500" style={{ fontSize: u(2.6), letterSpacing: "0.14em", marginBottom: u(1.6) }}>
+                        Autres films
+                    </p>
+                    <ul className="grid grid-cols-8 portrait:grid-cols-5" style={{ gap: u(1.6) }}>
+                        {data.discover.slice(0, 24).map((movie) => (
+                            <MoviePoster key={movie.tmdb_id} movie={movie} />
+                        ))}
+                    </ul>
+                </section>
+            )}
+        </div>
+    );
+}
+
+function MoviePoster({ movie, owned = false }: { movie: PersonFilmography["discover"][number]; owned?: boolean }) {
+    const ready = owned && movie.has_file;
+    return (
+        <li className={cn("flex flex-col", !owned && "opacity-55")} style={{ gap: u(0.6) }}>
+            <div
+                className={cn(
+                    "relative aspect-[2/3] overflow-hidden bg-white/[0.06]",
+                    owned && (ready ? "ring-2 ring-[#4A9EFF]" : "ring-1 ring-white/25"),
+                )}
+                style={{ borderRadius: u(1.2) }}
+            >
+                {movie.poster ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={movie.poster} alt="" loading="lazy" className="h-full w-full object-cover" />
+                ) : (
+                    <span className="flex h-full items-center justify-center p-1 text-center text-slate-500" style={{ fontSize: u(2.2) }}>
+                        {movie.title}
+                    </span>
+                )}
+                {owned && (
+                    <span
+                        className={cn("absolute inset-x-0 bottom-0 text-center font-semibold", ready ? "bg-[#4A9EFF] text-[#0b1220]" : "bg-black/70 text-slate-300")}
+                        style={{ fontSize: u(2), padding: `${u(0.4)} 0` }}
+                    >
+                        {ready ? "Disponible" : "Pas encore téléchargé"}
+                    </span>
+                )}
+            </div>
+            <span className="truncate text-slate-200" style={{ fontSize: u(2.4) }}>
+                {movie.title}
+            </span>
+            <span className="truncate text-slate-500" style={{ fontSize: u(2.1) }}>
+                {[movie.year, movie.character].filter(Boolean).join(" · ")}
+            </span>
+        </li>
     );
 }
 
@@ -899,7 +1157,7 @@ function TrackSheet({ tracks, allowOff, onPick }: { tracks: AmbientTrack[]; allo
     );
 }
 
-function InfoSheet({ playing }: { playing: AmbientPlaying }) {
+function InfoSheet({ playing, onPerson }: { playing: AmbientPlaying; onPerson: (person: AmbientCast) => void }) {
     return (
         <div className="flex flex-col" style={{ gap: u(3) }}>
             {playing.meta_line && (
@@ -915,7 +1173,16 @@ function InfoSheet({ playing }: { playing: AmbientPlaying }) {
             {playing.cast.length > 0 && (
                 <ul className="grid grid-cols-4 portrait:grid-cols-3" style={{ gap: u(2.5) }}>
                     {playing.cast.map((person) => (
-                        <li key={`${person.name}-${person.character}`} className="flex flex-col items-center text-center" style={{ gap: u(0.8) }}>
+                        <li
+                            key={`${person.name}-${person.character}`}
+                            // Toucher un acteur (film) : sa filmographie, médiathèque en tête
+                            onClick={person.tmdb_id ? () => onPerson(person) : undefined}
+                            className={cn(
+                                "flex flex-col items-center rounded-xl text-center",
+                                person.tmdb_id && "cursor-pointer transition-colors hover:bg-white/[0.05] active:scale-95",
+                            )}
+                            style={{ gap: u(0.8), padding: u(1) }}
+                        >
                             {person.photo ? (
                                 // eslint-disable-next-line @next/next/no-img-element
                                 <img src={person.photo} alt="" className="rounded-full object-cover" style={{ width: u(14), height: u(14) }} />

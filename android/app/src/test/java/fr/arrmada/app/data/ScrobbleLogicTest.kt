@@ -76,6 +76,17 @@ class ScrobbleLogicTest {
     }
 
     @Test
+    fun `acteurs envoyes avec leur identifiant TMDB (filmographie sur la tablette)`() {
+        val json = kotlinx.serialization.json.Json { explicitNulls = false }
+        val cast = listOf(ScrobbleCast("Zendaya", "Chani", "", 505710), ScrobbleCast("Figurant"))
+        val text = json.encodeToString(Scrobble.serializer(), dune.copy(cast = cast))
+        assertTrue(text.contains("\"tmdb_id\":505710"))
+        // Le film (438631) et Zendaya ; le figurant sans identifiant n'en a pas :
+        // la tablette ne le rend pas cliquable
+        assertEquals(2, Regex("\"tmdb_id\":").findAll(text).count())
+    }
+
+    @Test
     fun `commandes de la tablette`() {
         val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
         val page = json.decodeFromString(

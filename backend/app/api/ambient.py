@@ -232,20 +232,83 @@ async def ambient(
     }
 
 
+# Volume de l'ampli depuis la tablette : seules ces deux actions, bornées
+# (pas d'entrée, pas de mise en veille, pas de programme sonore)
+AMP_ACTIONS = {"volume_step", "mute"}
+MAX_VOLUME_STEP = 10  # pas YXC (0 à 161) : ±10 ≈ ±6 % par appui
+
+
+async def _amp_command(db: AsyncSession, room: str, avr: int | None, data: dict) -> dict[str, Any]:
+    """Volume ± / sourdine de l'ampli de la pièce, appliqués par le serveur."""
+    from app.services import yamaha
+
+    if room not in AMP_ROOMS:
+        raise HTTPException(status_code=409, detail="Pas d'ampli dans cette pièce")
+    action, value = data.get("action"), data.get("value")
+    if action == "volume_step":
+        try:
+            step = int(value)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail="Pas de volume invalide") from exc
+        if step == 0 or abs(step) > MAX_VOLUME_STEP:
+            raise HTTPException(status_code=422, detail="Pas de volume hors bornes")
+        value = step
+    else:
+        value = bool(value)
+    result = await yamaha.control(db, str(action), value, service_id=avr)
+    if result.get("status") != "ok":
+        raise HTTPException(status_code=502, detail=result.get("detail") or "Ampli injoignable")
+    cache.invalidate(f"ambient:amp:{avr}")  # la tablette voit le nouveau volume au relevé suivant
+    return {"status": "ok"}
+
+
+@router.get("/person/{person_id}")
+async def person(person_id: int, db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
+    """Filmographie d'un acteur (fiche du film, tablette) : ses films présents
+    dans la médiathèque d'abord (mis en avant), puis les autres (TMDB)."""
+    from app.services.people import get_person_filmography
+
+    if not 0 < person_id < 100_000_000:
+        raise HTTPException(status_code=404, detail="Acteur inconnu")
+
+    async def _fetch() -> dict[str, Any]:
+        return await get_person_filmography(db, person_id)
+
+    # Une heure : la filmographie ne bouge pas pendant une séance
+    data = await cache.get_or_set(f"ambient:person:{person_id}", _fetch, ttl_seconds=3600)
+    if data.get("person"):
+        data = {
+            **data,
+            "person": {
+                **data["person"],
+                "biography": (data["person"].get("biography") or "")[:700],
+            },
+        }
+    return data
+
+
 @router.post("/command")
-async def command(data: dict, user: dict = Depends(get_current_user)) -> dict[str, Any]:
-    """Télécommande tactile : pause, ±30 s, passer l'intro, pistes…
+async def command(
+    data: dict, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)
+) -> dict[str, Any]:
+    """Télécommande tactile : pause, ±30 s, passer l'intro, pistes, volume…
 
     Un écran appairé ne pilote que SA pièce ; la web app (aperçu) choisit
-    `room`. Refusé s'il n'y a rien en lecture, ou si la TV ne sait pas
-    recevoir de commandes (Kodi) : la tablette n'affiche alors pas les boutons.
+    `room`. Volume et sourdine vont directement à l'ampli de la pièce ; le
+    reste va à la TV, et est refusé s'il n'y a rien en lecture ou si la TV ne
+    sait pas recevoir de commandes (Kodi) : la tablette n'affiche alors pas
+    les boutons.
     """
     if user.get("role") == "device":
         room = user.get("room") or "salon"
+        avr = user.get("avr_service_id")
     else:
         room = str((data or {}).get("room") or "salon")
+        avr = None
     if room not in ROOMS:
         raise HTTPException(status_code=422, detail="Pièce inconnue")
+    if (data or {}).get("action") in AMP_ACTIONS:
+        return await _amp_command(db, room, avr, data or {})
     state = now_playing.current(room, time.time())
     if not state or not state.get("remote"):
         raise HTTPException(status_code=409, detail="Aucune lecture pilotable dans cette pièce")

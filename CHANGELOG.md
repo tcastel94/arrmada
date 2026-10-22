@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Tablet: volume and actor filmography (APK 2.11.4)
+
+#### Added
+- **Volume**: touch the volume shown at the top of the tablet (amp on) to open a **Volume** sheet: big **−** / **+** (3 % per press) and **Couper le son / Remettre le son**. New `POST /api/ambient/command` actions `volume_step` (±1 to ±10) and `mute`, sent to the Yamaha amp linked to the tablet's screen token (`avr_service_id`); the sheet also works when the TV plays under Kodi (no touch remote)
+- **Actor filmography**: in the tablet's **Fiche**, touching an actor opens their filmography (`GET /api/ambient/person/{tmdb_id}`, cached 1 h, screen scope): photo, birth date and place, biography, then **"Dans ta médiathèque"** first — accent ring and **Disponible** badge when the film is downloaded, **Pas encore téléchargé** when it is only in Radarr — and **Autres films** dimmed below. A back arrow returns to the fiche. The app (2.11.4) now sends each actor's TMDB id with the scrobble (`cast[].tmdb_id`); actors without an id (home-made series) are not clickable
+
 ### Android app 2.11.3
 
 #### Fixed

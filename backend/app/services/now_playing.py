@@ -91,6 +91,8 @@ def extras(data: dict[str, Any]) -> dict[str, Any]:
                 "name": _text(c.get("name"), 80),
                 "character": _text(c.get("character"), 80),
                 "photo": _text(c.get("photo"), 400),
+                # Identifiant TMDB de l'acteur (films) : sa filmographie au toucher
+                "tmdb_id": c["tmdb_id"] if isinstance(c.get("tmdb_id"), int) else None,
             }
             for c in _items(data.get("cast"), 8)
             if c.get("name")
