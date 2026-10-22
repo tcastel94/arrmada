@@ -61,7 +61,7 @@ import { MissingRow, RowSearchButton, releaseStatus } from "@/components/library
 import { useBulkSearch } from "@/components/library/use-bulk-search";
 
 const PER_PAGE = 50;
-const GRID = "grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8";
+const GRID = "grid grid-cols-3 gap-x-3 gap-y-5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8";
 const TYPES = ["all", "movie", "series"] as const;
 const SORTS = ["title", "year", "added"] as const;
 const ORDERS = ["asc", "desc"] as const;

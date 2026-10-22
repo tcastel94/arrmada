@@ -31,7 +31,7 @@ import { AddButton } from "./add-button";
 import { fromLookup, useAdder, type AddableItem } from "./adder";
 import { mediaHref, mediaKey, qualityLabel } from "./media-card";
 
-const GRID = "grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8";
+const GRID = "grid grid-cols-3 gap-x-3 gap-y-5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8";
 
 const AI_EXAMPLES = [
     "Films de science-fiction des années 80",
@@ -101,7 +101,7 @@ export function SearchTab({
     return (
         <motion.div variants={stagger(0, 0.08)} initial="hidden" animate="show" className="space-y-6">
             {/* ── Champ « hero » ── */}
-            <motion.div variants={fadeUp} className="glass border-gradient relative overflow-hidden rounded-3xl p-4 md:p-6">
+            <motion.div variants={fadeUp} className="relative">
                 <div className="relative space-y-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                         <SegmentedControl
@@ -122,7 +122,7 @@ export function SearchTab({
                                 { value: "ai", label: "IA", icon: Brain },
                             ]}
                         />
-                        <p className="text-xs text-muted-foreground">
+                        <p className="hidden text-[13px] text-muted-foreground sm:block">
                             {mode === "ai" ? "Recherche dans ta bibliothèque, en langage naturel" : "Bibliothèque + catalogues Radarr / Sonarr"}
                         </p>
                     </div>
@@ -139,7 +139,7 @@ export function SearchTab({
                             placeholder={mode === "ai" ? "Ex : films de SF des années 80 que je n'ai pas…" : "Titre d'un film ou d'une série…"}
                         />
                         {mode === "ai" && (
-                            <Button size="lg" onClick={() => runAi()} disabled={input.trim().length < 3 || ai.isFetching} className="h-14 rounded-2xl">
+                            <Button size="lg" onClick={() => runAi()} disabled={input.trim().length < 3 || ai.isFetching} className="h-12 rounded-xl">
                                 <Wand2 /> Analyser
                             </Button>
                         )}
@@ -154,8 +154,7 @@ export function SearchTab({
                                 transition={{ duration: 0.25, ease: EASE_OUT }}
                                 className="flex flex-wrap items-center gap-2"
                             >
-                                <span className="eyebrow mr-1">Idées</span>
-                                {AI_EXAMPLES.map((ex) => (
+                                                                {AI_EXAMPLES.map((ex) => (
                                     <button
                                         key={ex}
                                         type="button"
@@ -176,7 +175,7 @@ export function SearchTab({
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, y: -4 }}
                                 transition={{ duration: 0.25, ease: EASE_OUT }}
-                                className="text-xs text-muted-foreground"
+                                className="hidden text-[13px] text-muted-foreground sm:block"
                             >
                                 Résultats en direct : ce que tu possèdes déjà, et ce que tu peux ajouter en un clic à Radarr ou Sonarr.
                             </motion.p>
@@ -187,7 +186,7 @@ export function SearchTab({
 
             {/* ── Résultats ── */}
             {!active ? (
-                <motion.div variants={fadeUp} className="glass rounded-2xl">
+                <motion.div variants={fadeUp}>
                     <EmptyState
                         icon={mode === "ai" ? Brain : Search}
                         title={mode === "ai" ? "Pose ta question à l'IA" : "Que veux-tu regarder ?"}

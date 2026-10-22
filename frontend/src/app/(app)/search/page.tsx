@@ -43,7 +43,7 @@ type Tab = (typeof TABS)[number];
 export default function SearchHubPage() {
     return (
         <>
-            <Header title="Rechercher & Ajouter" />
+            <Header title="Rechercher" />
             {/* useSearchParams (onglet + requête dans l'URL) exige un Suspense au build. */}
             <Suspense
                 fallback={
@@ -98,10 +98,10 @@ function SearchHub() {
                 <PageHeader
                     icon={SearchCheck}
                     accent="brand"
-                    title="Rechercher & Ajouter"
+                    title="Rechercher"
                     description="Trouve un film ou une série, ajoute-le en un clic à Radarr ou Sonarr, puis suis son arrivée jusqu'à ta médiathèque."
                     actions={
-                        <Button variant="outline" onClick={() => openManual()}>
+                        <Button size="sm" variant="tinted" onClick={() => openManual()}>
                             <PenLine /> Ajout manuel
                         </Button>
                     }

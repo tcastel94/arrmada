@@ -69,12 +69,12 @@ export default function DownloadsPage() {
 
     return (
         <>
-            <Header title="Téléchargements" />
+            <Header title="Transferts" />
             <PageContainer>
                 <PageHeader
                     icon={Download}
                     accent="primary"
-                    title="Téléchargements"
+                    title="Transferts"
                     description="La file Radarr & Sonarr en direct, et les imports à débloquer quand un téléchargement reste coincé."
                     actions={
                         <Button

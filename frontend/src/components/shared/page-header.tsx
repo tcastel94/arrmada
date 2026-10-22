@@ -61,12 +61,14 @@ export function PageHeader({ title, description, eyebrow, actions, children, cla
             className={cn("pt-1", className)}
         >
             {/* Titre et actions sur la même ligne (actions alignées sur le bas du titre) */}
-            <div className="flex items-end justify-between gap-3 md:gap-6">
-                <div className="min-w-0">
+            {/* Les actions passent sous le titre quand la place manque (le
+                grand titre n'est jamais tronqué). */}
+            <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-2 md:gap-x-6">
+                <div className="min-w-0 max-w-full">
                     {eyebrow && <p className="mb-0.5 text-[13px] font-semibold text-muted-foreground">{eyebrow}</p>}
-                    <h1 className="truncate text-ios-large md:text-[2rem] md:leading-[2.375rem]">{title}</h1>
+                    <h1 className="break-words text-ios-large md:text-[2rem] md:leading-[2.375rem]">{title}</h1>
                 </div>
-                {actions && <div className="flex max-w-[65%] shrink-0 flex-wrap items-center justify-end gap-1 pb-0.5 md:gap-2">{actions}</div>}
+                {actions && <div className="flex flex-wrap items-center gap-1 pb-0.5 md:gap-2">{actions}</div>}
             </div>
             {/* Description : ordinateur seulement (sur mobile, elle repousserait
                 le contenu ; le grand titre suffit, comme dans les apps iOS). */}

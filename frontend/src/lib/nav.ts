@@ -128,7 +128,7 @@ export const NAV_GROUPS: NavGroup[] = [
             },
             {
                 href: "/search",
-                label: "Rechercher & Ajouter",
+                label: "Rechercher",
                 icon: Search,
         tint: "bg-[#8E8E93]",
                 description: "Trouver un titre, l'ajouter, suivre les demandes",
@@ -142,12 +142,12 @@ export const NAV_GROUPS: NavGroup[] = [
         items: [
             {
                 href: "/downloads",
-                label: "Téléchargements",
+                label: "Transferts",
                 icon: Download,
         tint: "bg-[#30D158]",
-                description: "File d'attente et imports",
+                description: "Téléchargements en cours et imports",
                 shortcut: "t",
-                keywords: ["downloads", "queue", "sabnzbd", "deluge", "imports", "fichiers"],
+                keywords: ["téléchargements", "downloads", "queue", "sabnzbd", "deluge", "imports", "fichiers"],
                 badge: "downloads",
             },
             {
