@@ -889,7 +889,13 @@ private fun describe(e: PlaybackException, container: String, how: String): Stri
         container.takeIf { it.isNotBlank() }?.let { "fichier .$it" },
         how,
     ).joinToString(" · ")
-    return describe(e) + "\n\n" + detail
+    // AVI : conteneur mal géré par le lecteur d'Android ; le MKV, lui, passe
+    val hint = if (container.equals("avi", ignoreCase = true)) {
+        "\n\nAVI mal pris en charge : le convertir en MKV, sans perte (scripts/remux-avi-mkv.sh sur le serveur)."
+    } else {
+        ""
+    }
+    return describe(e) + "\n\n" + detail + hint
 }
 
 /** Message lisible pour les erreurs de lecture les plus courantes. */
