@@ -487,7 +487,7 @@ private fun PlayerSurface(
         subtitleNote = null
         uiScope.launch {
             val result = runCatching { repository.downloadSubtitles(info.itemId, body) }
-                .getOrElse { SubtitleResult(message = "Serveur injoignable (${it.message.orEmpty()})") }
+                .getOrElse { SubtitleResult(message = subtitleError(it)) }
             subtitleBusy = false
             subtitleNote = result.message
             result.message?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
@@ -511,7 +511,7 @@ private fun PlayerSurface(
         subtitleNote = null
         uiScope.launch {
             val result = runCatching { repository.syncSubtitles(info.itemId, body) }
-                .getOrElse { SubtitleResult(message = "Serveur injoignable (${it.message.orEmpty()})") }
+                .getOrElse { SubtitleResult(message = subtitleError(it)) }
             subtitleBusy = false
             subtitleNote = result.message
             result.message?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
@@ -1032,6 +1032,18 @@ private fun audioDecoderFailed(e: PlaybackException): Boolean {
     return renderer.type == ExoPlaybackException.TYPE_RENDERER &&
         renderer.rendererFormat?.sampleMimeType?.startsWith("audio/") == true &&
         e.errorCode in AUDIO_DECODER_ERRORS
+}
+
+/**
+ * Échec d'une action Sous-titres (Bazarr), en clair : serveur trop ancien
+ * pour la fonction (403 / 404), Bazarr trop lent, ou serveur vraiment injoignable.
+ */
+private fun subtitleError(e: Throwable): String = when {
+    e is fr.arrmada.app.data.ApiException && e.code in setOf(403, 404, 405) ->
+        "Le serveur ArrMada n’a pas encore cette fonction : mets-le à jour (maj-arrmada.sh)"
+    e is java.net.SocketTimeoutException -> "Bazarr met du temps : réessaie dans une minute"
+    e is fr.arrmada.app.data.ApiException -> e.message ?: "Le serveur a refusé (${e.code})"
+    else -> "Serveur injoignable (${e.message.orEmpty()})"
 }
 
 /** Message affiché quand l'image Dolby Vision est convertie en SDR par Jellyfin. */

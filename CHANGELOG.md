@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Android app 2.11.3
+
+#### Fixed
+- Subtitle actions (Sous-titres FR, Resynchro auto) said "Serveur injoignable" for any failure; they now tell an outdated server (403 / 404: "mets-le à jour"), a slow Bazarr (timeout) and a real network failure apart. Bazarr resync wait lowered to 35 s so the answer always beats the TV's 45 s timeout
+
 ### Tablet: subtitle tools (APK 2.11.2)
 
 #### Added

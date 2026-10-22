@@ -775,7 +775,7 @@ async def download_subtitles(
 
 # Resynchronisation par Bazarr (ffsubsync, calée sur le son) : 30 s à 2 min
 # pour un film. La TV attend 45 s au plus ; au-delà, Bazarr finit seul.
-SYNC_WAIT = 40.0
+SYNC_WAIT = 35.0
 
 
 async def sync_subtitles(db: AsyncSession, item_id: str, data: dict[str, Any]) -> dict[str, Any]:
