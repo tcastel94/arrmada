@@ -39,6 +39,21 @@ class Settings(BaseSettings):
     # docker-compose.yml) ou, en développement, celui du dépôt.
     KODI_ADDON_DIR: str = ""
 
+    # ── Appli Android : mises à jour (ADR-009) ─────────────────
+    # La CI publie l'APK signée dans la release GitHub ANDROID_UPDATE_TAG du
+    # dépôt ANDROID_UPDATE_REPO ; le serveur la rapatrie dans ANDROID_APK_DIR
+    # (empreinte SHA-256 vérifiée) et la propose aux TV et téléphones.
+    # Dépôt vide : pas de GitHub, seulement les APK déposées à la main dans
+    # ANDROID_APK_DIR (nom arrmada-<version>-<n°>-release.apk, sortie de build-apk.sh).
+    ANDROID_UPDATE_REPO: str = "tcastel94/arrmada"
+    ANDROID_UPDATE_TAG: str = "android-latest"
+    ANDROID_APK_DIR: str = "data/apk"
+
+    # ── Vidéos hors médiathèque (écran « Vidéos ») ────────────
+    # Les dossiers déclarés dans la web app doivent être sous ce chemin
+    # (garde-fou : jamais /app/data, /etc…). Vide = n'importe où.
+    VIDEO_ALLOWED_BASE: str = "/mnt/user"
+
     # ── Telegram ──────────────────────────────────────────────
     TELEGRAM_BOT_TOKEN: str = ""
     TELEGRAM_CHAT_ID: str = ""
@@ -116,6 +131,12 @@ class Settings(BaseSettings):
     # vers la TV : person, ring, motion, pet, vehicle, package (virgules).
     EUFY_WS_URL: str = ""
     EUFY_DETECTIONS: str = "person"
+
+    # ── Appareils hors de la maison (VPN) ─────────────────────
+    # Réseaux acceptés comme « locaux » pour les jetons d'appareil (TV,
+    # téléphones), en plus des réseaux privés : ceux d'un VPN qui n'est pas
+    # en 10.x / 192.168.x, ex. « 100.64.0.0/10 » pour Tailscale. Virgules.
+    DEVICE_TRUSTED_NETWORKS: str = ""
 
     # ── Misc ──────────────────────────────────────────────────
     LOG_LEVEL: str = "INFO"

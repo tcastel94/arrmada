@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Thème de la fenêtre Android, avant que Compose ne dessine : fond nuit (pas
+  d'éclair blanc au lancement), sans barre de titre. Le reste du style est
+  dans ui/theme/Theme.kt.
+-->
+<resources>
+    <style name="Theme.ArrMada" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/night</item>
+        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:statusBarColor">@color/night</item>
+        <item name="android:navigationBarColor">@color/night</item>
+    </style>
+</resources>

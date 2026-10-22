@@ -125,7 +125,9 @@ def summarize(states: list[dict[str, Any]], library: list[dict[str, Any]]) -> di
                     "device": state.get("device") or "",
                     "updated_at": state.get("updated_at") or "",
                 }
-        if position and not watched:
+        # Page Reprendre de la web app : films et épisodes (une vidéo de l'écran
+        # Vidéos n'a ni fiche ni lien à ouvrir)
+        if position and not watched and state.get("media_type") in ("movie", "episode"):
             started.append(state)
 
     index = _library_index(library)
@@ -196,7 +198,13 @@ async def load_summary(db: Any) -> dict[str, Any]:
     from app.models.watch_state import WatchState
     from app.services.media_aggregator import cached_library
 
-    rows = (await db.execute(select(WatchState))).scalars().all()
+    # Profil « Famille » (celui des TV sous Kodi) : les autres profils ont
+    # leur propre « Reprendre » dans l'appli TV (ADR-008)
+    rows = (
+        (await db.execute(select(WatchState).where(WatchState.profile_id.is_(None))))
+        .scalars()
+        .all()
+    )
     states = [watch_sync.public(row) for row in rows]
     try:
         library = await cached_library(db)

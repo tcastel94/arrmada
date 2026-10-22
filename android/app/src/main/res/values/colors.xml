@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Couleurs utilisées avant le démarrage de Compose (thème de la fenêtre). -->
+<resources>
+    <color name="night">#FF0A0E16</color>
+    <color name="accent">#FF4A9EFF</color>
+</resources>

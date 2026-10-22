@@ -7,6 +7,134 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Home-made series: fan edits shown like official series (APK 2.10.0)
+
+#### Added
+- **"Séries maison"**: a video folder (Naruto Kai, Naruto Shippuden Kai, One Pace…) declared as a series appears in the app's **Séries grid** and opens in the **same Series screen** as Sonarr series: arcs as season chips (folder names: "Arc 02 - Examen Chunin"), episodes, watched / resume (shared with the Vidéos screen), "Lire la suite", long press menu; the next episode starts by itself in the player (across arcs); started episodes join the **Reprendre** row; the pause menu shows "Naruto Kai · S02E15 · title"
+- **Folder reading**: sub-folders with videos = seasons (number from "Saison 2", "Arc 03", "S04", "05 - …", else order), videos = episodes (number from "Naruto Kai - 015", "Ep 12", "S02E07", else order; title from "Show - 015 - Title"), local **NFO** (`tvshow.nfo`, episode `.nfo`, `season.nfo` — Jellyfin / Kodi / OnePacerr) and local images (`poster.jpg`, `fanart.jpg`, `<episode>-thumb.jpg`) win over file names
+- **Artwork from the official series**: pick it on TMDB (Naruto for Naruto Kai) for poster, backdrop, overview, year; a `poster.jpg` in the folder stays first
+- **Web app**: Settings › Dossiers vidéo › **Séries maison** (folder picker browsing the video folders, TMDB search, name, badge "Kai")
+- **Server**: `local_series` table; `GET /api/videos/series`, `/series/{id}`, `/series/index`, `/api/videos/image/{token}` for devices; `POST/PATCH/DELETE /api/videos/series`, `GET /api/videos/series/tmdb/search` for the web app; folder scans cached until a folder changes. 18 tests (+ 5 JVM tests for the app adapter)
+
+### "Vidéos" screen: NAS folders outside the library (APK 2.9.0)
+
+#### Added
+- **Android app, "Vidéos" screen** (TV top menu, "Plus" on phones): browse NAS folders like a file explorer for videos with no official TMDB / TVDB page that Radarr, Sonarr and Jellyfin ignore (Dragon Ball **Kai** and other fan edits, home videos). Natural sort (Ep 2 before Ep 10), breadcrumb, Back goes up one folder. OK plays the original file with the usual player (pause menu, audio / embedded subtitle tracks); long press: resume, from the start, mark watched / unwatched
+- **Watched / resume per file and per family profile** (watch-state `media_type: "file"`, `id_type: "sha1"` of the real path); progress bar and ✓ in the list; files are kept out of the "Reprendre" rows
+- **External subtitles** next to the video (`Ep 01.srt`, `Ep 01.fr.ass`, `Ep 01.forced.fr.srt`, `.vtt`) added to the Subtitles tab; served as UTF-8 (French `.srt` in Windows-1252 no longer show `Ã©`)
+- **Web app**: Settings › **Dossiers vidéo** (name + server path; flagged when the share is missing)
+- **Server**: `video_roots` table; `GET /api/videos/browse`, `/play/{token}`, `/stream/{token}` (HTTP Range: seeking, resume), `/subtitle/{token}` open to device tokens; `GET/POST/PATCH/DELETE /api/videos/roots` for the web app. Items are opaque tokens resolved to their real path and **confined to their root folder** (`../` or a symlink leaving it → 404); only folders, videos and subtitles are listed or served; roots must be under `VIDEO_ALLOWED_BASE` (default `/mnt/user`). 12 tests
+
+### Android app: automatic updates without adb (ADR-009, APK 2.8.0)
+
+#### Added
+- **CI**: the APK signed with the release key is published in the GitHub release **`android-latest`** (pre-release) with its `.sha256`, on every push to `main` / `android/apk`; never the debug APK
+- **Server mirror**: hourly job (first run 1 min after start) fetches that release into `data/apk/` when newer, **checks the SHA-256** before keeping it (`.part` renamed at the end), keeps the 2 latest per type; APKs built by hand can be dropped in the same folder (`arrmada-<version>-<code>-release.apk`). `GET /api/android/update`, `GET /api/android/apk/{file}` (device tokens, exact file names only), `GET /api/android/status`, `POST /api/android/refresh` (web app). Settings `ANDROID_UPDATE_REPO`, `ANDROID_UPDATE_TAG`, `ANDROID_APK_DIR`. 12 tests
+- **App**: checks the server once per launch (never during playback); "ArrMada X est disponible" window: download from the server with progress, SHA-256 checked again, then Android's installer (PackageInstaller session) with its confirmation; opens the "install unknown apps" permission screen the first time. *Réglages › Rechercher une mise à jour*; version code shown
+
+### Android TV app: rows on the Shield home screen (ADR-007 phase 4, APK 2.7.0)
+
+#### Added
+- **"À suivre" (Play Next) row of the Android TV home screen**: movies and episodes started in ArrMada, with their progress bar; a click resumes playback in ArrMada at the saved position (current profile)
+- **"ArrMada · Ajouts récents" channel** on the home screen: the last 20 movies and series added to the NAS; a click opens the movie page or the series screen. The stock home screen is kept (no launcher replacement, no adb)
+- Rows refreshed when leaving the app and every 30 minutes in the background (WorkManager), on/off in **Réglages** (on by default). Posters are cached by the app and served to the launcher by a read-only content provider (posters from the ArrMada server need the device token, which the launcher does not have)
+- Card links are explicit intents to the app (`arrmada://play|movie|show`), so the debug and release APKs installed side by side never answer for each other; pure Kotlin rules with 6 JVM tests
+
+#### Changed
+- Phone pause menu: chapter time no longer clipped
+
+### Android app on phones and tablets (ADR-007 phase 4, APK 2.6.0)
+
+#### Added
+- **Same APK on phone, tablet and TV**: the app detects the screen (Android TV / leanback, tablet when the smallest side is ≥ 600 dp, phone otherwise) and adapts: **bottom bar** on phones (Accueil, Films, Séries, Rechercher, Téléch., Plus), **side rail** on tablets, the add-on's top menu kept on the TV; tighter margins, adaptive poster grids, side-by-side blocks stacked on phones, movie case only on wide screens, dialogs sized to the screen. "Plus" holds Ce soir, Découvrir, Tableau de bord, Changer de profil, Réglages
+- **Touch**: every TV card and button reacts to a tap (Compose for TV components only listen to the remote), long press keeps the episode menu; screens scroll with the finger
+- **Touch player**: landscape and full screen during playback, tap opens the pause menu, double tap left / right = −10 s / +30 s, tap on the progress bar to seek, −10 s / +30 s and **Quitter** buttons. No amp preset or sound program from a phone: the advice is for the device's own sound
+- **"Sur la TV"** on the movie page and in the episode menu: pick a TV of the house and the title starts there within 5 s (same event as "Lire sur la TV" from the web app, works with Kodi TVs too)
+- **Server**: `GET /api/tv/targets` (TVs of the house, without the caller and without phones / tablets) and `POST /api/tv/targets/{id}/play`, allowed for device tokens; **`DEVICE_TRUSTED_NETWORKS`** (comma-separated CIDRs, e.g. Tailscale `100.64.0.0/10`) so paired devices also work through the home VPN. 5 tests
+- 8 phone / tablet CI screenshots
+
+#### Changed
+- The app no longer forces landscape outside the player (phones open in portrait)
+
+### Family profiles (ADR-008, APK 2.5.0)
+
+#### Added
+- **"Qui regarde ?"** screen at launch on the Android TV app (skipped when there are no profiles) and the current profile's avatar at the right of the top menu to switch. Each profile has its own **Reprendre / watched**, its own **"Pour toi"** (TMDB recommendations seeded with what this profile watched) and its own **"Pour ce soir" requests**: "Prêt à regarder" follows the person on whichever TV runs their profile; the Downloads cards show who asked
+- **Web app**: Settings › **Profils famille** (add, rename, emoji, colour, delete; 8 at most)
+- **Server**: `family_profiles` table; the "Famille" profile is the existing data (`profile_id` null), so Kodi TVs and the web app are unchanged; `X-Profile-Id` header resolved for device calls; `watch_states.profile_id`, `tv_requests.profile_id / profile_name` (columns added at startup); `GET/POST/PATCH/DELETE /api/profiles` (devices: read only); per-profile watch-state, playback resume, recommendations cache, request ownership and `tv_ready` payload. 10 tests
+
+### Android TV app: audio settings screen and recommended sound (APK 2.4.0)
+
+#### Changed
+- **Pause menu**: an **Audio** button opens a dedicated **Réglages audio** screen (Back returns to the menu) instead of the Audio and Ampli tabs: recommended sound, audio track, then the amp (sound program, volume, clearer dialogue, night mode, **Extra Bass** and **subwoofer level**)
+
+#### Added
+- **Recommended sound / auto decoding**: from the sound of the selected track (Dolby Atmos / DTS:X objects, 7.1, 5.1, stereo) and the speakers of the room (**salon 5.1**, **salle de cinéma 7.2.2**: centre, 2 front, 2 surround, 2 rear, 2 subwoofers, 2 Atmos), the app picks the Yamaha program: Straight for native decoding (Atmos folded onto 5.1 without height speakers), Surround Decoder (Dolby Surround / Neural:X) to spread a smaller source over the room. Applied automatically after the room preset and on each audio track change (can be switched off, remembered on the TV); without an amp, advice for the TV speakers (stereo, lighter track). Pure Kotlin rules, 4 JVM tests
+- **Server**: room profiles carry `speakers` (`"5.1"`, `"7.2.2"`), `/api/yamaha/state` returns `subwoofer_volume`, new control `subwoofer_volume` (−12 to +12); 1 test
+
+### Android TV app, phase 3: parity with the Kodi add-on (APK 2.3.1)
+
+#### Added
+- **Téléchargements** screen from the add-on: "Pour ce soir" cards of TV requests ("Prêt vers 21:02", steps Trouvé → Télécharg. → Import → Sous-titres → Prêt, requesting TV, ready in green / blocked in red) and the Radarr / Sonarr queue (status colour, progress, time left, speed estimated between two reads, sizes). OK opens the actions: Débloquer (server diagnosis in 3 steps + fix button), Passer en tête, Pause / Reprendre (SABnzbd), Relancer la recherche, Fiche du titre, Annuler ma demande. "Pause sauf ce soir" / "Tout reprendre". Refreshed every 5 s
+- **Bubbles** at the bottom right (imported on the NAS, download started, import blocked, health alert), grouped beyond 2, held during playback and shown at the end as "Pendant ta séance"; **"Prêt à regarder"** pop-up for requests made from this TV (Regarder / Plus tard); **camera** detection: small window with the photo at the top left during playback, a bubble otherwise; **"Lire sur la TV"** sent from the web app starts playback. Server events polled every 5 s (`/api/events/recent`, back-off up to 2 min), only while the app is on screen
+- **"Ampli" tab in the pause menu** (instead of the add-on's Salon page, which only duplicated the remote): sound program, volume, clearer dialogue (Yamaha dialogue level) and night mode (adaptive DRC), shown only in a room with an amp; the room preset still applies by itself at playback start. Server: `/api/yamaha/state` now returns `dialog_lift`, `dialog_level`, `adaptive_drc`, `enhancer`, `extra_bass` (null when the amp lacks them), 2 tests
+- **Tableau de bord**: greeting, animated counters (movies, series, storage with de-duplicated disks, downloads), downloads in progress, services, recent additions
+- **Animated intro** of the add-on at launch (A legs, waves, play button bounce, light sweep, wordmark), skipped by any key
+- **Ce soir**: what will be finished before 22:00, 22:30… ("fini vers 22:14"), resumes first then unwatched movies
+- **Applis**: Android apps installed on the TV (TV banners), launched with OK
+- **Background trailer** on the movie page: local trailer from the NAS (Jellyfin `LocalTrailers`), muted, fades in after 2.5 s. Server: `GET /api/tv/trailer/movie/{tmdb}`, 2 tests
+- Full top menu of the add-on (10 entries, Salon dropped); pure Kotlin rules with 10 JVM tests; 7 more CI screenshots
+
+### Android TV app: Blu-ray files, faster screens, case and disc (APK 2.2.0)
+
+#### Fixed
+- **Movies in `.m2ts` (Blu-ray), `.iso` or BDMV folders now play**: ExoPlayer cannot open these containers ("Fichier illisible"). The server detects them from the Jellyfin media source and asks Jellyfin for a **remux** (HLS, fMP4 segments, video copied untouched: 4K / HDR / Dolby Vision kept; audio copied when the container allows it, else Dolby Digital Plus). If a "normal" file still fails to parse, the player switches to the remux once, at the same position. The error screen now shows the ExoPlayer code, the file extension and the mode (direct / remux)
+- **Server**: `GET /api/tv/hls/{item}/{master|main.m3u8, hls1/…}` relays the remux with the Jellyfin key stripped from the playlists; `POST /api/tv/hls/{item}/stop` stops the encode when the TV leaves; `mode`, `container` and `remux_stream` in the play info; device whitelist updated. Movie lookup in Jellyfin uses a 10-minute TMDB index instead of a full library scan on each play. 17 tests
+
+#### Changed
+- **Faster navigation**: screen transitions 180 / 120 ms (the default fade lasted 700 ms); TMDB posters and backdrops downloaded at the displayed size (w342 / w780 / w1280) instead of the original 2000 × 3000 and 4K files; movie and series pages kept 2 minutes in memory and **preloaded when a card keeps the focus** for 0.35 s; movie page asks for its details and its play info at the same time; watch states read incrementally (only what changed since the last call)
+
+#### Added
+- **Movie page case and disc** from the Kodi add-on: Blu-ray (blue), 4K ULTRA HD (black), DVD or clear case chosen from the file; the disc (fanart.tv disc art, or the poster cut as a ring) rolls out of the case with a small bounce, then spins slowly. Same textures as the add-on. 3 CI screenshots
+
+### Android TV app, phase 2: series, skip intro, up next, search, Discover, download (APK 2.1.0)
+
+#### Added
+- **Series screen** (like the Kodi add-on): season chips ("3/10 vus", "4/10 sur le NAS"), episode thumbnails from Jellyfin with watched badge, resume bar, MANQUANT / À VENIR; **Lire la suite** button (resume the started episode, else the one after the last watched); long press: from the start, mark watched / unwatched; OK on a missing episode asks Sonarr to search it
+- **Player**: "Passer l'intro / le récap" (named file chapters first, then Jellyfin markers), **"Épisode suivant dans 10 s"** card at the end credits (or 30 s before the end), automatic chaining, Next key; pause menu shows the episode (SxxEyy · title, episode overview)
+- **Series grid**, **Discover** (TMDB trending, "Parce que tu as…"), full top menu
+- **Search** by keyboard or **voice** (Dicter button, remote search / mic key when Android forwards it): library, titles tracked by Radarr / Sonarr, titles to request
+- **Download sheet** from the add-on (ADR-005): movie in one button; series whole / one season / ticked episodes; "Pour ce soir" priority; the button says what is sent. Movie page shows "Télécharger" when the file is not there yet
+- **Server**: `GET /api/tv/series/{tvdb}/season/{n}` (Jellyfin episodes of a season: thumbnail, overview, runtime, double-episode files) and `GET /api/tv/item-image/{item}` (relayed thumbnail); device whitelist updated. 6 tests
+- Pure Kotlin rules with JVM tests (next up, episode status, chaining, intro / credits detection, download labels and request body); 7 more CI screenshots
+
+### Native Android TV app with its own player (APK 2.0.0, phase 1 of ADR-007)
+
+#### Changed
+- **The Android app is now native** (Kotlin, Compose for TV, Media3 ExoPlayer) instead of the web app in a WebView (ADR-006 replaced by ADR-007). Look and feel of the Kodi add-on: same colors, condensed font, blue focus with zoom, slow-zoom backdrop
+
+#### Added
+- **Setup**: server address (API, port 8420) checked on `/api/health`, then pairing with code + QR code validated in the web app, like a Kodi TV (`X-Device-Token`, back to pairing when the TV is revoked)
+- **Home**: top menu, hero of the focused title (logo or title, meta, overview, "Reprendre à…"), rows Reprendre (shared watch states, same as Kodi TVs), Ajouts récents, Pour toi, Bientôt; **Films** grid (7 columns, Récents / A à Z / Année / 4K)
+- **Movie page**: logo, TMDB / IMDb / RT ratings, 4K / Dolby Vision / Atmos / 7.1 badges, resume or start over, trailer (YouTube app), cast
+- **Player** (ExoPlayer): original file streamed without transcoding, audio passthrough to the amp, French audio preferred, −10 / +30 s, position saved every 30 s, on pause and on exit (shared with Kodi TVs), watched at 90 %, room amp preset applied on start
+- **Pause menu, Apple TV style**: logo, end time, progress, tabs Chapters (thumbnails, jump), Info, Cast, Audio and Subtitles with readable track names (language, Dolby TrueHD, DTS-HD, 7.1, forced, "non lisible ici")
+- **Server**: `GET /api/tv/play/movie/{tmdb}` and `/api/tv/play/episode/{tvdb}/{s}/{e}` (Jellyfin item, duration, chapters, intro markers, resume), `GET /api/tv/stream/{item}` (original file relayed from Jellyfin with Range, the admin Jellyfin key never leaves the server, only player headers forwarded), `GET /api/tv/chapter-image/{item}/{i}`; device whitelist updated (read-only, Jellyfin id checked before any call). 15 tests
+- **CI**: Kotlin tests, screenshots of every main screen rendered without a device (Robolectric + Roborazzi, 1920×1080) published as an artifact and on the `ci/android-screenshots` branch
+
+### Android app: phone, tablet and Android TV (APK 1.0.0)
+
+#### Added
+- **Android app** (`android/`, ADR-006): a minimal native app (Kotlin, WebView, 3 AndroidX libraries) that opens the ArrMada web app of your server. Updating the server updates the app; the APK only changes for its own behaviour
+- **Connection screen**: server address checked before it is saved (answers within 5 s, and is really ArrMada: catches the API port 8420 typed instead of the web port), clear French error per case (unknown name, timeout, HTTPS certificate, HTTP error), "Enregistrer sans tester" escape hatch
+- **Back key**: closes the open dialog / menu / select first (Escape sent to the page), then previous page, then an app menu (*Recharger*, *Changer de serveur*, *Quitter*); the remote's Menu key opens the same menu
+- **Android TV**: listed in the TV launcher with its 320×180 banner; arrows move a visible blue focus ring to the nearest clickable element (spatial navigation, components that handle their own arrows are left alone), OK clicks, OK on a field opens the on-screen keyboard; layout width 960 / 1280 (default) / 1600 px to read from the couch
+- Native "Serveur ArrMada injoignable" screen (network error, 502/503/504) with *Réessayer* / *Changer de serveur*; links to other sites open in the device browser; trailers go full screen; a crashed WebView engine rebuilds the screen instead of closing the app
+- Network: local HTTP allowed, user-installed CA trusted (homelab reverse proxy), invalid certificates always refused
+- `android/build-apk.sh`: unit tests + APK + signature check, `--init-keystore` (release key kept out of the repo, in `~/.arrmada/`), `--install <ip>` over adb; versionCode = git commit count
+- CI `android.yml`: injected scripts tested in Chromium (20 checks), Kotlin unit tests, APK uploaded as an artifact (release-signed when the `ARRMADA_KEYSTORE_*` secrets exist, debug otherwise)
+- `branding/export.py` also generates the Android vector icon (adaptive, themed) and the TV banner from the logo SVG
+
 ### Jellyfin: "Passer l'intro" without chapters, cast episodes (Kodi add-on 1.25.0)
 
 #### Added

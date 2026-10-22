@@ -348,14 +348,20 @@ def _background(coro) -> None:
 # ── Vu / reprise partagés entre les TV (ADR-004, phase 4.4) ───
 @router.get("/watch-state")
 async def get_watch_states(
-    since: str | None = None, limit: int = watch_sync.MAX_STATES, db: AsyncSession = Depends(get_db)
+    since: str | None = None,
+    limit: int = watch_sync.MAX_STATES,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
 ):
     """États vu / reprise modifiés après `since` (curseur rendu par l'appel précédent).
 
     Sans `since` : tout, page par page (premier passage d'une TV). `more`
     vrai : il en reste, rappeler avec le nouveau curseur.
     """
-    states, more = await watch_sync.changes(db, watch_sync.parse_cursor(since), limit)
+    # Profil famille de la TV (ADR-008) ; « Famille » pour les TV sous Kodi
+    states, more = await watch_sync.changes(
+        db, watch_sync.parse_cursor(since), limit, user.get("profile_id")
+    )
     cursor = states[-1]["updated_at"] if states else (since or "")
     return {"states": states, "cursor": cursor, "more": more}
 
@@ -374,12 +380,19 @@ async def post_watch_states(
     if not isinstance(raw, list):
         raise HTTPException(status_code=422, detail="« states » doit être une liste")
     device = str(user.get("device_name") or payload.get("device") or "ArrMada")
-    changed, rejected = await watch_sync.store(db, raw, bool(payload.get("merge")), device)
+    changed, rejected = await watch_sync.store(
+        db, raw, bool(payload.get("merge")), device, user.get("profile_id")
+    )
     cursor = changed[-1]["updated_at"].isoformat() if changed else ""
     if changed:
         await event_bus.publish(
             event_type="watch_state",
-            data={"changed": len(changed), "device": device, "cursor": cursor},
+            data={
+                "changed": len(changed),
+                "device": device,
+                "cursor": cursor,
+                "profile_id": user.get("profile_id"),
+            },
         )
     return {"status": "ok", "changed": len(changed), "rejected": rejected, "cursor": cursor}
 
@@ -595,7 +608,7 @@ async def list_tv_requests(
 
     `mine` : lancée par la TV qui appelle (elle seule peut l'annuler).
     """
-    items = await tv_priority.list_requests(db, user.get("device_id"))
+    items = await tv_priority.list_requests(db, user.get("device_id"), user.get("profile_id"))
     return {"items": items, "total": len(items)}
 
 
@@ -640,7 +653,7 @@ async def addon_downloads_board(
     db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)
 ):
     """Voie « Pour ce soir », reste de la file et état de SABnzbd, en un appel."""
-    return await tv_board.build_board(db, user.get("device_id"))
+    return await tv_board.build_board(db, user.get("device_id"), user.get("profile_id"))
 
 
 @router.get("/downloads/{service_type}/{download_id}/diagnose")

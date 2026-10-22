@@ -215,10 +215,19 @@ def _pct(volume: int, max_volume: int) -> int:
     return round((volume / max_volume) * 100) if max_volume else 0
 
 
-async def _zone_status(base: str, zone: str = "main") -> dict[str, Any]:
-    st = await _get(base, f"/{zone}/getStatus")
+def zone_status(st: dict[str, Any]) -> dict[str, Any]:
+    """Réponse YXC `getStatus` → état exposé (web app, TV).
+
+    Réglages « voix » et « mode nuit » (dialog_lift, dialog_level,
+    adaptive_drc) : None quand l'ampli ne les a pas (la TV masque alors le
+    réglage dans son menu pause).
+    """
     max_vol = st.get("max_volume") or 161
     vol = st.get("volume") or 0
+
+    def flag(key: str) -> bool | None:
+        return bool(st[key]) if key in st else None
+
     return {
         "power": st.get("power"),
         "volume": vol,
@@ -228,7 +237,17 @@ async def _zone_status(base: str, zone: str = "main") -> dict[str, Any]:
         "input": st.get("input"),
         "actual_db": (st.get("actual_volume") or {}).get("value"),
         "sound_program": st.get("sound_program"),
+        "dialog_lift": st.get("dialogue_lift"),
+        "dialog_level": st.get("dialogue_level"),
+        "adaptive_drc": flag("adaptive_drc"),
+        "enhancer": flag("enhancer"),
+        "extra_bass": flag("extra_bass"),
+        "subwoofer_volume": st.get("subwoofer_volume"),  # niveau du caisson (−12 à +12)
     }
+
+
+async def _zone_status(base: str, zone: str = "main") -> dict[str, Any]:
+    return zone_status(await _get(base, f"/{zone}/getStatus"))
 
 
 async def get_state(db: AsyncSession, service_id: int | None = None) -> dict[str, Any]:
@@ -313,6 +332,9 @@ async def control(
         elif action == "adaptive_drc":
             enable = "true" if value else "false"
             await _get(base, f"/{zone}/setAdaptiveDrc?enable={enable}")
+        elif action == "subwoofer_volume":
+            val = max(-12, min(12, int(value)))
+            await _get(base, f"/{zone}/setSubwooferVolume?volume={val}")
         else:
             return {"status": "error", "detail": f"Action inconnue: {action}"}
     except Exception as exc:
@@ -327,6 +349,9 @@ async def control(
 DEFAULT_PROFILES = {
     "salon": {
         "name": "Salon",
+        # Disposition des enceintes (principales.caissons.plafond) : la TV en
+        # déduit le décodage conseillé selon le son du film
+        "speakers": "5.1",
         "volume_pct": 40,
         "volume_raw": 65,  # Typical YXC volume step (0..161)
         "dialog_lift": 2,
@@ -341,6 +366,8 @@ DEFAULT_PROFILES = {
     },
     "cinema": {
         "name": "Salle de cinéma",
+        # Centrale, 2 avant, 2 surround, 2 arrière, 2 caissons, 2 Atmos
+        "speakers": "7.2.2",
         "volume_pct": 60,
         "volume_raw": 95,
         "dialog_lift": 1,

@@ -30,8 +30,10 @@ import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-MEDIA_TYPES = ("movie", "episode")
-ID_TYPES = ("tmdb", "tvdb", "imdb")
+# « file » + « sha1 » : vidéo hors médiathèque (écran Vidéos), repérée par
+# l'empreinte de son chemin sur le NAS
+MEDIA_TYPES = ("movie", "episode", "file")
+ID_TYPES = ("tmdb", "tvdb", "imdb", "sha1")
 POSITION_TOLERANCE = 10  # s : en dessous, deux positions de reprise sont « la même »
 MAX_STATES = 500  # par envoi et par page de relecture
 _ID = re.compile(r"^[A-Za-z0-9_.-]{1,40}$")
@@ -219,16 +221,19 @@ def _insert_for(db: Any):
 
 
 async def store(
-    db: Any, raw_states: list[Any], merge: bool, device: str
+    db: Any, raw_states: list[Any], merge: bool, device: str, profile_id: int | None = None
 ) -> tuple[list[dict[str, Any]], int]:
     """Range les états envoyés par une TV ; renvoie (lignes modifiées, états refusés).
 
     Lecture des lignes existantes, décision en Python (`resolve`), puis
     upsert `ON CONFLICT (key) DO UPDATE` des seules lignes qui changent.
+    [profile_id] : profil famille (ADR-008), None pour « Famille » ; ses
+    lignes ont une clé préfixée (« p3:movie:tmdb:438631 »).
     """
     from sqlalchemy import select
 
     from app.models.watch_state import WatchState
+    from app.services.family_profiles import profiled_key
 
     incoming: dict[str, dict[str, Any]] = {}
     rejected = 0
@@ -237,6 +242,7 @@ async def store(
         if state is None:
             rejected += 1
             continue
+        state["key"] = profiled_key(state["key"], profile_id)
         incoming[state["key"]] = state  # le dernier d'un même titre l'emporte
 
     existing: dict[str, dict[str, Any]] = {}
@@ -251,7 +257,9 @@ async def store(
     for key, state in incoming.items():
         result = resolve(existing.get(key), state, merge)
         if result is not None:
-            changed.append(dict(result, device=device[:100], updated_at=next_stamp()))
+            changed.append(
+                dict(result, device=device[:100], updated_at=next_stamp(), profile_id=profile_id)
+            )
     if not changed:
         return [], rejected
 
@@ -271,9 +279,9 @@ async def store(
 
 
 async def changes(
-    db: Any, since: datetime | None, limit: int = MAX_STATES
+    db: Any, since: datetime | None, limit: int = MAX_STATES, profile_id: int | None = None
 ) -> tuple[list[dict[str, Any]], bool]:
-    """États modifiés après `since` (tous si None), du plus ancien au plus récent.
+    """États d'un profil modifiés après `since` (tous si None), du plus ancien au plus récent.
 
     Renvoie (états, il en reste d'autres).
     """
@@ -283,6 +291,11 @@ async def changes(
 
     limit = max(1, min(limit, MAX_STATES))
     query = select(WatchState).order_by(WatchState.updated_at, WatchState.id)
+    query = query.where(
+        WatchState.profile_id.is_(None)
+        if profile_id is None
+        else WatchState.profile_id == profile_id
+    )
     if since is not None:
         query = query.where(WatchState.updated_at > since)
     rows = (await db.execute(query.limit(limit + 1))).scalars().all()

@@ -58,6 +58,14 @@ async def _authenticate_device(request: Request, db: AsyncSession, token: str) -
         "avr_service_id": device.avr_service_id,
         "kind": device.kind,
     }
+    # Profil famille qui regarde (appli Android) : « Famille » sans en-tête (ADR-008)
+    from app.services import family_profiles
+
+    profile_id, profile_name = await family_profiles.resolve(
+        db, request.headers.get("X-Profile-Id")
+    )
+    payload["profile_id"] = profile_id
+    payload["profile_name"] = profile_name
     now = datetime.now(UTC).replace(tzinfo=None)
     if device.last_seen_at is None or now - device.last_seen_at > _LAST_SEEN_EVERY:
         device.last_seen_at = now

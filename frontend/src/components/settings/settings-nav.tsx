@@ -16,11 +16,13 @@ import {
     ArrowUpRight,
     BookMarked,
     Cast,
+    FolderOpen,
     MonitorPlay,
     Server,
     SlidersHorizontal,
     Sofa,
     Speaker,
+    Users,
     type LucideIcon,
 } from "lucide-react";
 import { SPRING } from "@/lib/motion";
@@ -71,6 +73,20 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
         short: "Yamaha",
         icon: Speaker,
         description: "Ton ampli home cinéma MusicCast et ses profils audio Salon / Cinéma, pilotés depuis le Salon.",
+    },
+    {
+        href: "/settings/profils",
+        label: "Profils famille",
+        short: "Profils",
+        icon: Users,
+        description: "Qui regarde sur les TV : chacun sa rangée Reprendre, ses vus, son « Pour toi » et ses demandes.",
+    },
+    {
+        href: "/settings/dossiers",
+        label: "Dossiers vidéo",
+        short: "Vidéos",
+        icon: FolderOpen,
+        description: "Dossiers du NAS parcourus dans l'écran Vidéos de l'appli : mangas Kai, vidéos perso, tout ce qui n'a pas de fiche.",
     },
 ];
 

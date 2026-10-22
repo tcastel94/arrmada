@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Sécurité réseau de l'appli.
+
+  1. HTTP en clair autorisé : depuis Android 9, une appli ne peut plus parler
+     en HTTP non chiffré par défaut. Or un serveur ArrMada de homelab est le
+     plus souvent en http://192.168.x.x:3000. On ne peut pas lister les IP à
+     l'avance (le fichier n'accepte pas de plages CIDR), donc on l'autorise
+     partout : l'appli ne charge de toute façon QUE le serveur que tu as saisi
+     (les autres liens partent dans le navigateur du téléphone).
+
+  2. Certificats « utilisateur » acceptés : si ton reverse proxy HTTPS utilise
+     une autorité de certification maison (CA du homelab), installe-la dans
+     Paramètres > Sécurité > Certificats et l'appli lui fera confiance.
+     Par défaut, depuis Android 7, les applis ignorent ces certificats.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

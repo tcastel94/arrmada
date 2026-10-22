@@ -13,6 +13,7 @@ scheduler = AsyncIOScheduler()
 
 def start_scheduler() -> None:
     """Start the scheduler with all registered jobs."""
+    from app.tasks.android_update_task import register as register_android_update
     from app.tasks.artwork_task import register as register_artwork
     from app.tasks.auto_import_task import register as register_auto_import
     from app.tasks.health_check_task import register as register_health_check
@@ -28,6 +29,7 @@ def start_scheduler() -> None:
     register_kodi_playback(scheduler)
     register_artwork(scheduler)
     register_tv_priority(scheduler)
+    register_android_update(scheduler)
 
     scheduler.start()
     logger.info("Scheduler started with %d jobs", len(scheduler.get_jobs()))
