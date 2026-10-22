@@ -6,15 +6,19 @@
  * Affiche, sans gêner le film, en grand (lu depuis le canapé, à 3-4 m) :
  *  - pendant une lecture : l'affiche sur toute la hauteur, l'heure de FIN
  *    prévue en très grand, l'heure de DÉBUT, le temps restant, la barre de
- *    progression, le titre, l'heure et le volume de l'ampli ;
+ *    progression, le titre, l'heure et le volume de l'ampli ; avec l'appli
+ *    Android en plus : formats (4K, Dolby Vision, Atmos), pistes, chapitre,
+ *    générique et épisode suivant, fiche (résumé, distribution) et une
+ *    TÉLÉCOMMANDE TACTILE (pause, −10 s / +30 s, passer l'intro, pistes) ;
  *  - au repos : une grande horloge, les sorties de ce soir / demain, les
  *    téléchargements en cours et l'ampli de la pièce.
  *
  * Trois états, comme une petite machine à états :
  *  1. « appairage » : pas encore de jeton → code + QR code à valider depuis
  *     le téléphone (Réglages → Kodi → Appareils), comme pour une TV ;
- *  2. « affichage » : jeton « écran » (lecture seule, une seule route
- *     serveur : GET /api/ambient), relevé toutes les 10 s ;
+ *  2. « affichage » : jeton « écran » (GET /api/ambient, relevé toutes les
+ *     10 s, 5 s pendant une lecture ; et POST /api/ambient/command pour la
+ *     télécommande de la lecture en cours de sa pièce) ;
  *  3. « aperçu » : depuis un PC où l'on est connecté en admin, pour régler
  *     l'affichage sans appairer (bouton sur l'écran d'appairage).
  *
@@ -26,13 +30,32 @@
  * que l'add-on envoie déjà au serveur (aucun serveur web Kodi à ouvrir).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
-import { CalendarClock, Download, Loader2, Pause, Speaker, Volume2, VolumeX, WifiOff } from "lucide-react";
+import {
+    AudioLines,
+    CalendarClock,
+    ChevronsRight,
+    Download,
+    Info,
+    Loader2,
+    Pause,
+    Play,
+    RotateCcw,
+    RotateCw,
+    SkipForward,
+    Speaker,
+    Subtitles,
+    Volume2,
+    VolumeX,
+    WifiOff,
+    X,
+} from "lucide-react";
 import { BrandIcon } from "@/components/brand/brand-mark";
 import { API_URL } from "@/lib/constants";
 import { getToken } from "@/lib/api-client";
 import {
+    activeSkip,
     getScreenToken,
     hasFully,
     hhmm,
@@ -46,14 +69,21 @@ import {
     sessionAt,
     setBrightness,
     setScreenToken,
+    untilCredits,
     type Ambient,
     type AmbientPlaying,
+    type AmbientTrack,
+    type RemoteAction,
     type ScreenOptions,
 } from "@/lib/ambient";
 import { cn } from "@/lib/utils";
 
 /** Relevé du serveur (s). La position avance toute seule entre deux relevés. */
 const POLL_MS = 10_000;
+/** Pendant une lecture : relevé plus serré (pistes, « Passer l'intro »). */
+const POLL_PLAYING_MS = 5_000;
+/** Après une commande : le temps que la TV l'applique et renvoie son état. */
+const AFTER_COMMAND_MS = 1_200;
 /** Toucher l'écran pendant un film : luminosité de repos pendant ce temps. */
 const WAKE_MS = 20_000;
 /** Décalage de quelques pixels toutes les 5 min (écran allumé en permanence). */
@@ -76,6 +106,16 @@ async function fetchAmbient(auth: Auth, room: string): Promise<Ambient> {
     const response = await fetch(`${API_URL}/api/ambient${query}`, { headers: authHeaders(auth), cache: "no-store" });
     if (!response.ok) throw new HttpError(response.status, `HTTP ${response.status}`);
     return response.json();
+}
+
+/** Télécommande tactile : la TV de la pièce reçoit la commande en moins d'une seconde. */
+async function sendCommand(auth: Auth, room: string, command: RemoteAction): Promise<void> {
+    const response = await fetch(`${API_URL}/api/ambient/command`, {
+        method: "POST",
+        headers: { ...authHeaders(auth), "Content-Type": "application/json" },
+        body: JSON.stringify(auth.kind === "admin" ? { ...command, room } : command),
+    });
+    if (!response.ok) throw new HttpError(response.status, `HTTP ${response.status}`);
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -315,7 +355,7 @@ function AmbientView({
     const { data, error, dataUpdatedAt } = useQuery({
         queryKey: ["ambient", auth.kind, room],
         queryFn: () => fetchAmbient(auth, room),
-        refetchInterval: POLL_MS,
+        refetchInterval: (query) => (query.state.data?.playing ? POLL_PLAYING_MS : POLL_MS),
         refetchIntervalInBackground: true,
         retry: false,
         // Une panne réseau garde le dernier affichage (avec un petit avertissement)
@@ -327,6 +367,16 @@ function AmbientView({
     useEffect(() => {
         if (error instanceof HttpError && error.status === 401 && auth.kind === "screen") onRevoked();
     }, [error, auth.kind, onRevoked]);
+
+    // Télécommande : envoi, puis relecture rapide de l'état renvoyé par la TV
+    const queryClient = useQueryClient();
+    const onCommand = useCallback(
+        async (command: RemoteAction) => {
+            await sendCommand(auth, room, command);
+            setTimeout(() => queryClient.invalidateQueries({ queryKey: ["ambient", auth.kind, room] }), AFTER_COMMAND_MS);
+        },
+        [auth, room, queryClient],
+    );
 
     // Écart d'horloge tablette ↔ serveur, mesuré à chaque réponse
     const offset = useMemo(() => (data ? data.server_time - dataUpdatedAt / 1000 : 0), [data, dataUpdatedAt]);
@@ -381,7 +431,7 @@ function AmbientView({
                 )}
             >
                 {playing ? (
-                    <SessionView playing={playing} now={now} offset={offset} amp={data?.amp ?? null} />
+                    <SessionView playing={playing} now={now} offset={offset} amp={data?.amp ?? null} onCommand={onCommand} />
                 ) : (
                     <RestView now={now} data={data} />
                 )}
@@ -425,14 +475,26 @@ function SessionView({
     now,
     offset,
     amp,
+    onCommand,
 }: {
     playing: AmbientPlaying;
     now: Date;
     offset: number;
     amp: Ambient["amp"];
+    onCommand: (command: RemoteAction) => Promise<void>;
 }) {
     const session = sessionAt(playing, now.getTime(), offset);
     const status = session.paused ? "En pause" : playing.kind === "episode" ? "Épisode en cours" : "Film en cours";
+    const badges = [playing.video, playing.audio, playing.subtitle_track ? `Sous-titres ${playing.subtitle_track}` : ""].filter(Boolean);
+    const credits = untilCredits(playing, session.position);
+    // Appli Android : badges, détails et télécommande en plus → tout resserré
+    // pour tenir sur un écran de tablette en paysage
+    const compact = playing.remote;
+    const details = [
+        playing.chapter ? `Chapitre : ${playing.chapter}` : "",
+        credits !== null ? `Générique dans ${remainingLabel(credits)}` : "",
+        playing.next_up ? `Ensuite : ${playing.next_up}` : "",
+    ].filter(Boolean);
     return (
         <motion.section
             key={`${playing.title}-${playing.subtitle}`}
@@ -456,7 +518,7 @@ function SessionView({
                 />
             )}
 
-            <div className="flex min-w-0 flex-1 flex-col justify-between" style={{ gap: u(2.5) }}>
+            <div className="flex min-w-0 flex-1 flex-col justify-between" style={{ gap: u(compact ? 1.6 : 2.5) }}>
                 {/* Bandeau : état de la lecture, volume de l'ampli, heure */}
                 <div className="flex items-center justify-between" style={{ gap: u(3) }}>
                     <p
@@ -489,13 +551,30 @@ function SessionView({
 
                 {/* Titre (2 lignes au plus) et épisode ou année */}
                 <div>
-                    <h1 className="line-clamp-2 font-semibold leading-[1.05] text-white" style={{ fontSize: u(8) }}>
+                    <h1
+                        className={cn("font-semibold leading-[1.05] text-white", compact ? "line-clamp-1" : "line-clamp-2")}
+                        style={{ fontSize: u(compact ? 7 : 8) }}
+                    >
                         {playing.title}
                     </h1>
                     {playing.subtitle && (
-                        <p className="truncate text-slate-400" style={{ fontSize: u(4.6), marginTop: u(1) }}>
+                        <p className="truncate text-slate-400" style={{ fontSize: u(compact ? 4 : 4.6), marginTop: u(1) }}>
                             {playing.subtitle}
                         </p>
+                    )}
+                    {/* Formats de la séance (appli Android) : image, son, sous-titres, sur une ligne */}
+                    {badges.length > 0 && (
+                        <div className="flex flex-nowrap overflow-hidden" style={{ gap: u(1.2), marginTop: u(1.4) }}>
+                            {badges.map((badge) => (
+                                <span
+                                    key={badge}
+                                    className="shrink-0 truncate rounded-full border border-white/10 bg-white/[0.06] text-slate-300"
+                                    style={{ fontSize: u(2.7), padding: `${u(0.5)} ${u(1.8)}` }}
+                                >
+                                    {badge}
+                                </span>
+                            ))}
+                        </div>
                     )}
                 </div>
 
@@ -506,7 +585,7 @@ function SessionView({
                     </p>
                     <p
                         className={cn("font-medium leading-[0.9] tracking-tight tabular-nums", session.paused ? "text-amber-200" : "text-[#8CC4FF]")}
-                        style={{ fontSize: u(26) }}
+                        style={{ fontSize: u(compact ? 20 : 26) }}
                     >
                         {hhmm(session.endsAt)}
                     </p>
@@ -514,8 +593,8 @@ function SessionView({
 
                 {/* Début et temps restant */}
                 <div className="flex flex-wrap" style={{ columnGap: u(9), rowGap: u(2) }}>
-                    <BigFigure label="Début" value={hhmm(session.startedAt)} />
-                    <BigFigure label="Reste" value={session.endsAt ? remainingLabel(session.remaining) : "—"} />
+                    <BigFigure label="Début" value={hhmm(session.startedAt)} size={compact ? 8 : 11} />
+                    <BigFigure label="Reste" value={session.endsAt ? remainingLabel(session.remaining) : "—"} size={compact ? 8 : 11} />
                 </div>
 
                 {session.endsAt && (
@@ -529,18 +608,298 @@ function SessionView({
                         />
                     </div>
                 )}
+
+                {/* Chapitre, générique, épisode suivant */}
+                {details.length > 0 && (
+                    <p className="truncate text-slate-400" style={{ fontSize: u(3.2) }}>
+                        {details.join("   ·   ")}
+                    </p>
+                )}
+
+                {playing.remote && <RemoteBar playing={playing} position={session.position} paused={session.paused} onCommand={onCommand} />}
             </div>
         </motion.section>
     );
 }
 
-function BigFigure({ label, value }: { label: string; value: string }) {
+/* ── Télécommande tactile (appli Android) ─────────────────────── */
+
+type Sheet = "subtitles" | "audio" | "info" | null;
+
+function RemoteBar({
+    playing,
+    position,
+    paused,
+    onCommand,
+}: {
+    playing: AmbientPlaying;
+    position: number;
+    paused: boolean;
+    onCommand: (command: RemoteAction) => Promise<void>;
+}) {
+    const [sheet, setSheet] = useState<Sheet>(null);
+    const [busy, setBusy] = useState(false);
+    const [failed, setFailed] = useState(false);
+    const skip = activeSkip(playing, position);
+    // Générique commencé et épisode suivant connu : « Épisode suivant »
+    const nextReady = !!playing.next_up && playing.credits_at > 0 && position >= playing.credits_at;
+
+    const run = async (command: RemoteAction) => {
+        setBusy(true);
+        setFailed(false);
+        try {
+            await onCommand(command);
+        } catch {
+            setFailed(true);
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <>
+            {/* Une seule ligne : boutons ronds, seul l'action du moment (intro, suivant) garde son texte */}
+            <div className="flex items-center" style={{ gap: u(1.2) }}>
+                <RemoteButton label="Reculer de 10 s" caption="10" round onClick={() => run({ action: "seek", value: -10 })}>
+                    <RotateCcw style={{ width: u(3.4), height: u(3.4) }} />
+                </RemoteButton>
+                <RemoteButton label={paused ? "Lecture" : "Pause"} round primary onClick={() => run({ action: "toggle" })}>
+                    {busy ? (
+                        <Loader2 className="animate-spin" style={{ width: u(4.4), height: u(4.4) }} />
+                    ) : paused ? (
+                        <Play style={{ width: u(4.4), height: u(4.4) }} />
+                    ) : (
+                        <Pause style={{ width: u(4.4), height: u(4.4) }} />
+                    )}
+                </RemoteButton>
+                <RemoteButton label="Avancer de 30 s" caption="30" round onClick={() => run({ action: "seek", value: 30 })}>
+                    <RotateCw style={{ width: u(3.4), height: u(3.4) }} />
+                </RemoteButton>
+                {skip && (
+                    <RemoteButton label={skip.label} accent onClick={() => run({ action: "skip" })}>
+                        <ChevronsRight style={{ width: u(3.8), height: u(3.8) }} />
+                    </RemoteButton>
+                )}
+                {nextReady && (
+                    <RemoteButton label="Épisode suivant" accent onClick={() => run({ action: "next" })}>
+                        <SkipForward style={{ width: u(3.8), height: u(3.8) }} />
+                    </RemoteButton>
+                )}
+                <span className="flex-1" />
+                {playing.subtitle_tracks.length > 0 && (
+                    <RemoteButton label="Sous-titres" round onClick={() => setSheet("subtitles")}>
+                        <Subtitles style={{ width: u(3.8), height: u(3.8) }} />
+                    </RemoteButton>
+                )}
+                {playing.audio_tracks.length > 1 && (
+                    <RemoteButton label="Son" round onClick={() => setSheet("audio")}>
+                        <AudioLines style={{ width: u(3.8), height: u(3.8) }} />
+                    </RemoteButton>
+                )}
+                {(playing.overview || playing.cast.length > 0) && (
+                    <RemoteButton label="Fiche" round onClick={() => setSheet("info")}>
+                        <Info style={{ width: u(3.8), height: u(3.8) }} />
+                    </RemoteButton>
+                )}
+            </div>
+            {failed && (
+                <p className="text-amber-300/80" style={{ fontSize: u(2.8) }}>
+                    La TV n&apos;a pas répondu : réessaie dans un instant.
+                </p>
+            )}
+
+            <AnimatePresence>
+                {sheet && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-20 flex items-end justify-center bg-black/80 backdrop-blur-sm"
+                        onClick={() => setSheet(null)}
+                    >
+                        <motion.div
+                            initial={{ y: 40 }}
+                            animate={{ y: 0 }}
+                            exit={{ y: 40 }}
+                            className="w-full max-w-[min(100%,calc(var(--u)*150))] overflow-y-auto border border-white/10 bg-[#0d1117]"
+                            style={{ maxHeight: "85dvh", padding: u(4), borderRadius: `${u(3)} ${u(3)} 0 0` }}
+                            onClick={(event) => event.stopPropagation()}
+                        >
+                            <div className="flex items-center justify-between" style={{ marginBottom: u(2.5) }}>
+                                <p className="font-semibold text-white" style={{ fontSize: u(4.4) }}>
+                                    {sheet === "subtitles" ? "Sous-titres" : sheet === "audio" ? "Son" : playing.title}
+                                </p>
+                                <button type="button" onClick={() => setSheet(null)} className="rounded-full p-2 text-slate-400 hover:bg-white/10" aria-label="Fermer">
+                                    <X style={{ width: u(4.4), height: u(4.4) }} />
+                                </button>
+                            </div>
+                            {sheet === "info" ? (
+                                <InfoSheet playing={playing} />
+                            ) : (
+                                <TrackSheet
+                                    tracks={sheet === "subtitles" ? playing.subtitle_tracks : playing.audio_tracks}
+                                    allowOff={sheet === "subtitles"}
+                                    onPick={(index) => {
+                                        void run({ action: "track", value: { type: sheet === "subtitles" ? "text" : "audio", index } });
+                                        setSheet(null);
+                                    }}
+                                />
+                            )}
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </>
+    );
+}
+
+/**
+ * Bouton de la télécommande. [round] : icône seule dans un rond (le texte
+ * devient l'étiquette d'accessibilité), avec une petite [caption] dessous
+ * (« 10 », « 30 ») pour les sauts.
+ */
+function RemoteButton({
+    label,
+    caption,
+    round,
+    primary,
+    accent,
+    onClick,
+    children,
+}: {
+    label: string;
+    caption?: string;
+    round?: boolean;
+    primary?: boolean;
+    accent?: boolean;
+    onClick: () => void;
+    children: React.ReactNode;
+}) {
+    if (round) {
+        return (
+            <button
+                type="button"
+                onClick={onClick}
+                aria-label={label}
+                title={label}
+                className={cn(
+                    "flex shrink-0 flex-col items-center justify-center rounded-full transition-colors active:scale-95",
+                    primary ? "bg-[#4A9EFF] text-[#0b1220] hover:bg-[#6cb1ff]" : "bg-white/[0.07] text-slate-200 hover:bg-white/[0.12]",
+                )}
+                style={{ width: u(primary ? 9.5 : 8), height: u(primary ? 9.5 : 8) }}
+            >
+                {children}
+                {caption && (
+                    <span className="font-semibold leading-none tabular-nums" style={{ fontSize: u(1.9), marginTop: u(0.3) }}>
+                        {caption}
+                    </span>
+                )}
+            </button>
+        );
+    }
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            className={cn(
+                "flex shrink-0 items-center rounded-full font-medium transition-colors active:scale-95",
+                primary
+                    ? "bg-[#4A9EFF] text-[#0b1220] hover:bg-[#6cb1ff]"
+                    : accent
+                      ? "bg-[#4A9EFF]/15 text-[#8CC4FF] ring-1 ring-[#4A9EFF]/40 hover:bg-[#4A9EFF]/25"
+                      : "bg-white/[0.07] text-slate-200 hover:bg-white/[0.12]",
+            )}
+            style={{ height: u(8.5), padding: `0 ${u(2.6)}`, gap: u(1.1), fontSize: u(3) }}
+        >
+            {children}
+            <span>{label}</span>
+        </button>
+    );
+}
+
+function TrackSheet({ tracks, allowOff, onPick }: { tracks: AmbientTrack[]; allowOff: boolean; onPick: (index: number) => void }) {
+    const none = !tracks.some((t) => t.selected);
+    const rows: { index: number; label: string; detail: string; selected: boolean }[] = [
+        ...(allowOff ? [{ index: -1, label: "Aucun", detail: "Sous-titres désactivés", selected: none }] : []),
+        ...tracks,
+    ];
+    return (
+        <ul className="flex flex-col" style={{ gap: u(1.2) }}>
+            {rows.map((track) => (
+                <li key={track.index}>
+                    <button
+                        type="button"
+                        onClick={() => onPick(track.index)}
+                        className={cn(
+                            "flex w-full items-center justify-between text-left transition-colors",
+                            track.selected ? "bg-[#4A9EFF]/15 ring-1 ring-[#4A9EFF]/50" : "bg-white/[0.04] hover:bg-white/[0.08]",
+                        )}
+                        style={{ padding: `${u(2)} ${u(2.8)}`, borderRadius: u(1.6), gap: u(2) }}
+                    >
+                        <span className="min-w-0">
+                            <span className="block truncate text-slate-100" style={{ fontSize: u(3.4) }}>
+                                {track.label}
+                            </span>
+                            {track.detail && (
+                                <span className="block truncate text-slate-500" style={{ fontSize: u(2.7) }}>
+                                    {track.detail}
+                                </span>
+                            )}
+                        </span>
+                        {track.selected && <span className="shrink-0 rounded-full bg-[#4A9EFF]" style={{ width: u(1.6), height: u(1.6) }} />}
+                    </button>
+                </li>
+            ))}
+        </ul>
+    );
+}
+
+function InfoSheet({ playing }: { playing: AmbientPlaying }) {
+    return (
+        <div className="flex flex-col" style={{ gap: u(3) }}>
+            {playing.meta_line && (
+                <p className="text-slate-400" style={{ fontSize: u(3) }}>
+                    {playing.meta_line}
+                </p>
+            )}
+            {playing.overview && (
+                <p className="leading-relaxed text-slate-200" style={{ fontSize: u(3.4) }}>
+                    {playing.overview}
+                </p>
+            )}
+            {playing.cast.length > 0 && (
+                <ul className="grid grid-cols-4 portrait:grid-cols-3" style={{ gap: u(2.5) }}>
+                    {playing.cast.map((person) => (
+                        <li key={`${person.name}-${person.character}`} className="flex flex-col items-center text-center" style={{ gap: u(0.8) }}>
+                            {person.photo ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={person.photo} alt="" className="rounded-full object-cover" style={{ width: u(14), height: u(14) }} />
+                            ) : (
+                                <span className="rounded-full bg-white/10" style={{ width: u(14), height: u(14) }} />
+                            )}
+                            <span className="w-full truncate text-slate-100" style={{ fontSize: u(2.8) }}>
+                                {person.name}
+                            </span>
+                            {person.character && (
+                                <span className="w-full truncate text-slate-500" style={{ fontSize: u(2.5) }}>
+                                    {person.character}
+                                </span>
+                            )}
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </div>
+    );
+}
+
+function BigFigure({ label, value, size = 11 }: { label: string; value: string; size?: number }) {
     return (
         <div className="min-w-0">
             <p className="font-medium uppercase text-slate-400" style={{ fontSize: u(3.2), letterSpacing: "0.14em" }}>
                 {label}
             </p>
-            <p className="leading-none tabular-nums text-slate-100" style={{ fontSize: u(11), marginTop: u(0.8) }}>
+            <p className="leading-none tabular-nums text-slate-100" style={{ fontSize: u(size), marginTop: u(0.8) }}>
                 {value}
             </p>
         </div>
@@ -575,7 +934,7 @@ function RestView({ now, data }: { now: Date; data?: Ambient }) {
             <div className="flex flex-col" style={{ gap: u(3) }}>
                 <p className="text-slate-500" style={{ fontSize: u(3) }}>
                     Rien en lecture{room ? ` dans ${room === "Salle de cinéma" ? "la salle de cinéma" : `le ${room.toLowerCase()}`}` : ""}. Lance un film sur
-                    Kodi : l&apos;heure de fin s&apos;affichera ici en grand.
+                    la TV : l&apos;heure de fin s&apos;affichera ici en grand.
                 </p>
                 {hasPanels && (
                     <div className="flex portrait:flex-col" style={{ gap: u(3) }}>

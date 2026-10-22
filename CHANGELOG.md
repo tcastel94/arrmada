@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Home-made series in the web app (Médiathèque › Séries)
+
+#### Added
+- **"Séries maison" row** above the library grid (types "Tout" and "Séries"): poster, badge ("Kai"), arcs and episodes count. Fan edits are not in Sonarr, so they get their own row instead of being mixed into the server-paginated grid
+- **Series page** `/media/local/{id}`: backdrop, poster, overview, arcs as tabs, episodes with thumbnail, watched ✓ and resume bar ("Arrêté à 25:30 sur 1:56:10"), a main **"S01E02 sur la TV"** (episode in progress, else the next one) and one per episode (resume or from the start)
+- **Server**: `GET /api/videos/series/{id}?states=true` adds each episode's watched / resume state (same shared keys as the TVs, family profile aware); `play_request` accepts `media_type: "file"` with the video token, the series and the resume position (token format checked; the TV still resolves it under its root folder). The app (2.11.0) plays such requests like a Vidéos-screen file. Images of the NAS are loaded with the session token in the URL, like the live event stream
+
+### Tablet under the TV: richer screen and touch remote (APK 2.11.0)
+
+#### Added
+- **Richer ambient screen** while the Android app plays (the Kodi add-on keeps the previous screen): picture format ("4K · Dolby Vision", "SDR (converti)"), sound track ("Français · TrueHD Atmos · 7.1"), subtitles shown, current chapter, "Générique dans 12 min", "Ensuite : S02E04 · …", and a **Fiche** sheet (overview, genres / director, main cast with photos). The layout tightens so everything still fits a landscape tablet
+- **Touch remote** on the tablet: play / pause, −10 s / +30 s, "Passer l'intro" / "Passer le récap" while one is on screen, "Épisode suivant" during the credits, subtitle and sound track pickers. The tablet posts `POST /api/ambient/command` (screen token: its own room only; actions and values bounded, 409 when nothing remote-capable is playing); the TV long-polls `GET /api/tv/remote?after=N` (answer on the next command or after 15 s, commands older than 15 s never replayed) and applies it at once, then reports its new state. The tablet polls every 5 s during playback (10 s otherwise). 6 server tests, 4 JVM tests
+
+### Android app 2.10.4: the tablet under the TV works again
+
+#### Fixed
+- **Ambient screen (Pixel tablet under the TV) stayed on the clock during playback** since the switch from Kodi to the app: the "now playing" feed came from the Kodi add-on (`POST /api/kodi/scrobble`), which the app never sent. The TV app now sends the same events (play, pause, resume, progress every 30 s, stop with the percentage reached): poster, end time, progress bar and Fully Kiosk "séance" brightness come back. Phones and tablets running the app do not report (the living-room screen would show what is watched elsewhere). 3 JVM tests
+
+### Android app 2.10.3: pause with OK, French subtitles from the pause menu
+
+#### Fixed
+- **OK (centre button) paused for a split second then resumed**: the pause menu opened on key press and the key release "clicked" its focused "Reprendre" button. The release is now swallowed (Play/Pause was not affected)
+- Old **`.avi`** (Naruto Shippuden Kai 01–06) failing with `ERROR_CODE_IO_UNSPECIFIED`: Media3's AVI support is limited (index at the end, XviD packed B-frames). New `scripts/remux-avi-mkv.sh` rewraps a folder's `.avi` into `.mkv` (picture copied untouched; MP3 / MP2 sound re-encoded to AAC, since Android's decoder gave **no sound** on MP3 split across AVI chunks; `--reparer-son` fixes `.mkv` files that still carry MP3) (jellyfin-ffmpeg borrowed from the Jellyfin container image, `mpeg4_unpack_bframes` for XviD, duration check, originals moved to the hidden `.avi-originaux/`); the player's error screen points to it for `.avi` files
+- Dolby Vision toast shortened ("Image convertie en SDR (TV sans Dolby Vision)"): Android TV cuts toasts after two lines
+
+#### Added
+- **External subtitles in the player**: `.srt` / `.ass` / `.vtt` files next to the video (Bazarr downloads) are listed in the Subtitles tab ("Français · fichier"); before, the player only saw the tracks inside the MKV. `/api/tv/play` returns `subtitles`; new relay `GET /api/tv/subtitle/{id}/{index}.{srt|ass|vtt}` (Jellyfin converts to UTF-8; image subtitles such as PGS are skipped)
+- **"⬇ Sous-titres FR" in the pause menu** (movies and episodes of the library): Bazarr searches and downloads, Jellyfin re-reads the folder, the new subtitle is added to the tracks and French is selected, playback stays paused. `POST /api/tv/subtitles/{id}` waits 25 s for Bazarr (it keeps searching after that: "réessaie dans une minute") and 12 s for Jellyfin. 9 tests
+
 ### Android app 2.10.2: Dolby Vision profile 5 on a screen without Dolby Vision
 
 #### Fixed

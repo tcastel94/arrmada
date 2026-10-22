@@ -33,6 +33,64 @@ export interface AmbientPlaying {
     updated_at: number;
     started_at: number;
     device: string;
+    /* ── Appli Android (vides avec Kodi) ── */
+    /** « 4K · Dolby Vision », « 1080p · SDR (converti) » */
+    video: string;
+    /** « Français · TrueHD Atmos · 7.1 » */
+    audio: string;
+    /** Sous-titres affichés (« Français (forcés) »), vide si aucun. */
+    subtitle_track: string;
+    chapter: string;
+    /** Début du générique de fin (s), 0 si inconnu. */
+    credits_at: number;
+    /** « S02E04 · Titre » */
+    next_up: string;
+    /** Passages à sauter : « Passer l'intro » pendant [start, end[. */
+    skips: AmbientSkip[];
+    overview: string;
+    meta_line: string;
+    cast: AmbientCast[];
+    subtitle_tracks: AmbientTrack[];
+    audio_tracks: AmbientTrack[];
+    /** La TV accepte la télécommande tactile. */
+    remote: boolean;
+}
+
+export interface AmbientSkip {
+    kind: string;
+    label: string;
+    start: number;
+    end: number;
+}
+
+export interface AmbientCast {
+    name: string;
+    character: string;
+    photo: string;
+}
+
+export interface AmbientTrack {
+    index: number;
+    label: string;
+    detail: string;
+    selected: boolean;
+}
+
+/** Commande de la télécommande tactile (POST /api/ambient/command). */
+export type RemoteAction =
+    | { action: "toggle" | "play" | "pause" | "skip" | "next" }
+    | { action: "seek"; value: number }
+    | { action: "track"; value: { type: "text" | "audio"; index: number } };
+
+/** Passage à sauter en cours à cette position, s'il y en a un. */
+export function activeSkip(playing: AmbientPlaying, position: number): AmbientSkip | null {
+    return (playing.skips ?? []).find((s) => position >= s.start && position < s.end) ?? null;
+}
+
+/** Secondes avant le générique de fin, ou null (inconnu, ou déjà commencé). */
+export function untilCredits(playing: AmbientPlaying, position: number): number | null {
+    const at = playing.credits_at ?? 0;
+    return at > 0 && at > position ? at - position : null;
 }
 
 export interface AmbientAmp {

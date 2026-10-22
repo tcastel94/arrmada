@@ -225,9 +225,49 @@ async def tmdb_search(q: str = Query(..., min_length=2, max_length=100)) -> dict
     }
 
 
+async def _states(db: AsyncSession, detail: dict[str, Any], profile_id: int | None) -> None:
+    """Ajoute à chaque épisode son vu / sa reprise (`state`), pour la web app.
+
+    Clés du vu partagé : « file:sha1:<empreinte> », préfixées du profil
+    famille s'il y en a un (ADR-008). Une seule requête pour toute la série.
+    """
+    from app.models.watch_state import WatchState
+    from app.services import watch_sync
+    from app.services.family_profiles import profiled_key
+
+    episodes = [ep for season in detail["seasons"] for ep in season["episodes"]]
+    keys = {
+        profiled_key(watch_sync.state_key("file", "sha1", ep["watch_id"]), profile_id): ep
+        for ep in episodes
+        if ep.get("watch_id")
+    }
+    rows = (
+        (await db.execute(select(WatchState).where(WatchState.key.in_(list(keys))))).scalars().all()
+        if keys
+        else []
+    )
+    found = {row.key: row for row in rows}
+    for key, ep in keys.items():
+        row = found.get(key)
+        ep["state"] = (
+            {
+                "watched": bool(row.watched),
+                "position": int(row.position or 0),
+                "total": int(row.total or 0),
+            }
+            if row
+            else None
+        )
+
+
 @router.get("/{series_id}")
-async def series_detail(series_id: int, db: AsyncSession = Depends(get_db)) -> dict:
-    """Écran Série : saisons (arcs) et épisodes."""
+async def series_detail(
+    series_id: int,
+    states: bool = False,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Écran Série : saisons (arcs) et épisodes (`states=true` : avec le vu / la reprise)."""
     series = await db.get(LocalSeries, series_id)
     if series is None:
         raise HTTPException(status_code=404, detail="Série inconnue")
@@ -236,7 +276,10 @@ async def series_detail(series_id: int, db: AsyncSession = Depends(get_db)) -> d
     scan = _scan(series, root)
     if scan is None:
         raise HTTPException(status_code=404, detail="Dossier de la série introuvable sur le NAS")
-    return _detail(series, scan)
+    detail = _detail(series, scan)
+    if states:
+        await _states(db, detail, user.get("profile_id"))
+    return detail
 
 
 # ─── Web app ─────────────────────────────────────────────────────────────────

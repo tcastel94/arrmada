@@ -26,10 +26,33 @@ VIDEO = bytes(range(256)) * 40  # « fichier » de 10 240 octets
 SEEN: dict[str, Any] = {}
 
 
+def _dune_streams() -> list[dict[str, Any]]:
+    """Dune : un .en.srt à côté du fichier ; le .fr.srt arrive quand Bazarr l'a
+    téléchargé ET que Jellyfin a relu le dossier (Refresh)."""
+    streams: list[dict[str, Any]] = [
+        {"Type": "Video", "Codec": "hevc", "VideoRangeType": "HDR10"},
+        {"Type": "Subtitle", "Index": 2, "Codec": "subrip", "Language": "eng", "IsExternal": True},
+        {"Type": "Subtitle", "Index": 3, "Codec": "PGSSUB", "Language": "fre", "IsExternal": True},
+        {"Type": "Subtitle", "Index": 4, "Codec": "ass", "Language": "fre", "IsExternal": False},
+    ]
+    refreshed = any(path == f"/Items/{MOVIE_ID}/Refresh" for _h, path, _b in fake_arr.POSTS)
+    if SEEN.get("bazarr") and refreshed:
+        streams.append(
+            {"Type": "Subtitle", "Index": 5, "Codec": "srt", "Language": "fre", "IsExternal": True}
+        )
+    return streams
+
+
+def _subtitle(params: dict, m: Any) -> httpx.Response:
+    SEEN["subtitle"] = {"path": m.group(0), "params": params}
+    return httpx.Response(200, text="1\n00:00:01,000 --> 00:00:02,000\nÉté\n")
+
+
 def _items(params: dict, _m: Any) -> Any:
     if params.get("ids") == MOVIE_ID:
         return {"Items": [{
             "Id": MOVIE_ID, "Name": "Dune", "Overview": "Arrakis.", "RunTimeTicks": 9300 * T,
+            "MediaSources": [{"Path": "/movies/Dune.mkv", "MediaStreams": _dune_streams()}],
             "Chapters": [
                 {"Name": "Ouverture", "StartPositionTicks": 0, "ImageTag": "a1"},
                 {"Name": "Arrakis", "StartPositionTicks": int(612.5 * T), "ImageTag": "b2"},
@@ -159,6 +182,7 @@ async def jellyfin(
         (r"/MediaSegments/([^/]+)", _segments),
         (r"/Items/([^/]+)/LocalTrailers", _trailers),
         (r"/Videos/([^/]+)/stream", _stream),
+        (r"/Videos/([^/]+)/([^/]+)/Subtitles/(\d+)/0/Stream\.(srt|ass|vtt)", _subtitle),
         (r"/Videos/([^/]+)/((?:master|main)\.m3u8|hls1/.+)", _hls),
         (r"/Items/([^/]+)/Images/Chapter/(\d+)", _chapter),
         (r"/Items/([^/]+)/Images/Primary", _primary),
@@ -211,6 +235,10 @@ async def _tv(client: AsyncClient, admin: dict[str, str]) -> dict[str, str]:
         ("GET", f"/api/tv/hls/{MOVIE_ID}/stream", False),
         ("GET", f"/api/tv/hls/{MOVIE_ID}/sdr.m3u8", True),
         ("GET", f"/api/tv/hls/{MOVIE_ID}/hdr.m3u8", False),
+        ("GET", f"/api/tv/subtitle/{MOVIE_ID}/5.srt", True),
+        ("GET", f"/api/tv/subtitle/{MOVIE_ID}/5.sup", False),
+        ("POST", f"/api/tv/subtitles/{MOVIE_ID}", True),
+        ("GET", f"/api/tv/subtitles/{MOVIE_ID}", False),
     ],
 )
 def test_device_scope(method: str, path: str, allowed: bool) -> None:
@@ -537,3 +565,106 @@ async def test_play_movie_resume_is_per_profile(
     family = (await client.get("/api/tv/play/movie/438631", headers=tv)).json()
     assert mine["resume"]["position"] == 4210
     assert family["resume"]["position"] == 0  # la reprise de Tom n'est pas celle de la famille
+
+
+# ── Sous-titres externes (Bazarr) : affichés, et recherchés depuis le menu pause ──
+
+
+async def test_play_lists_external_subtitles(client: AsyncClient, jellyfin: dict[str, str]) -> None:
+    tv = await _tv(client, jellyfin)
+    fake_arr.POSTS.clear()
+    data = (await client.get("/api/tv/play/movie/438631", headers=tv)).json()
+    # Le .en.srt seulement : ni le PGS (image), ni la piste intégrée au MKV
+    assert data["subtitles"] == [
+        {
+            "url": f"/api/tv/subtitle/{MOVIE_ID}/2.srt",
+            "label": "Anglais · fichier",
+            "language": "en",
+            "mime": "application/x-subrip",
+        }
+    ]
+    sub = await client.get(data["subtitles"][0]["url"], headers=tv)
+    assert sub.status_code == 200 and "Été" in sub.text
+    assert sub.headers["content-type"].startswith("application/x-subrip")
+    assert "charset=utf-8" in sub.headers["content-type"]
+    assert SEEN["subtitle"]["path"] == f"/Videos/{MOVIE_ID}/{MOVIE_ID}/Subtitles/2/0/Stream.srt"
+    assert SEEN["subtitle"]["params"] == {"ApiKey": "j-key"}
+    bad = await client.get(f"/api/tv/subtitle/{MOVIE_ID}/2.exe", headers=jellyfin)
+    assert bad.status_code == 404
+
+
+async def test_download_subtitles_from_pause_menu(
+    client: AsyncClient, jellyfin: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.services import kodi
+
+    async def fake_bazarr(_db: Any, data: dict) -> dict:
+        SEEN["bazarr"] = data
+        return {"status": "ok", "message": "Recherche lancée"}
+
+    monkeypatch.setattr(kodi, "handle_addon_subtitles", fake_bazarr)
+    monkeypatch.setattr(tv_playback, "POLL_EVERY", 0.01)
+    tv = await _tv(client, jellyfin)
+    fake_arr.POSTS.clear()
+    body = {"media_type": "movie", "tmdb_id": 438631}
+    data = (await client.post(f"/api/tv/subtitles/{MOVIE_ID}", json=body, headers=tv)).json()
+    assert data["status"] == "ok", data
+    assert data["message"] == "Sous-titres ajoutés : Français"
+    assert [s["url"] for s in data["subtitles"]] == [
+        f"/api/tv/subtitle/{MOVIE_ID}/2.srt",
+        f"/api/tv/subtitle/{MOVIE_ID}/5.srt",
+    ]
+    # Bazarr : français par défaut, demande marquée « appli »
+    assert SEEN["bazarr"]["language"] == "fr" and SEEN["bazarr"]["origin"] == "android"
+    assert any(path == f"/Items/{MOVIE_ID}/Refresh" for _h, path, _b in fake_arr.POSTS)
+
+
+async def test_download_subtitles_nothing_found(
+    client: AsyncClient, jellyfin: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.services import kodi
+
+    async def nothing(_db: Any, _data: dict) -> dict:
+        return {"status": "ok"}  # Bazarr a cherché, sans rien écrire sur le disque
+
+    monkeypatch.setattr(kodi, "handle_addon_subtitles", nothing)
+    monkeypatch.setattr(tv_playback, "POLL_EVERY", 0.01)
+    monkeypatch.setattr(tv_playback, "JELLYFIN_WAIT", 0.05)
+    tv = await _tv(client, jellyfin)
+    body = {"media_type": "movie", "tmdb_id": 438631}
+    data = (await client.post(f"/api/tv/subtitles/{MOVIE_ID}", json=body, headers=tv)).json()
+    assert data["status"] == "none"
+    assert data["message"] == "Aucun nouveau sous-titre FR trouvé par Bazarr"
+    assert len(data["subtitles"]) == 1
+
+
+async def test_download_subtitles_bazarr_still_searching(
+    client: AsyncClient, jellyfin: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import asyncio
+
+    from app.services import kodi
+
+    async def slow(_db: Any, _data: dict) -> dict:
+        await asyncio.sleep(0.5)
+        return {"status": "ok"}
+
+    async def error(_db: Any, _data: dict) -> dict:
+        return {"status": "error", "message": "Bazarr n'est pas configuré dans ArrMada"}
+
+    monkeypatch.setattr(tv_playback, "BAZARR_WAIT", 0.05)
+    monkeypatch.setattr(tv_playback, "POLL_EVERY", 0.01)
+    monkeypatch.setattr(tv_playback, "JELLYFIN_WAIT", 0.05)
+    tv = await _tv(client, jellyfin)
+    body = {"media_type": "movie", "tmdb_id": 438631}
+    monkeypatch.setattr(kodi, "handle_addon_subtitles", slow)
+    data = (await client.post(f"/api/tv/subtitles/{MOVIE_ID}", json=body, headers=tv)).json()
+    assert data["status"] == "pending"
+    monkeypatch.setattr(kodi, "handle_addon_subtitles", error)
+    data = (await client.post(f"/api/tv/subtitles/{MOVIE_ID}", json=body, headers=tv)).json()
+    assert data == {
+        "status": "error",
+        "message": "Bazarr n'est pas configuré dans ArrMada",
+        "subtitles": data["subtitles"],
+    }
+    await asyncio.sleep(0.5)  # la recherche lente se termine sans bruit

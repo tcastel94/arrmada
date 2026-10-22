@@ -187,3 +187,140 @@ def test_missing_column_added_once() -> None:
         columns = {col["name"] for col in inspect(conn).get_columns("devices")}
         assert "kind" in columns
         assert conn.execute(text("SELECT kind FROM devices")).scalar_one() == "tv"
+
+
+# ── Appli Android : écran enrichi et télécommande tactile ──────
+
+
+ANDROID = dict(
+    DUNE,
+    event="play",
+    room="salon",
+    remote=True,
+    video="4K · Dolby Vision",
+    audio="Français · TrueHD Atmos 7.1",
+    subtitle_track="Français (forcés)",
+    chapter="Arrakis",
+    credits_at=9500,
+    next_up="",
+    skips=[{"kind": "intro", "label": "Passer l’intro", "start": 60, "end": 120}],
+    overview="Paul Atreides…" * 200,  # tronqué à 1 500 caractères
+    meta_line="2021 · Science-fiction",
+    cast=[{"name": "Timothée Chalamet", "character": "Paul", "photo": "https://img.test/t.jpg"}]
+    + [{"name": f"Acteur {i}", "photo": "smb://pas/une/image.jpg"} for i in range(20)],
+    subtitle_tracks=[
+        {"index": 0, "label": "Français (forcés)", "detail": "SRT", "selected": True},
+        {"index": "x", "label": "ignoré"},
+    ],
+    audio_tracks=[
+        {"index": 0, "label": "Français", "detail": "TrueHD Atmos 7.1", "selected": True}
+    ],
+)
+
+
+async def _screen(client: AsyncClient, admin: dict, room: str = "salon") -> dict[str, str]:
+    start = (
+        await client.post(
+            "/api/devices/pair/start", json={"platform": "Pixel Tablet", "kind": "screen"}
+        )
+    ).json()
+    body = {"user_code": start["user_code"], "name": "Tablette", "room": room}
+    assert (await client.post("/api/devices/pair/confirm", json=body, headers=admin)).is_success
+    poll = (
+        await client.post("/api/devices/pair/poll", json={"device_code": start["device_code"]})
+    ).json()
+    return {"X-Device-Token": poll["token"]}
+
+
+async def test_android_extras_are_shown_and_bounded(
+    client: AsyncClient, auth_headers: dict
+) -> None:
+    await client.post("/api/kodi/scrobble", json=ANDROID, headers=auth_headers)
+    playing = (await client.get("/api/ambient?room=salon", headers=auth_headers)).json()["playing"]
+    assert playing["video"] == "4K · Dolby Vision" and playing["remote"] is True
+    assert playing["subtitle_track"] == "Français (forcés)" and playing["chapter"] == "Arrakis"
+    assert playing["skips"] == [
+        {"kind": "intro", "label": "Passer l’intro", "start": 60.0, "end": 120.0}
+    ]
+    assert len(playing["overview"]) == 1500 and playing["credits_at"] == 9500
+    assert len(playing["cast"]) == 8 and playing["cast"][1]["photo"] == ""  # pas une adresse web
+    assert [t["index"] for t in playing["subtitle_tracks"]] == [0]  # index invalide écarté
+    # Un relevé suivant sans ces champs (Kodi) ne les efface pas
+    await client.post(
+        "/api/kodi/scrobble", json=dict(DUNE, event="progress", room="salon"), headers=auth_headers
+    )
+    again = (await client.get("/api/ambient?room=salon", headers=auth_headers)).json()["playing"]
+    assert again["video"] == "4K · Dolby Vision"
+
+
+async def test_tablet_remote_reaches_the_tv(client: AsyncClient, auth_headers: dict) -> None:
+    import asyncio
+
+    from app.services.tv_remote import remote_queue
+
+    remote_queue.clear()
+    screen = await _screen(client, auth_headers)
+    # Rien en lecture : pas de commande
+    refused = await client.post("/api/ambient/command", json={"action": "toggle"}, headers=screen)
+    assert refused.status_code == 409
+    # Lecture depuis Kodi (sans télécommande) : refusé aussi
+    await client.post(
+        "/api/kodi/scrobble", json=dict(DUNE, event="play", room="salon"), headers=auth_headers
+    )
+    assert (
+        await client.post("/api/ambient/command", json={"action": "toggle"}, headers=screen)
+    ).status_code == 409
+
+    await client.post("/api/kodi/scrobble", json=ANDROID, headers=auth_headers)
+    # Première question de la TV : le curseur seulement
+    first = (await client.get("/api/tv/remote", headers=auth_headers)).json()
+    assert first["commands"] == []
+    cursor = first["last_id"]
+
+    # La TV attend ; la tablette envoie « +30 s » : la TV reçoit aussitôt
+    waiting = asyncio.create_task(
+        client.get(f"/api/tv/remote?after={cursor}", headers=auth_headers)
+    )
+    await asyncio.sleep(0.05)
+    sent = await client.post(
+        "/api/ambient/command", json={"action": "seek", "value": 30}, headers=screen
+    )
+    assert sent.status_code == 200, sent.text
+    got = (await asyncio.wait_for(waiting, 5)).json()
+    assert got["commands"] == [{"id": sent.json()["id"], "action": "seek", "value": 30}]
+    assert got["last_id"] == sent.json()["id"]
+
+    # Valeurs bornées
+    for bad in (
+        {"action": "rm -rf"},
+        {"action": "seek", "value": 5000},
+        {"action": "track", "value": {"type": "audio", "index": -1}},
+        {"action": "track", "value": {"type": "video", "index": 0}},
+    ):
+        assert (
+            await client.post("/api/ambient/command", json=bad, headers=screen)
+        ).status_code == 422
+    ok = {"action": "track", "value": {"type": "text", "index": -1}}
+    assert (await client.post("/api/ambient/command", json=ok, headers=screen)).status_code == 200
+
+
+async def test_remote_wait_times_out_and_skips_old_commands() -> None:
+    from app.services import tv_remote
+
+    queue = tv_remote.RemoteQueue()
+    await queue.push("salon", {"action": "pause", "value": None})
+    await queue.push("cinema", {"action": "play", "value": None})
+    got = await queue.wait("salon", 0, timeout=0.1)
+    assert [c["action"] for c in got["commands"]] == ["pause"]  # pas celle du cinéma
+    nothing = await queue.wait("salon", got["last_id"], timeout=0.1)
+    assert nothing["commands"] == [] and nothing["last_id"] == got["last_id"]
+    # Commande trop vieille (TV revenue après une coupure) : jamais rejouée
+    queue._rooms["salon"][0]["at"] -= 60
+    assert (await queue.wait("salon", 0, timeout=0.05))["commands"] == []
+
+
+def test_screen_may_only_send_remote_commands() -> None:
+    assert device_may_call("POST", "/api/ambient/command", "screen")
+    assert not device_may_call("POST", "/api/yamaha/control", "screen")
+    assert device_may_call("GET", "/api/tv/remote", "tv")
+    assert not device_may_call("GET", "/api/tv/remote", "screen")

@@ -54,6 +54,7 @@ import { Header } from "@/components/layout/header";
 import { PageContainer } from "@/components/shared/page-container";
 import { ArtworkRefreshButton } from "@/components/library/artwork-refresh-button";
 import { LibrarySourcesBanner } from "@/components/library/library-sources-banner";
+import { LocalSeriesRow } from "@/components/library/local-series-row";
 import { PageHeader, StatPill } from "@/components/shared/page-header";
 import { EmptyState, ErrorState } from "@/components/shared/empty-state";
 import { PosterGridSkeleton, Shimmer } from "@/components/shared/loading-skeleton";
@@ -489,6 +490,9 @@ function MediaLibrary() {
 
                 {/* Radarr / Sonarr injoignable : dernière liste connue affichée */}
                 <LibrarySourcesBanner />
+
+                {/* Séries maison (Naruto Kai…) : hors Sonarr, leur propre rangée */}
+                {type !== "movie" && <LocalSeriesRow />}
 
                 {/* ── Barre d'outils collante ── */}
                 <StickyToolbar>

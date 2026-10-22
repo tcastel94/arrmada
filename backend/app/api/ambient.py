@@ -2,8 +2,9 @@
 
 La tablette (Pixel Tablet sous la TV, navigateur Fully Kiosk) affiche la page
 `/ecran` de la web app. Elle est appairée comme une TV, avec un jeton
-« écran » en LECTURE SEULE (une seule route : celle-ci). Toutes les 10 s,
-elle demande :
+« écran » (deux routes : celle-ci, et la télécommande tactile de la lecture
+en cours de SA pièce, `POST /api/ambient/command`). Toutes les 10 s (5 s
+pendant une lecture), elle demande :
 
   - la lecture en cours dans SA pièce (titre, épisode, affiche, position,
     durée, début de la séance), d'après le suivi de lecture des TV ;
@@ -22,12 +23,13 @@ import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
 from app.models.device import AMP_ROOMS, ROOMS
 from app.services.now_playing import now_playing
+from app.services.tv_remote import InvalidCommand, clean_command, remote_queue
 from app.utils.cache import cache
 from app.utils.logger import get_logger
 
@@ -79,6 +81,21 @@ def playing_view(state: dict[str, Any] | None) -> dict[str, Any] | None:
         "updated_at": float(state.get("updated_at") or 0),
         "started_at": float(state.get("started_at") or 0),
         "device": state.get("device_name") or "",
+        # Appli Android : formats, pistes, chapitre, intro / générique,
+        # épisode suivant, fiche, télécommande (absents avec Kodi)
+        "video": state.get("video") or "",
+        "audio": state.get("audio") or "",
+        "subtitle_track": state.get("subtitle_track") or "",
+        "chapter": state.get("chapter") or "",
+        "next_up": state.get("next_up") or "",
+        "credits_at": float(state.get("credits_at") or 0),
+        "skips": state.get("skips") or [],
+        "overview": state.get("overview") or "",
+        "meta_line": state.get("meta_line") or "",
+        "cast": [{**c, "photo": web_image(c.get("photo"))} for c in state.get("cast") or []],
+        "subtitle_tracks": state.get("subtitle_tracks") or [],
+        "audio_tracks": state.get("audio_tracks") or [],
+        "remote": bool(state.get("remote")),
     }
 
 
@@ -208,3 +225,28 @@ async def ambient(
         "downloads": await _downloads(db),
         "upcoming": await _upcoming(db),
     }
+
+
+@router.post("/command")
+async def command(data: dict, user: dict = Depends(get_current_user)) -> dict[str, Any]:
+    """Télécommande tactile : pause, ±30 s, passer l'intro, pistes…
+
+    Un écran appairé ne pilote que SA pièce ; la web app (aperçu) choisit
+    `room`. Refusé s'il n'y a rien en lecture, ou si la TV ne sait pas
+    recevoir de commandes (Kodi) : la tablette n'affiche alors pas les boutons.
+    """
+    if user.get("role") == "device":
+        room = user.get("room") or "salon"
+    else:
+        room = str((data or {}).get("room") or "salon")
+    if room not in ROOMS:
+        raise HTTPException(status_code=422, detail="Pièce inconnue")
+    state = now_playing.current(room, time.time())
+    if not state or not state.get("remote"):
+        raise HTTPException(status_code=409, detail="Aucune lecture pilotable dans cette pièce")
+    try:
+        cleaned = clean_command((data or {}).get("action"), (data or {}).get("value"))
+    except InvalidCommand as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    entry = await remote_queue.push(room, cleaned)
+    return {"status": "ok", "id": entry["id"]}

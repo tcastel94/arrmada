@@ -285,6 +285,29 @@ data class PlayInfo(
     val subtitles: List<SideSubtitle> = emptyList(),
 )
 
+/** Menu pause → « Sous-titres FR » : ce que Bazarr doit chercher (TMDB du film, ou TVDB + numéros). */
+@Serializable
+data class SubtitleRequest(
+    @SerialName("media_type") val mediaType: String,
+    @SerialName("tmdb_id") val tmdbId: Long? = null,
+    @SerialName("tvdb_id") val tvdbId: Long? = null,
+    val season: Int? = null,
+    val episode: Int? = null,
+    val language: String = "fr",
+)
+
+/**
+ * Réponse de la recherche : ok (nouveau sous-titre), none (rien trouvé),
+ * pending (Bazarr cherche encore), error ; plus la liste à jour des
+ * sous-titres posés à côté du fichier.
+ */
+@Serializable
+data class SubtitleResult(
+    val status: String = "error",
+    val message: String? = null,
+    val subtitles: List<SideSubtitle> = emptyList(),
+)
+
 /** Sous-titre externe (« Ep01.fr.srt » à côté de la vidéo), servi en UTF-8 par le serveur. */
 @Serializable
 data class SideSubtitle(

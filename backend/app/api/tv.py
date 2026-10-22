@@ -18,6 +18,18 @@ router = APIRouter(
 )
 
 
+@router.get("/remote")
+async def remote(after: int = -1, user: dict = Depends(get_current_user)) -> dict:
+    """Commandes de la tablette pour la TV de cette pièce (attente jusqu'à 15 s).
+
+    Appelée en boucle par la TV pendant une lecture ; `after` : dernier
+    numéro de commande reçu (−1 au premier appel : juste le curseur).
+    """
+    from app.services.tv_remote import remote_queue
+
+    return await remote_queue.wait(user.get("room") or "salon", after)
+
+
 @router.get("/play/movie/{tmdb_id}")
 async def play_movie(
     tmdb_id: int, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)
@@ -115,6 +127,25 @@ async def play_on_target(
 async def season(tvdb_id: int, season: int, db: AsyncSession = Depends(get_db)) -> dict:
     """Épisodes d'une saison présents dans Jellyfin (vignette, résumé, durée)."""
     return await tv_playback.season_episodes(db, tvdb_id, season)
+
+
+@router.get("/subtitle/{item_id}/{index}.{ext}")
+async def subtitle(
+    item_id: str, index: int, ext: str, db: AsyncSession = Depends(get_db)
+) -> Response:
+    """Sous-titre externe (.srt / .ass / .vtt posé à côté du fichier), en UTF-8."""
+    try:
+        content, media_type = await tv_playback.open_subtitle(db, item_id, index, ext)
+    except tv_playback.UpstreamError as exc:
+        raise HTTPException(exc.status_code, exc.detail) from exc
+    return Response(content, headers={"Content-Type": media_type})
+
+
+@router.post("/subtitles/{item_id}")
+async def download_subtitles(item_id: str, data: dict, db: AsyncSession = Depends(get_db)) -> dict:
+    """Menu pause : Bazarr cherche des sous-titres (français par défaut), la
+    TV reçoit la liste à jour des sous-titres externes (45 s au plus)."""
+    return await tv_playback.download_subtitles(db, item_id, data or {})
 
 
 @router.get("/stream/{item_id}")

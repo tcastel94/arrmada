@@ -184,6 +184,11 @@ _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         ),
         ("POST", r"/api/tv/hls/[0-9a-f]{32}/stop"),
         ("GET", r"/api/tv/series/\d+/season/\d+"),  # épisodes Jellyfin (écran Série)
+        # Télécommande tactile : commandes de la tablette de la pièce (long polling)
+        ("GET", r"/api/tv/remote"),
+        # Sous-titres externes (Bazarr) : lecture, et recherche depuis le menu pause
+        ("GET", r"/api/tv/subtitle/[0-9a-f]{32}/\d+\.(srt|ass|vtt)"),
+        ("POST", r"/api/tv/subtitles/[0-9a-f]{32}"),
         # Mises à jour de l'appli Android (ADR-009) : version proposée, APK
         ("GET", r"/api/android/update"),
         ("GET", r"/api/android/apk/arrmada-[A-Za-z0-9.+_-]+\.apk"),
@@ -197,12 +202,16 @@ _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
 )
 
 
-# Périmètre « écran d'appoint » : il affiche, il ne commande rien.
+# Périmètre « écran d'appoint » : il affiche ; seule commande permise, la
+# télécommande tactile de la lecture en cours de SA pièce (pause, ±30 s,
+# intro, pistes : actions et valeurs bornées par tv_remote.clean_command).
+# Rien d'autre : ni ampli, ni téléchargements, ni réglages.
 _SCREEN_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
     (method, re.compile(pattern))
     for method, pattern in (
         ("GET", r"/api/devices/me"),
         ("GET", r"/api/ambient"),
+        ("POST", r"/api/ambient/command"),
     )
 )
 

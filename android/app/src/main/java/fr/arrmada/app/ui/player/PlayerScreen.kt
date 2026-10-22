@@ -80,6 +80,15 @@ import fr.arrmada.app.data.AmpDevice
 import fr.arrmada.app.data.SoundAdvisor
 import fr.arrmada.app.data.DolbyVisionLogic
 import fr.arrmada.app.data.PlayInfo
+import fr.arrmada.app.data.RemoteCommand
+import fr.arrmada.app.data.ScrobbleCast
+import fr.arrmada.app.data.ScrobbleLogic
+import fr.arrmada.app.data.ScrobbleSkip
+import fr.arrmada.app.data.ScrobbleTrack
+import fr.arrmada.app.ui.detail.techBadges
+import fr.arrmada.app.data.SideSubtitle
+import fr.arrmada.app.data.SubtitleRequest
+import fr.arrmada.app.data.SubtitleResult
 import fr.arrmada.app.data.LocalSeriesDetail
 import fr.arrmada.app.data.LocalSeriesLogic
 import fr.arrmada.app.data.PlaybackLogic
@@ -279,6 +288,8 @@ private fun PlayerSurface(
     // lecture directe. On part alors d'emblée sur la conversion SDR de Jellyfin.
     val screenDolbyVision = remember { ScreenCapabilities.dolbyVision(context) }
     val sdrAtStart = remember { DolbyVisionLogic.startWithSdr(info, screenDolbyVision) }
+    // Flux lu (adresse, HLS ?) : change si l'on bascule en remux ou en SDR
+    val initialSource = if (sdrAtStart) info.sdrStream to true else info.stream to (info.mode == "remux")
 
     // ── Création du lecteur (une fois) ──
     val player = remember {
@@ -309,11 +320,7 @@ private fun PlayerSurface(
             .setSeekForwardIncrementMs(30_000)
             .build()
             .apply {
-                if (sdrAtStart) {
-                    setMediaItem(mediaItem(app.api.baseUrl + info.sdrStream, hls = true, sideSubtitles(info, app.api.baseUrl)))
-                } else {
-                    setMediaItem(mediaItem(app.api.baseUrl + info.stream, hls = info.mode == "remux", sideSubtitles(info, app.api.baseUrl)))
-                }
+                setMediaItem(mediaItem(app.api.baseUrl + initialSource.first, initialSource.second, sideSubtitles(info.subtitles, app.api.baseUrl)))
                 prepare()
                 if (request.startSeconds > 0) seekTo(request.startSeconds * 1000L)
                 playWhenReady = true
@@ -370,6 +377,14 @@ private fun PlayerSurface(
     var remuxed by remember { mutableStateOf(info.mode == "remux" || sdrAtStart) } // flux converti par Jellyfin
     var toneMapped by remember { mutableStateOf(sdrAtStart) } // image convertie en SDR (Dolby Vision profil 5)
     var dolbyVisionWarned by remember { mutableStateOf(false) }
+    var source by remember { mutableStateOf(initialSource) }
+    // Sous-titres posés à côté du fichier (Bazarr…), complétés depuis le menu pause
+    var sideSubs by remember { mutableStateOf(info.subtitles) }
+    var subtitleBusy by remember { mutableStateOf(false) }
+    var subtitleNote by remember { mutableStateOf<String?>(null) }
+    // Le bouton central ouvre le menu à l'appui : son relâchement est avalé
+    // (sinon il « clique » sur « Reprendre », qui a le focus, et relance aussitôt)
+    var swallowOkUp by remember { mutableStateOf(false) }
     var softwareAudio by remember { mutableStateOf(false) } // son décodé par FFmpeg (secours)
     var finished by remember { mutableStateOf(false) } // fin enregistrée (vu)
     var upNextDismissed by remember { mutableStateOf(false) }
@@ -444,14 +459,97 @@ private fun PlayerSurface(
         if (next != null && !upNextDismissed) onPlayNext(next.request) else onExit()
     }
 
+    /** Recharge le flux [url] (remux, SDR, nouveaux sous-titres) à la position [at]. */
+    fun load(url: String, hls: Boolean, at: Long) {
+        source = url to hls
+        player.setMediaItem(mediaItem(app.api.baseUrl + url, hls, sideSubtitles(sideSubs, app.api.baseUrl)), at)
+        player.prepare()
+    }
+
+    // Menu pause → « Sous-titres FR » : film ou épisode de la médiathèque
+    // seulement (Bazarr ne connaît pas les vidéos de l'écran Vidéos)
+    val subtitleRequest = remember(request) {
+        when (request.kind) {
+            "movie" -> SubtitleRequest("movie", tmdbId = request.id)
+            "episode" -> SubtitleRequest("episode", tvdbId = request.id, season = request.season, episode = request.episode)
+            else -> null
+        }?.takeIf { info.itemId.isNotBlank() }
+    }
+
+    fun downloadSubtitles() {
+        val body = subtitleRequest ?: return
+        if (subtitleBusy) return
+        subtitleBusy = true
+        subtitleNote = null
+        uiScope.launch {
+            val result = runCatching { repository.downloadSubtitles(info.itemId, body) }
+                .getOrElse { SubtitleResult(message = "Serveur injoignable (${it.message.orEmpty()})") }
+            subtitleBusy = false
+            subtitleNote = result.message
+            result.message?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
+            if (result.subtitles.isNotEmpty() && result.subtitles.map { it.url } != sideSubs.map { it.url }) {
+                sideSubs = result.subtitles
+                // Même flux, sous-titres en plus ; la lecture reste en pause, le
+                // français est choisi d'office
+                load(source.first, source.second, player.currentPosition)
+                (player.trackSelector as? DefaultTrackSelector)?.let {
+                    it.setParameters(it.buildUponParameters().setPreferredTextLanguage("fr"))
+                }
+            }
+        }
+    }
+
     LaunchedEffect(Unit) {
         if (sdrAtStart) Toast.makeText(context, DV_SDR_MESSAGE, Toast.LENGTH_LONG).show()
+    }
+
+    // Écran d'appoint (tablette sous la TV) : « lecture en cours » envoyée au
+    // serveur, comme le faisait l'add-on Kodi (affiche, heure de fin, mode
+    // séance de Fully Kiosk). Pas depuis un téléphone : la tablette du salon
+    // afficherait ce qu'on regarde ailleurs.
+    var scrobbleStarted by remember { mutableStateOf(false) }
+    val sendScrobble by rememberUpdatedState<(String, Boolean) -> Unit> { event, ended ->
+        if (!touch) {
+            val what = ScrobbleLogic.identity(
+                request.kind, request.id, request.season, request.episode,
+                title = meta?.title ?: info.title.orEmpty(),
+                subtitle = meta?.subtitle,
+                localSeries = request.localSeries > 0,
+            )
+            val total = (player.duration.takeIf { it > 0 } ?: duration) / 1000.0
+            val positionS = player.currentPosition / 1000.0
+            val audioChoices = trackChoices(tracks, C.TRACK_TYPE_AUDIO)
+            val textChoices = trackChoices(tracks, C.TRACK_TYPE_TEXT)
+            // Ce que la tablette affiche en plus pendant la séance
+            val rich = what.copy(
+                video = ScrobbleLogic.videoLabel(selectedVideoFormat(tracks)?.height, techBadges(meta?.file), info.videoRange, toneMapped),
+                audio = audioChoices.firstOrNull { it.selected }
+                    ?.let { listOf(it.label, it.detail).filter { part -> part.isNotBlank() }.joinToString(" · ") }.orEmpty(),
+                subtitleTrack = textChoices.firstOrNull { it.selected }?.label.orEmpty(),
+                chapter = ScrobbleLogic.chapterAt(info.chapters, positionS),
+                creditsAt = if (total > 0) PlaybackLogic.creditsStart(info, total) ?: 0.0 else 0.0,
+                nextUp = upNext?.let { "${it.code} · ${it.title}" }.orEmpty(),
+                skips = skips.map { ScrobbleSkip(it.kind, PlaybackLogic.skipLabel(it), it.start, it.end) },
+                overview = meta?.overview ?: info.overview.orEmpty(),
+                metaLine = meta?.metaLine.orEmpty(),
+                cast = meta?.cast.orEmpty().take(8).map { ScrobbleCast(it.name, it.character, it.photo.orEmpty()) },
+                subtitleTracks = textChoices.mapIndexed { i, c -> ScrobbleTrack(i, c.label, c.detail, c.selected) },
+                audioTracks = audioChoices.mapIndexed { i, c -> ScrobbleTrack(i, c.label, c.detail, c.selected) },
+                remote = true,
+            )
+            val payload = ScrobbleLogic.payload(
+                event, rich, positionS, total, paused = !player.playWhenReady, ended = ended,
+            )
+            app.appScope.launch { runCatching { repository.scrobble(payload) } }
+        }
     }
 
     DisposableEffect(player) {
         val listener = object : Player.Listener {
             override fun onTracksChanged(newTracks: Tracks) {
                 tracks = newTracks
+                // Piste changée (menu pause ou tablette) : la tablette suit aussitôt
+                if (scrobbleStarted) sendScrobble("progress", false)
                 // Filet de sécurité : la piste vidéo se révèle Dolby Vision profil 5
                 // alors que l'écran ne le gère pas (serveur Jellyfin trop ancien
                 // pour l'annoncer, ou remux) → conversion SDR là où on en était.
@@ -461,8 +559,7 @@ private fun PlayerSurface(
                     toneMapped = true
                     remuxed = true
                     val at = player.currentPosition.takeIf { it > 0 } ?: (request.startSeconds * 1000L)
-                    player.setMediaItem(mediaItem(app.api.baseUrl + info.sdrStream, hls = true, sideSubtitles(info, app.api.baseUrl)), at)
-                    player.prepare()
+                    load(info.sdrStream, hls = true, at = at)
                     player.play()
                     Toast.makeText(context, DV_SDR_MESSAGE, Toast.LENGTH_LONG).show()
                 } else if (!dolbyVisionWarned) {
@@ -470,7 +567,7 @@ private fun PlayerSurface(
                     dolbyVisionWarned = true
                     Toast.makeText(
                         context,
-                        "Dolby Vision profil 5 : couleurs fausses sur un écran sans Dolby Vision (préférer une version HDR10)",
+                        "Dolby Vision profil 5 : couleurs fausses sur cet écran",
                         Toast.LENGTH_LONG,
                     ).show()
                 }
@@ -478,7 +575,18 @@ private fun PlayerSurface(
 
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == Player.STATE_READY && player.duration > 0) duration = player.duration
+                // Première image prête : la séance commence (une seule fois, même
+                // si l'on bascule ensuite en remux ou en SDR)
+                if (state == Player.STATE_READY && !scrobbleStarted) {
+                    scrobbleStarted = true
+                    sendScrobble("play", false)
+                }
                 if (state == Player.STATE_ENDED) onEnded()
+            }
+
+            // Pause / reprise demandées (et non les attentes de chargement)
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                if (scrobbleStarted) sendScrobble(if (playWhenReady) "resume" else "pause", false)
             }
 
             override fun onPlayerError(e: PlaybackException) {
@@ -504,8 +612,7 @@ private fun PlayerSurface(
                 if (!remuxed && info.remuxStream.isNotBlank() && e.errorCode in REMUX_RETRY) {
                     remuxed = true
                     val at = player.currentPosition.takeIf { it > 0 } ?: (request.startSeconds * 1000L)
-                    player.setMediaItem(mediaItem(app.api.baseUrl + info.remuxStream, hls = true), at)
-                    player.prepare()
+                    load(info.remuxStream, hls = true, at = at)
                     player.play()
                     Toast.makeText(context, "Format ${info.container.ifBlank { "inconnu" }} : conversion par Jellyfin…", Toast.LENGTH_LONG).show()
                     return
@@ -524,6 +631,7 @@ private fun PlayerSurface(
         player.addListener(listener)
         onDispose {
             save(false)
+            if (scrobbleStarted) sendScrobble("stop", finished)
             player.removeListener(listener)
             player.release()
             // Remux : Jellyfin arrête la conversion (sinon elle tourne à vide)
@@ -534,11 +642,17 @@ private fun PlayerSurface(
     // Position affichée + sauvegarde toutes les 30 s pendant la lecture
     LaunchedEffect(player) {
         var lastSave = System.currentTimeMillis()
+        var lastScrobble = System.currentTimeMillis()
         while (true) {
             position = player.currentPosition
             if (player.isPlaying && System.currentTimeMillis() - lastSave > 30_000) {
                 save(false)
                 lastSave = System.currentTimeMillis()
+            }
+            // Relevé pour l'écran d'appoint (il fait avancer la barre entre deux)
+            if (player.isPlaying && scrobbleStarted && System.currentTimeMillis() - lastScrobble > ScrobbleLogic.PROGRESS_EVERY_MS) {
+                sendScrobble("progress", false)
+                lastScrobble = System.currentTimeMillis()
             }
             delay(500)
         }
@@ -564,9 +678,52 @@ private fun PlayerSurface(
     }
 
     fun resume() {
+        swallowOkUp = false
         showMenu = false
         player.play()
         runCatching { keyFocus.requestFocus() }
+    }
+
+    // ── Télécommande tactile : commandes de la tablette de la pièce ──
+    val onRemote by rememberUpdatedState<(RemoteCommand) -> Unit> { command ->
+        when (command.action) {
+            "toggle" -> if (player.playWhenReady) pause() else resume()
+            "pause" -> if (player.playWhenReady) pause()
+            "play" -> if (!player.playWhenReady) resume()
+            "seek" -> command.seconds?.let {
+                player.seekTo((player.currentPosition + it * 1000L).coerceAtLeast(0))
+                osdUntil = System.currentTimeMillis() + 3000
+            }
+            // Intro / récap en cours → sa fin ; sinon carte « Épisode suivant » → l'enchaîner
+            "skip" -> {
+                val at = player.currentPosition / 1000.0
+                val segment = skips.firstOrNull { at >= it.start && at < it.end }
+                if (segment != null) player.seekTo((segment.end * 1000).toLong()) else if (showUpNext) playNext()
+            }
+            "next" -> if (upNext != null) playNext()
+            "track" -> command.track?.let { (kind, index) ->
+                val type = if (kind == "audio") C.TRACK_TYPE_AUDIO else C.TRACK_TYPE_TEXT
+                if (index < 0) {
+                    if (type == C.TRACK_TYPE_TEXT) selectTrack(player, type, null)
+                } else {
+                    trackChoices(tracks, type).getOrNull(index)?.takeIf { it.supported }?.let { selectTrack(player, type, it) }
+                }
+            }
+        }
+        if (scrobbleStarted) sendScrobble("progress", false)
+    }
+    LaunchedEffect(Unit) {
+        if (touch) return@LaunchedEffect // téléphone : pas de tablette qui le pilote
+        var after = -1L
+        while (true) {
+            val page = runCatching { repository.remote(after) }.getOrNull()
+            if (page == null) {
+                delay(5_000) // serveur injoignable : on réessaie sans insister
+                continue
+            }
+            after = page.lastId
+            page.commands.forEach { onRemote(it) }
+        }
     }
 
     // Retour : carte « Épisode suivant » → l'écarter ; pendant la lecture →
@@ -604,16 +761,20 @@ private fun PlayerSurface(
                 },
             )
             .onPreviewKeyEvent { event ->
-                if (showMenu || playbackError != null || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 val code = event.key.nativeKeyCode
                 val ok = code == AndroidKeyEvent.KEYCODE_DPAD_CENTER || code == AndroidKeyEvent.KEYCODE_ENTER
+                if (ok && event.type == KeyEventType.KeyUp && swallowOkUp) {
+                    swallowOkUp = false
+                    return@onPreviewKeyEvent true
+                }
+                if (showMenu || playbackError != null || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when {
                     ok && showUpNext -> { playNext(); true }
                     ok && activeSkip != null -> { player.seekTo((activeSkip.end * 1000).toLong()); true }
                     else -> when (code) {
                         AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER,
                         AndroidKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, AndroidKeyEvent.KEYCODE_MEDIA_PAUSE,
-                        AndroidKeyEvent.KEYCODE_SPACE -> { pause(); true }
+                        AndroidKeyEvent.KEYCODE_SPACE -> { swallowOkUp = ok; pause(); true }
                         AndroidKeyEvent.KEYCODE_MEDIA_PLAY -> { player.play(); true }
                         AndroidKeyEvent.KEYCODE_DPAD_LEFT, AndroidKeyEvent.KEYCODE_MEDIA_REWIND -> {
                             player.seekBack(); osdUntil = System.currentTimeMillis() + 3000; true
@@ -710,6 +871,7 @@ private fun PlayerSurface(
                     app.prefs.autoSound = on
                 },
                 onApplyAdvice = { advice.program?.let { ampCommand("sound_program", JsonPrimitive(it)) } },
+                subtitleDownload = subtitleRequest?.let { SubtitleDownload(subtitleBusy, subtitleNote, ::downloadSubtitles) },
             )
         }
 
@@ -785,8 +947,8 @@ private fun audioDecoderFailed(e: PlaybackException): Boolean {
 }
 
 /** Message affiché quand l'image Dolby Vision est convertie en SDR par Jellyfin. */
-private const val DV_SDR_MESSAGE =
-    "Dolby Vision sans HDR10 : image convertie en SDR par Jellyfin (écran sans Dolby Vision)"
+// Court : Android TV coupe ses messages après deux lignes
+private const val DV_SDR_MESSAGE = "Image convertie en SDR (TV sans Dolby Vision)"
 
 /** Format de la piste vidéo en cours de lecture (null tant qu'aucune n'est choisie). */
 @OptIn(UnstableApi::class)
@@ -816,8 +978,8 @@ private fun mediaItem(url: String, hls: Boolean, subtitles: List<MediaItem.Subti
  * fichier, choisis dans l'onglet Sous-titres du menu pause. Téléchargés par
  * le même client HTTP que la vidéo (jeton d'appareil), en UTF-8.
  */
-private fun sideSubtitles(info: PlayInfo, baseUrl: String): List<MediaItem.SubtitleConfiguration> =
-    info.subtitles.map { sub ->
+private fun sideSubtitles(subtitles: List<SideSubtitle>, baseUrl: String): List<MediaItem.SubtitleConfiguration> =
+    subtitles.map { sub ->
         MediaItem.SubtitleConfiguration.Builder(android.net.Uri.parse(baseUrl + sub.url))
             .setMimeType(sub.mime)
             .setLanguage(sub.language.ifBlank { null })
@@ -836,7 +998,13 @@ private fun describe(e: PlaybackException, container: String, how: String): Stri
         container.takeIf { it.isNotBlank() }?.let { "fichier .$it" },
         how,
     ).joinToString(" · ")
-    return describe(e) + "\n\n" + detail
+    // AVI : conteneur mal géré par le lecteur d'Android ; le MKV, lui, passe
+    val hint = if (container.equals("avi", ignoreCase = true)) {
+        "\n\nAVI mal pris en charge : le convertir en MKV, sans perte (scripts/remux-avi-mkv.sh sur le serveur)."
+    } else {
+        ""
+    }
+    return describe(e) + "\n\n" + detail + hint
 }
 
 /** Message lisible pour les erreurs de lecture les plus courantes. */

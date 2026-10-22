@@ -207,6 +207,24 @@ class Repository(private val api: Api) {
     suspend fun playEpisode(tvdbId: Long, season: Int, episode: Int): PlayInfo =
         api.get("/api/tv/play/episode/$tvdbId/$season/$episode")
 
+    /**
+     * Menu pause : Bazarr cherche des sous-titres, Jellyfin relit le dossier ;
+     * réponse en 40 s au plus (client « lent »).
+     */
+    suspend fun downloadSubtitles(itemId: String, request: SubtitleRequest): SubtitleResult =
+        api.post("/api/tv/subtitles/$itemId", request, slow = true)
+
+    /**
+     * Commandes de la tablette de la pièce (télécommande tactile) : le serveur
+     * ne répond qu'à l'arrivée d'une commande, ou au bout de 15 s.
+     */
+    suspend fun remote(after: Long): RemotePage = api.get("/api/tv/remote?after=$after", slow = true)
+
+    /** Lecture en cours → écran d'appoint de la pièce (tablette sous la TV). */
+    suspend fun scrobble(payload: Scrobble) {
+        api.post<kotlinx.serialization.json.JsonObject, Scrobble>("/api/kodi/scrobble", payload)
+    }
+
     /** Fin de lecture d'un remux : Jellyfin arrête la conversion. */
     suspend fun stopRemux(itemId: String) {
         api.post<kotlinx.serialization.json.JsonObject, kotlinx.serialization.json.JsonObject>(
