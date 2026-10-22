@@ -10,6 +10,8 @@ import java.time.format.DateTimeFormatter
 data class ResumeEntry(
     val state: WatchState,
     val item: LibraryItem?, // film ou série correspondant dans la médiathèque
+    val file: String? = null, // série maison : jeton de la vidéo à reprendre
+    val localSeries: Int = 0, // série maison : son identifiant (épisode suivant)
 ) {
     val isEpisode: Boolean get() = state.mediaType == "episode"
     val progress: Float get() = if (state.total > 0) state.position.toFloat() / state.total else 0f
@@ -103,7 +105,7 @@ class Repository(private val api: Api) {
      * dans Jellyfin) : quand on appuie sur OK, tout est déjà là.
      */
     suspend fun prefetch(item: LibraryItem) {
-        if (item.externalId.isBlank()) return
+        if (item.externalId.isBlank() || LocalSeriesLogic.isLocal(item.externalId)) return
         if (item.isMovie) {
             movie(item.externalId)
             item.tmdbId?.let { playMovie(it) }
@@ -298,6 +300,16 @@ class Repository(private val api: Api) {
     }
 
     /** Cette TV (pièce, ampli, identifiant), relue toutes les 10 min au plus. */
+    /** Séries maison (Naruto Kai, One Pace…) pour la grille Séries. */
+    suspend fun localSeries(): List<LocalSeriesSummary> =
+        cached("local-series", 2 * 60_000L, false) { api.get<LocalSeriesList>("/api/videos/series") }.items
+
+    /** Écran Série d'une série maison (saisons = arcs, épisodes = vidéos). */
+    suspend fun localSeriesDetail(id: Int): LocalSeriesDetail = api.get("/api/videos/series/$id")
+
+    /** Empreinte de chaque épisode de série maison → série, saison, épisode (rangée Reprendre). */
+    suspend fun localIndex(): List<LocalIndexItem> = api.get<LocalIndex>("/api/videos/series/index").items
+
     /** Écran Vidéos : dossiers déclarés ([token] null) ou contenu d'un dossier. */
     suspend fun videos(token: String?): VideoListing =
         api.get("/api/videos/browse" + (token?.let { "?path=${q(it)}" } ?: ""))

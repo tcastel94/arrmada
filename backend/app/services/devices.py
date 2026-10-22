@@ -190,7 +190,9 @@ _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         # Écran « Vidéos » : parcourir les dossiers déclarés, lire (jetons
         # opaques confinés au dossier racine, lecture seule)
         ("GET", r"/api/videos/browse"),
-        ("GET", r"/api/videos/(play|stream|subtitle)/[A-Za-z0-9_-]{1,2000}"),
+        ("GET", r"/api/videos/(play|stream|subtitle|image)/[A-Za-z0-9_-]{1,2000}"),
+        # Séries maison (Naruto Kai, One Pace…) : grille, écran Série, Reprendre
+        ("GET", r"/api/videos/series(/index|/\d+)?"),
     )
 )
 

@@ -28,6 +28,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import fr.arrmada.app.data.Api
 import fr.arrmada.app.data.LibraryItem
+import fr.arrmada.app.data.LocalSeriesLogic
 import fr.arrmada.app.data.Repository
 import fr.arrmada.app.ui.components.ArrButton
 import fr.arrmada.app.ui.components.MessageScreen
@@ -58,7 +59,13 @@ fun LibraryScreen(type: String, repository: Repository, api: Api, onOpen: (Libra
 
     LaunchedEffect(type) {
         try {
-            items = repository.allLibrary(type).filter { it.hasFile }
+            // Grille Séries : les séries maison (Naruto Kai, One Pace…) s'ajoutent aux séries Sonarr
+            val local = if (type == "series") {
+                runCatching { repository.localSeries() }.getOrDefault(emptyList()).map(LocalSeriesLogic::libraryItem)
+            } else {
+                emptyList()
+            }
+            items = (repository.allLibrary(type) + local).filter { it.hasFile }
         } catch (e: Exception) {
             error = e.message ?: "Serveur injoignable"
         }

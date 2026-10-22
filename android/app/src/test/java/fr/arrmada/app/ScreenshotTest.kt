@@ -83,6 +83,10 @@ import fr.arrmada.app.data.VideoFile
 import fr.arrmada.app.data.VideoFolder
 import fr.arrmada.app.data.VideoListing
 import fr.arrmada.app.ui.videos.VideosContent
+import fr.arrmada.app.data.LocalEpisode
+import fr.arrmada.app.data.LocalSeason
+import fr.arrmada.app.data.LocalSeriesDetail
+import fr.arrmada.app.data.LocalSeriesLogic
 import fr.arrmada.app.ui.detail.MovieContent
 import fr.arrmada.app.ui.detail.SeriesContent
 import fr.arrmada.app.ui.home.DiscoverContent
@@ -694,6 +698,41 @@ class ScreenshotTest {
         captureRoboImage(shot("38-telephone-videos")) {
             OnScreen(phone) {
                 TouchShell(selected = "more", visible = true, onGo = {}) { VideosContent(kai, kaiStates, {}, {}, {}) }
+            }
+        }
+    }
+
+    // ── Série maison (Naruto Kai) : même écran Série, arcs en pastilles ──
+
+    @Test
+    fun serieMaisonKai() {
+        val titles = listOf("Le Pays des Vagues", "Le ninja copieur", "Zabuza le démon", "Le pont des héros", "Haku", "Le serment")
+        val kaiDetail = LocalSeriesDetail(
+            id = 3, title = "Naruto Kai", badge = "Kai", year = 2002, fanartUrl = "https://img/naruto",
+            overview = "Naruto, sans les épisodes de remplissage : l'histoire du manga, au rythme du manga.",
+            seasons = listOf(
+                LocalSeason(1, "Arc 01 - Pays des Vagues", titles.mapIndexed { i, t ->
+                    LocalEpisode(1, i + 1, t, token = "t$i", watchId = "w$i", image = "https://img/nk$i")
+                }),
+                LocalSeason(2, "Arc 02 - Examen Chunin", (15..22).map { LocalEpisode(2, it, "Épisode $it", token = "u$it", watchId = "x$it") }),
+                LocalSeason(3, "Arc 03 - Invasion de Konoha", (23..30).map { LocalEpisode(3, it, "Épisode $it", token = "v$it", watchId = "y$it") }),
+            ),
+        )
+        val states = listOf(
+            WatchState(mediaType = "file", idType = "sha1", id = "w0", watched = true, updatedAt = "2026-10-20"),
+            WatchState(mediaType = "file", idType = "sha1", id = "w1", watched = true, updatedAt = "2026-10-21"),
+            WatchState(mediaType = "file", idType = "sha1", id = "w2", position = 600, total = 1380, updatedAt = "2026-10-22"),
+        )
+        val series = LocalSeriesLogic.toDetail(kaiDetail)
+        val byEpisode = LocalSeriesLogic.states(kaiDetail, states)
+        captureRoboImage(shot("26-serie-maison-kai")) {
+            ArrMadaTheme {
+                SeriesContent(
+                    series = series, season = 1,
+                    rows = SeriesLogic.rows(series.seasons[0], LocalSeriesLogic.thumbnails(kaiDetail, 1), byEpisode),
+                    nextUp = SeriesLogic.nextUp(series, byEpisode), seasonSubtitle = { "${it.episodes.size} épisodes" },
+                    absolute = noAbsolute, onSeason = {}, onPlay = { _, _ -> }, onMissing = {}, onMark = { _, _ -> }, onDownload = null,
+                )
             }
         }
     }

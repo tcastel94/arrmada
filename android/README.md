@@ -8,7 +8,7 @@ sont expliqués dans l'[ADR-007](../docs/adr/007-appli-android-native.md).
 > Une seule APK : elle reconnaît l'écran au lancement (TV, tablette ou
 > téléphone) et adapte la navigation. Voir [Téléphone et tablette](#téléphone-et-tablette).
 
-## Ce que fait la version 2.9 (phases 1 à 4 de l'ADR-007)
+## Ce que fait la version 2.10 (phases 1 à 4 de l'ADR-007)
 
 | Écran | Contenu |
 |---|---|
@@ -30,6 +30,7 @@ sont expliqués dans l'[ADR-007](../docs/adr/007-appli-android-native.md).
 | **Profils famille** (ADR-008) | **Qui regarde ?** au lancement, avatar dans le menu pour changer : chacun sa rangée Reprendre, ses vus, son « Pour toi », ses demandes (« Prêt à regarder » le suit sur n'importe quelle TV). Gestion dans la web app (*Réglages › Profils famille*) |
 | **Bande-annonce en fond** | Sur la fiche film, la bande-annonce rangée sur le NAS se lance sans le son après 2,5 s |
 | **Vidéos** | Explorateur des dossiers du NAS déclarés dans la web app (*Réglages › Dossiers vidéo*) : ce qui n'a pas de fiche officielle (mangas **Kai**, montages, vidéos perso). Tri naturel (Ep 2 avant Ep 10), Retour remonte d'un dossier. Lecture du fichier d'origine avec le lecteur habituel, **vu / reprise** par profil, **sous-titres posés à côté** (`Ep 01.fr.srt`, `.ass`, `.vtt`) dans l'onglet Sous-titres. Appui long : reprendre, depuis le début, vu / pas vu |
+| **Séries maison** | Un dossier de montage de fans (**Naruto Kai**, **One Pace**…) déclaré comme série apparaît dans la grille **Séries** et s'ouvre dans le **même écran Série** : arcs en pastilles, vu / reprise, « Lire la suite », épisode suivant automatique, rangée **Reprendre**. Affiche de la série officielle (TMDB) ou `poster.jpg` du dossier ; NFO repris s'il y en a. Voir [Séries maison](#séries-maison-naruto-kai-one-pace) |
 | **Accueil de la Shield** | Rangée **À suivre** d'Android TV : les films et épisodes commencés, un clic reprend la lecture dans ArrMada. Chaîne **ArrMada · Ajouts récents** : un clic ouvre la fiche. Mises à jour en quittant l'appli et toutes les 30 min ; à couper dans *Réglages* |
 
 
@@ -80,6 +81,42 @@ l'adresse VPN du NAS (ex. `http://100.101.102.103:8420`).
 | Retour | Pause + menu (ou écarte la carte « Épisode suivant ») | **Quitter la lecture** (position enregistrée) |
 | Suivant (⏭) | Épisode suivant | — |
 | *Reprendre* | — | Relance la lecture |
+
+## Séries maison (Naruto Kai, One Pace…)
+
+Les montages de fans n'ont pas de fiche TVDB / TMDB : Sonarr ne peut pas les
+gérer. ArrMada les affiche quand même comme des séries :
+
+1. web app › *Réglages › Dossiers vidéo* : déclarer le dossier parent (ex.
+   `/mnt/user/medias/mangas`) ;
+2. même page › **Séries maison › Déclarer une série** : choisir le dossier de
+   la série, la série officielle pour l'affiche (Naruto pour Naruto Kai), le
+   nom et la pastille (« Kai »).
+
+Rangement conseillé (le numéro et le titre sont lus dans le nom) :
+
+```text
+Naruto Kai/
+├── poster.jpg                         # facultatif : sinon l'affiche TMDB
+├── Arc 01 - Pays des Vagues/          # un sous-dossier = une saison (un arc)
+│   ├── Naruto Kai - 001 - Uzumaki Naruto.mkv
+│   ├── Naruto Kai - 001 - Uzumaki Naruto.fr.srt
+│   └── Naruto Kai - 002 - Le ninja copieur.mkv
+└── Arc 02 - Examen Chunin/
+    └── Naruto Kai - 015.mkv           # sans titre : « Épisode 15 »
+```
+
+- Saisons : numéro tiré du nom (« Saison 2 », « Arc 03 », « S04 », « 05 - … »),
+  sinon l'ordre des dossiers. Sans sous-dossier : tout en saison 1.
+- Épisodes : numéro tiré du nom (`- 015`, `Ep 12`, `S02E07`), sinon l'ordre ;
+  titre = dernier morceau de `Série - 015 - Titre`.
+- **NFO** (`tvshow.nfo`, `<épisode>.nfo`, `season.nfo`) et images locales
+  (`poster.jpg`, `fanart.jpg`, `<épisode>-thumb.jpg`) l'emportent : c'est ce
+  qu'écrivent Jellyfin, Kodi ou OnePacerr pour One Pace.
+
+> Pièges : le vu suit le chemin du fichier, renommer un épisode remet sa
+> reprise à zéro (fixe ton nommage avant de regarder) ; pas de téléchargement
+> automatique (Sonarr ne connaît pas ces séries ; pour One Pace, OnePacerr).
 
 ## Prérequis côté serveur
 
@@ -291,6 +328,7 @@ android/
 
 Côté serveur : `backend/app/api/tv.py` et `backend/app/services/tv_playback.py` ;
 mises à jour : `backend/app/api/android.py` et `backend/app/services/android_update.py` ;
-écran Vidéos : `backend/app/api/videos.py` et `backend/app/services/video_files.py`
+écran Vidéos : `backend/app/api/videos.py` et `backend/app/services/video_files.py` ;
+séries maison : `backend/app/api/local_series.py` et `backend/app/services/local_series.py`
 (infos de lecture, relais du flux Jellyfin, remux HLS des .m2ts / .iso,
 vignettes de chapitres).

@@ -77,6 +77,8 @@ import fr.arrmada.app.ArrMadaApplication
 import fr.arrmada.app.data.AmpDevice
 import fr.arrmada.app.data.SoundAdvisor
 import fr.arrmada.app.data.PlayInfo
+import fr.arrmada.app.data.LocalSeriesDetail
+import fr.arrmada.app.data.LocalSeriesLogic
 import fr.arrmada.app.data.PlaybackLogic
 import fr.arrmada.app.data.Repository
 import fr.arrmada.app.data.SeriesDetail
@@ -103,6 +105,7 @@ data class PlayRequest(
     val sonarrId: String? = null, // épisode : fiche Sonarr (logo, épisode suivant)
     val startSeconds: Int = 0,
     val file: String? = null, // « file » : jeton de la vidéo (écran Vidéos)
+    val localSeries: Int = 0, // « file » d'une série maison : titre, épisode suivant
 )
 
 /** Un titre est « vu » passé 90 % (le générique de fin ne compte pas). */
@@ -140,6 +143,7 @@ fun PlayerScreen(request: PlayRequest, app: ArrMadaApplication, onExit: () -> Un
     var info by remember { mutableStateOf<PlayInfo?>(null) }
     var meta by remember { mutableStateOf<PlaybackMeta?>(null) }
     var series by remember { mutableStateOf<SeriesDetail?>(null) }
+    var local by remember { mutableStateOf<LocalSeriesDetail?>(null) } // série maison
     var error by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(request) {
@@ -158,6 +162,14 @@ fun PlayerScreen(request: PlayRequest, app: ArrMadaApplication, onExit: () -> Un
             // arrière-plan, la lecture n'attend pas
             if (request.kind == "movie") {
                 request.radarrId?.let { id -> runCatching { repository.movie(id) }.getOrNull()?.let { meta = it.toMeta() } }
+            } else if (request.kind == "file") {
+                // Série maison : « Naruto Kai · S02E15 · L'examen commence », épisode suivant
+                if (request.localSeries > 0) {
+                    runCatching { repository.localSeriesDetail(request.localSeries) }.getOrNull()?.let {
+                        local = it
+                        meta = LocalSeriesLogic.toDetail(it).toMeta(request.season, request.episode, play)
+                    }
+                }
             } else {
                 request.sonarrId?.let { id ->
                     runCatching { repository.series(id) }.getOrNull()?.takeIf { it.error == null }?.let {
@@ -198,13 +210,24 @@ fun PlayerScreen(request: PlayRequest, app: ArrMadaApplication, onExit: () -> Un
     }
 
     // Épisode suivant (fiche Sonarr) : disponible sur le disque, dans l'ordre
-    val upNext = series?.let { s ->
+    val seriesUpNext = series?.let { s ->
         SeriesLogic.following(s, request.season, request.episode)?.let { ep ->
             UpNext(
                 request = request.copy(season = ep.seasonNumber, episode = ep.episodeNumber, startSeconds = 0),
                 code = "S%02dE%02d".format(ep.seasonNumber, ep.episodeNumber),
                 title = ep.title ?: "Épisode ${ep.episodeNumber}",
                 image = s.images.fanart ?: s.images.landscape,
+            )
+        }
+    }
+    // Série maison : vidéo suivante de la série (dans l'arc, sinon l'arc suivant)
+    val upNext = seriesUpNext ?: local?.let { d ->
+        LocalSeriesLogic.next(d, request.file.orEmpty())?.let { ep ->
+            UpNext(
+                request = request.copy(file = ep.token, season = ep.seasonNumber, episode = ep.episodeNumber, startSeconds = 0),
+                code = "S%02dE%02d".format(ep.seasonNumber, ep.episodeNumber),
+                title = ep.title,
+                image = ep.image ?: d.fanartUrl,
             )
         }
     }

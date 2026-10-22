@@ -8,6 +8,8 @@ import fr.arrmada.app.home.HomeRowsWorker
 import fr.arrmada.app.home.TvHomeRows
 import fr.arrmada.app.update.UpdateDialog
 import fr.arrmada.app.ui.videos.VideosScreen
+import fr.arrmada.app.ui.detail.LocalSeriesScreen
+import fr.arrmada.app.data.LocalSeriesLogic
 import fr.arrmada.app.ui.components.gutter
 import android.os.Bundle
 import android.view.KeyEvent
@@ -183,7 +185,8 @@ private object Routes {
     const val TONIGHT = "tonight"
     const val MOVIE = "movie/{radarrId}?tmdb={tmdb}"
     const val SHOW = "show/{sonarrId}"
-    const val PLAY = "play/{kind}/{id}/{season}/{episode}/{start}?radarr={radarr}&sonarr={sonarr}&file={file}"
+    const val PLAY = "play/{kind}/{id}/{season}/{episode}/{start}?radarr={radarr}&sonarr={sonarr}&file={file}&local={local}"
+    const val LOCAL_SHOW = "localshow/{id}" // série maison (Naruto Kai, One Pace…)
     const val VIDEOS = "videos?path={path}" // écran Vidéos : un dossier (sans path : les dossiers déclarés)
 
     fun library(type: String) = "library/$type"
@@ -191,7 +194,8 @@ private object Routes {
     fun movie(radarrId: String, tmdbId: Long? = null) = "movie/$radarrId" + (tmdbId?.let { "?tmdb=$it" } ?: "")
     fun show(sonarrId: String) = "show/$sonarrId"
     fun play(r: PlayRequest) = "play/${r.kind}/${r.id}/${r.season}/${r.episode}/${r.startSeconds}" +
-        "?radarr=${r.radarrId.orEmpty()}&sonarr=${r.sonarrId.orEmpty()}&file=${r.file.orEmpty()}"
+        "?radarr=${r.radarrId.orEmpty()}&sonarr=${r.sonarrId.orEmpty()}&file=${r.file.orEmpty()}&local=${r.localSeries}"
+    fun localShow(id: Int) = "localshow/$id"
     fun videos(token: String? = null) = "videos?path=${token.orEmpty()}"
 }
 
@@ -254,7 +258,14 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
     }
 
     fun openItem(item: LibraryItem) {
-        nav.navigate(if (item.isMovie) Routes.movie(item.externalId, item.tmdbId) else Routes.show(item.externalId))
+        val local = LocalSeriesLogic.idOf(item.externalId) // série maison (Naruto Kai…)
+        nav.navigate(
+            when {
+                local != null -> Routes.localShow(local)
+                item.isMovie -> Routes.movie(item.externalId, item.tmdbId)
+                else -> Routes.show(item.externalId)
+            }
+        )
     }
 
     val prefetcher = remember { Prefetcher(app) }
@@ -548,6 +559,7 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
                 navArgument("radarr") { type = NavType.StringType; defaultValue = "" },
                 navArgument("sonarr") { type = NavType.StringType; defaultValue = "" },
                 navArgument("file") { type = NavType.StringType; defaultValue = "" },
+                navArgument("local") { type = NavType.IntType; defaultValue = 0 },
             ),
         ) { entry ->
             val args = requireNotNull(entry.arguments)
@@ -560,6 +572,7 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
                 sonarrId = args.getString("sonarr")?.takeIf { it.isNotBlank() },
                 startSeconds = args.getInt("start"),
                 file = args.getString("file")?.takeIf { it.isNotBlank() },
+                localSeries = args.getInt("local"),
             )
             PlayerScreen(
                 request = request,
@@ -579,6 +592,24 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
                 token = entry.arguments?.getString("path")?.takeIf { it.isNotBlank() },
                 onFolder = { nav.navigate(Routes.videos(it)) },
                 onPlay = { file, start -> nav.navigate(Routes.play(PlayRequest(kind = "file", id = 0, startSeconds = start, file = file.token))) },
+            )
+        }
+        composable(Routes.LOCAL_SHOW, arguments = listOf(navArgument("id") { type = NavType.IntType })) { entry ->
+            val id = entry.arguments?.getInt("id") ?: 0
+            LocalSeriesScreen(
+                id = id,
+                repository = app.repository,
+                absolute = app.api::absolute,
+                onPlay = { ep, start ->
+                    nav.navigate(
+                        Routes.play(
+                            PlayRequest(
+                                kind = "file", id = 0, season = ep.seasonNumber, episode = ep.episodeNumber,
+                                startSeconds = start, file = ep.token, localSeries = id,
+                            )
+                        )
+                    )
+                },
             )
         }
         composable(Routes.DOWNLOADS) {
@@ -652,6 +683,13 @@ private fun tonightRequest(row: TonightLogic.Row): PlayRequest {
 /** « Reprendre » : relance le film ou l'épisode là où il s'était arrêté. */
 private fun resumeRequest(entry: ResumeEntry): PlayRequest {
     val state = entry.state
+    // Épisode d'une série maison : la vidéo elle-même
+    entry.file?.let { token ->
+        return PlayRequest(
+            kind = "file", id = 0, season = state.season ?: 0, episode = state.episode ?: 0,
+            startSeconds = state.position, file = token, localSeries = entry.localSeries,
+        )
+    }
     return PlayRequest(
         kind = if (entry.isEpisode) "episode" else "movie",
         id = state.id.toLongOrNull() ?: 0,

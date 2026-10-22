@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Home-made series: fan edits shown like official series (APK 2.10.0)
+
+#### Added
+- **"Séries maison"**: a video folder (Naruto Kai, Naruto Shippuden Kai, One Pace…) declared as a series appears in the app's **Séries grid** and opens in the **same Series screen** as Sonarr series: arcs as season chips (folder names: "Arc 02 - Examen Chunin"), episodes, watched / resume (shared with the Vidéos screen), "Lire la suite", long press menu; the next episode starts by itself in the player (across arcs); started episodes join the **Reprendre** row; the pause menu shows "Naruto Kai · S02E15 · title"
+- **Folder reading**: sub-folders with videos = seasons (number from "Saison 2", "Arc 03", "S04", "05 - …", else order), videos = episodes (number from "Naruto Kai - 015", "Ep 12", "S02E07", else order; title from "Show - 015 - Title"), local **NFO** (`tvshow.nfo`, episode `.nfo`, `season.nfo` — Jellyfin / Kodi / OnePacerr) and local images (`poster.jpg`, `fanart.jpg`, `<episode>-thumb.jpg`) win over file names
+- **Artwork from the official series**: pick it on TMDB (Naruto for Naruto Kai) for poster, backdrop, overview, year; a `poster.jpg` in the folder stays first
+- **Web app**: Settings › Dossiers vidéo › **Séries maison** (folder picker browsing the video folders, TMDB search, name, badge "Kai")
+- **Server**: `local_series` table; `GET /api/videos/series`, `/series/{id}`, `/series/index`, `/api/videos/image/{token}` for devices; `POST/PATCH/DELETE /api/videos/series`, `GET /api/videos/series/tmdb/search` for the web app; folder scans cached until a folder changes. 18 tests (+ 5 JVM tests for the app adapter)
+
 ### "Vidéos" screen: NAS folders outside the library (APK 2.9.0)
 
 #### Added

@@ -47,6 +47,7 @@ import coil.compose.AsyncImage
 import fr.arrmada.app.data.Api
 import fr.arrmada.app.data.CalendarEntry
 import fr.arrmada.app.data.LibraryItem
+import fr.arrmada.app.data.LocalSeriesLogic
 import fr.arrmada.app.data.Repository
 import fr.arrmada.app.data.ResumeEntry
 import fr.arrmada.app.data.TmdbItem
@@ -107,7 +108,16 @@ class HomeViewModel(private val repository: Repository) : ViewModel() {
                     val states = repository.watchStates()
                     val movies = async { repository.allLibrary("movie") }
                     val series = async { repository.allLibrary("series") }
-                    repository.resumeRow(states, movies.await(), series.await())
+                    // Séries maison commencées (Naruto Kai…) : dans la même rangée, par date
+                    val local = async {
+                        runCatching {
+                            val index = repository.localIndex()
+                            if (index.isEmpty()) emptyList() else LocalSeriesLogic.resume(states, index, repository.localSeries())
+                        }.getOrDefault(emptyList())
+                    }
+                    (repository.resumeRow(states, movies.await(), series.await()) + local.await())
+                        .sortedByDescending { it.state.updatedAt }
+                        .take(20)
                 }
             }
             val recentItems = recent.await()

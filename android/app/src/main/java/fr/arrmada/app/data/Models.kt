@@ -312,6 +312,7 @@ data class SeasonInfo(
     @SerialName("episodes_have") val episodesHave: Int = 0,
     val monitored: Boolean = false,
     val episodes: List<EpisodeInfo> = emptyList(),
+    val name: String? = null, // série maison : nom de l'arc (« Arc 02 - Examen Chunin »)
 )
 
 @Serializable

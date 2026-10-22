@@ -328,3 +328,71 @@ data class VideoListing(
     val folders: List<VideoFolder> = emptyList(),
     val files: List<VideoFile> = emptyList(),
 )
+
+// ─── Séries maison (Naruto Kai, One Pace…) ──────────────────────────────────
+
+/** Carte de la grille Séries pour une série maison (GET /api/videos/series). */
+@Serializable
+data class LocalSeriesSummary(
+    val id: Int = 0,
+    val title: String = "",
+    val badge: String = "",
+    val year: Int? = null,
+    val overview: String? = null,
+    @SerialName("poster_url") val posterUrl: String? = null,
+    @SerialName("fanart_url") val fanartUrl: String? = null,
+    val added: String? = null,
+    val episodes: Int = 0,
+    val available: Boolean = true,
+)
+
+@Serializable
+data class LocalSeriesList(val items: List<LocalSeriesSummary> = emptyList())
+
+/** Épisode d'une série maison : une vidéo du dossier (jeton de lecture, empreinte de vu). */
+@Serializable
+data class LocalEpisode(
+    @SerialName("season_number") val seasonNumber: Int = 0,
+    @SerialName("episode_number") val episodeNumber: Int = 0,
+    val title: String = "",
+    val overview: String? = null,
+    @SerialName("air_date") val airDate: String? = null,
+    val token: String = "",
+    @SerialName("watch_id") val watchId: String = "",
+    val image: String? = null,
+)
+
+/** Saison (arc) : un sous-dossier, avec son nom (« Arc 02 - Examen Chunin »). */
+@Serializable
+data class LocalSeason(
+    @SerialName("season_number") val seasonNumber: Int = 0,
+    val name: String = "",
+    val episodes: List<LocalEpisode> = emptyList(),
+)
+
+/** Écran Série d'une série maison (GET /api/videos/series/{id}). */
+@Serializable
+data class LocalSeriesDetail(
+    val id: Int = 0,
+    val title: String = "",
+    val badge: String = "",
+    val year: Int? = null,
+    val overview: String? = null,
+    @SerialName("poster_url") val posterUrl: String? = null,
+    @SerialName("fanart_url") val fanartUrl: String? = null,
+    val seasons: List<LocalSeason> = emptyList(),
+)
+
+/** Empreinte d'une vidéo → sa place dans une série maison (rangée Reprendre). */
+@Serializable
+data class LocalIndexItem(
+    @SerialName("watch_id") val watchId: String = "",
+    @SerialName("series_id") val seriesId: Int = 0,
+    val season: Int = 0,
+    val episode: Int = 0,
+    val title: String = "",
+    val token: String = "",
+)
+
+@Serializable
+data class LocalIndex(val items: List<LocalIndexItem> = emptyList())

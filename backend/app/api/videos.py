@@ -16,6 +16,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, require_admin
+from app.models.local_series import LocalSeries
 from app.models.video_root import VideoRoot
 from app.services import video_files
 from app.services.video_files import NotFound, Root
@@ -72,6 +73,16 @@ async def stream(token: str, db: AsyncSession = Depends(get_db)) -> FileResponse
     if not real.is_file() or real.suffix.lower().lstrip(".") not in video_files.VIDEO_EXTENSIONS:
         raise HTTPException(status_code=404, detail="Pas une vidéo")
     return FileResponse(real, media_type=video_files.video_mime(real))
+
+
+@router.get("/image/{token}")
+async def image(token: str, db: AsyncSession = Depends(get_db)) -> FileResponse:
+    """Image posée dans un dossier vidéo (poster.jpg, vignette d'épisode) : séries maison."""
+    _, real, _ = await _resolve(db, token)
+    ext = real.suffix.lower().lstrip(".")
+    if not real.is_file() or ext not in video_files.IMAGE_MIME:
+        raise HTTPException(status_code=404, detail="Pas une image")
+    return FileResponse(real, media_type=video_files.IMAGE_MIME[ext])
 
 
 @router.get("/subtitle/{token}")
@@ -167,6 +178,11 @@ async def delete_root(root_id: int, db: AsyncSession = Depends(get_db)) -> dict:
     root = await db.get(VideoRoot, root_id)
     if root is None:
         raise HTTPException(status_code=404, detail="Dossier inconnu")
+    # Ses séries maison disparaissent avec lui (rien n'est supprimé sur le disque)
+    for series in (
+        await db.execute(select(LocalSeries).where(LocalSeries.root_id == root_id))
+    ).scalars():
+        await db.delete(series)
     await db.delete(root)
     await db.commit()
     return {"status": "ok"}

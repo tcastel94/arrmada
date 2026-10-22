@@ -57,6 +57,9 @@ SUBTITLE_MIME = {
 }
 MAX_SUBTITLE_BYTES = 5 * 1024 * 1024
 
+# Images posées dans les dossiers (affiches, fonds, vignettes : séries maison)
+IMAGE_MIME = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "webp": "image/webp"}
+
 # Dossiers techniques de NAS / Windows, jamais affichés
 _HIDDEN_DIRS = {"$recycle.bin", "system volume information", "#recycle", "lost+found", "@eadir"}
 

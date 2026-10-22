@@ -20,6 +20,7 @@ import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { ErrorState } from "@/components/shared/empty-state";
 import { TableSkeleton } from "@/components/shared/loading-skeleton";
 import { FormField } from "@/components/settings/form-field";
+import { LocalSeriesPanel } from "@/components/settings/local-series-panel";
 import {
     MAX_VIDEO_ROOTS,
     useCreateVideoRoot,
@@ -138,6 +139,9 @@ export default function VideoRootsPage() {
                 )}
                 {full && <p className="text-xs text-muted-foreground">{MAX_VIDEO_ROOTS} dossiers au plus.</p>}
             </Panel>
+
+            {/* Séries maison : un dossier vu comme une série (Naruto Kai, One Pace…) */}
+            <LocalSeriesPanel />
 
             <Dialog open={adding} onOpenChange={setAdding}>
                 <DialogContent>

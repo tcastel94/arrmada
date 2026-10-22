@@ -165,6 +165,18 @@ Chaque phase est livrée en APK testable sur la Shield.
 > profil (empreinte SHA-1 du chemin) ; sous-titres posés à côté, convertis en
 > UTF-8. Choix : dossiers déclarés à la souris plutôt que dans `.env`.
 
+> **Note (22/10/2026, APK 2.10.0) : séries maison.** Les montages de fans
+> (Naruto Kai, One Pace) n'ont pas de fiche TVDB / TMDB, donc pas de Sonarr.
+> Un dossier vidéo peut être déclaré « série maison » : sous-dossiers =
+> saisons (arcs), vidéos = épisodes, numéro et titre lus dans le nom, NFO et
+> images locales prioritaires (Jellyfin, OnePacerr), affiche empruntée à la
+> série officielle sur TMDB. Côté appli, un adaptateur (`LocalSeriesLogic`)
+> la traduit en fiche « façon Sonarr » : grille Séries, écran Série, Lire la
+> suite, épisode suivant et Reprendre fonctionnent sans code en double. Le vu
+> reste celui des fichiers (écran Vidéos). Écarté : lire One Pace en
+> streaming depuis son hébergeur (débit limité, liens instables, pas de
+> maîtrise de la qualité) ; on télécharge une fois sur le NAS.
+
 ## Conséquences
 
 - ➕ Interface pensée pour la TV, rapide (affichage natif), et des

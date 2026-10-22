@@ -58,6 +58,9 @@ import coil.compose.AsyncImage
 import fr.arrmada.app.data.EpisodeRow
 import fr.arrmada.app.data.EpisodeStatus
 import fr.arrmada.app.data.JellyfinEpisode
+import fr.arrmada.app.data.LocalEpisode
+import fr.arrmada.app.data.LocalSeriesDetail
+import fr.arrmada.app.data.LocalSeriesLogic
 import fr.arrmada.app.data.NextUp
 import fr.arrmada.app.data.Repository
 import fr.arrmada.app.data.SeasonInfo
@@ -224,7 +227,7 @@ fun SeriesContent(
     onPlay: (EpisodeRow, start: Int) -> Unit,
     onMissing: (EpisodeRow) -> Unit,
     onMark: (EpisodeRow, watched: Boolean) -> Unit,
-    onDownload: () -> Unit,
+    onDownload: (() -> Unit)?, // null : série maison, pas de Sonarr
     onSendToTv: ((EpisodeRow) -> Unit)? = null, // téléphone / tablette : « Sur la TV »
 ) {
     val mainFocus = remember { FocusRequester() }
@@ -287,7 +290,9 @@ fun SeriesContent(
                         modifier = Modifier.focusRequester(mainFocus),
                     )
                 }
-                ArrButton("Télécharger", onDownload, modifier = if (nextUp == null) Modifier.focusRequester(mainFocus) else Modifier)
+                if (onDownload != null) {
+                    ArrButton("Télécharger", onDownload, modifier = if (nextUp == null) Modifier.focusRequester(mainFocus) else Modifier)
+                }
             }
 
             // ── Saisons ──
@@ -298,7 +303,8 @@ fun SeriesContent(
             ) {
                 items(SeriesLogic.orderedSeasons(series), key = { it.seasonNumber }) { info ->
                     SeasonChip(
-                        label = if (info.seasonNumber == 0) "Spéciaux" else "Saison ${info.seasonNumber}",
+                        // Série maison : le nom de l'arc (« Arc 02 - Examen Chunin »)
+                        label = info.name ?: if (info.seasonNumber == 0) "Spéciaux" else "Saison ${info.seasonNumber}",
                         subtitle = seasonSubtitle(info),
                         selected = info.seasonNumber == season,
                         onFocus = { onSeason(info.seasonNumber) },
@@ -475,4 +481,76 @@ private fun EpisodeMenu(
         }
     }
     LaunchedEffect(row) { runCatching { first.requestFocus() } }
+}
+
+/**
+ * Écran Série d'une série maison (Naruto Kai, One Pace…) : le même écran que
+ * pour une série Sonarr (arcs en pastilles, épisodes, vu, « Lire la suite »),
+ * alimenté par le dossier du NAS via [LocalSeriesLogic]. Pas de bouton
+ * Télécharger ni de recherche d'épisode manquant : tout est déjà sur le disque.
+ */
+@Composable
+fun LocalSeriesScreen(
+    id: Int,
+    repository: Repository,
+    absolute: (String?) -> String?,
+    onPlay: (episode: LocalEpisode, start: Int) -> Unit,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var local by remember { mutableStateOf<LocalSeriesDetail?>(null) }
+    var states by remember { mutableStateOf<List<WatchState>>(emptyList()) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var chosenSeason by remember { mutableIntStateOf(-1) }
+
+    // Rechargé à chaque retour sur l'écran (vu / reprise après un épisode)
+    LaunchedEffect(id) {
+        try {
+            local = repository.localSeriesDetail(id)
+            states = runCatching { repository.watchStates() }.getOrDefault(emptyList())
+        } catch (e: Exception) {
+            error = e.message ?: "Serveur injoignable"
+        }
+    }
+
+    val d = local
+    if (error != null) return MessageScreen("Série indisponible", error)
+    if (d == null) return MessageScreen("Chargement…")
+
+    val s = LocalSeriesLogic.toDetail(d)
+    val byEpisode = LocalSeriesLogic.states(d, states)
+    val nextUp = SeriesLogic.nextUp(s, byEpisode)
+    val season = if (chosenSeason >= 0) chosenSeason else SeriesLogic.initialSeason(s, nextUp)
+
+    fun play(row: EpisodeRow, start: Int) {
+        LocalSeriesLogic.episode(d, row.season, row.episode)?.let { onPlay(it, start) }
+    }
+
+    fun mark(row: EpisodeRow, watched: Boolean) {
+        val ep = LocalSeriesLogic.episode(d, row.season, row.episode) ?: return
+        val update = WatchStateUpdate(
+            mediaType = "file", idType = "sha1", id = ep.watchId, title = ep.title,
+            watched = watched, position = 0, total = row.total, lastPlayed = Repository.nowLastPlayed(),
+        )
+        scope.launch {
+            runCatching { repository.saveWatchState(update) }
+                .onSuccess { states = runCatching { repository.watchStates() }.getOrDefault(states) }
+                .onFailure { Toast.makeText(context, it.message ?: "Échec", Toast.LENGTH_SHORT).show() }
+        }
+    }
+
+    SeriesContent(
+        series = s,
+        season = season,
+        rows = SeriesLogic.orderedSeasons(s).firstOrNull { it.seasonNumber == season }
+            ?.let { SeriesLogic.rows(it, LocalSeriesLogic.thumbnails(d, season), byEpisode) }.orEmpty(),
+        nextUp = nextUp,
+        seasonSubtitle = { info -> seasonSubtitle(info, byEpisode) },
+        absolute = absolute,
+        onSeason = { chosenSeason = it },
+        onPlay = ::play,
+        onMissing = {},
+        onMark = ::mark,
+        onDownload = null,
+    )
 }
