@@ -30,7 +30,12 @@
 #
 # Sécurités : fichier écrit en « .part » puis renommé ; durée du résultat
 # comparée à l'original (± 2 s), sinon résultat supprimé et original gardé ;
-# relance sans risque (ce qui est déjà fait est ignoré).
+# relance sans risque (ce qui est déjà fait est ignoré) ; Ctrl+C arrête
+# proprement (fichier en cours supprimé, originaux intacts).
+#
+# Journal : les messages de ffmpeg (des centaines de « Header missing » sur
+# ces MP3 abîmés : NORMAL, les trames cassées sont sautées) vont dans
+# /tmp/remux-avi-mkv-<date>.log ; l'écran n'affiche qu'une ligne par épisode.
 #
 # ⚠️ Piège torrent : si le dossier est celui où le client torrent partage
 #    encore (downloads/completed), déplacer l'original casse le partage :
@@ -63,6 +68,9 @@ DURATION_TOLERANCE=2                           # écart de durée accepté (seco
 AAC_BITRATE="192k"                             # débit du son AAC (stéréo)
 UNRAID_OWNER="99:100"                          # nobody:users, propriétaire habituel sur Unraid
 
+LOG_FILE="/tmp/remux-avi-mkv-$(date '+%Y%m%d-%H%M%S').log"
+CURRENT_PART=""                                # fichier en cours d'écriture (Ctrl+C)
+
 DRY_RUN=0
 KEEP_ORIG=0
 FIX_AUDIO=0
@@ -92,6 +100,11 @@ while (( $# > 0 )); do
     shift
 done
 
+# Un seul lancement à la fois : deux scripts sur les mêmes fichiers
+# écriraient le même « .part » en même temps et l'abîmeraient
+exec 9>/tmp/remux-avi-mkv.lock
+flock -n 9 || { err "Le script tourne déjà (autre terminal ?) : attends la fin"; exit 2; }
+
 [[ -n "$TARGET_DIR" ]] || { err "Dossier à traiter manquant"; usage; }
 [[ -d "$TARGET_DIR" ]] || { err "Dossier introuvable : $TARGET_DIR"; exit 2; }
 TARGET_DIR="$(realpath "$TARGET_DIR")"
@@ -103,6 +116,16 @@ IMAGE="$(docker inspect --format '{{.Config.Image}}' "$JELLYFIN_CONTAINER" 2>/de
     exit 2
 }
 info "ffmpeg emprunté à l'image : $IMAGE"
+info "Journal détaillé de ffmpeg : $LOG_FILE"
+
+# Ctrl+C / arrêt : on supprime le fichier à moitié écrit et on s'arrête là
+# (docker transmet le signal à ffmpeg, le conteneur jetable disparaît)
+on_interrupt() {
+    [[ -n "$CURRENT_PART" ]] && rm -f "$TARGET_DIR/$CURRENT_PART"
+    err "Interrompu : originaux intacts, relance le script pour reprendre"
+    exit 130
+}
+trap on_interrupt INT TERM
 
 # Lance un outil de jellyfin-ffmpeg dans un conteneur jetable, le dossier
 # traité monté sur /work. --entrypoint remplace le démarrage de Jellyfin.
@@ -152,24 +175,36 @@ stash() {
 # Retour 0 si la sortie est en place et valide.
 transcode() {
     local rel_in="$1" rel_out="$2"; shift 2
+    local started=$SECONDS before after
+    CURRENT_PART="$rel_out.part"
+    printf '\n===== %s =====\n' "$rel_in" >> "$LOG_FILE"
+    before=$(wc -l < "$LOG_FILE")
     # -fflags +genpts : l'AVI n'a pas d'horodatage par image, ffmpeg les recrée
     # -map 0          : toutes les pistes (vidéo, son, sous-titres)
     if ! run_tool "$FFMPEG" -nostdin -hide_banner -loglevel error -y \
             -fflags +genpts -i "/work/$rel_in" -map 0 "$@" \
-            -f matroska "/work/$rel_out.part"; then
-        err "Échec ffmpeg : $rel_in"
+            -f matroska "/work/$rel_out.part" 2>> "$LOG_FILE"; then
+        err "Échec ffmpeg : $rel_in (fin du journal ci-dessous)"
+        tail -n 5 "$LOG_FILE" >&2
         rm -f "$TARGET_DIR/$rel_out.part"
+        CURRENT_PART=""
         return 1
     fi
+    after=$(wc -l < "$LOG_FILE")
+    # Trames abîmées sautées par ffmpeg : information, pas une erreur
+    (( after - before > 0 )) && info "  $((after - before)) avertissement(s) ffmpeg (trames abîmées sautées, normal), détail dans le journal"
+    info "  calcul terminé en $((SECONDS - started)) s, contrôle de la durée…"
     local d_in d_out
     d_in="$(duration_of "$rel_in")"
     d_out="$(duration_of "$rel_out.part")"
     if ! same_duration "$d_in" "$d_out"; then
         err "Durées différentes (original ${d_in:-?} s / résultat ${d_out:-?} s) : fichier abîmé ? Résultat supprimé, original gardé : $rel_in"
         rm -f "$TARGET_DIR/$rel_out.part"
+        CURRENT_PART=""
         return 1
     fi
     mv -f "$TARGET_DIR/$rel_out.part" "$TARGET_DIR/$rel_out"
+    CURRENT_PART=""
     give_back "$TARGET_DIR/$rel_out"
     LAST_DURATION="$d_out"
 }
@@ -228,7 +263,7 @@ fix_mkv_audio() {
         info "[simulation] son $acodec → AAC : $rel_mkv"
         return 0
     fi
-    info "Son $acodec → AAC : $rel_mkv"
+    info "Son $acodec → AAC : $rel_mkv (1 à 3 min par épisode)"
     local tmp="${rel_mkv%.*}.aac-tmp.mkv"
     local -a opts
     mapfile -d '' -t opts < <(encode_options "$vcodec" "$acodec")
@@ -270,4 +305,5 @@ if (( total == 0 )); then
     exit 0
 fi
 info "Terminé : $total fichier(s), $failed échec(s)$( (( DRY_RUN )) && echo ' (simulation)')"
+(( DRY_RUN )) || info "Journal : $LOG_FILE"
 (( failed == 0 )) || exit 1
