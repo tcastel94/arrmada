@@ -89,7 +89,8 @@ jobs:
       # serveur ArrMada rapatrie toutes les heures (empreinte SHA-256
       # vérifiée) puis propose aux TV et téléphones. Jamais l'APK de test.
       - name: Publish release APK (android-latest)
-        if: env.BUILD_TYPE == 'release' && github.event_name == 'push'
+        # Push sur main / android/apk, ou lancement à la main (onglet Actions › Run workflow)
+        if: env.BUILD_TYPE == 'release' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
