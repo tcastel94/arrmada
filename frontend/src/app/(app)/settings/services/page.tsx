@@ -76,7 +76,7 @@ export default function SettingsServicesPage() {
                         <StatusDot tone="online" size="sm" /> {counts.online} en ligne
                     </span>
                     {counts.offline > 0 && (
-                        <span className="chip !text-red-300">
+                        <span className="chip !text-destructive">
                             <StatusDot tone="offline" size="sm" /> {counts.offline} en panne
                         </span>
                     )}

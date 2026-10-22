@@ -122,7 +122,7 @@ export const ROOM_META: Record<YamahaRoom, { label: string; short: string; icon:
         label: "Salle de cinéma",
         short: "Cinéma",
         icon: Clapperboard,
-        tile: "from-violet-500/30 to-fuchsia-500/10 text-violet-300 ring-violet-400/25",
+        tile: "from-violet-500/30 to-fuchsia-500/10 text-primary ring-primary/25",
     },
 };
 

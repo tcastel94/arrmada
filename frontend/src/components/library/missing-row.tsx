@@ -20,12 +20,12 @@ import type { RowSearchState } from "./use-bulk-search";
 export function releaseStatus(item: MediaItem): { label: string; className: string } | null {
     const s = (item.status || "").toLowerCase();
     const map: Record<string, { label: string; className: string }> = {
-        released: { label: "Sorti", className: "bg-emerald-500/10 text-emerald-300 ring-emerald-500/25" },
-        incinemas: { label: "Au cinéma", className: "bg-sky-500/10 text-sky-300 ring-sky-500/25" },
-        announced: { label: "Annoncé", className: "bg-amber-500/10 text-amber-300 ring-amber-500/25" },
+        released: { label: "Sorti", className: "bg-success/10 text-success ring-success/25" },
+        incinemas: { label: "Au cinéma", className: "bg-primary/10 text-primary ring-primary/25" },
+        announced: { label: "Annoncé", className: "bg-warning/10 text-warning ring-warning/25" },
         tba: { label: "À venir", className: "bg-white/[0.04] text-muted-foreground ring-white/10" },
-        continuing: { label: "En cours", className: "bg-emerald-500/10 text-emerald-300 ring-emerald-500/25" },
-        upcoming: { label: "À venir", className: "bg-amber-500/10 text-amber-300 ring-amber-500/25" },
+        continuing: { label: "En cours", className: "bg-success/10 text-success ring-success/25" },
+        upcoming: { label: "À venir", className: "bg-warning/10 text-warning ring-warning/25" },
         ended: { label: "Terminée", className: "bg-white/[0.04] text-muted-foreground ring-white/10" },
     };
     return map[s] ?? (s ? { label: item.status, className: "bg-white/[0.04] text-muted-foreground ring-white/10" } : null);
@@ -67,9 +67,9 @@ export function RowSearchButton({
                 className={cn(
                     "flex h-8 w-8 items-center justify-center rounded-full shadow-lg ring-1 backdrop-blur-md transition-all hover:scale-110 disabled:hover:scale-100",
                     launched
-                        ? "bg-emerald-500 text-white ring-emerald-300/40"
+                        ? "bg-success text-white ring-success/40"
                         : failed
-                          ? "bg-red-500/90 text-white ring-red-300/40"
+                          ? "bg-destructive/90 text-white ring-destructive/40"
                           : "bg-black/60 text-white ring-white/20 hover:bg-primary",
                 )}
             >
@@ -86,7 +86,7 @@ export function RowSearchButton({
             disabled={disabled || busy || launched}
             aria-label={`${label} : ${title}`}
             // Mobile : bouton carré (icône seule) pour laisser la place au titre.
-            className={cn("w-9 shrink-0 px-0 sm:w-[7.5rem] sm:px-3", launched && "border-emerald-500/40 text-emerald-400 disabled:opacity-100")}
+            className={cn("w-9 shrink-0 px-0 sm:w-[7.5rem] sm:px-3", launched && "border-success/40 text-success disabled:opacity-100")}
         >
             <Icon className={cn(busy && "animate-spin")} />
             <span className="hidden sm:inline">{label}</span>
@@ -124,8 +124,8 @@ export function MissingRow({
             className={cn(
                 "group flex items-center gap-3 rounded-xl p-2 pr-2.5 ring-1 transition-colors duration-300",
                 selected ? "bg-primary/10 ring-primary/40" : "ring-transparent hover:bg-white/[0.04] hover:ring-white/[0.08]",
-                state === "launched" && !selected && "bg-emerald-500/[0.04]",
-                state === "failed" && !selected && "bg-red-500/[0.05]",
+                state === "launched" && !selected && "bg-success/[0.04]",
+                state === "failed" && !selected && "bg-destructive/[0.05]",
             )}
         >
             <button
@@ -160,7 +160,7 @@ export function MissingRow({
                         {item.type === "movie" ? "Film" : "Série"}
                     </span>
                     {item.monitored ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-emerald-300 ring-1 ring-emerald-500/25">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-success ring-1 ring-success/25">
                             <Eye className="h-3 w-3" /> Surveillé
                         </span>
                     ) : (
@@ -178,7 +178,7 @@ export function MissingRow({
                         </span>
                     )}
                     {state === "failed" && (
-                        <span className="inline-flex items-center gap-1 text-red-400">
+                        <span className="inline-flex items-center gap-1 text-destructive">
                             <AlertCircle className="h-3 w-3" /> échec
                         </span>
                     )}

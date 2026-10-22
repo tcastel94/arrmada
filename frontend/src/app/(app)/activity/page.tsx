@@ -208,9 +208,9 @@ export default function ActivityPage() {
                                     onChange={setStatus}
                                     options={[
                                         { value: "all", label: "Tous" },
-                                        { value: "ok", label: "Succès", icon: CheckCircle2, tone: "text-emerald-300" },
-                                        { value: "ko", label: "Échecs", icon: AlertOctagon, tone: "text-red-300" },
-                                        { value: "info", label: "Info", icon: Info, tone: "text-sky-300" },
+                                        { value: "ok", label: "Succès", icon: CheckCircle2, tone: "text-success" },
+                                        { value: "ko", label: "Échecs", icon: AlertOctagon, tone: "text-destructive" },
+                                        { value: "info", label: "Info", icon: Info, tone: "text-primary" },
                                     ]}
                                 />
                                 <Segmented<View>

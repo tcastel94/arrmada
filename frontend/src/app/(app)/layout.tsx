@@ -116,7 +116,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
             <CommandPalette />
             <KeyboardShortcuts />
             <MiniPlayer />
-            <main className="pb-[calc(var(--tabbar-h)+env(safe-area-inset-bottom)+1rem)] transition-[padding] duration-300 ease-smooth lg:pb-10 lg:pl-[var(--sb-w)]">
+            <main className="pb-[calc(var(--tabbar-h)+env(safe-area-inset-bottom)+var(--miniplayer-h,0px)+1rem)] transition-[padding] duration-300 ease-smooth lg:pb-[calc(var(--miniplayer-h,0px)+2.5rem)] lg:pl-[var(--sb-w)]">
                 {children}
             </main>
         </div>

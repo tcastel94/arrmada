@@ -17,7 +17,7 @@ export interface SegmentOption<T extends string> {
     value: T;
     label: string;
     icon?: LucideIcon;
-    /** Classe Tailwind de couleur de l'icône (ex: "text-amber-400"). */
+    /** Classe Tailwind de couleur de l'icône (ex: "text-warning"). */
     iconClassName?: string;
     /** Compteur affiché à droite du libellé. */
     count?: number;

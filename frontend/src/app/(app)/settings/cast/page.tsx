@@ -116,13 +116,13 @@ function JellyfinPanel() {
         <Panel
             title="Jellyfin (transcodage)"
             icon={Server}
-            iconClassName="text-sky-300"
+            iconClassName="text-primary"
             action={
                 !isLoading && !isError ? (
                     <span
                         className={cn(
                             "flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold",
-                            configured ? "bg-emerald-500/10 text-emerald-300" : "bg-amber-500/10 text-amber-300",
+                            configured ? "bg-success/10 text-success" : "bg-warning/10 text-warning",
                         )}
                     >
                         <StatusDot tone={configured ? "online" : "warning"} size="sm" />
@@ -187,8 +187,8 @@ function JellyfinPanel() {
                                 className={cn(
                                     "flex items-center gap-2 overflow-hidden rounded-xl border px-3.5 py-2.5 text-sm",
                                     testResult.ok
-                                        ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-300"
-                                        : "border-red-500/25 bg-red-500/10 text-red-300",
+                                        ? "border-success/25 bg-success/10 text-success"
+                                        : "border-destructive/25 bg-destructive/10 text-destructive",
                                 )}
                             >
                                 {testResult.ok ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <XCircle className="h-4 w-4 shrink-0" />}
@@ -244,7 +244,7 @@ function DevicesPanel() {
         <Panel
             title="Appareils Cast"
             icon={Cast}
-            iconClassName="text-sky-300"
+            iconClassName="text-primary"
             action={
                 <Button variant="outline" size="sm" onClick={scan} disabled={discover.isPending}>
                     {discover.isPending ? <Loader2 className="animate-spin" /> : <Radar />}
@@ -295,7 +295,7 @@ function DevicesPanel() {
                                     <span
                                         className={cn(
                                             "rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
-                                            d.video_capable ? "bg-sky-500/15 text-sky-300" : "bg-white/[0.06] text-muted-foreground",
+                                            d.video_capable ? "bg-primary/15 text-primary" : "bg-white/[0.06] text-muted-foreground",
                                         )}
                                     >
                                         {d.video_capable ? "Vidéo" : "Audio"}

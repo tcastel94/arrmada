@@ -66,12 +66,6 @@ export function ServiceCard({ service, onEdit, onDelete }: ServiceCardProps) {
     return (
         <motion.div layout variants={scaleIn} exit={{ opacity: 0, scale: 0.94, transition: { duration: 0.2 } }}>
             <SpotlightCard interactive className={cn("group relative h-full overflow-hidden", disabled && "opacity-70")}>
-                {/* Lueur aux couleurs de l'application */}
-                <span
-                    aria-hidden
-                    className="pointer-events-none absolute -left-10 -top-10 h-32 w-32 rounded-full opacity-20 blur-2xl transition-opacity duration-500 group-hover:opacity-40"
-                    style={{ background: visual.color }}
-                />
 
                 <div className="relative z-[2] flex h-full flex-col gap-4 p-4">
                     {/* En-tête : icône, nom, interrupteur */}
@@ -104,11 +98,11 @@ export function ServiceCard({ service, onEdit, onDelete }: ServiceCardProps) {
                                 disabled
                                     ? "bg-slate-500/10 text-slate-300"
                                     : status === "online"
-                                      ? "bg-emerald-500/10 text-emerald-300"
+                                      ? "bg-success/10 text-success"
                                       : status === "offline"
-                                        ? "bg-red-500/10 text-red-300"
+                                        ? "bg-destructive/10 text-destructive"
                                         : status === "degraded"
-                                          ? "bg-amber-500/10 text-amber-300"
+                                          ? "bg-warning/10 text-warning"
                                           : "bg-slate-500/10 text-slate-300",
                             )}
                         >
@@ -145,7 +139,7 @@ export function ServiceCard({ service, onEdit, onDelete }: ServiceCardProps) {
                         <Button
                             size="icon-sm"
                             variant="ghost"
-                            className="text-muted-foreground hover:bg-red-500/10 hover:text-red-400"
+                            className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                             onClick={() => onDelete(service)}
                             aria-label={`Supprimer ${service.name}`}
                         >

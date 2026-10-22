@@ -61,18 +61,16 @@ export function ArtworkRefreshButton() {
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <Button variant="outline" aria-label="Artworks : logos, disques, clearart">
+                <Button variant="ghost" size={running ? "sm" : "icon"} className="text-primary" aria-label="Artworks : logos, disques, clearart" title="Artworks : logos, disques, clearart">
                     {running ? (
                         <RingGauge value={pct} size={18} stroke={3} tone="primary" />
                     ) : (
                         <Images />
                     )}
-                    {running ? (
+                    {running && (
                         <span className="tabular-nums">
                             {status?.done ?? 0} / {status?.total ?? 0}
                         </span>
-                    ) : (
-                        "Artworks"
                     )}
                 </Button>
             </DropdownMenuTrigger>
@@ -92,7 +90,7 @@ export function ArtworkRefreshButton() {
                     </p>
                 )}
                 {(noSource || noSite) && (
-                    <p className="mx-2 mb-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-200">
+                    <p className="mx-2 mb-2 rounded-md border border-warning/30 bg-warning/10 px-2 py-1.5 text-xs text-warning">
                         {noSource
                             ? "Aucune source : ajoute FANART_CLIENT_KEY (compte fanart.tv gratuit) dans le .env du serveur."
                             : "Dossiers des médias seulement : ajoute FANART_CLIENT_KEY (compte fanart.tv gratuit) pour les logos HD et les disques."}

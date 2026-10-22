@@ -212,7 +212,7 @@ function LogStream({ query, live, onToggleLive, service, onServiceChange, servic
         <Panel
             title="Journaux"
             icon={ScrollText}
-            iconClassName="text-sky-300"
+            iconClassName="text-primary"
             bodyClassName="p-0"
             action={
                 <>
@@ -278,7 +278,7 @@ function LogStream({ query, live, onToggleLive, service, onServiceChange, servic
             </div>
 
             {isRefetchError && data && (
-                <p className="flex items-center gap-2 border-b border-amber-400/10 bg-amber-500/[0.07] px-4 py-2 text-xs text-amber-300 sm:px-5">
+                <p className="flex items-center gap-2 border-b border-warning/10 bg-warning/[0.07] px-4 py-2 text-xs text-warning sm:px-5">
                     <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                     Le flux ne répond plus : tu vois les dernières lignes lues.
                 </p>

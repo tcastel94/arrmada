@@ -140,10 +140,9 @@ export function Scrubber({
         keyTimer.current = setTimeout(() => commit(v), 350);
     };
 
-    const fill =
-        tone === "violet"
-            ? "from-violet-500 via-fuchsia-400 to-violet-300"
-            : "from-primary via-sky-400 to-brand ";
+    // Barre pleine : blanche pour la lecture vidéo (comme le lecteur iOS),
+    // bleue pour les autres réglages.
+    const fill = tone === "violet" ? "bg-white" : "bg-primary";
 
     return (
         <div
@@ -170,14 +169,14 @@ export function Scrubber({
             <div
                 ref={trackRef}
                 className={cn(
-                    "relative w-full overflow-visible rounded-full bg-white/10 transition-[height] duration-200",
+                    "relative w-full overflow-visible rounded-full bg-white/[0.18] transition-[height] duration-200",
                     size === "sm" ? "h-1" : "h-1.5 group-hover:h-2",
                     drag !== null && "h-2",
                 )}
             >
                 <div
                     className={cn(
-                        "absolute inset-y-0 left-0 rounded-full bg-gradient-to-r",
+                        "absolute inset-y-0 left-0 rounded-full",
                         fill,
                         // Pas de transition pendant le glisser (suivi direct du doigt).
                         drag === null && "transition-[width] duration-500 ease-smooth",

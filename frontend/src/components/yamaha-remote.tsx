@@ -207,7 +207,7 @@ function PresetTiles({ device, onApplied }: { device: YamahaDevice; onApplied?: 
                                 {busy ? (
                                     <Loader2 className="h-4 w-4 animate-spin" />
                                 ) : done === room ? (
-                                    <Check className="h-4 w-4 text-emerald-300" />
+                                    <Check className="h-4 w-4 text-success" />
                                 ) : (
                                     <Icon className="h-4 w-4" />
                                 )}
@@ -344,7 +344,7 @@ function FullDeviceControl({ device }: { device: YamahaDevice }) {
                     className={cn(
                         "flex h-12 w-12 shrink-0 items-center justify-center rounded-full border transition-all duration-300 disabled:opacity-40",
                         on
-                            ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-300"
+                            ? "border-success/40 bg-success/15 text-success"
                             : "border-white/10 bg-white/[0.04] text-muted-foreground hover:text-foreground",
                     )}
                 >
@@ -353,7 +353,7 @@ function FullDeviceControl({ device }: { device: YamahaDevice }) {
             </div>
 
             {!device.online ? (
-                <p className="rounded-xl border border-red-500/20 bg-red-500/[0.07] px-3.5 py-3 text-xs text-red-300">
+                <p className="rounded-xl border border-destructive/20 bg-destructive/[0.07] px-3.5 py-3 text-xs text-destructive">
                     L&apos;ampli ne répond pas{device.error ? ` (${device.error})` : ""}. Vérifie qu&apos;il est branché au réseau.
                 </p>
             ) : (
@@ -378,7 +378,7 @@ function FullDeviceControl({ device }: { device: YamahaDevice }) {
                                     transition={SPRING}
                                     className="text-3xl font-bold tabular-nums"
                                 >
-                                    {device.mute ? <VolumeX className="mx-auto h-8 w-8 text-red-400" /> : `${pct}`}
+                                    {device.mute ? <VolumeX className="mx-auto h-8 w-8 text-destructive" /> : `${pct}`}
                                 </motion.p>
                                 <p className="text-[11px] text-muted-foreground">{device.mute ? "Sourdine" : db ?? "%"}</p>
                             </div>
@@ -398,7 +398,7 @@ function FullDeviceControl({ device }: { device: YamahaDevice }) {
                         <Button
                             variant="ghost"
                             size="icon-sm"
-                            className={cn(device.mute && "bg-red-500/10 text-red-400 hover:text-red-300")}
+                            className={cn(device.mute && "bg-destructive/10 text-destructive hover:text-destructive")}
                             onClick={() => send({ action: "mute", value: !device.mute })}
                             aria-label={device.mute ? "Réactiver le son" : "Couper le son"}
                             aria-pressed={!!device.mute}
@@ -432,14 +432,14 @@ function FullDeviceControl({ device }: { device: YamahaDevice }) {
                                             onClick={() => !active && send({ action: "input", value: i })}
                                             className={cn(
                                                 "relative rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
-                                                active ? "text-amber-200" : "bg-white/[0.04] text-muted-foreground hover:bg-white/[0.08] hover:text-foreground",
+                                                active ? "text-warning" : "bg-white/[0.04] text-muted-foreground hover:bg-white/[0.08] hover:text-foreground",
                                             )}
                                         >
                                             {active && (
                                                 <motion.span
                                                     layoutId={`yamaha-input-${device.id}`}
                                                     transition={SPRING}
-                                                    className="absolute inset-0 rounded-full border border-amber-400/40 bg-amber-500/15"
+                                                    className="absolute inset-0 rounded-full border border-warning/40 bg-warning/15"
                                                 />
                                             )}
                                             <span className="relative">{inputLabel(i)}</span>
@@ -491,7 +491,7 @@ function CompactDeviceControl({ device }: { device: YamahaDevice }) {
                 <span
                     className={cn(
                         "flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                        !device.online ? "bg-red-500/15 text-red-300" : on ? "bg-emerald-500/15 text-emerald-300" : "bg-white/[0.06] text-muted-foreground",
+                        !device.online ? "bg-destructive/15 text-destructive" : on ? "bg-success/15 text-success" : "bg-white/[0.06] text-muted-foreground",
                     )}
                 >
                     {!device.online ? "Hors ligne" : on ? "Allumé" : "Veille"}
@@ -500,7 +500,7 @@ function CompactDeviceControl({ device }: { device: YamahaDevice }) {
                 <Button
                     size="icon-sm"
                     variant="ghost"
-                    className={cn(on ? "text-emerald-400" : "text-muted-foreground")}
+                    className={cn(on ? "text-success" : "text-muted-foreground")}
                     aria-label={on ? "Mettre en veille" : "Allumer"}
                     aria-pressed={on}
                     disabled={!device.online}
@@ -518,7 +518,7 @@ function CompactDeviceControl({ device }: { device: YamahaDevice }) {
                     <Button
                         size="icon-sm"
                         variant="ghost"
-                        className={cn(device.mute && "text-red-400")}
+                        className={cn(device.mute && "text-destructive")}
                         aria-label={device.mute ? "Réactiver le son" : "Couper le son"}
                         aria-pressed={!!device.mute}
                         onClick={() => send({ action: "mute", value: !device.mute })}
@@ -589,7 +589,7 @@ function CompactPresets({ device }: { device: YamahaDevice }) {
                             onClick={() => run(room)}
                             aria-label={`Appliquer le préréglage ${meta.label}`}
                         >
-                            {pending === room ? <Loader2 className="animate-spin" /> : done === room ? <Check className="text-emerald-300" /> : <Icon />}
+                            {pending === room ? <Loader2 className="animate-spin" /> : done === room ? <Check className="text-success" /> : <Icon />}
                             <span className="truncate">{meta.short}</span>
                         </Button>
                     );
@@ -634,12 +634,6 @@ export function YamahaRemote({
 
     return (
         <div className="glass relative overflow-hidden rounded-2xl p-4">
-            {/* Lueur ambrée discrète : identité visuelle « ampli » */}
-            <div
-                aria-hidden
-                className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full opacity-30 blur-2xl"
-                style={{ background: "radial-gradient(closest-side, hsl(32 95% 58% / 0.6), transparent)" }}
-            />
             <div className="relative">{body}</div>
         </div>
     );

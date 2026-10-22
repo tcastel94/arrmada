@@ -89,7 +89,7 @@ export default function VideoRootsPage() {
             <Panel
                 title="Dossiers vidéo"
                 icon={FolderOpen}
-                iconClassName="text-amber-300"
+                iconClassName="text-warning"
                 action={
                     <Button size="sm" onClick={() => setAdding(true)} disabled={full || isLoading}>
                         <Plus />
@@ -116,12 +116,12 @@ export default function VideoRootsPage() {
                     <ul className="divide-y divide-white/[0.05]">
                         {roots?.map((r) => (
                             <li key={r.id} className="flex items-center gap-3 py-3">
-                                <FolderOpen className="h-5 w-5 shrink-0 text-amber-300" />
+                                <FolderOpen className="h-5 w-5 shrink-0 text-warning" />
                                 <div className="min-w-0 flex-1">
                                     <p className="truncate text-sm font-semibold">{r.name}</p>
                                     <p className="truncate font-mono text-xs text-muted-foreground">{r.path}</p>
                                     {!r.available && (
-                                        <p className="mt-1 flex items-center gap-1 text-xs text-amber-300">
+                                        <p className="mt-1 flex items-center gap-1 text-xs text-warning">
                                             <AlertTriangle className="h-3.5 w-3.5" />
                                             Introuvable sur le serveur (partage démonté ?)
                                         </p>

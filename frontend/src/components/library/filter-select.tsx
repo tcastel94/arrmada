@@ -34,13 +34,13 @@ export function FilterSelect<T extends string>({
     const active = value !== choices[0]?.value;
     return (
         <div className="min-w-0 space-y-1.5">
-            <label htmlFor={id} className="eyebrow block">
+            <label htmlFor={id} className="block px-1 text-[13px] font-medium text-muted-foreground">
                 {label}
             </label>
             <Select value={value} onValueChange={(v) => onChange(v as T)} disabled={disabled}>
                 <SelectTrigger
                     id={id}
-                    className={cn(active && "border-primary/40 bg-primary/[0.07] text-primary")}
+                    className={cn(active && "bg-primary/15 text-primary")}
                 >
                     <SelectValue />
                 </SelectTrigger>

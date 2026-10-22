@@ -137,7 +137,7 @@ export function SabnzbdPanel() {
                                 <p className="text-lg font-semibold">{audit.service_name}</p>
                                 <p className="text-sm text-muted-foreground">
                                     {audit.passed}/{audit.total_checks} réglages conformes
-                                    {!allGood && <span className="text-amber-300"> · {plural(failing.length, "écart")}</span>}
+                                    {!allGood && <span className="text-warning"> · {plural(failing.length, "écart")}</span>}
                                 </p>
                             </div>
                         </div>
@@ -161,14 +161,14 @@ export function SabnzbdPanel() {
                                 exit={{ opacity: 0, height: 0 }}
                                 className="overflow-hidden"
                             >
-                                <div className="mt-4 rounded-xl bg-red-500/10 p-3 ring-1 ring-red-400/20">
+                                <div className="mt-4 rounded-xl bg-destructive/10 p-3 ring-1 ring-destructive/20">
                                     <div className="flex items-center justify-between gap-2">
-                                        <p className="text-sm font-medium text-red-300">Erreurs de la dernière application</p>
+                                        <p className="text-sm font-medium text-destructive">Erreurs de la dernière application</p>
                                         <Button variant="ghost" size="sm" onClick={() => setLastErrors([])}>
                                             Masquer
                                         </Button>
                                     </div>
-                                    <ul className="mt-1 space-y-1 text-xs text-red-200/90">
+                                    <ul className="mt-1 space-y-1 text-xs text-destructive/90">
                                         {lastErrors.map((err, i) => (
                                             <li key={`${i}:${err}`} className="flex gap-1.5">
                                                 <XCircle className="mt-0.5 h-3 w-3 shrink-0" />
@@ -192,7 +192,7 @@ export function SabnzbdPanel() {
                     onChange={setFilter}
                     options={[
                         { value: "all", label: "Tous les réglages", count: audit.total_checks },
-                        { value: "issues", label: "À corriger", count: failing.length, icon: XCircle, iconClassName: "text-red-400" },
+                        { value: "issues", label: "À corriger", count: failing.length, icon: XCircle, iconClassName: "text-destructive" },
                     ]}
                 />
             </motion.div>
@@ -201,7 +201,7 @@ export function SabnzbdPanel() {
                 <motion.div variants={fadeUp}>
                     <Panel>
                         <div className="flex flex-col items-center gap-2 py-8 text-center">
-                            <ShieldCheck className="h-8 w-8 text-emerald-400" />
+                            <ShieldCheck className="h-8 w-8 text-success" />
                             <p className="font-semibold">Aucun écart</p>
                             <p className="text-sm text-muted-foreground">SABnzbd suit déjà toutes les recommandations TRaSH.</p>
                         </div>
@@ -227,7 +227,7 @@ export function SabnzbdPanel() {
                                         <span
                                             className={cn(
                                                 "rounded-md px-1.5 py-0.5 text-xs font-semibold tabular-nums",
-                                                ok ? "bg-emerald-500/15 text-emerald-300" : "bg-red-500/15 text-red-300",
+                                                ok ? "bg-success/15 text-success" : "bg-destructive/15 text-destructive",
                                             )}
                                         >
                                             {passed}/{all.length}
@@ -260,9 +260,9 @@ export function SabnzbdPanel() {
                         <li key={c.key} className="rounded-xl bg-white/[0.03] px-3 py-2 text-xs ring-1 ring-white/[0.06]">
                             <p className="font-medium">{c.label}</p>
                             <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-muted-foreground">
-                                <span className="text-red-300 line-through decoration-red-400/60">{formatValue(c.current_value)}</span>
+                                <span className="text-destructive line-through decoration-red-400/60">{formatValue(c.current_value)}</span>
                                 <ArrowRight className="h-3 w-3" />
-                                <span className="font-semibold text-emerald-300">{formatValue(c.recommended_value)}</span>
+                                <span className="font-semibold text-success">{formatValue(c.recommended_value)}</span>
                             </p>
                         </li>
                     ))}
@@ -277,9 +277,9 @@ function CheckRow({ check }: { check: ConfigCheck }) {
         <li className="flex flex-col gap-1.5 px-5 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
             <div className="flex min-w-0 items-start gap-2.5">
                 {check.is_compliant ? (
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" aria-label="Conforme" />
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-label="Conforme" />
                 ) : (
-                    <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-400" aria-label="Non conforme" />
+                    <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-label="Non conforme" />
                 )}
                 <div className="min-w-0">
                     <p className="text-sm">{check.label}</p>
@@ -288,14 +288,14 @@ function CheckRow({ check }: { check: ConfigCheck }) {
             </div>
             <div className="flex shrink-0 items-center gap-1.5 pl-6 text-xs sm:pl-0">
                 {check.is_compliant ? (
-                    <span className="rounded-md bg-emerald-500/10 px-1.5 py-0.5 font-medium text-emerald-300">
+                    <span className="rounded-md bg-success/10 px-1.5 py-0.5 font-medium text-success">
                         {formatValue(check.current_value)}
                     </span>
                 ) : (
                     <>
-                        <span className="rounded-md bg-red-500/10 px-1.5 py-0.5 text-red-300">{formatValue(check.current_value)}</span>
+                        <span className="rounded-md bg-destructive/10 px-1.5 py-0.5 text-destructive">{formatValue(check.current_value)}</span>
                         <ArrowRight className="h-3 w-3 text-muted-foreground" />
-                        <span className="rounded-md bg-amber-500/10 px-1.5 py-0.5 font-semibold text-amber-300">
+                        <span className="rounded-md bg-warning/10 px-1.5 py-0.5 font-semibold text-warning">
                             {formatValue(check.recommended_value)}
                         </span>
                     </>

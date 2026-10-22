@@ -23,9 +23,9 @@ import { cn } from "@/lib/utils";
 
 /** Teintes disponibles pour la tuile d'icône (une par famille d'appareil). */
 const TONES = {
-    violet: "from-violet-500/30 to-fuchsia-500/10 text-violet-300 ring-violet-400/25 shadow-violet-500/60",
-    orange: "from-orange-500/30 to-amber-500/10 text-orange-300 ring-orange-400/25 shadow-orange-500/60",
-    sky: "from-sky-500/30 to-cyan-500/10 text-sky-300 ring-sky-400/25 shadow-sky-500/60",
+    violet: "from-violet-500/30 to-fuchsia-500/10 text-primary ring-primary/25",
+    orange: "from-orange-500/30 to-amber-500/10 text-orange-300 ring-orange-400/25",
+    sky: "from-primary/30 to-primary/10 text-primary ring-primary/25",
     slate: "from-slate-400/25 to-slate-500/10 text-slate-300 ring-slate-400/25",
 } as const;
 
@@ -139,7 +139,7 @@ export function DeviceRow({
                                 exit={{ opacity: 0 }}
                                 className={cn(
                                     "mt-1 flex items-center gap-1 text-[11px] font-medium",
-                                    result.ok ? "text-emerald-400" : "text-red-400",
+                                    result.ok ? "text-success" : "text-destructive",
                                 )}
                                 aria-live="polite"
                             >
@@ -168,7 +168,7 @@ export function DeviceRow({
                     <Button
                         size="icon-sm"
                         variant="ghost"
-                        className="text-muted-foreground hover:bg-red-500/10 hover:text-red-400"
+                        className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                         onClick={() => setConfirmOpen(true)}
                         aria-label={`Supprimer ${name}`}
                     >

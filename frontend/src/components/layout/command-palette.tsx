@@ -236,7 +236,7 @@ export function CommandPalette() {
                                             <p className="text-xs text-muted-foreground">
                                                 {m.type === "movie" ? "Film" : "Série"}
                                                 {m.year ? ` · ${m.year}` : ""}
-                                                {!m.has_file && <span className="text-amber-400"> · manquant</span>}
+                                                {!m.has_file && <span className="text-warning"> · manquant</span>}
                                             </p>
                                         </div>
                                         <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 transition-opacity group-data-[selected=true]:opacity-100" />

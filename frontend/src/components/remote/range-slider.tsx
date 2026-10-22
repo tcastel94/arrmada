@@ -17,9 +17,9 @@ import { useState, type KeyboardEvent } from "react";
 import { cn } from "@/lib/utils";
 
 const TONES = {
-    violet: { fill: "from-violet-500 via-fuchsia-500 to-pink-400", glow: "hsl(280 85% 65% / 0.65)" },
+    violet: { fill: "from-violet-500 via-primary to-pink-400", glow: "hsl(280 85% 65% / 0.65)" },
     orange: { fill: "from-orange-500 via-amber-400 to-yellow-300", glow: "hsl(32 95% 58% / 0.6)" },
-    primary: { fill: "from-primary via-sky-400 to-brand", glow: "hsl(var(--primary) / 0.6)" },
+    primary: { fill: "from-primary via-primary to-brand", glow: "hsl(var(--primary) / 0.6)" },
 } as const;
 
 interface RangeSliderProps {

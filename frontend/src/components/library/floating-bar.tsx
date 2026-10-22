@@ -54,7 +54,7 @@ export function FloatingBar({
 /** Compteur « 12 sélectionnés » qui roule à chaque changement. */
 export function SelectionCount({ count, label = "sélectionné" }: { count: number; label?: string }) {
     return (
-        <span className="flex items-center gap-1.5 rounded-xl bg-primary/10 px-3 py-1.5 text-sm ring-1 ring-primary/25">
+        <span className="flex items-center gap-1.5 px-2 text-[14px]">
             <AnimatePresence mode="popLayout" initial={false}>
                 <motion.span
                     key={count}

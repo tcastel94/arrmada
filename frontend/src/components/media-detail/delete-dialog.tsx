@@ -63,7 +63,7 @@ export function DeleteMediaDialog({
                         id="delete-files"
                         checked={deleteFiles}
                         onCheckedChange={setDeleteFiles}
-                        className="data-[state=checked]:bg-red-500 data-[state="
+                        className="data-[state=checked]:bg-destructive data-[state="
                     />
                 </div>
                 <div className="flex items-start justify-between gap-4 rounded-xl border border-white/[0.06] bg-background/40 p-3">
@@ -75,7 +75,7 @@ export function DeleteMediaDialog({
                         id="delete-downloads"
                         checked={deleteDownloads}
                         onCheckedChange={setDeleteDownloads}
-                        className="data-[state=checked]:bg-red-500 data-[state="
+                        className="data-[state=checked]:bg-destructive data-[state="
                     />
                 </div>
             </div>

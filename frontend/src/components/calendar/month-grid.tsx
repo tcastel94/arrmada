@@ -40,7 +40,7 @@ export function MonthGrid({ days, month, byDay, todayKey, onOpenDay, direction }
                         key={d}
                         className={cn(
                             "py-2 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground sm:text-[11px]",
-                            i >= 5 && "text-sky-300/70",
+                            i >= 5 && "text-primary/70",
                         )}
                     >
                         <span className="sm:hidden">{d.charAt(0)}</span>
@@ -80,7 +80,7 @@ export function MonthGrid({ days, month, byDay, todayKey, onOpenDay, direction }
                                 i >= days.length - 7 && "border-b-0",
                                 !inMonth && "bg-black/20",
                                 inMonth && col >= 5 && !isToday && "bg-white/[0.012]",
-                                isToday && "bg-gradient-to-b from-sky-500/[0.14] via-sky-500/[0.05] to-transparent",
+                                isToday && "bg-gradient-to-b from-primary/[0.14] via-sky-500/[0.05] to-transparent",
                                 "hover:bg-white/[0.025]",
                             )}
                         >
@@ -128,7 +128,7 @@ export function MonthGrid({ days, month, byDay, todayKey, onOpenDay, direction }
                                     <button
                                         type="button"
                                         onClick={() => onOpenDay(key)}
-                                        className="rounded-md px-1.5 py-0.5 text-left text-[10px] font-semibold text-sky-300/90 transition-colors hover:bg-sky-500/10 hover:text-sky-200"
+                                        className="rounded-md px-1.5 py-0.5 text-left text-[10px] font-semibold text-primary/90 transition-colors hover:bg-primary/10 hover:text-sky-200"
                                     >
                                         +{hidden} autre{hidden > 1 ? "s" : ""}
                                     </button>
@@ -141,7 +141,7 @@ export function MonthGrid({ days, month, byDay, todayKey, onOpenDay, direction }
                                     {entries.slice(0, 4).map((e) => (
                                         <span
                                             key={e.id}
-                                            className={cn("h-1.5 w-1.5 rounded-full", e.has_file ? "bg-emerald-400" : TYPE_TONES[e.type]?.dot ?? "bg-sky-400")}
+                                            className={cn("h-1.5 w-1.5 rounded-full", e.has_file ? "bg-success" : TYPE_TONES[e.type]?.dot ?? "bg-sky-400")}
                                         />
                                     ))}
                                     {entries.length > 4 && <span className="text-[8px] leading-[6px] text-muted-foreground">+</span>}

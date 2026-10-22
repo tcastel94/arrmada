@@ -109,7 +109,7 @@ export default function KodiSettingsPage() {
             <Panel
                 title="Lecteurs Kodi"
                 icon={MonitorPlay}
-                iconClassName="text-violet-300"
+                iconClassName="text-primary"
                 action={instances && instances.length > 0 ? <span className="text-xs text-muted-foreground">{plural(instances.length, "lecteur")}</span> : undefined}
             >
                 {isLoading ? (
@@ -281,7 +281,7 @@ function MaintenancePanel({ instances }: { instances: KodiInstance[] }) {
     const coverage = drift.data ? percent(drift.data.radarr_total - drift.data.missing_count, drift.data.radarr_total) : 0;
 
     return (
-        <Panel title="Bibliothèque & maintenance" icon={Wrench} iconClassName="text-amber-300" bodyClassName="space-y-5">
+        <Panel title="Bibliothèque & maintenance" icon={Wrench} iconClassName="text-warning" bodyClassName="space-y-5">
             <div className="flex flex-wrap gap-2">
                 <Button variant="outline" onClick={runSync} disabled={!hasKodi || sync.isPending}>
                     {sync.isPending ? <Loader2 className="animate-spin" /> : <RefreshCw />}
@@ -322,11 +322,11 @@ function MaintenancePanel({ instances }: { instances: KodiInstance[] }) {
                             </RingGauge>
                             <div className="min-w-0 flex-1">
                                 {drift.data.missing_count === 0 ? (
-                                    <p className="flex items-center gap-1.5 text-sm font-semibold text-emerald-300">
+                                    <p className="flex items-center gap-1.5 text-sm font-semibold text-success">
                                         <CheckCircle2 className="h-4 w-4" /> Radarr et Kodi sont synchronisés
                                     </p>
                                 ) : (
-                                    <p className="flex items-center gap-1.5 text-sm font-semibold text-amber-300">
+                                    <p className="flex items-center gap-1.5 text-sm font-semibold text-warning">
                                         <AlertTriangle className="h-4 w-4" />
                                         {plural(drift.data.missing_count, "film absent", "films absents")} de Kodi
                                     </p>
@@ -355,11 +355,11 @@ function MaintenancePanel({ instances }: { instances: KodiInstance[] }) {
                                                 href={`https://www.themoviedb.org/movie/${m.tmdb_id}`}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
-                                                className="group inline-flex items-center gap-1 rounded-full border border-amber-500/25 bg-amber-500/[0.06] px-2.5 py-1 text-[11px] text-amber-200 transition-colors hover:border-amber-400/50 hover:bg-amber-500/15"
+                                                className="group inline-flex items-center gap-1 rounded-full border border-warning/25 bg-warning/[0.06] px-2.5 py-1 text-[11px] text-warning transition-colors hover:border-warning/50 hover:bg-warning/15"
                                                 title="Voir sur TMDB"
                                             >
                                                 {m.title}
-                                                {m.year ? <span className="text-amber-200/60">({m.year})</span> : null}
+                                                {m.year ? <span className="text-warning/60">({m.year})</span> : null}
                                                 <ExternalLink className="h-2.5 w-2.5 opacity-50 group-hover:opacity-100" />
                                             </a>
                                         </li>

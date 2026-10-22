@@ -220,7 +220,7 @@ export function SearchTab({
                         <section className="space-y-3">
                             <SectionTitle
                                 icon={CheckCircle2}
-                                iconClassName="text-emerald-400"
+                                iconClassName="text-success"
                                 title="Dans ta bibliothèque"
                                 count={libraryItems.length}
                             />
@@ -348,8 +348,8 @@ function AiNotice({
 }) {
     if (!available) {
         return (
-            <div className="glass rounded-2xl border border-amber-500/20 p-4 text-sm">
-                <p className="font-semibold text-amber-300">Recherche IA non configurée</p>
+            <div className="glass rounded-2xl border border-warning/20 p-4 text-sm">
+                <p className="font-semibold text-warning">Recherche IA non configurée</p>
                 <p className="mt-1 text-muted-foreground">
                     Ajoute <code className="kbd">OPENROUTER_API_KEY</code> dans le fichier <code className="kbd">.env</code> du backend, puis redémarre
                     le conteneur. En attendant, le mode Titre fonctionne sans IA.
@@ -359,8 +359,8 @@ function AiNotice({
     }
     if (error) {
         return (
-            <div className="glass rounded-2xl border border-red-500/20 p-4 text-sm">
-                <p className="font-semibold text-red-300">L&apos;IA n&apos;a pas pu interpréter ta demande</p>
+            <div className="glass rounded-2xl border border-destructive/20 p-4 text-sm">
+                <p className="font-semibold text-destructive">L&apos;IA n&apos;a pas pu interpréter ta demande</p>
                 <p className="mt-1 break-words text-muted-foreground">{error}</p>
             </div>
         );
@@ -368,7 +368,7 @@ function AiNotice({
     if (!description) return null;
     return (
         <div className="glass flex items-start gap-3 rounded-2xl p-4 text-sm">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-violet-500/15 text-violet-300 ring-1 ring-violet-400/30">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary ring-1 ring-primary/30">
                 <Brain className="h-4 w-4" />
             </span>
             <div>

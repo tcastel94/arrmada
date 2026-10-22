@@ -151,7 +151,7 @@ export function PersonDialog({
                     <div className="space-y-6">
                         {data.in_library.length > 0 && (
                             <section className="space-y-3">
-                                <h3 className="flex items-center gap-2 text-sm font-semibold text-emerald-300">
+                                <h3 className="flex items-center gap-2 text-sm font-semibold text-success">
                                     <Library className="h-4 w-4" aria-hidden /> Dans ta médiathèque
                                 </h3>
                                 <motion.div variants={stagger(0, 0.03)} initial="hidden" animate="show" className={GRID}>
@@ -175,7 +175,7 @@ export function PersonDialog({
                                             corner={
                                                 m.vote_average ? (
                                                     <PosterBadge>
-                                                        <Star className="h-2.5 w-2.5 fill-amber-400 text-amber-400" aria-hidden />
+                                                        <Star className="h-2.5 w-2.5 fill-amber-400 text-warning" aria-hidden />
                                                         {m.vote_average.toFixed(1)}
                                                     </PosterBadge>
                                                 ) : undefined
@@ -207,7 +207,7 @@ export function PersonDialog({
                                                 corner={
                                                     m.vote_average ? (
                                                         <PosterBadge>
-                                                            <Star className="h-2.5 w-2.5 fill-amber-400 text-amber-400" aria-hidden />
+                                                            <Star className="h-2.5 w-2.5 fill-amber-400 text-warning" aria-hidden />
                                                             {m.vote_average.toFixed(1)}
                                                         </PosterBadge>
                                                     ) : undefined

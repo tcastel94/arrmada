@@ -49,7 +49,7 @@ export function ImportsTab() {
                         onChange={setSection}
                         options={[
                             { value: "sab", label: "SABnzbd", icon: History },
-                            { value: "auto", label: "Auto-import", icon: Bot, tone: "text-emerald-300" },
+                            { value: "auto", label: "Auto-import", icon: Bot, tone: "text-success" },
                         ]}
                     />
                 </div>

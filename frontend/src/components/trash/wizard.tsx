@@ -315,7 +315,7 @@ function OptionGrid<V extends string>({
                             <span className="flex flex-wrap items-center gap-1.5 text-sm font-semibold">
                                 {opt.label}
                                 {opt.recommended && (
-                                    <span className="rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-300">
+                                    <span className="rounded-md bg-success/15 px-1.5 py-0.5 text-[10px] font-semibold text-success">
                                         Recommandé
                                     </span>
                                 )}
@@ -436,7 +436,7 @@ function RecommendationCard({ rec }: { rec: RecommendedProfile }) {
                     <span
                         className={cn(
                             "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ring-1",
-                            isSonarr ? "bg-sky-500/15 text-sky-300 ring-sky-400/25" : "bg-violet-500/15 text-violet-300 ring-violet-400/25",
+                            isSonarr ? "bg-primary/15 text-primary ring-primary/25" : "bg-primary/15 text-primary ring-primary/25",
                         )}
                     >
                         <Icon className="h-4 w-4" />

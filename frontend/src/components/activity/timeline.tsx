@@ -50,7 +50,7 @@ export function ActivityTimeline({ items }: { items: TimelineItem[] }) {
                             <h2 className="text-sm font-semibold tracking-tight">{g.label}</h2>
                             <span className="text-[11px] tabular-nums text-muted-foreground">
                                 {plural(g.items.length, "évènement")}
-                                {failures > 0 && <span className="text-red-300"> · {plural(failures, "échec")}</span>}
+                                {failures > 0 && <span className="text-destructive"> · {plural(failures, "échec")}</span>}
                             </span>
                             <span aria-hidden className="h-px flex-1 bg-gradient-to-r from-white/10 to-transparent" />
                         </div>
@@ -58,7 +58,7 @@ export function ActivityTimeline({ items }: { items: TimelineItem[] }) {
                             {/* Ligne de temps dégradée qui relie les pastilles */}
                             <span
                                 aria-hidden
-                                className="pointer-events-none absolute bottom-6 left-[31.5px] top-6 w-px bg-gradient-to-b from-emerald-400/50 via-sky-400/25 to-transparent sm:left-[35.5px]"
+                                className="pointer-events-none absolute bottom-6 left-[31.5px] top-6 w-px bg-gradient-to-b from-emerald-400/50 via-primary/25 to-transparent sm:left-[35.5px]"
                             />
                             <ol className="relative">
                                 {g.items.map((it) => {
@@ -97,13 +97,13 @@ function TimelineRow({ item, index, compact = false }: { item: TimelineItem; ind
             <span
                 className={cn(
                     "relative z-[1] flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ring-1 sm:h-10 sm:w-10",
-                    failed ? "from-red-500/35 to-rose-500/10 text-red-300 ring-red-400/40" : cn(cat.tile, cat.text),
+                    failed ? "from-red-500/35 to-rose-500/10 text-destructive ring-destructive/40" : cn(cat.tile, cat.text),
                 )}
                 style={{ boxShadow: `0 0 22px -6px ${failed ? "hsl(0 84% 62% / 0.6)" : cat.glow}` }}
             >
                 <Icon className="h-4 w-4" strokeWidth={2} />
                 {item.status === "ok" && !compact && (
-                    <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-background" />
+                    <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-success ring-2 ring-background" />
                 )}
             </span>
 
@@ -118,7 +118,7 @@ function TimelineRow({ item, index, compact = false }: { item: TimelineItem; ind
 
             <div className="min-w-0 flex-1">
                 <p className="truncate text-sm">
-                    <span className={cn("font-semibold", failed && "text-red-300")}>{actionLabel(item.action, item.status)}</span>
+                    <span className={cn("font-semibold", failed && "text-destructive")}>{actionLabel(item.action, item.status)}</span>
                     {item.title && !compact && <span className="text-muted-foreground"> · {item.title}</span>}
                 </p>
                 <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-muted-foreground/80">
@@ -173,7 +173,7 @@ function TimelineRow({ item, index, compact = false }: { item: TimelineItem; ind
                         type="button"
                         onClick={() => setOpen((o) => !o)}
                         aria-expanded={open}
-                        className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-red-300/90 transition-colors hover:bg-red-500/10 hover:text-red-200"
+                        className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-destructive/90 transition-colors hover:bg-destructive/10 hover:text-destructive"
                     >
                         {open ? "Masquer les détails" : "Détails de l'échec"}
                         <ChevronDown className={cn("h-3 w-3 transition-transform duration-300", open && "rotate-180")} />
@@ -187,7 +187,7 @@ function TimelineRow({ item, index, compact = false }: { item: TimelineItem; ind
                                 transition={{ duration: 0.3, ease: EASE_OUT }}
                                 className="overflow-hidden"
                             >
-                                <p className="mt-1.5 whitespace-pre-wrap break-words rounded-lg border border-red-500/20 bg-red-500/[0.07] px-2.5 py-2 font-mono text-[11px] leading-relaxed text-red-200/90">
+                                <p className="mt-1.5 whitespace-pre-wrap break-words rounded-lg border border-destructive/20 bg-destructive/[0.07] px-2.5 py-2 font-mono text-[11px] leading-relaxed text-destructive/90">
                                     {item.detail}
                                 </p>
                             </motion.div>

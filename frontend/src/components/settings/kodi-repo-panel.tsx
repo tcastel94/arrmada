@@ -37,10 +37,10 @@ export function KodiRepoPanel() {
         <Panel
             title="Mises à jour de l'appli Kodi"
             icon={PackageCheck}
-            iconClassName="text-emerald-300"
+            iconClassName="text-success"
             action={
                 data ? (
-                    <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">
+                    <span className="rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-semibold text-success">
                         v{data.addon_version} servie
                     </span>
                 ) : undefined
@@ -55,11 +55,11 @@ export function KodiRepoPanel() {
             {isLoading ? (
                 <Shimmer className="h-10 w-full rounded-xl" />
             ) : isError || !data ? (
-                <div className="flex gap-2.5 rounded-xl border border-amber-500/25 bg-amber-500/[0.06] p-3 text-xs leading-relaxed text-amber-200">
+                <div className="flex gap-2.5 rounded-xl border border-warning/25 bg-warning/[0.06] p-3 text-xs leading-relaxed text-warning">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                     <div>
                         <p className="font-semibold">Dépôt indisponible</p>
-                        <p className="text-amber-200/80">
+                        <p className="text-warning/80">
                             {error instanceof Error ? error.message : "Le serveur ne répond pas."} Le conteneur backend doit voir le
                             dossier <code className="font-mono">kodi-addon</code> : ligne{" "}
                             <code className="font-mono">./kodi-addon:/app/kodi-addon:ro</code> dans docker-compose.yml, puis{" "}

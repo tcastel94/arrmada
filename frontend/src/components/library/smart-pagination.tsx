@@ -56,7 +56,7 @@ export function SmartPagination({
     return (
         <nav aria-label="Pagination" className={cn("flex items-center justify-center gap-2", className)}>
             <Button
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 disabled={page <= 1}
                 onClick={() => onChange(page - 1)}
@@ -73,7 +73,7 @@ export function SmartPagination({
             </span>
 
             {/* Desktop : numéros de page avec pastille animée */}
-            <div className="glass hidden items-center gap-0.5 rounded-xl p-1 sm:flex">
+            <div className="hidden items-center gap-0.5 rounded-[10px] bg-white/[0.07] p-[3px] sm:flex">
                 {tokens.map((token) =>
                     typeof token === "number" ? (
                         <button
@@ -84,7 +84,7 @@ export function SmartPagination({
                             aria-current={token === page ? "page" : undefined}
                             className={cn(
                                 "relative h-8 min-w-8 rounded-lg px-2 text-sm font-medium tabular-nums transition-colors",
-                                token === page ? "text-primary-foreground" : "text-muted-foreground hover:bg-white/[0.06] hover:text-foreground",
+                                token === page ? "font-semibold text-white" : "text-muted-foreground hover:bg-white/[0.06] hover:text-foreground",
                             )}
                         >
                             {token === page && (
@@ -92,7 +92,7 @@ export function SmartPagination({
                                     layoutId={layoutId}
                                     transition={SPRING}
                                     aria-hidden
-                                    className="absolute inset-0 rounded-lg bg-gradient-to-r from-primary to-[hsl(200_100%_62%)]"
+                                    className="absolute inset-0 rounded-lg bg-[#636366]"
                                 />
                             )}
                             <span className="relative z-[1]">{token}</span>
@@ -106,7 +106,7 @@ export function SmartPagination({
             </div>
 
             <Button
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 disabled={page >= totalPages}
                 onClick={() => onChange(page + 1)}

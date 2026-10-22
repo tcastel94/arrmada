@@ -204,7 +204,7 @@ function EpisodeRow({ series, episode }: { series: LocalSeriesDetail; episode: L
                     </span>
                     <span className="truncate font-medium">{episode.title}</span>
                     {state?.watched && (
-                        <span className="flex shrink-0 items-center gap-0.5 text-xs text-emerald-400">
+                        <span className="flex shrink-0 items-center gap-0.5 text-xs text-success">
                             <Check className="h-3.5 w-3.5" /> vu
                         </span>
                     )}

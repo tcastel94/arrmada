@@ -147,7 +147,7 @@ export default function NotificationsPage() {
                     options={[
                         { value: "all", label: "Toutes", count: all.length },
                         { value: "unread", label: "Non lues", count: counts.unread, icon: BellDot, tone: "text-rose-300" },
-                        { value: "error", label: "Erreurs", count: counts.error, icon: AlertCircle, tone: "text-red-300" },
+                        { value: "error", label: "Erreurs", count: counts.error, icon: AlertCircle, tone: "text-destructive" },
                         {
                             value: "warning",
                             // Libellé court sur mobile : les 4 options tiennent sans défilement.
@@ -159,7 +159,7 @@ export default function NotificationsPage() {
                             ),
                             count: counts.warning,
                             icon: AlertTriangle,
-                            tone: "text-amber-300",
+                            tone: "text-warning",
                         },
                     ]}
                 />

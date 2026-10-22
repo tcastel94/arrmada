@@ -7,6 +7,7 @@
  */
 /* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
+import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { Pause, Play, Square, Sofa } from "lucide-react";
@@ -30,6 +31,13 @@ export function MiniPlayer() {
         control.mutate({ action }, { onError: (e) => toast.error("Commande Kodi refusée", { description: e.message }) });
 
     const href = np?.media_id && np?.media_type ? `/media/${np.media_type}/${np.media_id}` : "/remote";
+
+    // Réserve la place du lecteur en bas de page (variable CSS lue par le
+    // layout) : sinon il masquerait la dernière rangée de contenu.
+    useEffect(() => {
+        document.documentElement.style.setProperty("--miniplayer-h", visible ? "4.5rem" : "0px");
+        return () => document.documentElement.style.setProperty("--miniplayer-h", "0px");
+    }, [visible]);
 
     return (
         <AnimatePresence>

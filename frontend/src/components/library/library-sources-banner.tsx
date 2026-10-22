@@ -45,22 +45,22 @@ export function LibrarySourcesBanner() {
     return (
         <div
             role="status"
-            className="flex gap-2.5 rounded-xl border border-amber-500/25 bg-amber-500/[0.06] p-3 text-xs leading-relaxed text-amber-200"
+            className="flex gap-2.5 rounded-xl bg-warning/[0.12] p-3.5 text-[13px] leading-relaxed text-foreground"
         >
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
             <div className="min-w-0 flex-1 space-y-1">
                 {down.map((source) => (
                     <p key={source.id} className="font-medium">
                         {sourceLine(source)}
                     </p>
                 ))}
-                <p className="text-amber-200/75">
+                <p className="text-muted-foreground">
                     ArrMada réessaie toutes les 30&nbsp;s. Vérifie que le conteneur tourne et que son port répond.
                 </p>
             </div>
             <Link
                 href="/settings/services"
-                className="inline-flex shrink-0 items-center gap-1 self-start rounded-lg px-2 py-1 font-semibold text-amber-100 transition-colors hover:bg-amber-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60"
+                className="inline-flex shrink-0 items-center gap-1 self-start rounded-lg px-2 py-1 font-medium text-primary transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
             >
                 Services <ArrowRight className="h-3.5 w-3.5" aria-hidden />
             </Link>

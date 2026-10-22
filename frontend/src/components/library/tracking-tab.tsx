@@ -226,7 +226,7 @@ export function TrackingTab({ onOpenManual, onGoSearch }: { onOpenManual: () => 
                                                 onClick={() => setToDelete(req)}
                                                 aria-label={`Retirer « ${req.title} » du suivi`}
                                                 title="Retirer du suivi"
-                                                className="text-muted-foreground hover:text-red-400"
+                                                className="text-muted-foreground hover:text-destructive"
                                             >
                                                 <Trash2 />
                                             </Button>

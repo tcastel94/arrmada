@@ -16,7 +16,7 @@ import { SpotlightCard } from "@/components/fx/spotlight-card";
 interface PanelProps {
     title?: ReactNode;
     icon?: LucideIcon;
-    /** Couleur Tailwind de l'icône (ex: "text-amber-400"). */
+    /** Couleur Tailwind de l'icône (ex: "text-warning"). */
     iconClassName?: string;
     /** Élément à droite de l'en-tête (badge, bouton…). */
     action?: ReactNode;

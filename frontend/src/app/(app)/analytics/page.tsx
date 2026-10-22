@@ -129,7 +129,7 @@ function AnalyticsContent({ data }: { data: AnalyticsData }) {
             <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
                 <KpiTile
                     icon={Film}
-                    iconClass="bg-violet-500/15 text-violet-300 ring-violet-400/25"
+                    iconClass="bg-primary/15 text-primary ring-primary/25"
                     label="Films"
                     value={<AnimatedNumber value={o.movies} />}
                     sub={`${frSize(o.movie_size_human)} · moy. ${frSize(o.avg_movie_size_human)}`}
@@ -143,7 +143,7 @@ function AnalyticsContent({ data }: { data: AnalyticsData }) {
                 />
                 <KpiTile
                     icon={HardDrive}
-                    iconClass="bg-emerald-500/15 text-emerald-300 ring-emerald-400/25"
+                    iconClass="bg-success/15 text-success ring-success/25"
                     label="Stockage total"
                     className="col-span-2 sm:col-span-1"
                     value={formatBytes(o.total_size_bytes)}
@@ -162,7 +162,7 @@ function AnalyticsContent({ data }: { data: AnalyticsData }) {
                             <p className="text-lg font-bold">
                                 <AnimatedNumber value={o.available} /> <span className="text-xs font-normal text-muted-foreground">/ {formatNumber(o.total_items)}</span>
                             </p>
-                            <p className={cn("text-[11px]", o.missing > 0 ? "text-amber-300" : "text-muted-foreground")}>
+                            <p className={cn("text-[11px]", o.missing > 0 ? "text-warning" : "text-muted-foreground")}>
                                 {o.missing > 0 ? `${plural(o.missing, "manquant")} · voir la liste` : "Rien ne manque"}
                             </p>
                         </div>
@@ -174,7 +174,7 @@ function AnalyticsContent({ data }: { data: AnalyticsData }) {
             {/* Films / séries + services */}
             <div className="grid gap-5 lg:grid-cols-2">
                 <motion.div variants={fadeUp}>
-                    <Panel title="Films et séries" icon={Layers} iconClassName="text-emerald-300" className="h-full">
+                    <Panel title="Films et séries" icon={Layers} iconClassName="text-success" className="h-full">
                         <SplitBar
                             label="En nombre"
                             parts={[
@@ -203,7 +203,7 @@ function AnalyticsContent({ data }: { data: AnalyticsData }) {
                     <ChartPanel
                         title="Qualité des films"
                         icon={BarChart3}
-                        iconClassName="text-sky-300"
+                        iconClassName="text-primary"
                         description="Les 10 qualités les plus présentes (les séries sont classées par profil, pas par fichier)."
                         rows={qualities}
                         rowKey={(r) => r.name}
@@ -219,7 +219,7 @@ function AnalyticsContent({ data }: { data: AnalyticsData }) {
                     <ChartPanel
                         title="Genres les plus représentés"
                         icon={Tags}
-                        iconClassName="text-violet-300"
+                        iconClassName="text-primary"
                         description="Un média peut avoir plusieurs genres."
                         rows={genres}
                         rowKey={(r) => r.name}
@@ -238,7 +238,7 @@ function AnalyticsContent({ data }: { data: AnalyticsData }) {
                 <ChartPanel
                     title="Années de sortie"
                     icon={CalendarRange}
-                    iconClassName="text-amber-300"
+                    iconClassName="text-warning"
                     rows={[...data.year_distribution].reverse()}
                     rowKey={(r) => String(r.year)}
                     columns={[
@@ -384,7 +384,7 @@ function ServicesPanel({ items }: { items: { name: string; count: number }[] }) 
     const total = parts.reduce((s, p) => s + p.count, 0);
 
     return (
-        <Panel title="Répartition par service" icon={Server} iconClassName="text-emerald-300" className="h-full">
+        <Panel title="Répartition par service" icon={Server} iconClassName="text-success" className="h-full">
             {parts.length === 0 ? (
                 <EmptyState compact icon={Server} title="Aucun service" />
             ) : (
@@ -480,7 +480,7 @@ function TopBiggest({ items }: { items: BiggestItem[] }) {
     };
 
     return (
-        <Panel title="Les 10 plus volumineux" icon={Trophy} iconClassName="text-amber-300" bodyClassName="p-2 sm:p-3">
+        <Panel title="Les 10 plus volumineux" icon={Trophy} iconClassName="text-warning" bodyClassName="p-2 sm:p-3">
             {items.length === 0 ? (
                 <EmptyState compact icon={Trophy} title="Aucun fichier" />
             ) : (
@@ -500,14 +500,14 @@ function TopBiggest({ items }: { items: BiggestItem[] }) {
                                     <span
                                         className={cn(
                                             "flex h-7 w-7 items-center justify-center rounded-lg text-xs font-bold tabular-nums",
-                                            i < 3 ? "bg-amber-500/15 text-amber-300" : "bg-white/[0.05] text-muted-foreground",
+                                            i < 3 ? "bg-warning/15 text-warning" : "bg-white/[0.05] text-muted-foreground",
                                         )}
                                     >
                                         {i + 1}
                                     </span>
                                     <span className="min-w-0">
                                         <span className="flex items-center gap-1.5">
-                                            <Icon className={cn("h-3.5 w-3.5 shrink-0", isSeries ? "text-blue-400" : "text-violet-400")} />
+                                            <Icon className={cn("h-3.5 w-3.5 shrink-0", isSeries ? "text-blue-400" : "text-primary")} />
                                             <span className="truncate text-sm font-medium transition-colors group-hover:text-primary">{item.title}</span>
                                         </span>
                                         {/* Barre proportionnelle au plus gros (lecture immédiate des écarts) */}

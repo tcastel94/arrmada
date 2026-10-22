@@ -95,7 +95,7 @@ export function DuplicatesTab() {
                             value: "cross",
                             label: "Entre services",
                             icon: Server,
-                            iconClassName: "text-fuchsia-300",
+                            iconClassName: "text-primary",
                             count: stats.total_duplicates,
                             hint: "Le même titre existe dans plusieurs instances (ex: Radarr et Radarr 4K).",
                         },
@@ -103,14 +103,14 @@ export function DuplicatesTab() {
                             value: "same",
                             label: "Même service",
                             icon: Layers3,
-                            iconClassName: "text-sky-300",
+                            iconClassName: "text-primary",
                             count: stats.total_upgrades,
                             hint: "Le même titre apparaît plusieurs fois dans une seule instance.",
                         },
                     ]}
                 />
                 {view === "cross" && stats.wasted_space_bytes > 0 && (
-                    <span className="inline-flex items-center gap-1.5 self-start rounded-lg border border-amber-400/25 bg-amber-500/10 px-2.5 py-1 text-xs text-amber-300 sm:self-auto">
+                    <span className="inline-flex items-center gap-1.5 self-start rounded-lg border border-warning/25 bg-warning/10 px-2.5 py-1 text-xs text-warning sm:self-auto">
                         <HardDrive className="h-3.5 w-3.5" />
                         {formatBytes(stats.wasted_space_bytes)} occupés par des copies en trop
                     </span>
@@ -178,8 +178,8 @@ function DuplicateCard({ group, animate }: { group: DuplicateGroup; animate: boo
                         className={cn(
                             "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ring-1",
                             group.type === "series"
-                                ? "bg-sky-500/15 text-sky-300 ring-sky-400/25"
-                                : "bg-violet-500/15 text-violet-300 ring-violet-400/25",
+                                ? "bg-primary/15 text-primary ring-primary/25"
+                                : "bg-primary/15 text-primary ring-primary/25",
                         )}
                     >
                         <TypeIcon className="h-4 w-4" />
@@ -207,7 +207,7 @@ function DuplicateCard({ group, animate }: { group: DuplicateGroup; animate: boo
                             className={cn(
                                 "flex items-center gap-2 rounded-xl px-3 py-2 text-xs ring-1 transition-colors",
                                 isKeep
-                                    ? "bg-emerald-500/10 ring-emerald-400/25"
+                                    ? "bg-success/10 ring-success/25"
                                     : item.has_file
                                       ? "bg-white/[0.025] ring-white/[0.05]"
                                       : "bg-white/[0.015] ring-white/[0.05] opacity-75",
@@ -221,7 +221,7 @@ function DuplicateCard({ group, animate }: { group: DuplicateGroup; animate: boo
                                 {item.has_file ? frSize(item.size_human) : "—"}
                             </span>
                             {isKeep ? (
-                                <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-300">
+                                <span className="inline-flex items-center gap-1 rounded-md bg-success/20 px-1.5 py-0.5 text-[10px] font-semibold text-success">
                                     <Crown className="h-3 w-3" /> À garder
                                 </span>
                             ) : !item.has_file ? (
@@ -229,7 +229,7 @@ function DuplicateCard({ group, animate }: { group: DuplicateGroup; animate: boo
                                     <FileX2 className="h-3 w-3" /> Sans fichier
                                 </span>
                             ) : (
-                                <span className="rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
+                                <span className="rounded-md bg-warning/15 px-1.5 py-0.5 text-[10px] font-semibold text-warning">
                                     En trop
                                 </span>
                             )}
@@ -265,7 +265,7 @@ function SameServiceList({ items, total }: { items: SameServiceVariant[]; total:
         <Panel
             title="Titres présents plusieurs fois dans un même service"
             icon={Layers3}
-            iconClassName="text-sky-300"
+            iconClassName="text-primary"
             bodyClassName="p-0"
             action={<ShownCount shown={items.length} total={total} />}
         >

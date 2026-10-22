@@ -32,19 +32,19 @@ const FETCH_STEP = 50;
 
 /** Statuts SABnzbd → libellé FR + teinte. */
 const SAB_STATUS: Record<string, { label: string; tone: StatusTone; text: string }> = {
-    completed: { label: "Terminé", tone: "success", text: "text-emerald-300" },
-    failed: { label: "Échec", tone: "error", text: "text-red-300" },
+    completed: { label: "Terminé", tone: "success", text: "text-success" },
+    failed: { label: "Échec", tone: "error", text: "text-destructive" },
     queued: { label: "En file", tone: "unknown", text: "text-muted-foreground" },
     downloading: { label: "Téléchargement", tone: "primary", text: "text-primary" },
-    paused: { label: "En pause", tone: "warning", text: "text-amber-300" },
+    paused: { label: "En pause", tone: "warning", text: "text-warning" },
     fetching: { label: "Récupération", tone: "primary", text: "text-primary" },
-    propagating: { label: "Propagation", tone: "warning", text: "text-amber-300" },
-    quickcheck: { label: "Vérif. rapide", tone: "warning", text: "text-amber-300" },
-    verifying: { label: "Vérification", tone: "warning", text: "text-amber-300" },
-    repairing: { label: "Réparation", tone: "warning", text: "text-amber-300" },
-    extracting: { label: "Extraction", tone: "warning", text: "text-amber-300" },
-    moving: { label: "Déplacement", tone: "warning", text: "text-amber-300" },
-    running: { label: "Script en cours", tone: "warning", text: "text-amber-300" },
+    propagating: { label: "Propagation", tone: "warning", text: "text-warning" },
+    quickcheck: { label: "Vérif. rapide", tone: "warning", text: "text-warning" },
+    verifying: { label: "Vérification", tone: "warning", text: "text-warning" },
+    repairing: { label: "Réparation", tone: "warning", text: "text-warning" },
+    extracting: { label: "Extraction", tone: "warning", text: "text-warning" },
+    moving: { label: "Déplacement", tone: "warning", text: "text-warning" },
+    running: { label: "Script en cours", tone: "warning", text: "text-warning" },
 };
 
 function sabStatus(status: string) {
@@ -146,9 +146,9 @@ export function SabHistory() {
                     }}
                     options={[
                         { value: "all", label: "Tous", count: items.length },
-                        { value: "completed", label: "Terminés", count: counts.completed, tone: "text-emerald-300" },
-                        { value: "failed", label: "Échecs", count: counts.failed, tone: "text-red-300" },
-                        { value: "stuck", label: "Bloqués", count: counts.stuck, tone: "text-amber-300" },
+                        { value: "completed", label: "Terminés", count: counts.completed, tone: "text-success" },
+                        { value: "failed", label: "Échecs", count: counts.failed, tone: "text-destructive" },
+                        { value: "stuck", label: "Bloqués", count: counts.stuck, tone: "text-warning" },
                     ]}
                 />
             </div>
@@ -190,7 +190,7 @@ function HistoryRow({ item, delay }: { item: HistoryItem; delay: number }) {
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35, ease: EASE_OUT, delay }}
-            className={cn("px-4 py-3 transition-colors hover:bg-white/[0.02] sm:px-5", item.is_stuck && "bg-amber-500/[0.04]")}
+            className={cn("px-4 py-3 transition-colors hover:bg-white/[0.02] sm:px-5", item.is_stuck && "bg-warning/[0.04]")}
         >
             <div className="flex items-start gap-3">
                 <StatusDot tone={st.tone} pulse={false} className="mt-1.5" />
@@ -200,7 +200,7 @@ function HistoryRow({ item, delay }: { item: HistoryItem; delay: number }) {
                             {item.name}
                         </p>
                         {item.is_stuck && (
-                            <span className="rounded-md bg-amber-500/15 px-1.5 py-px text-[10px] font-semibold text-amber-300 ring-1 ring-inset ring-amber-400/25">
+                            <span className="rounded-md bg-warning/15 px-1.5 py-px text-[10px] font-semibold text-warning ring-1 ring-inset ring-warning/25">
                                 Bloqué
                             </span>
                         )}
@@ -219,7 +219,7 @@ function HistoryRow({ item, delay }: { item: HistoryItem; delay: number }) {
                             <code className="truncate font-mono">{item.download_path}</code>
                         </p>
                     )}
-                    {item.fail_message && <p className="text-[11px] text-red-300">{item.fail_message}</p>}
+                    {item.fail_message && <p className="text-[11px] text-destructive">{item.fail_message}</p>}
                     {hasLog && (
                         <button
                             type="button"

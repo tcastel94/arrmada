@@ -83,7 +83,7 @@ export function MoveMediaDialog({
             <DialogContent className="sm:max-w-[520px]">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
-                        <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-sky-500/15 text-sky-300 ring-1 ring-sky-400/30">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/15 text-primary ring-1 ring-primary/30">
                             <FolderInput className="h-4 w-4" />
                         </span>
                         Déplacer les fichiers
@@ -127,9 +127,9 @@ export function MoveMediaDialog({
                         <div className="space-y-2 rounded-xl border border-white/[0.06] bg-background/40 p-3">
                             <p className="eyebrow">Chemin actuel</p>
                             <code className="block break-all font-mono text-xs text-muted-foreground">{media.path}</code>
-                            <ArrowDown className="h-3.5 w-3.5 text-sky-400" aria-hidden />
+                            <ArrowDown className="h-3.5 w-3.5 text-primary" aria-hidden />
                             <p className="eyebrow">Nouveau chemin</p>
-                            <code className="block break-all font-mono text-xs text-sky-300">{target || "—"}</code>
+                            <code className="block break-all font-mono text-xs text-primary">{target || "—"}</code>
                         </div>
                     </div>
                 )}

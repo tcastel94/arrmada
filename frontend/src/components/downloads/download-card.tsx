@@ -65,15 +65,15 @@ interface DownloadCardProps {
 
 const ACTIONS: Array<{ kind: QueueActionKind; label: string; icon: typeof RotateCw; className: string }> = [
     { kind: "retry", label: "Relancer (blocklist + nouvelle recherche)", icon: RotateCw, className: "hover:text-primary" },
-    { kind: "blocklist", label: "Supprimer et blocklister", icon: Ban, className: "hover:text-amber-300" },
-    { kind: "remove", label: "Supprimer de la file", icon: Trash2, className: "hover:text-red-400" },
+    { kind: "blocklist", label: "Supprimer et blocklister", icon: Ban, className: "hover:text-warning" },
+    { kind: "remove", label: "Supprimer de la file", icon: Trash2, className: "hover:text-destructive" },
 ];
 
 const TRACK_TONES = {
     info: "border-white/[0.06] bg-white/[0.03] text-muted-foreground",
-    success: "border-emerald-500/20 bg-emerald-500/[0.07] text-emerald-300",
-    warning: "border-amber-500/20 bg-amber-500/[0.07] text-amber-300",
-    danger: "border-red-500/25 bg-red-500/[0.08] text-red-300",
+    success: "border-success/20 bg-success/[0.07] text-success",
+    warning: "border-warning/20 bg-warning/[0.07] text-warning",
+    danger: "border-destructive/25 bg-destructive/[0.08] text-destructive",
 } as const;
 
 /**
@@ -84,7 +84,7 @@ function TvRequestBadge({ request }: { request: NonNullable<DownloadItem["tv_req
     return (
         <Tooltip>
             <TooltipTrigger asChild>
-                <span className="inline-flex items-center gap-1 rounded-md bg-cyan-400/10 px-1.5 py-px text-[10px] font-semibold text-cyan-300 ring-1 ring-inset ring-cyan-400/25">
+                <span className="inline-flex items-center gap-1 rounded-md bg-cyan-400/10 px-1.5 py-px text-[10px] font-semibold text-primary ring-1 ring-inset ring-cyan-400/25">
                     <Tv className="h-3 w-3" strokeWidth={2} aria-hidden />
                     {request.device_name}
                     {request.priority && <span className="text-cyan-200/80">· ce soir</span>}
@@ -266,10 +266,10 @@ export const DownloadCard = forwardRef<HTMLLIElement, DownloadCardProps>(functio
                                             <RotateCw /> Relancer
                                         </DropdownMenuItem>
                                         <DropdownMenuSeparator />
-                                        <DropdownMenuItem onSelect={() => onAction("blocklist")} className="text-amber-300 focus:text-amber-200">
+                                        <DropdownMenuItem onSelect={() => onAction("blocklist")} className="text-warning focus:text-warning">
                                             <Ban /> Supprimer + blocklist
                                         </DropdownMenuItem>
-                                        <DropdownMenuItem onSelect={() => onAction("remove")} className="text-red-400 focus:text-red-300">
+                                        <DropdownMenuItem onSelect={() => onAction("remove")} className="text-destructive focus:text-destructive">
                                             <Trash2 /> Supprimer
                                         </DropdownMenuItem>
                                     </DropdownMenuContent>

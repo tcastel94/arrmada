@@ -235,7 +235,7 @@ export default function CalendarPage() {
                                         Aujourd&apos;hui
                                     </Button>
                                 )}
-                                {changing && <Loader2 className="ml-1 h-4 w-4 animate-spin text-sky-300" aria-label="Chargement du mois" />}
+                                {changing && <Loader2 className="ml-1 h-4 w-4 animate-spin text-primary" aria-label="Chargement du mois" />}
                             </div>
 
                             <div className="flex flex-wrap items-center gap-3">
@@ -246,8 +246,8 @@ export default function CalendarPage() {
                                     onChange={setTypeFilter}
                                     options={[
                                         { value: "all", label: "Tout" },
-                                        { value: "episode", label: "Séries", icon: Tv, tone: "text-sky-300" },
-                                        { value: "movie", label: "Films", icon: Film, tone: "text-violet-300" },
+                                        { value: "episode", label: "Séries", icon: Tv, tone: "text-primary" },
+                                        { value: "movie", label: "Films", icon: Film, tone: "text-primary" },
                                     ]}
                                 />
                                 <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
@@ -263,10 +263,10 @@ export default function CalendarPage() {
                                 <span className="h-2 w-2 rounded-full bg-sky-400" /> Séries
                             </span>
                             <span className="inline-flex items-center gap-1.5">
-                                <span className="h-2 w-2 rounded-full bg-violet-400" /> Films
+                                <span className="h-2 w-2 rounded-full bg-primary" /> Films
                             </span>
                             <span className="inline-flex items-center gap-1.5">
-                                <Check className="h-3 w-3 text-emerald-300" strokeWidth={3} /> Déjà téléchargé
+                                <Check className="h-3 w-3 text-success" strokeWidth={3} /> Déjà téléchargé
                             </span>
                             {!monitoredOnly && (
                                 <span className="inline-flex items-center gap-1.5">

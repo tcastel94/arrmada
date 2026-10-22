@@ -206,9 +206,9 @@ export function NavCount({ children, tone = "default" }: { children: React.React
         <span
             className={cn(
                 "rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums",
-                tone === "success" && "bg-emerald-500/10 text-emerald-300",
-                tone === "warning" && "bg-amber-500/10 text-amber-300",
-                tone === "danger" && "bg-red-500/10 text-red-300",
+                tone === "success" && "bg-success/10 text-success",
+                tone === "warning" && "bg-warning/10 text-warning",
+                tone === "danger" && "bg-destructive/10 text-destructive",
                 tone === "default" && "bg-white/[0.06] text-muted-foreground",
             )}
         >

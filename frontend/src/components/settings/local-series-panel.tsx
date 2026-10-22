@@ -55,7 +55,7 @@ function FolderPicker({ onPick }: { onPick: (folder: { rootId: number; path: str
             {isLoading ? (
                 <TableSkeleton rows={3} />
             ) : isError ? (
-                <p className="text-xs text-red-300">{error.message}</p>
+                <p className="text-xs text-destructive">{error.message}</p>
             ) : (
                 <ul className="max-h-56 overflow-y-auto">
                     {data?.folders.map((f) => (
@@ -65,7 +65,7 @@ function FolderPicker({ onPick }: { onPick: (folder: { rootId: number; path: str
                                 onClick={() => setToken(f.token)}
                                 className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-white/5"
                             >
-                                <Folder className="h-4 w-4 text-amber-300" />
+                                <Folder className="h-4 w-4 text-warning" />
                                 <span className="flex-1 truncate">{f.name}</span>
                                 <ChevronRight className="h-4 w-4 text-muted-foreground" />
                             </button>
@@ -103,7 +103,7 @@ function TmdbPicker({ value, onChange }: { value: number | null; onChange: (id: 
                 <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Naruto" className="pl-8" />
             </div>
-            {error && <p className="text-xs text-amber-300">{error.message}</p>}
+            {error && <p className="text-xs text-warning">{error.message}</p>}
             {isFetching && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
             <div className="flex gap-2 overflow-x-auto pb-1">
                 {value !== null && (
@@ -181,7 +181,7 @@ export function LocalSeriesPanel() {
             <Panel
                 title="Séries maison"
                 icon={Tv}
-                iconClassName="text-sky-300"
+                iconClassName="text-primary"
                 action={
                     <Button size="sm" onClick={openAdd} disabled={isLoading}>
                         <Plus />
@@ -217,13 +217,13 @@ export function LocalSeriesPanel() {
                                 <div className="min-w-0 flex-1">
                                     <p className="truncate text-sm font-semibold">
                                         {s.title}
-                                        {s.badge && <span className="ml-2 rounded bg-sky-500/20 px-1.5 py-0.5 text-[10px] text-sky-200">{s.badge}</span>}
+                                        {s.badge && <span className="ml-2 rounded bg-primary/20 px-1.5 py-0.5 text-[10px] text-sky-200">{s.badge}</span>}
                                     </p>
                                     <p className="truncate text-xs text-muted-foreground">
                                         {s.seasons} saison(s) · {s.episodes} épisode(s) · <span className="font-mono">{s.path || "/"}</span>
                                     </p>
                                     {!s.available && (
-                                        <p className="mt-1 flex items-center gap-1 text-xs text-amber-300">
+                                        <p className="mt-1 flex items-center gap-1 text-xs text-warning">
                                             <AlertTriangle className="h-3.5 w-3.5" />
                                             Dossier introuvable sur le NAS
                                         </p>

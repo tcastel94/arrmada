@@ -126,13 +126,7 @@ function KodiRemote({ np }: { np: KodiNowPlaying }) {
     const volume = np.muted ? 0 : np.volume ?? 100;
 
     return (
-        <div className="glass border-gradient relative overflow-hidden rounded-2xl p-4 sm:p-5">
-            {/* Halo violet (= « lecture » dans le code couleur de l'app) */}
-            <div
-                aria-hidden
-                className="pointer-events-none absolute -left-20 -top-24 h-64 w-64 rounded-full opacity-50"
-                style={{ background: "radial-gradient(closest-side, hsl(262 83% 60% / 0.6), transparent)" }}
-            />
+        <div className="relative overflow-hidden rounded-2xl bg-card p-4 sm:p-5">
             <div className="relative flex gap-4">
                 {np.poster && (
                     <img
@@ -145,15 +139,15 @@ function KodiRemote({ np }: { np: KodiNowPlaying }) {
                 <div className="min-w-0 flex-1 space-y-3">
                     <div className="flex flex-wrap items-center gap-2">
                         <span className="relative flex h-2 w-2">
-                            {!np.paused && <span className="absolute inset-0 animate-pulse-ring rounded-full bg-violet-400" />}
-                            <span className="relative h-2 w-2 rounded-full bg-violet-400 shadow-violet-400" />
+                            {!np.paused && <span className="absolute inset-0 animate-pulse-ring rounded-full bg-primary" />}
+                            <span className="relative h-2 w-2 rounded-full bg-primary" />
                         </span>
-                        <span className="flex items-center gap-1.5 text-xs font-medium text-violet-300">
+                        <span className="flex items-center gap-1.5 text-xs font-medium text-primary">
                             <MonitorPlay className="h-3.5 w-3.5" aria-hidden />
                             En lecture sur {np.kodi ?? "Kodi"}
                         </span>
                         {np.paused && (
-                            <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-px text-[10px] font-semibold text-amber-300">
+                            <span className="rounded-full border border-warning/30 bg-warning/10 px-2 py-px text-[10px] font-semibold text-warning">
                                 En pause
                             </span>
                         )}
@@ -188,11 +182,11 @@ function KodiRemote({ np }: { np: KodiNowPlaying }) {
                             size="icon"
                             aria-label={np.paused ? "Reprendre la lecture" : "Mettre en pause"}
                             onClick={() => send("playpause")}
-                            className="h-11 w-11 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white [&_svg]:size-5"
+                            className="h-11 w-11 rounded-full bg-primary text-white [&_svg]:size-5"
                         >
                             {np.paused ? <Play className="fill-current" /> : <Pause className="fill-current" />}
                         </Button>
-                        <Button size="icon" variant="outline" aria-label="Arrêter la lecture" onClick={() => send("stop")} className="rounded-full">
+                        <Button size="icon" variant="secondary" aria-label="Arrêter la lecture" onClick={() => send("stop")}>
                             <Square />
                         </Button>
                         <div className="flex-1" />
@@ -203,7 +197,7 @@ function KodiRemote({ np }: { np: KodiNowPlaying }) {
                             aria-pressed={!!np.muted}
                             onClick={() => send("mute")}
                         >
-                            {np.muted ? <VolumeX className="text-red-400" /> : <Volume2 />}
+                            {np.muted ? <VolumeX className="text-destructive" /> : <Volume2 />}
                         </Button>
                         <Scrubber
                             value={volume}

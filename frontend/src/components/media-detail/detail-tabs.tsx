@@ -15,7 +15,6 @@ import { Captions, Disc3, HardDrive, Info, Layers, Radar, Users, type LucideIcon
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { MediaDetail } from "@/hooks/use-media";
 import { SPRING } from "@/lib/motion";
-import { cn } from "@/lib/utils";
 import { ArtworksTab } from "./artworks-tab";
 import { CastSection } from "./cast-section";
 import { FilesQualityTab } from "./files-quality";
@@ -78,44 +77,34 @@ export function DetailTabs({
 
     return (
         <Tabs value={active} onValueChange={(v) => onTabChange(v as DetailTab)} className="space-y-4">
-            {/* Barre collée sous l'en-tête (h-14 + marge) pendant le défilement */}
-            <div id="media-tabs" className="sticky top-[calc(var(--navbar-h)+env(safe-area-inset-top))] z-20 -mx-1 scroll-mt-24 px-1">
-                <TabsList className="w-full justify-start bg-background/70 shadow-[0_10px_30px_-12px_rgb(0_0_0/0.8)] backdrop-blur-xl sm:w-auto">
+            {/* Barre d'onglets texte soulignée, collée sous la barre du haut au
+                défilement (fond flouté, pleine largeur), défilante sur mobile. */}
+            <div
+                id="media-tabs"
+                className="sticky top-[calc(var(--navbar-h)+env(safe-area-inset-top))] z-20 -mx-4 scroll-mt-24 bg-black/80 px-4 backdrop-blur-xl hairline-b md:-mx-6 md:px-6 lg:-mx-8 lg:px-8"
+            >
+                <TabsList className="h-11 w-full justify-start gap-6 rounded-none bg-transparent p-0">
                     {tabs.map((t) => {
-                        const { label, icon: Icon } = META[t];
+                        const { label } = META[t];
                         const count = counter(t);
                         const isActive = active === t;
                         return (
                             <TabsTrigger
                                 key={t}
                                 value={t}
-                                // La pastille animée remplace le fond « actif » par défaut du TabsTrigger.
-                                className="relative data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                                className="relative h-full rounded-none px-0 text-[15px] font-medium text-muted-foreground hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:font-semibold data-[state=active]:text-foreground data-[state=active]:shadow-none"
                             >
-                                {isActive && (
-                                    <motion.span
-                                        layoutId="media-tab-pill"
-                                        transition={SPRING}
-                                        className="absolute inset-0 rounded-lg bg-primary/15"
-                                    />
-                                )}
-                                <span className="relative z-[1] flex items-center gap-1.5">
-                                    <Icon className="h-3.5 w-3.5" aria-hidden />
+                                <span className="flex items-center gap-1.5">
                                     {label}
-                                    {count && (
-                                        <span
-                                            className={cn(
-                                                "rounded-md px-1.5 py-px text-[10px] font-semibold tabular-nums",
-                                                isActive ? "bg-primary/20 text-primary" : "bg-white/[0.06] text-muted-foreground",
-                                            )}
-                                        >
-                                            {count}
-                                        </span>
-                                    )}
+                                    {count && <span className="text-[13px] font-normal tabular-nums text-muted-foreground">{count}</span>}
                                     {t === "subtitles" && missingFr > 0 && (
-                                        <span className="h-1.5 w-1.5 rounded-full bg-amber-400 shadow-amber-400" aria-label={`${missingFr} sans sous-titre FR`} />
+                                        <span className="h-1.5 w-1.5 rounded-full bg-warning" aria-label={`${missingFr} sans sous-titre FR`} />
                                     )}
                                 </span>
+                                {/* Soulignement qui glisse d'un onglet à l'autre */}
+                                {isActive && (
+                                    <motion.span layoutId="media-tab-underline" transition={SPRING} className="absolute inset-x-0 bottom-0 h-[2px] rounded-full bg-foreground" />
+                                )}
                             </TabsTrigger>
                         );
                     })}

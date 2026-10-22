@@ -1,20 +1,20 @@
 "use client";
 
 /**
- * Carte « En lecture » (Dashboard) — visible uniquement pendant une lecture
- * Kodi. Ambiance cinéma : affiche floutée en fond, égaliseur animé,
- * progression lumineuse, badges techniques (4K, HDR, codec, 5.1…).
+ * Carte « En lecture » de l'Accueil — visible uniquement pendant une
+ * lecture Kodi. Style « À l'écran » des apps Apple : affiche, titre,
+ * TV qui joue, progression et temps restant, commandes, détails
+ * techniques en petites étiquettes grises.
  */
 /* eslint-disable @next/next/no-img-element */
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
-import { Play, Pause, Square, Tv, Film, Star, Clock, Volume2, VolumeX, ArrowUpRight, Sofa } from "lucide-react";
+import { Film, Pause, Play, Square, Tv } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useKodiNowPlaying, useKodiControl } from "@/hooks/use-kodi";
 import { formatClock } from "@/lib/format";
 import { EASE_OUT } from "@/lib/motion";
-import { translateGenre } from "@/lib/genres";
 
 /** Nombre de canaux audio → notation home-cinéma. */
 function fmtChannels(ch?: number | null): string | null {
@@ -33,166 +33,78 @@ export function NowPlayingCard() {
     const visible = !!np?.playing;
     const remaining = np ? Math.max(0, (np.total || 0) - (np.position || 0)) : 0;
     const pct = np?.total ? Math.min(100, ((np.position || 0) / np.total) * 100) : np?.percentage ?? 0;
-    const techBadges = np
-        ? [np.resolution, np.hdr, np.video_codec, np.audio_codec, fmtChannels(np.audio_channels)].filter(Boolean)
-        : [];
+    const tech = np ? [np.resolution, np.hdr, np.video_codec, np.audio_codec, fmtChannels(np.audio_channels)].filter(Boolean) : [];
+    const href = np?.media_id && np?.media_type ? `/media/${np.media_type}/${np.media_id}` : "/remote";
 
     const send = (action: "playpause" | "stop") =>
-        control.mutate({ action }, { onError: (e) => toast.error("Commande Kodi refusée", { description: e.message }) });
+        control.mutate({ action }, { onError: (e) => toast.error("Commande refusée par la TV", { description: e.message }) });
 
     return (
-        <AnimatePresence>
+        <AnimatePresence initial={false}>
             {visible && np && (
                 <motion.section
-                    initial={{ opacity: 0, height: 0, y: -10 }}
-                    animate={{ opacity: 1, height: "auto", y: 0 }}
-                    exit={{ opacity: 0, height: 0, y: -10 }}
-                    transition={{ duration: 0.5, ease: EASE_OUT }}
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.35, ease: EASE_OUT }}
                     className="overflow-hidden"
                 >
-                    <div className="glass border-gradient relative overflow-hidden rounded-3xl">
-                        {/* Affiche floutée en arrière-plan */}
-                        {np.poster && (
-                            <div
-                                aria-hidden
-                                className="absolute inset-0 scale-125 opacity-30 blur-3xl saturate-150"
-                                style={{
-                                    backgroundImage: `url("${np.poster}")`,
-                                    backgroundSize: "cover",
-                                    backgroundPosition: "center 30%",
-                                }}
-                            />
-                        )}
-                        <div aria-hidden className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/70 to-background/30" />
-
-                        <div className="relative flex gap-4 p-4 sm:gap-6 sm:p-6">
-                            {/* Affiche */}
-                            <motion.div
-                                initial={{ rotate: -4, scale: 0.9, opacity: 0 }}
-                                animate={{ rotate: 0, scale: 1, opacity: 1 }}
-                                transition={{ type: "spring", stiffness: 200, damping: 18, delay: 0.15 }}
-                                className="relative shrink-0"
-                            >
-                                <div className="absolute -inset-2 rounded-2xl bg-primary/30 blur-xl animate-pulse-glow" aria-hidden />
-                                {np.poster ? (
-                                    <img
-                                        src={np.poster}
-                                        alt={np.title || ""}
-                                        className="relative h-36 w-24 rounded-xl object-cover shadow-2xl ring-1 ring-white/15 sm:h-48 sm:w-32"
-                                    />
-                                ) : (
-                                    <div className="relative flex h-36 w-24 items-center justify-center rounded-xl bg-muted/50 ring-1 ring-white/10 sm:h-48 sm:w-32">
-                                        {np.type === "episode" ? <Tv className="h-8 w-8 opacity-40" /> : <Film className="h-8 w-8 opacity-40" />}
-                                    </div>
-                                )}
-                            </motion.div>
-
-                            {/* Infos */}
-                            <div className="flex min-w-0 flex-1 flex-col">
-                                <div className="mb-2 flex items-center gap-2">
-                                    {/* Égaliseur */}
-                                    <span className="flex h-3.5 items-end gap-[3px]" aria-hidden>
-                                        {[0, 1, 2, 3].map((i) => (
-                                            <motion.span
-                                                key={i}
-                                                className="w-[3px] rounded-full bg-gradient-to-t from-primary to-brand"
-                                                animate={np.paused ? { height: 3 } : { height: [3, 14, 6, 12, 4] }}
-                                                transition={{ duration: 1.1, repeat: Infinity, delay: i * 0.12, ease: "easeInOut" }}
-                                            />
-                                        ))}
-                                    </span>
-                                    <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
-                                        {np.paused ? "En pause" : "En lecture"}
-                                    </span>
-                                    {np.kodi && (
-                                        <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                                            <Sofa className="h-3 w-3" /> {np.kodi}
-                                        </span>
-                                    )}
+                    <p className="mb-2.5 text-[20px] font-bold tracking-tight">À l&apos;écran</p>
+                    <div className="flex gap-4 rounded-2xl bg-card p-3 sm:p-4">
+                        <Link href={href} className="shrink-0">
+                            {np.poster ? (
+                                <img src={np.poster} alt="" className="h-[132px] w-[88px] rounded-[10px] object-cover sm:h-[156px] sm:w-[104px]" />
+                            ) : (
+                                <div className="flex h-[132px] w-[88px] items-center justify-center rounded-[10px] bg-white/[0.06] sm:h-[156px] sm:w-[104px]">
+                                    {np.type === "episode" ? <Tv className="h-7 w-7 text-white/25" /> : <Film className="h-7 w-7 text-white/25" />}
                                 </div>
+                            )}
+                        </Link>
 
-                                <h2 className="truncate text-xl font-bold leading-tight tracking-tight sm:text-3xl">{np.title}</h2>
-                                {np.subtitle && <p className="truncate text-sm text-muted-foreground">{np.subtitle}</p>}
-
-                                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                                    {np.year ? <span className="tabular-nums">{np.year}</span> : null}
-                                    {np.runtime ? (
-                                        <span className="flex items-center gap-1">
-                                            <Clock className="h-3 w-3" /> {np.runtime} min
+                        <div className="flex min-w-0 flex-1 flex-col">
+                            <p className="text-[13px] font-medium text-primary">
+                                {np.paused ? "En pause" : "En lecture"}
+                                {np.kodi ? ` sur ${np.kodi}` : ""}
+                            </p>
+                            <Link href={href} className="mt-0.5 truncate text-[19px] font-semibold leading-tight tracking-tight hover:underline sm:text-[22px]">
+                                {np.title}
+                            </Link>
+                            {np.subtitle && <p className="truncate text-[14px] text-muted-foreground">{np.subtitle}</p>}
+                            {tech.length > 0 && (
+                                <div className="mt-2 hidden flex-wrap gap-1 sm:flex">
+                                    {tech.map((t) => (
+                                        <span key={String(t)} className="rounded-[5px] bg-white/[0.08] px-1.5 py-0.5 text-[11px] font-medium text-foreground/70">
+                                            {t}
                                         </span>
-                                    ) : null}
-                                    {np.rating ? (
-                                        <span className="flex items-center gap-1">
-                                            <Star className="h-3 w-3 fill-amber-400 text-amber-400" /> {np.rating.toFixed(1)}
-                                        </span>
-                                    ) : null}
-                                    {np.genres && np.genres.length > 0 && <span className="truncate">{np.genres.slice(0, 3).map(translateGenre).join(" · ")}</span>}
+                                    ))}
                                 </div>
+                            )}
 
-                                {techBadges.length > 0 && (
-                                    <div className="mt-3 hidden flex-wrap gap-1.5 sm:flex">
-                                        {techBadges.map((b) => (
-                                            <span
-                                                key={String(b)}
-                                                className="rounded-md border border-white/10 bg-black/30 px-1.5 py-0.5 font-mono text-[10px] text-foreground/80 backdrop-blur"
-                                            >
-                                                {b}
-                                            </span>
-                                        ))}
-                                        <span className="flex items-center gap-1 rounded-md border border-white/10 bg-black/30 px-1.5 py-0.5 font-mono text-[10px] text-foreground/80 backdrop-blur">
-                                            {np.muted ? <VolumeX className="h-3 w-3" /> : <Volume2 className="h-3 w-3" />}
-                                            {np.muted ? "muet" : `${np.volume ?? 0} %`}
-                                        </span>
-                                    </div>
-                                )}
+                            <div className="flex-1" />
 
-                                <div className="flex-1" />
-
-                                {/* Progression */}
-                                <div className="mt-4 space-y-1.5">
-                                    <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-                                        <motion.div
-                                            className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-primary via-sky-400 to-brand"
-                                            animate={{ width: `${pct}%` }}
-                                            transition={{ duration: 1, ease: "linear" }}
-                                        />
-                                    </div>
-                                    <div className="flex items-center justify-between text-[11px] tabular-nums text-muted-foreground">
-                                        <span>{formatClock(np.position)}</span>
-                                        <span>-{formatClock(remaining)}</span>
-                                    </div>
+                            {/* Progression */}
+                            <div className="mt-3">
+                                <div className="h-1 overflow-hidden rounded-full bg-white/[0.12]">
+                                    <motion.div className="h-full rounded-full bg-foreground" animate={{ width: `${pct}%` }} transition={{ duration: 1, ease: "linear" }} />
                                 </div>
-
-                                {/* Commandes */}
-                                <div className="mt-3 flex min-w-0 items-center gap-2">
-                                    <Button size="sm" onClick={() => send("playpause")} disabled={control.isPending}>
-                                        {np.paused ? <Play className="fill-current" /> : <Pause className="fill-current" />}
-                                        {np.paused ? "Reprendre" : "Pause"}
-                                    </Button>
-                                    <Button
-                                        size="icon-sm"
-                                        variant="ghost"
-                                        onClick={() => send("stop")}
-                                        disabled={control.isPending}
-                                        aria-label="Arrêter la lecture"
-                                        className="hover:text-red-400"
-                                    >
-                                        <Square className="fill-current" />
-                                    </Button>
-                                    <div className="ml-auto flex items-center gap-3 text-xs">
-                                        <Link href="/remote" className="hidden text-muted-foreground transition-colors hover:text-primary sm:inline">
-                                            Télécommande
-                                        </Link>
-                                        {np.media_id && np.media_type && (
-                                            <Link
-                                                href={`/media/${np.media_type}/${np.media_id}`}
-                                                className="flex items-center gap-1 text-muted-foreground transition-colors hover:text-primary"
-                                            >
-                                                Fiche <ArrowUpRight className="h-3.5 w-3.5" />
-                                            </Link>
-                                        )}
-                                    </div>
+                                <div className="mt-1 flex justify-between text-[11px] tabular-nums text-muted-foreground">
+                                    <span>{formatClock(np.position)}</span>
+                                    <span>-{formatClock(remaining)}</span>
                                 </div>
+                            </div>
+
+                            {/* Commandes */}
+                            <div className="mt-2 flex items-center gap-2">
+                                <Button size="sm" variant="secondary" onClick={() => send("playpause")} disabled={control.isPending}>
+                                    {np.paused ? <Play className="fill-current" /> : <Pause className="fill-current" />}
+                                    {np.paused ? "Lecture" : "Pause"}
+                                </Button>
+                                <Button size="icon-sm" variant="secondary" onClick={() => send("stop")} disabled={control.isPending} aria-label="Arrêter la lecture">
+                                    <Square className="!size-3.5 fill-current" />
+                                </Button>
+                                <Link href="/remote" className="ml-auto text-[14px] text-primary hover:opacity-80">
+                                    Télécommande
+                                </Link>
                             </div>
                         </div>
                     </div>

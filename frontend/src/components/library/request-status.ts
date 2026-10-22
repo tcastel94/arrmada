@@ -27,7 +27,7 @@ export const REQUEST_STATUS: Record<RequestStatus, RequestStatusMeta> = {
         label: "Recherche",
         tone: "warning",
         pulse: true,
-        badge: "bg-amber-500/10 text-amber-300 ring-amber-500/25",
+        badge: "bg-warning/10 text-warning ring-warning/25",
     },
     downloading: {
         label: "Téléchargement",
@@ -39,13 +39,13 @@ export const REQUEST_STATUS: Record<RequestStatus, RequestStatusMeta> = {
         label: "Disponible",
         tone: "success",
         pulse: false,
-        badge: "bg-emerald-500/10 text-emerald-300 ring-emerald-500/25",
+        badge: "bg-success/10 text-success ring-success/25",
     },
     failed: {
         label: "Échec",
         tone: "error",
         pulse: false,
-        badge: "bg-red-500/10 text-red-300 ring-red-500/25",
+        badge: "bg-destructive/10 text-destructive ring-destructive/25",
     },
 };
 
