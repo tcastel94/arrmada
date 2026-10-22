@@ -71,8 +71,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
                 <PageHeader
                     icon={Cog}
                     accent="slate"
-                    eyebrow={section.href === "/settings" ? "Configuration" : `Paramètres · ${section.label}`}
-                    title="Paramètres"
+                    title={section.href === "/settings" ? "Paramètres" : section.label}
                     description={
                         <AnimatePresence mode="wait" initial={false}>
                             <motion.span

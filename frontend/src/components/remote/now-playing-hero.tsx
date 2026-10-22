@@ -194,8 +194,6 @@ function IdleState({ np, onRetry, retrying }: { np?: KodiNowPlaying; onRetry: ()
     const unreachable = !!(np as { error?: string } | undefined)?.error;
     return (
         <HeroShell>
-            {/* Décor : halo violet qui respire + grille */}
-            <div aria-hidden className="pointer-events-none absolute inset-0 bg-grid opacity-30 [mask-image:radial-gradient(ellipse_at_center,#000,transparent_70%)]" />
             <div className="relative px-5 pb-8 md:px-8">
                 {unreachable ? (
                     <EmptyState
@@ -326,7 +324,7 @@ function Player({ np, fetchedAt }: { np: KodiNowPlaying; fetchedAt: number }) {
                                 className="aspect-[2/3] w-full rounded-2xl object-cover shadow-2xl ring-1 ring-white/15"
                             />
                         ) : (
-                            <div className="flex aspect-[2/3] w-full items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500/25 to-fuchsia-500/10 ring-1 ring-white/10">
+                            <div className="flex aspect-[2/3] w-full items-center justify-center rounded-2xl bg-white/[0.06] ring-1 ring-white/10">
                                 <Film className="h-10 w-10 text-primary" />
                             </div>
                         )}
@@ -510,7 +508,7 @@ function Player({ np, fetchedAt }: { np: KodiNowPlaying; fetchedAt: number }) {
             {/* Barre de progression lumineuse en bas de carte */}
             <div className="relative h-[3px] bg-white/[0.06]">
                 <motion.div
-                    className="h-full bg-gradient-to-r from-violet-500 via-primary to-pink-400"
+                    className="h-full bg-white"
                     animate={{ width: `${Math.min(100, pct)}%` }}
                     transition={{ duration: 0.9, ease: "linear" }}
                 />
