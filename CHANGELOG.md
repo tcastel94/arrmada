@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Android app 2.10.1: sound that Android cannot decode
+
+#### Fixed
+- **Old `.avi` with MP3 sound** (typical of fan-edit "Kai" episodes) stopped with `ERROR_CODE_DECODING_FAILED` (`MediaCodecAudioRenderer`, `audio/mpeg`): Android's MP3 decoder rejects MP3 frames that the AVI splits across chunks. The app now ships the FFmpeg audio decoder (Jellyfin build of the Media3 extension) **behind** Android's decoders: when Android's audio decoder fails, the player sets it aside and FFmpeg resumes the sound at the same position (toast "Son décodé par l'appli"). Passthrough to the amp is unchanged for everything Android handles; FFmpeg also covers sound Android cannot decode at all (DTS / TrueHD on a phone without passthrough)
+
+#### Changed
+- CI: the release APK is published to `android-latest` on a manual run too (`workflow_dispatch`); the SSH deploy to Unraid is skipped with a notice when `UNRAID_HOST` is not set instead of failing
+
 ### Home-made series: fan edits shown like official series (APK 2.10.0)
 
 #### Added

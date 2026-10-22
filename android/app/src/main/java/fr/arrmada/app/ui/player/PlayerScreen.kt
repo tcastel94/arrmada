@@ -67,6 +67,7 @@ import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.ExoPlaybackException
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
@@ -284,7 +285,13 @@ private fun PlayerSurface(
                     .setPreferredAudioLanguages("fr", "en")
             )
         }
-        ExoPlayer.Builder(context, DefaultRenderersFactory(context))
+        // Décodeurs d'Android d'abord (passthrough vers l'ampli intact), FFmpeg
+        // ensuite : il ne sert que pour un son qu'Android ne sait pas décoder,
+        // ou en secours quand son décodeur plante (voir onPlayerError).
+        val renderers = DefaultRenderersFactory(context)
+            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+            .setEnableDecoderFallback(true) // autre décodeur Android si le premier ne démarre pas
+        ExoPlayer.Builder(context, renderers)
             .setMediaSourceFactory(DefaultMediaSourceFactory(OkHttpDataSource.Factory(app.api.http)))
             .setTrackSelector(trackSelector)
             .setAudioAttributes(
@@ -350,6 +357,7 @@ private fun PlayerSurface(
     var tracks by remember { mutableStateOf(Tracks.EMPTY) }
     var playbackError by remember { mutableStateOf<String?>(null) }
     var remuxed by remember { mutableStateOf(info.mode == "remux") } // flux converti par Jellyfin
+    var softwareAudio by remember { mutableStateOf(false) } // son décodé par FFmpeg (secours)
     var finished by remember { mutableStateOf(false) } // fin enregistrée (vu)
     var upNextDismissed by remember { mutableStateOf(false) }
     var countdown by remember { mutableIntStateOf(PlaybackLogic.UP_NEXT_SECONDS) }
@@ -435,6 +443,23 @@ private fun PlayerSurface(
             }
 
             override fun onPlayerError(e: PlaybackException) {
+                // Décodeur audio d'Android en échec (ex. MP3 d'un vieil .avi, dont
+                // les blocs ne tombent pas sur les trames) : on le met de côté et
+                // FFmpeg, plus tolérant, reprend le son là où on en était.
+                if (!softwareAudio && audioDecoderFailed(e)) {
+                    val audio = (0 until player.rendererCount).filter { player.getRendererType(it) == C.TRACK_TYPE_AUDIO }
+                    val selector = player.trackSelector as? DefaultTrackSelector
+                    if (audio.size > 1 && selector != null) {
+                        softwareAudio = true
+                        val at = player.currentPosition.takeIf { it > 0 } ?: (request.startSeconds * 1000L)
+                        selector.setParameters(selector.buildUponParameters().setRendererDisabled(audio.first(), true))
+                        player.prepare()
+                        player.seekTo(at)
+                        player.play()
+                        Toast.makeText(context, "Son décodé par l’appli (format audio mal géré par Android)", Toast.LENGTH_LONG).show()
+                        return
+                    }
+                }
                 // Fichier illisible en direct : on retente une fois en remux,
                 // là où on en était
                 if (!remuxed && info.remuxStream.isNotBlank() && e.errorCode in REMUX_RETRY) {
@@ -693,6 +718,23 @@ fun UpNextCard(next: UpNext, countdown: Int, absolute: (String?) -> String?) {
             Text("OK : maintenant  ·  Retour : non merci", style = MaterialTheme.typography.labelSmall, color = ArrColors.TextSecondary, modifier = Modifier.padding(top = 4.dp))
         }
     }
+}
+
+/** Erreurs de décodeur audio : on retente avec FFmpeg (décodage par l'appli). */
+private val AUDIO_DECODER_ERRORS = setOf(
+    PlaybackException.ERROR_CODE_DECODING_FAILED,
+    PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+    PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED,
+    PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES,
+)
+
+/** L'erreur vient-elle du décodeur de la piste audio (et pas de la vidéo ou du réseau) ? */
+@OptIn(UnstableApi::class)
+private fun audioDecoderFailed(e: PlaybackException): Boolean {
+    val renderer = e as? ExoPlaybackException ?: return false
+    return renderer.type == ExoPlaybackException.TYPE_RENDERER &&
+        renderer.rendererFormat?.sampleMimeType?.startsWith("audio/") == true &&
+        e.errorCode in AUDIO_DECODER_ERRORS
 }
 
 /** Erreurs de lecture directe qui justifient de retenter en remux. */
