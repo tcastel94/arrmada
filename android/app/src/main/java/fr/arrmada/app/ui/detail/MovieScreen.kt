@@ -153,6 +153,12 @@ fun MovieScreen(
         backdropVideo = video?.let { url -> @Composable { TrailerVideo(url, api.http) { trailerDone = true } } },
         // Téléphone / tablette : « Sur la TV »
         onSendToTv = if (LocalScreen.current.isTouch && m.tmdbId != null) { { sending = true } } else null,
+        // Liste « À voir » du profil qui regarde
+        extraActions = {
+            m.tmdbId?.let { tmdb ->
+                WatchlistButton(WatchlistTarget("movie", tmdb, m.title, m.year, m.images.poster), repository)
+            }
+        },
     )
     if (sending) {
         SendToTvDialog(
@@ -226,6 +232,8 @@ fun MovieContent(
     onDownload: (MovieDetail) -> Unit = {},
     backdropVideo: (@Composable () -> Unit)? = null,
     onSendToTv: (() -> Unit)? = null,
+    // Boutons en plus, après « Sur la TV » (« Ma liste »)
+    extraActions: @Composable () -> Unit = {},
 ) {
     val context = LocalContext.current
     val playFocus = remember { FocusRequester() }
@@ -304,10 +312,7 @@ fun MovieContent(
                     ArrButton("Télécharger", { onDownload(m) }, primary = true, modifier = Modifier.focusRequester(playFocus))
                 }
                 if (onSendToTv != null && playable) ArrButton("Sur la TV", onSendToTv, leading = "📺")
-                // Liste « À voir » du profil qui regarde
-                m.tmdbId?.let { tmdb ->
-                    WatchlistButton(WatchlistTarget("movie", tmdb, m.title, m.year, m.images.poster), repository)
-                }
+                extraActions()
                 m.trailerId?.takeIf { it.isNotBlank() }?.let { id ->
                     ArrButton("Bande-annonce", { openTrailer(context, id) })
                 }
