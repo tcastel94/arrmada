@@ -10,8 +10,10 @@
  *    Android en plus : formats (4K, Dolby Vision, Atmos), pistes, chapitre,
  *    générique et épisode suivant, fiche (résumé, distribution) et une
  *    TÉLÉCOMMANDE TACTILE (pause, −10 s / +30 s, passer l'intro, pistes) ;
- *  - au repos : une grande horloge, les sorties de ce soir / demain, les
- *    téléchargements en cours et l'ampli de la pièce.
+ *  - au repos : une grande horloge, « Ce soir » (reprendre, Ma liste,
+ *    nouveaux films : un toucher → confirmation → lancé sur la TV de la
+ *    pièce), les sorties de ce soir / demain, les téléchargements en cours
+ *    et l'ampli de la pièce.
  *
  * Trois états, comme une petite machine à états :
  *  1. « appairage » : pas encore de jeton → code + QR code à valider depuis
@@ -30,6 +32,7 @@
  * que l'add-on envoie déjà au serveur (aucun serveur web Kodi à ouvrir).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -44,6 +47,7 @@ import {
     Pause,
     Play,
     Plus,
+    Popcorn,
     RefreshCw,
     RotateCcw,
     RotateCw,
@@ -76,7 +80,9 @@ import {
     setScreenToken,
     untilCredits,
     type Ambient,
+    type AmbientPlay,
     type AmbientPlaying,
+    type AmbientTile,
     type AmbientCast,
     type AmbientTrack,
     type PersonFilmography,
@@ -130,6 +136,24 @@ async function sendCommand(auth: Auth, room: string, command: RemoteAction): Pro
         body: JSON.stringify(auth.kind === "admin" ? { ...command, room } : command),
     });
     if (!response.ok) throw new HttpError(response.status, `HTTP ${response.status}`);
+}
+
+/** « Ce soir » : lance un titre proposé sur la TV de la pièce (le serveur vérifie qu'il est proposé). */
+async function sendPlay(auth: Auth, room: string, play: AmbientPlay): Promise<{ device: string; online: boolean }> {
+    const response = await fetch(`${API_URL}/api/ambient/play`, {
+        method: "POST",
+        headers: { ...authHeaders(auth), "Content-Type": "application/json" },
+        body: JSON.stringify(auth.kind === "admin" ? { ...play, room } : play),
+    });
+    if (!response.ok) {
+        // Le serveur explique le refus (« Aucune TV appairée dans cette pièce »…)
+        const detail = await response
+            .json()
+            .then((body: { detail?: unknown }) => (typeof body.detail === "string" ? body.detail : ""))
+            .catch(() => "");
+        throw new HttpError(response.status, detail || `HTTP ${response.status}`);
+    }
+    return response.json();
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -393,6 +417,16 @@ function AmbientView({
         [auth, room, queryClient],
     );
 
+    // « Ce soir » : lancé sur la TV, puis relecture (l'écran passera en mode séance)
+    const onPlay = useCallback(
+        async (play: AmbientPlay) => {
+            const sent = await sendPlay(auth, room, play);
+            setTimeout(() => queryClient.invalidateQueries({ queryKey: ["ambient", auth.kind, room] }), 4_000);
+            return sent;
+        },
+        [auth, room, queryClient],
+    );
+
     // Écart d'horloge tablette ↔ serveur, mesuré à chaque réponse
     const offset = useMemo(() => (data ? data.server_time - dataUpdatedAt / 1000 : 0), [data, dataUpdatedAt]);
 
@@ -455,7 +489,7 @@ function AmbientView({
                         loadPerson={loadPerson}
                     />
                 ) : (
-                    <RestView now={now} data={data} />
+                    <RestView now={now} data={data} onPlay={onPlay} />
                 )}
             </div>
 
@@ -1220,19 +1254,30 @@ function BigFigure({ label, value, size = 11 }: { label: string; value: string; 
 
 /* ── Au repos ────────────────────────────────────────────────── */
 
-function RestView({ now, data }: { now: Date; data?: Ambient }) {
+/** Lancer un titre de « Ce soir » : renvoie la TV qui l'a reçu. */
+type PlayHandler = (play: AmbientPlay) => Promise<{ device: string; online: boolean }>;
+
+function RestView({ now, data, onPlay }: { now: Date; data?: Ambient; onPlay: PlayHandler }) {
     const room = data?.room_label;
     const amp = data?.amp ?? null;
     const hasPanels = !!data && (data.upcoming.length > 0 || data.downloads.length > 0 || !!amp);
+    const tonight = data?.tonight ?? null;
+    const hasTonight = !!tonight && (tonight.resume.length > 0 || tonight.watchlist.length > 0 || tonight.fresh.length > 0);
+    // « dans le salon » / « dans la salle de cinéma »
+    const inRoom = room ? ` dans ${room === "Salle de cinéma" ? "la salle de cinéma" : `le ${room.toLowerCase()}`}` : "";
     return (
-        <div className="flex min-h-[100dvh] flex-col justify-between" style={{ padding: u(5), gap: u(4) }}>
+        <div className="flex min-h-[100dvh] flex-col justify-between" style={{ padding: u(hasTonight ? 4 : 5), gap: u(hasTonight ? 2.5 : 4) }}>
             <header className="flex items-start justify-between" style={{ gap: u(3) }}>
                 <div>
-                    <p className="font-light leading-[0.85] tracking-tight tabular-nums text-slate-100" style={{ fontSize: u(30) }}>
+                    {/* Horloge plus petite quand « Ce soir » prend la place */}
+                    <p
+                        className="font-light leading-[0.85] tracking-tight tabular-nums text-slate-100"
+                        style={{ fontSize: u(hasTonight ? 15 : 30) }}
+                    >
                         {hhmm(now)}
                     </p>
                     {/* « Samedi 10 octobre » : majuscule au premier mot seulement */}
-                    <p className="text-slate-400 first-letter:uppercase" style={{ fontSize: u(5), marginTop: u(2.5) }}>
+                    <p className="text-slate-400 first-letter:uppercase" style={{ fontSize: u(hasTonight ? 3.4 : 5), marginTop: u(hasTonight ? 1.4 : 2.5) }}>
                         {longDay(now)}
                     </p>
                 </div>
@@ -1243,20 +1288,229 @@ function RestView({ now, data }: { now: Date; data?: Ambient }) {
                 )}
             </header>
 
-            <div className="flex flex-col" style={{ gap: u(3) }}>
+            {hasTonight ? (
+                <TonightShelf tonight={tonight} inRoom={inRoom} onPlay={onPlay} />
+            ) : (
                 <p className="text-slate-500" style={{ fontSize: u(3) }}>
-                    Rien en lecture{room ? ` dans ${room === "Salle de cinéma" ? "la salle de cinéma" : `le ${room.toLowerCase()}`}` : ""}. Lance un film sur
-                    la TV : l&apos;heure de fin s&apos;affichera ici en grand.
+                    Rien en lecture{inRoom}. Lance un film sur la TV : l&apos;heure de fin s&apos;affichera ici en grand.
                 </p>
-                {hasPanels && (
-                    <div className="flex portrait:flex-col" style={{ gap: u(3) }}>
-                        {data.upcoming.length > 0 && <UpcomingPanel upcoming={data.upcoming} now={now} />}
-                        {data.downloads.length > 0 && <DownloadsPanel downloads={data.downloads} />}
-                        {amp && <AmpPanel amp={amp} />}
+            )}
+
+            {hasPanels && (
+                <div className="flex portrait:flex-col" style={{ gap: u(3) }}>
+                    {data.upcoming.length > 0 && <UpcomingPanel upcoming={data.upcoming} now={now} />}
+                    {data.downloads.length > 0 && <DownloadsPanel downloads={data.downloads} />}
+                    {amp && <AmpPanel amp={amp} />}
+                </div>
+            )}
+        </div>
+    );
+}
+
+/* ── « Ce soir » : choisir quoi regarder, le lancer sur la TV ─── */
+
+const TONIGHT_TABS = [
+    { key: "resume", label: "Reprendre" },
+    { key: "watchlist", label: "Ma liste" },
+    { key: "fresh", label: "Nouveaux films" },
+] as const;
+type TonightKey = (typeof TONIGHT_TABS)[number]["key"];
+
+function TonightShelf({ tonight, inRoom, onPlay }: { tonight: NonNullable<Ambient["tonight"]>; inRoom: string; onPlay: PlayHandler }) {
+    // Une seule rangée à la fois (lisible depuis le canapé) : onglets, et
+    // seulement ceux qui ont quelque chose à proposer
+    const tabs = TONIGHT_TABS.filter((tab) => tonight[tab.key].length > 0);
+    const [picked, setPicked] = useState<TonightKey | null>(null);
+    const active = tabs.find((tab) => tab.key === picked)?.key ?? tabs[0]?.key;
+    const [chosen, setChosen] = useState<AmbientTile | null>(null);
+    if (!active) return null;
+    return (
+        <section className="flex min-h-0 flex-col" style={{ gap: u(1.8) }}>
+            <div className="flex items-center" style={{ gap: u(1.2) }}>
+                <p className="flex items-center text-slate-300" style={{ fontSize: u(3.4), gap: u(1.2), marginRight: u(1.5) }}>
+                    <Popcorn style={{ width: u(3.6), height: u(3.6) }} className="text-[#4A9EFF]" />
+                    Ce soir
+                </p>
+                {tabs.map((tab) => (
+                    <button
+                        key={tab.key}
+                        type="button"
+                        onClick={() => setPicked(tab.key)}
+                        className={cn(
+                            "rounded-full transition-colors duration-200",
+                            tab.key === active ? "bg-white text-black" : "bg-white/[0.08] text-slate-300 active:bg-white/[0.15]",
+                        )}
+                        style={{ fontSize: u(2.6), padding: `${u(0.9)} ${u(2.4)}` }}
+                    >
+                        {tab.label}
+                    </button>
+                ))}
+            </div>
+            {/* Défilement horizontal au doigt ; « snap » : les affiches s'alignent au bord */}
+            <div
+                key={active}
+                className="flex snap-x snap-mandatory overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                style={{ gap: u(2.4), scrollPaddingLeft: 0 }}
+            >
+                {tonight[active].map((tile, i) => (
+                    <TonightTile key={`${tile.title}-${tile.subtitle}-${i}`} tile={tile} index={i} onPick={() => setChosen(tile)} />
+                ))}
+            </div>
+            {/* Portail vers <body> : la page entière est décalée de quelques pixels
+                (anti-marquage, `transform`), ce qui casserait le « plein écran » fixe */}
+            {createPortal(
+                <AnimatePresence>
+                    {chosen && <LaunchSheet tile={chosen} inRoom={inRoom} onPlay={onPlay} onClose={() => setChosen(null)} />}
+                </AnimatePresence>,
+                document.body,
+            )}
+        </section>
+    );
+}
+
+function TonightTile({ tile, index, onPick }: { tile: AmbientTile; index: number; onPick: () => void }) {
+    return (
+        <motion.button
+            type="button"
+            onClick={onPick}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay: Math.min(index, 6) * 0.04, ease: [0.22, 1, 0.36, 1] }}
+            whileTap={{ scale: 0.96 }}
+            className="shrink-0 snap-start text-left"
+            style={{ width: u(15) }}
+        >
+            <div className="relative overflow-hidden bg-white/[0.06]" style={{ aspectRatio: "2 / 3", borderRadius: u(1.6) }}>
+                {tile.poster ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- affiches distantes (Radarr / TMDB), pas d'optimisation Next ici
+                    <img src={tile.poster} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover" />
+                ) : (
+                    <div className="absolute inset-0 flex items-center justify-center p-3 text-center text-slate-300" style={{ fontSize: u(2.6) }}>
+                        {tile.title}
+                    </div>
+                )}
+                {tile.progress !== null && (
+                    <div className="absolute inset-x-0 bottom-0 bg-black/50" style={{ height: u(0.7) }}>
+                        <div className="h-full bg-[#4A9EFF]" style={{ width: `${tile.progress}%` }} />
                     </div>
                 )}
             </div>
-        </div>
+            <p className="truncate text-slate-200" style={{ fontSize: u(2.4), marginTop: u(1) }}>
+                {tile.title}
+            </p>
+            <p className="truncate text-slate-500" style={{ fontSize: u(2.1) }}>
+                {tile.subtitle}
+            </p>
+        </motion.button>
+    );
+}
+
+/**
+ * Confirmation avant de lancer : un enfant qui tapote la tablette ne doit
+ * pas déclencher un film. Un toucher en dehors annule.
+ */
+function LaunchSheet({ tile, inRoom, onPlay, onClose }: { tile: AmbientTile; inRoom: string; onPlay: PlayHandler; onClose: () => void }) {
+    const [state, setState] = useState<{ kind: "idle" | "sending" | "sent" | "error"; text?: string }>({ kind: "idle" });
+
+    // Envoyé : la fenêtre se ferme seule après un court message
+    useEffect(() => {
+        if (state.kind !== "sent") return;
+        const timer = setTimeout(onClose, 2_500);
+        return () => clearTimeout(timer);
+    }, [state.kind, onClose]);
+
+    const launch = async () => {
+        if (!tile.play || state.kind === "sending") return;
+        setState({ kind: "sending" });
+        try {
+            const sent = await onPlay(tile.play);
+            setState({
+                kind: "sent",
+                text: sent.online ? `Lancement sur ${sent.device}…` : `${sent.device} semble éteinte : allume-la, la demande attend 2 min.`,
+            });
+        } catch (err) {
+            setState({ kind: "error", text: err instanceof Error ? err.message : "Envoi impossible" });
+        }
+    };
+
+    const what = tile.kind === "episode" ? `${tile.title} · ${tile.subtitle}` : tile.title;
+    return (
+        <motion.div
+            // Rendue hors de la page (portail) : l'unité --u y est redéclarée
+            className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm landscape:[--u:min(1vh,0.625vw)] portrait:[--u:min(0.625vh,1vw)]"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={onClose}
+        >
+            <motion.div
+                className="relative w-full overflow-hidden bg-[#1C1C1E]"
+                style={{ maxWidth: u(110), margin: u(4), borderRadius: u(3) }}
+                initial={{ y: 40, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: 40, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 380, damping: 34 }}
+                onClick={(event) => event.stopPropagation()}
+            >
+                {tile.fanart && (
+                    <div className="absolute inset-0 bg-cover bg-center opacity-25" style={{ backgroundImage: `url(${tile.fanart})` }} />
+                )}
+                <div className="relative flex items-center" style={{ padding: u(4), gap: u(4) }}>
+                    {tile.poster && (
+                        // eslint-disable-next-line @next/next/no-img-element -- affiche distante
+                        <img src={tile.poster} alt="" className="shrink-0 object-cover" style={{ width: u(16), aspectRatio: "2 / 3", borderRadius: u(1.4) }} />
+                    )}
+                    <div className="min-w-0 flex-1">
+                        <p className="text-slate-400" style={{ fontSize: u(2.6) }}>
+                            {tile.play ? (tile.play.resume && tile.progress ? `Reprendre sur la TV${inRoom}` : `Lancer sur la TV${inRoom}`) : "Ma liste"}
+                        </p>
+                        <p className="font-semibold text-white" style={{ fontSize: u(4.4), lineHeight: 1.15, marginTop: u(0.8) }}>
+                            {what}
+                        </p>
+                        {!tile.play && (
+                            <p className="text-slate-400" style={{ fontSize: u(2.8), marginTop: u(1.4) }}>
+                                Série pas encore commencée : choisis l&apos;épisode depuis la TV.
+                            </p>
+                        )}
+                        {state.text && (
+                            <p
+                                className={state.kind === "error" ? "text-[#FF6961]" : "text-[#8CC4FF]"}
+                                style={{ fontSize: u(2.8), marginTop: u(1.4) }}
+                            >
+                                {state.text}
+                            </p>
+                        )}
+                        <div className="flex" style={{ gap: u(2), marginTop: u(3) }}>
+                            {tile.play && state.kind !== "sent" && (
+                                <button
+                                    type="button"
+                                    onClick={launch}
+                                    disabled={state.kind === "sending"}
+                                    className="flex items-center rounded-full bg-[#4A9EFF] font-semibold text-white transition-opacity active:opacity-80 disabled:opacity-60"
+                                    style={{ fontSize: u(3), padding: `${u(1.6)} ${u(4)}`, gap: u(1.2) }}
+                                >
+                                    {state.kind === "sending" ? (
+                                        <Loader2 className="animate-spin" style={{ width: u(3.2), height: u(3.2) }} />
+                                    ) : (
+                                        <Play className="fill-current" style={{ width: u(3.2), height: u(3.2) }} />
+                                    )}
+                                    {tile.play.resume && tile.progress ? "Reprendre" : "Lancer"}
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="rounded-full bg-white/[0.1] text-slate-200 active:bg-white/[0.18]"
+                                style={{ fontSize: u(3), padding: `${u(1.6)} ${u(4)}` }}
+                            >
+                                {state.kind === "sent" || !tile.play ? "Fermer" : "Annuler"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </motion.div>
+        </motion.div>
     );
 }
 

@@ -98,6 +98,9 @@ import fr.arrmada.app.data.FamilyProfile
 import fr.arrmada.app.ui.player.AudioContext
 import fr.arrmada.app.ui.profiles.ProfilesContent
 import fr.arrmada.app.ui.player.PauseMenu
+import fr.arrmada.app.ui.player.RecapScreen
+import fr.arrmada.app.data.Recap
+import fr.arrmada.app.data.WatchlistItem
 import fr.arrmada.app.ui.player.SubtitleDownload
 import fr.arrmada.app.ui.player.selectedSound
 import fr.arrmada.app.data.SoundAdvisor
@@ -202,6 +205,10 @@ class ScreenshotTest {
             ResumeEntry(WatchState(mediaType = "episode", idType = "tvdb", id = "305288", season = 4, episode = 3, title = "La traque", position = 1200, total = 3000), movie(11, "Stranger Things", 2016).copy(type = "series")),
             ResumeEntry(WatchState(mediaType = "movie", id = "1003", position = 5000, total = 10140), movie(3, "Interstellar", 2014)),
         ),
+        // « Ma liste » du profil : prêt à regarder d'abord, puis pas encore sur le NAS
+        watchlist = titles.drop(3).take(5).mapIndexed { i, t ->
+            WatchlistItem(key = "movie:tmdb:${7000 + i}", tmdbId = 7000L + i, title = t, posterUrl = "https://img/w$i", hasFile = i < 3, inLibrary = i < 4)
+        },
         recent = titles.mapIndexed { i, t -> movie(i + 1, t, 2010 + i) },
         forYou = titles.take(6).mapIndexed { i, t -> TmdbItem(tmdbId = 5000L + i, title = "$t 2", posterUrl = "https://img/r$i", year = "2026") },
         upcoming = titles.take(5).mapIndexed { i, t -> CalendarEntry(id = "c$i", title = t, label = "2026", posterUrl = "https://img/u$i", airDate = "2026-11-0${i + 1}T00:00:00Z") },
@@ -749,6 +756,20 @@ class ScreenshotTest {
                     absolute = noAbsolute, onSeason = {}, onPlay = { _, _ -> }, onMissing = {}, onMark = { _, _ -> }, onDownload = null,
                 )
             }
+        }
+    }
+
+    @Test
+    fun precedemment() {
+        // « Précédemment dans… » : série pas regardée depuis 12 jours
+        val previous = EpisodeInfo(
+            seasonNumber = 2, episodeNumber = 4, title = "Retour sur Cérès", hasFile = true,
+            overview = "Holden et l’équipage du Rocinante reviennent sur Cérès, où la station est en pleine révolte. " +
+                "Miller enquête sur la disparition de Julie Mao et découvre un lien avec la protomolécule.",
+        )
+        val recap = Recap(seriesTitle = "The Expanse", previous = previous, awayDays = 12, fanart = "https://img/fanart-expanse")
+        captureRoboImage(shot("40-precedemment-dans")) {
+            ArrMadaTheme { RecapScreen(recap, "S02E05", noAbsolute, onStart = {}, onReplayPrevious = {}, onExit = {}) }
         }
     }
 }

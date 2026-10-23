@@ -172,6 +172,39 @@ export interface Ambient {
     amp: AmbientAmp | null;
     downloads: AmbientDownload[];
     upcoming: AmbientUpcoming[];
+    /** « Ce soir » : seulement quand rien ne passe (null pendant une lecture). */
+    tonight?: AmbientTonight | null;
+}
+
+/** Demande de lecture d'une vignette (renvoyée telle quelle à POST /api/ambient/play). */
+export interface AmbientPlay {
+    media_type: "movie" | "episode";
+    /** TMDB d'un film, TVDB d'une série. */
+    id: string;
+    season: number | null;
+    episode: number | null;
+    title: string;
+    /** Reprendre où on en était (sinon depuis le début). */
+    resume: boolean;
+}
+
+export interface AmbientTile {
+    kind: "movie" | "episode" | "series";
+    title: string;
+    /** Année, « S02E03 » ou « Série ». */
+    subtitle: string;
+    poster: string;
+    fanart: string;
+    /** Avancement 1-99 (Reprendre), null sinon. */
+    progress: number | null;
+    /** null : à lancer depuis la TV (série de « Ma liste » jamais commencée). */
+    play: AmbientPlay | null;
+}
+
+export interface AmbientTonight {
+    resume: AmbientTile[];
+    watchlist: AmbientTile[];
+    fresh: AmbientTile[];
 }
 
 /* ── Séance en cours : position, début, fin ─────────────────── */

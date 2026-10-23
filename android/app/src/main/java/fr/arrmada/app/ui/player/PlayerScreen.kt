@@ -9,6 +9,11 @@ import android.content.pm.ActivityInfo
 import fr.arrmada.app.ui.components.LocalScreen
 import androidx.compose.foundation.layout.widthIn
 import fr.arrmada.app.ui.components.gutter
+import fr.arrmada.app.data.Recap
+import fr.arrmada.app.data.RecapLogic
+import fr.arrmada.app.data.TrickplayLogic
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.offset
 import android.view.KeyEvent as AndroidKeyEvent
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -158,6 +163,32 @@ fun PlayerScreen(request: PlayRequest, app: ArrMadaApplication, onExit: () -> Un
     var series by remember { mutableStateOf<SeriesDetail?>(null) }
     var local by remember { mutableStateOf<LocalSeriesDetail?>(null) } // série maison
     var error by remember { mutableStateOf<String?>(null) }
+    // « Précédemment dans… » : décidé en parallèle du chargement (2,5 s au plus)
+    var recap by remember(request) { mutableStateOf<Recap?>(null) }
+    var recapChecked by remember(request) {
+        mutableStateOf(!RecapLogic.applies(request.kind, request.startSeconds, request.sonarrId))
+    }
+
+    LaunchedEffect(request) {
+        if (recapChecked) return@LaunchedEffect
+        val found = withTimeoutOrNull(2_500) {
+            runCatching {
+                val detail = repository.series(request.sonarrId.orEmpty()) // en cache depuis l'écran Série
+                RecapLogic.recap(
+                    series = detail,
+                    states = repository.watchStates(),
+                    tvdbId = request.id,
+                    season = request.season,
+                    episode = request.episode,
+                    nowMs = System.currentTimeMillis(),
+                    shownRecently = repository.recapShownRecently(request.id),
+                )
+            }.getOrNull()
+        }
+        found?.let { repository.markRecapShown(request.id) }
+        recap = found
+        recapChecked = true
+    }
 
     LaunchedEffect(request) {
         try {
@@ -248,7 +279,23 @@ fun PlayerScreen(request: PlayRequest, app: ArrMadaApplication, onExit: () -> Un
     val play = info
     when {
         error != null -> return MessageScreen("Lecture impossible", error, "Retour", onExit)
-        play == null -> return MessageScreen("Préparation de la lecture…")
+        play == null || !recapChecked -> return MessageScreen("Préparation de la lecture…")
+    }
+    // « Précédemment dans… » d'abord (OK ou 15 s sans rien toucher : l'épisode part)
+    val shownRecap = recap
+    if (shownRecap != null) {
+        RecapScreen(
+            recap = shownRecap,
+            nextCode = "S%02dE%02d".format(request.season, request.episode),
+            absolute = app.api::absolute,
+            onStart = { recap = null },
+            // Revoir l'épisode d'avant : il remplace celui-ci (Retour ramène à l'écran Série)
+            onReplayPrevious = if (shownRecap.previous.hasFile) ({
+                onPlayNext(request.copy(season = shownRecap.previous.seasonNumber, episode = shownRecap.previous.episodeNumber, startSeconds = 0))
+            }) else null,
+            onExit = onExit,
+        )
+        return
     }
     PlayerSurface(request, play!!, meta, upNext, app, presetDone, onExit, onPlayNext)
 }
@@ -372,6 +419,9 @@ private fun PlayerSurface(
     }
     var osdUntil by remember { mutableLongStateOf(0L) }
     var position by remember { mutableLongStateOf(request.startSeconds * 1000L) }
+    // Aperçu en image (trickplay) : ←/→ déplacent une position visée, vignette
+    // à l'appui ; la lecture ne saute qu'une fois, quand on lâche la touche
+    var scrubTarget by remember { mutableStateOf<Long?>(null) }
     var duration by remember { mutableLongStateOf(info.duration * 1000L) }
     var tracks by remember { mutableStateOf(Tracks.EMPTY) }
     var playbackError by remember { mutableStateOf<String?>(null) }
@@ -412,6 +462,25 @@ private fun PlayerSurface(
             }
         }
         ampRead++
+    }
+
+    // Fin du défilement : un seul saut, 0,8 s après le dernier appui
+    LaunchedEffect(scrubTarget) {
+        val target = scrubTarget ?: return@LaunchedEffect
+        delay(800)
+        player.seekTo(target)
+        position = target
+        scrubTarget = null
+    }
+
+    /** ← / → : saut direct, ou défilement avec vignettes si Jellyfin en a généré. */
+    fun seekBy(forward: Boolean, repeat: Int) {
+        osdUntil = System.currentTimeMillis() + 3000
+        if (TrickplayLogic.frame(info.trickplay, 0.0) == null) {
+            if (forward) player.seekForward() else player.seekBack()
+            return
+        }
+        scrubTarget = TrickplayLogic.scrub(scrubTarget ?: player.currentPosition, TrickplayLogic.step(forward, repeat), duration)
     }
 
     val durationSeconds = (duration / 1000.0).takeIf { it > 0 } ?: info.duration.toDouble()
@@ -858,10 +927,10 @@ private fun PlayerSurface(
                         AndroidKeyEvent.KEYCODE_SPACE -> { swallowOkUp = ok; pause(); true }
                         AndroidKeyEvent.KEYCODE_MEDIA_PLAY -> { player.play(); true }
                         AndroidKeyEvent.KEYCODE_DPAD_LEFT, AndroidKeyEvent.KEYCODE_MEDIA_REWIND -> {
-                            player.seekBack(); osdUntil = System.currentTimeMillis() + 3000; true
+                            seekBy(forward = false, repeat = event.nativeKeyEvent.repeatCount); true
                         }
                         AndroidKeyEvent.KEYCODE_DPAD_RIGHT, AndroidKeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
-                            player.seekForward(); osdUntil = System.currentTimeMillis() + 3000; true
+                            seekBy(forward = true, repeat = event.nativeKeyEvent.repeatCount); true
                         }
                         AndroidKeyEvent.KEYCODE_DPAD_UP, AndroidKeyEvent.KEYCODE_DPAD_DOWN -> {
                             osdUntil = System.currentTimeMillis() + 3000; true
@@ -899,9 +968,27 @@ private fun PlayerSurface(
                     .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xCC000000))))
                     .padding(horizontal = gutter, vertical = 24.dp)
             ) {
-                ProgressBar(if (duration > 0) position.toFloat() / duration else 0f, Modifier.fillMaxWidth(), height = 4.dp)
+                val shown = scrubTarget ?: position // pendant le défilement : l'instant visé
+                val fraction = if (duration > 0) (shown.toFloat() / duration).coerceIn(0f, 1f) else 0f
+                val trickplay = info.trickplay
+                if (scrubTarget != null && trickplay != null) {
+                    // Vignette au-dessus de l'instant visé, sans sortir de l'écran
+                    BoxWithConstraints(Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
+                        val thumb = 240.dp
+                        val x = (maxWidth * fraction - thumb / 2).coerceIn(0.dp, (maxWidth - thumb).coerceAtLeast(0.dp))
+                        Column(Modifier.offset(x = x)) {
+                            TrickplayThumb(trickplay, shown / 1000.0, app.api::absolute, width = thumb)
+                            Text(
+                                formatClock(shown / 1000),
+                                style = MaterialTheme.typography.titleMedium,
+                                modifier = Modifier.padding(top = 4.dp).align(Alignment.CenterHorizontally),
+                            )
+                        }
+                    }
+                }
+                ProgressBar(fraction, Modifier.fillMaxWidth(), height = 4.dp)
                 Row(Modifier.fillMaxWidth().padding(top = 6.dp)) {
-                    Text(formatClock(position / 1000), style = MaterialTheme.typography.labelLarge)
+                    Text(formatClock(shown / 1000), style = MaterialTheme.typography.labelLarge)
                     Text(" / " + formatClock(duration / 1000), style = MaterialTheme.typography.labelLarge, color = ArrColors.TextSecondary)
                 }
             }

@@ -84,6 +84,9 @@ class Api(private val prefs: Prefs) {
         return decode(call(request, if (slow) slowHttp else http))
     }
 
+    suspend inline fun <reified T> delete(path: String): T =
+        decode(call(Request.Builder().url(baseUrl + path).delete().build()))
+
     /**
      * Même client, avec un délai de réponse de 45 s : pour les actions que le
      * serveur met longtemps à finir (« Débloquer » relance Radarr / Sonarr).

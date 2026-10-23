@@ -9,10 +9,11 @@
  *   2. Alertes, seulement s'il y en a (service hors ligne, disque plein)
  *   3. À l'écran (lecture en cours sur une TV)
  *   4. Reprendre (films / épisodes commencés)
- *   5. Ajoutés récemment
- *   6. À venir | Transferts
- *   7. Chiffres clés (films, séries, stockage, services)
- *   8. Activité récente
+ *   5. Ma liste (titres à voir du profil choisi)
+ *   6. Ajoutés récemment
+ *   7. À venir | Transferts
+ *   8. Chiffres clés (films, séries, stockage, services)
+ *   9. Activité récente
  * Les anciens blocs « techniques » (conformité TRaSH, détail des disques,
  * bandeau radar) ont quitté l'Accueil : ils restent dans Santé, TRaSH
  * Guides et Serveur (onglet « Plus »), où on les cherche quand on en a besoin.
@@ -26,6 +27,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { StatTile } from "@/components/shared/stat-tile";
 import { NowPlayingCard } from "@/components/dashboard/now-playing";
 import { ContinueShelf } from "@/components/dashboard/continue-shelf";
+import { WatchlistShelf } from "@/components/dashboard/watchlist-shelf";
 import { RecentAdditions } from "@/components/dashboard/recent-additions";
 import { ActivityFeedCard } from "@/components/dashboard/activity-feed";
 import { DownloadsWidget } from "@/components/dashboard/downloads-widget";
@@ -97,6 +99,7 @@ export default function DashboardPage() {
 
                 <NowPlayingCard />
                 <ContinueShelf />
+                <WatchlistShelf />
                 <RecentAdditions />
 
                 <div className="grid grid-cols-1 gap-7 lg:grid-cols-2 lg:gap-6">

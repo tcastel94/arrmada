@@ -10,7 +10,10 @@ pendant une lecture), elle demande :
     durée, début de la séance), d'après le suivi de lecture des TV ;
   - l'ampli de la pièce (marche, volume, entrée, programme) ;
   - les téléchargements en cours ;
-  - ce qui sort ce soir et demain (calendrier).
+  - ce qui sort ce soir et demain (calendrier) ;
+  - quand rien ne passe : « Ce soir » (reprendre, Ma liste, nouveaux films),
+    chaque titre se lance sur la TV de la pièce d'un toucher
+    (`POST /api/ambient/play`, voir services/ambient_tonight.py).
 
 Chaque bloc est indépendant : un ampli éteint ou un Sonarr en panne ne vide
 pas le reste de l'écran. Petits caches (5 s à 5 min) : dix tablettes ne
@@ -24,10 +27,12 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
-from app.models.device import AMP_ROOMS, ROOMS
+from app.models.device import AMP_ROOMS, ROOMS, Device
+from app.services import ambient_tonight, watch_summary, watch_sync
 from app.services.now_playing import now_playing
 from app.services.tv_remote import InvalidCommand, clean_command, remote_queue
 from app.utils.cache import cache
@@ -201,6 +206,23 @@ async def _upcoming(db: AsyncSession) -> list[dict[str, Any]]:
     ]
 
 
+async def _tonight(db: AsyncSession) -> dict[str, list[dict[str, Any]]]:
+    """« Ce soir » (profil Famille, celui des TV), gardé 60 s pour toutes les tablettes."""
+    from app.services import watchlist
+
+    async def _fetch():
+        summary = await watch_summary.load_summary(db)
+        library = await watchlist._library(db)  # médiathèque en cache, [] si *arr en panne
+        items = await watchlist.list_items(db, None)
+        return ambient_tonight.build(summary, library, items, datetime.now(UTC))
+
+    try:
+        return await cache.get_or_set("ambient:tonight", _fetch, ttl_seconds=60)
+    except Exception as exc:
+        logger.debug("[Ambient] ce soir : %s", exc)
+        return {"resume": [], "watchlist": [], "fresh": []}
+
+
 @router.get("")
 async def ambient(
     room: str | None = None,
@@ -225,6 +247,8 @@ async def ambient(
         "room": room,
         "room_label": ROOM_LABELS.get(room, room),
         "playing": playing_view(state),
+        # Calculé seulement entre deux lectures (inutile pendant un film)
+        "tonight": None if state else await _tonight(db),
         # Bureau : pas d'ampli (sinon l'écran montrerait celui du salon)
         "amp": await _amp(db, avr) if room in AMP_ROOMS else None,
         "downloads": await _downloads(db),
@@ -318,3 +342,86 @@ async def command(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     entry = await remote_queue.push(room, cleaned)
     return {"status": "ok", "id": entry["id"]}
+
+
+async def _room_tv(db: AsyncSession, room: str) -> Device | None:
+    """TV de la pièce : la dernière à s'être manifestée (plusieurs : la plus récente)."""
+    rows = (
+        (await db.execute(select(Device).where(Device.kind == "tv", Device.room == room)))
+        .scalars()
+        .all()
+    )
+    if not rows:
+        return None
+    epoch = datetime.min.replace(tzinfo=UTC)
+    return max(
+        rows,
+        key=lambda d: watch_sync.as_utc(d.last_seen_at) if d.last_seen_at else epoch,
+    )
+
+
+@router.post("/play")
+async def play(
+    data: dict, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)
+) -> dict[str, Any]:
+    """« Ce soir » : lance un titre proposé sur la TV de la pièce de la tablette.
+
+    Garde-fous : la tablette ne peut lancer QUE ce qu'elle affiche (titres de
+    « Ce soir », vérifiés côté serveur), sur la TV de SA pièce, et seulement
+    quand rien n'y passe déjà. Même mécanisme que « Lire sur la TV » de la web
+    app : un événement `play_request` adressé à cette TV.
+    """
+    payload = data or {}
+    if user.get("role") == "device":
+        room = user.get("room") or "salon"
+    else:
+        room = str(payload.get("room") or "salon")
+    if room not in ROOMS:
+        raise HTTPException(status_code=422, detail="Pièce inconnue")
+    if now_playing.current(room, time.time()):
+        raise HTTPException(status_code=409, detail="Une lecture est déjà en cours")
+
+    try:
+        wanted = ambient_tonight.play_key(payload)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail="Titre à lire invalide") from exc
+    if wanted not in ambient_tonight.offered(await _tonight(db)):
+        raise HTTPException(status_code=422, detail="Titre non proposé sur cet écran")
+
+    device = await _room_tv(db, room)
+    if device is None:
+        raise HTTPException(status_code=409, detail="Aucune TV appairée dans cette pièce")
+    now = datetime.now(UTC)
+    request = watch_summary.play_request(
+        {"id": device.id, "name": device.name, "room": device.room},
+        # Seulement les champs connus (pas de « file » : pas de vidéo de dossier ici)
+        {k: payload.get(k) for k in ("media_type", "id", "season", "episode", "title", "resume")},
+        now,
+    )
+    if request is None or request["media_type"] not in ("movie", "episode"):
+        raise HTTPException(status_code=422, detail="Titre à lire invalide")
+
+    from app.services.activity_log import log_event
+    from app.utils.event_bus import event_bus
+
+    await event_bus.publish(event_type="play_request", data=request)
+    code = (
+        f" S{request['season']:02d}E{request['episode']:02d}"
+        if request["media_type"] == "episode"
+        else ""
+    )
+    await log_event(
+        category="playback",
+        action="play_on_device",
+        source="arrmada",
+        subtitle="Depuis la tablette",
+        media_type=request["media_type"],
+        tmdb_id=int(request["id"]) if request["id_type"] == "tmdb" else None,
+        title=f"{request['title']}{code}" or None,
+        device=device.name,
+    )
+    return {
+        "status": "sent",
+        "device": device.name,
+        "online": watch_summary.is_online(device.last_seen_at, now),
+    }

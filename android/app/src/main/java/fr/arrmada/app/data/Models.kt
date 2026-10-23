@@ -256,6 +256,21 @@ data class Chapter(
 @Serializable
 data class Resume(val position: Int = 0, val watched: Boolean = false)
 
+/**
+ * Vignettes « trickplay » : une image toutes les [interval] s, rangées par
+ * planches de [tileWidth] × [tileHeight] (GET [url]/<n° de planche>).
+ */
+@Serializable
+data class Trickplay(
+    val width: Int = 0, // px d'une vignette
+    val height: Int = 0,
+    @SerialName("tile_width") val tileWidth: Int = 0, // vignettes par ligne d'une planche
+    @SerialName("tile_height") val tileHeight: Int = 0, // lignes par planche
+    val count: Int = 0, // vignettes en tout
+    val interval: Double = 0.0, // secondes entre deux vignettes
+    val url: String = "",
+)
+
 @Serializable
 data class Segment(val kind: String = "", val start: Double = 0.0, val end: Double = 0.0)
 
@@ -279,6 +294,8 @@ data class PlayInfo(
     @SerialName("dovi_only") val doviOnly: Boolean = false,
     @SerialName("sdr_stream") val sdrStream: String = "",
     val chapters: List<Chapter> = emptyList(),
+    // Vignettes de la barre de lecture (Jellyfin 10.9+), null si non générées
+    val trickplay: Trickplay? = null,
     val resume: Resume = Resume(),
     val segments: List<Segment> = emptyList(),
     // Écran Vidéos : identifiant de vu / reprise du fichier, sous-titres posés à côté

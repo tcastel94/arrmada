@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Four new features: watchlist, "Ce soir" on the tablet, "Précédemment dans…", seek thumbnails (APK 2.12.0)
+
+#### Added
+- **"Ma liste" (watchlist), per family profile.** New table `watchlist_items` (created automatically) and API `GET / POST / DELETE /api/watchlist`: the TV reads the list of the profile that is watching (`X-Profile-Id`), the web app picks the profile with `?profile=`. Titles are keyed by their public id (TMDB for a film, TVDB for a series), so a title can be in the list before it is on the NAS; each entry shows its library state (ready, requested, not on the NAS). `POST … {request: true}` also asks Radarr / Sonarr for a missing title (no "tonight" priority). 200 titles per profile
+  - **Web app**: "Ma liste" page (Plus › Bibliothèque, shortcut `l`) with a per-profile picker, a "Ma liste" row on the Accueil, a **+ / ✓** button on every media page and in the recommendation details (adds and requests)
+  - **TV app**: "Ma liste" row on the home screen (ready titles first; OK opens the film / series, or the Télécharger sheet when it is not tracked yet) and a **"Ma liste" / "✓ Dans ma liste"** button on the film and series screens
+- **Tablet between two films ("Ce soir")**: when nothing plays, the tablet's idle screen shows a **Ce soir** row with three tabs: **Reprendre** (started films and episodes), **Ma liste** (Famille list, titles on the NAS) and **Nouveaux films** (added in the last 14 days, not watched). Touching a poster opens a confirmation sheet; **Lancer / Reprendre** starts it on the TV of the tablet's room. New screen-scope route `POST /api/ambient/play`: the server only accepts a title the tablet is showing, sends it to the room's TV (the one seen last) as a `play_request`, and refuses when something is already playing or no TV is paired in the room. The clock shrinks when the row is shown; everything fits on one landscape screen
+- **"Précédemment dans…" (TV app)**: starting an episode from the beginning of a series not watched for 7 days or more shows the previous episode's title and summary (from Sonarr) over the series backdrop, with **▶ Lancer** (focused, starts by itself after 15 s, e.g. when launched from the tablet) and **Revoir S02E04**. Never for a resume, a series never watched, or twice in a row for the same series (6 h)
+- **Seek thumbnails (TV app)**: with Jellyfin trickplay images (10.9+, library option "Activer l'extraction des images trickplay"), **← / →** now scrub: each press moves a target time and shows the picture at that time above the progress bar, and playback jumps once you let go (0.8 s). Holding the key speeds up (×2 after 5 repeats, ×4 after 15). `trickplay` added to `/api/tv/play/…` (closest size to 320 px) and new route `GET /api/tv/trickplay/{item}/{width}/{tile}` relaying Jellyfin's tile sheets unresized (TV scope). Without trickplay images, ← / → keep jumping −10 s / +30 s directly
+- Tests: 6 watchlist API tests, 6 "Ce soir" tests (rows, de-duplication, launch scope), 2 trickplay server tests, 15 JVM tests (WatchlistLogic, RecapLogic, TrickplayLogic), 1 new screenshot ("Précédemment dans…") and the "Ma liste" row on the home screenshot
+
 ### Web app redesign, part 1: clean design system and iOS-style navigation
 
 #### Changed

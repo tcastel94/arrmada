@@ -298,6 +298,41 @@ class Repository(private val api: Api) {
             statesCursor = ""
         }
         details.keys.removeAll { it.startsWith("play:") }
+        watchlistKeys = null // chacun sa liste
+    }
+
+    // ── Liste « À voir » du profil qui regarde ──
+    // Clés des titres de la liste, gardées en mémoire : le bouton « Ma liste »
+    // d'une fiche sait tout de suite s'il est coché, sans relire le serveur.
+    private var watchlistKeys: Set<String>? = null
+
+    suspend fun watchlist(): List<WatchlistItem> =
+        api.get<Watchlist>("/api/watchlist").items.also { list -> watchlistKeys = list.map { it.key }.toSet() }
+
+    /** Le titre est-il dans la liste ? (première question : la liste est relue une fois) */
+    suspend fun inWatchlist(key: String): Boolean {
+        if (watchlistKeys == null) runCatching { watchlist() }
+        return watchlistKeys?.contains(key) == true
+    }
+
+    suspend fun addToWatchlist(target: WatchlistTarget): WatchlistItem =
+        api.post<WatchlistAdded, WatchlistAdd>("/api/watchlist", target.body()).item.also {
+            watchlistKeys = watchlistKeys.orEmpty() + target.key
+        }
+
+    suspend fun removeFromWatchlist(target: WatchlistTarget) {
+        api.delete<kotlinx.serialization.json.JsonObject>("/api/watchlist/${target.mediaType}/${target.id}")
+        watchlistKeys = watchlistKeys.orEmpty() - target.key
+    }
+
+    // ── « Précédemment dans… » : une fois par série et par séance (6 h) ──
+    private val recapShown = java.util.concurrent.ConcurrentHashMap<Long, Long>()
+
+    fun recapShownRecently(tvdbId: Long): Boolean =
+        recapShown[tvdbId]?.let { System.currentTimeMillis() - it < 6 * 3600_000L } == true
+
+    fun markRecapShown(tvdbId: Long) {
+        recapShown[tvdbId] = System.currentTimeMillis()
     }
 
     suspend fun movieTrailer(tmdbId: Long): TrailerInfo =

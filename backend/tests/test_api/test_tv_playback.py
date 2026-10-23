@@ -58,6 +58,13 @@ def _items(params: dict, _m: Any) -> Any:
                 {"Name": "Arrakis", "StartPositionTicks": int(612.5 * T), "ImageTag": "b2"},
                 {"Name": "Sans vignette", "StartPositionTicks": 1800 * T},
             ],
+            # Vignettes trickplay (Jellyfin 10.9+) : 320 et 640 px, 10 × 10 par planche
+            "Trickplay": {MOVIE_ID: {
+                "640": {"Width": 640, "Height": 266, "TileWidth": 10, "TileHeight": 10,
+                        "ThumbnailCount": 930, "Interval": 10000},
+                "320": {"Width": 320, "Height": 133, "TileWidth": 10, "TileHeight": 10,
+                        "ThumbnailCount": 930, "Interval": 10000},
+            }},
         }]}  # fmt: skip
     if params.get("ids") == REMUX_ID:
         return {"Items": [{
@@ -141,6 +148,16 @@ def _chapter(params: dict, m: Any) -> httpx.Response:
     return httpx.Response(200, content=b"\xff\xd8jpeg", headers={"Content-Type": "image/jpeg"})
 
 
+def _trickplay(params: dict, m: Any) -> httpx.Response:
+    SEEN["trickplay"] = {
+        "item": m.group(1),
+        "width": m.group(2),
+        "index": m.group(3),
+        "params": params,
+    }
+    return httpx.Response(200, content=b"\xff\xd8tiles", headers={"Content-Type": "image/jpeg"})
+
+
 def _primary(params: dict, m: Any) -> httpx.Response:
     SEEN["primary"] = {"item": m.group(1), "params": params}
     return httpx.Response(200, content=b"\xff\xd8ep", headers={"Content-Type": "image/jpeg"})
@@ -185,6 +202,7 @@ async def jellyfin(
         (r"/Videos/([^/]+)/([^/]+)/Subtitles/(\d+)/0/Stream\.(srt|ass|vtt)", _subtitle),
         (r"/Videos/([^/]+)/((?:master|main)\.m3u8|hls1/.+)", _hls),
         (r"/Items/([^/]+)/Images/Chapter/(\d+)", _chapter),
+        (r"/Videos/([^/]+)/Trickplay/(\d+)/(\d+)\.jpg", _trickplay),
         (r"/Items/([^/]+)/Images/Primary", _primary),
     ]
     monkeypatch.setattr(fake_arr, "ROUTES", routes)
@@ -220,6 +238,8 @@ async def _tv(client: AsyncClient, admin: dict[str, str]) -> dict[str, str]:
         ("GET", "/api/tv/play/episode/280619/2/2", True),
         ("GET", f"/api/tv/stream/{MOVIE_ID}", True),
         ("GET", f"/api/tv/chapter-image/{MOVIE_ID}/3", True),
+        ("GET", f"/api/tv/trickplay/{MOVIE_ID}/320/4", True),
+        ("GET", f"/api/tv/trickplay/{MOVIE_ID}/../4", False),
         ("GET", f"/api/tv/item-image/{MOVIE_ID}", True),
         ("GET", "/api/tv/series/280619/season/2", True),
         ("GET", "/api/tv/item-image/abc", False),
@@ -360,6 +380,37 @@ async def test_chapter_image(client: AsyncClient, jellyfin: dict[str, str]) -> N
     assert resp.headers["content-type"] == "image/jpeg"
     assert SEEN["chapter"]["index"] == "1"
     assert SEEN["chapter"]["params"]["ApiKey"] == "j-key"
+
+
+def test_parse_trickplay() -> None:
+    from app.services import tv_playback
+
+    info = {"Width": 320, "Height": 180, "TileWidth": 10, "TileHeight": 10,
+            "ThumbnailCount": 42, "Interval": 5000}  # fmt: skip
+    parsed = tv_playback.parse_trickplay(MOVIE_ID, {"other": {"320": info, "1280": info}})
+    assert parsed == {"width": 320, "height": 180, "tile_width": 10, "tile_height": 10,
+                      "count": 42, "interval": 5.0,
+                      "url": f"/api/tv/trickplay/{MOVIE_ID}/320"}  # fmt: skip
+    assert tv_playback.parse_trickplay(MOVIE_ID, None) is None
+    assert tv_playback.parse_trickplay(MOVIE_ID, {}) is None
+    assert tv_playback.parse_trickplay(MOVIE_ID, {MOVIE_ID: {"320": {"Width": 0}}}) is None
+    assert tv_playback.parse_trickplay(MOVIE_ID, {MOVIE_ID: {"x": info}}) is None
+
+
+async def test_trickplay_tiles(client: AsyncClient, jellyfin: dict[str, str]) -> None:
+    tv = await _tv(client, jellyfin)
+    play = (await client.get("/api/tv/play/movie/438631", headers=tv)).json()
+    assert play["trickplay"]["width"] == 320 and play["trickplay"]["count"] == 930
+    assert play["trickplay"]["url"] == f"/api/tv/trickplay/{MOVIE_ID}/320"
+    resp = await client.get(f"{play['trickplay']['url']}/4", headers=tv)
+    assert resp.status_code == 200 and resp.content == b"\xff\xd8tiles"
+    # La planche est relayée telle quelle : surtout pas réduite à 480 px
+    assert SEEN["trickplay"]["index"] == "4" and "maxWidth" not in SEEN["trickplay"]["params"]
+    assert (
+        await client.get(f"/api/tv/trickplay/{MOVIE_ID}/320/99999", headers=tv)
+    ).status_code == 404
+    # Identifiant qui n'est pas un id Jellyfin : refusé dès le périmètre du jeton
+    assert (await client.get("/api/tv/trickplay/pas-un-id/320/1", headers=tv)).status_code == 403
 
 
 # ── Écran Série : épisodes et vignettes ───────────────────────
