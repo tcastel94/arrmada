@@ -80,6 +80,8 @@ import fr.arrmada.app.ui.home.HomeScreen
 import fr.arrmada.app.ui.home.HomeViewModel
 import fr.arrmada.app.ui.home.LibraryScreen
 import fr.arrmada.app.ui.player.PlayRequest
+import fr.arrmada.app.data.WatchlistLogic
+import fr.arrmada.app.data.WatchlistOpen
 import fr.arrmada.app.ui.player.PlayerScreen
 import fr.arrmada.app.ui.player.ScreenCapabilities
 import fr.arrmada.app.ui.request.DownloadScreen
@@ -483,6 +485,13 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
                     openMovieId = { nav.navigate(Routes.movie(it.toString())) },
                     openSeriesId = { nav.navigate(Routes.show(it.toString())) },
                     resume = { entry -> nav.navigate(Routes.play(resumeRequest(entry))) },
+                    openWatchlist = { item ->
+                        when (val target = WatchlistLogic.open(item)) {
+                            is WatchlistOpen.Movie -> nav.navigate(Routes.movie(target.radarrId, target.tmdbId))
+                            is WatchlistOpen.Show -> nav.navigate(Routes.show(target.sonarrId))
+                            is WatchlistOpen.Download -> openDownload(target.target)
+                        }
+                    },
                     request = ::openTmdb,
                     go = ::go,
                     prefetch = prefetcher::focus,

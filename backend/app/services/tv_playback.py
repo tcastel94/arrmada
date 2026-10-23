@@ -64,7 +64,8 @@ _FORWARDED = (
 )
 
 # Champs demandés à Jellyfin pour un élément
-_FIELDS = "Chapters,Overview,MediaSources,ProviderIds,Path"
+# (Trickplay : vignettes de la barre de lecture, Jellyfin 10.9+)
+_FIELDS = "Chapters,Overview,MediaSources,ProviderIds,Path,Trickplay"
 
 # Extensions que le lecteur de la TV (ExoPlayer) ouvre directement. Les
 # autres (.m2ts, .mts, .iso, .vob, .img…) passent par le remux de Jellyfin.
@@ -89,6 +90,11 @@ def stream_path(item_id: str) -> str:
 
 def chapter_image_path(item_id: str, index: int) -> str:
     return f"/api/tv/chapter-image/{item_id}/{index}"
+
+
+def trickplay_path(item_id: str, width: int) -> str:
+    """Planches de vignettes : la TV ajoute « /<n° de planche> »."""
+    return f"/api/tv/trickplay/{item_id}/{width}"
 
 
 def item_image_path(item_id: str) -> str:
@@ -278,6 +284,48 @@ def parse_chapters(item_id: str, raw: Any) -> list[dict[str, Any]]:
     return chapters
 
 
+TRICKPLAY_WIDTH = 320  # largeur de vignette préférée (lisible au-dessus de la barre)
+
+
+def parse_trickplay(item_id: str, raw: Any) -> dict[str, Any] | None:
+    """Vignettes de la barre de lecture (« trickplay » de Jellyfin 10.9+) → format de la TV.
+
+    Jellyfin range une vignette toutes les `Interval` ms, assemblées en
+    planches de TileWidth × TileHeight (une image JPEG = jusqu'à 100
+    vignettes) : la TV télécharge une planche et y découpe la vignette de
+    l'instant visé. None si Jellyfin ne les a pas générées (option
+    « Activer l'extraction des images trickplay » de la bibliothèque).
+    """
+    if not isinstance(raw, dict) or not raw:
+        return None
+    # Une entrée par version du fichier (MediaSourceId) : celle de l'élément, sinon la première
+    per_source = raw.get(item_id) or next(iter(raw.values()))
+    if not isinstance(per_source, dict):
+        return None
+    options = []
+    for width_key, info in per_source.items():
+        try:
+            width = int(width_key)
+            entry = {
+                "width": int(info.get("Width") or width),
+                "height": int(info.get("Height") or 0),
+                "tile_width": int(info.get("TileWidth") or 0),
+                "tile_height": int(info.get("TileHeight") or 0),
+                "count": int(info.get("ThumbnailCount") or 0),
+                "interval": int(info.get("Interval") or 0) / 1000,
+            }
+        except (AttributeError, TypeError, ValueError):
+            continue
+        if min(entry.values()) <= 0:
+            continue
+        options.append((width, entry))
+    if not options:
+        return None
+    # La plus proche de 320 px (Jellyfin en propose souvent 320, parfois 480…)
+    width, entry = min(options, key=lambda pair: abs(pair[0] - TRICKPLAY_WIDTH))
+    return {**entry, "url": trickplay_path(item_id, width)}
+
+
 def duration_seconds(item: dict[str, Any]) -> int:
     try:
         return int(int(item.get("RunTimeTicks") or 0) / jellyfin.TICKS_PER_SECOND)
@@ -326,6 +374,8 @@ def _found(item_id: str, details: dict[str, Any] | None, resume: dict[str, Any])
         "dovi_only": image["dovi_only"],
         "sdr_stream": sdr_path(item_id),
         "chapters": parse_chapters(item_id, details.get("Chapters")),
+        # Aperçu en image quand on avance / recule (None : pas généré par Jellyfin)
+        "trickplay": parse_trickplay(item_id, details.get("Trickplay")),
         "resume": resume,
         # Sous-titres posés à côté du fichier (.fr.srt de Bazarr…) : le lecteur
         # ne voit que les pistes du MKV, on les lui ajoute
@@ -817,12 +867,15 @@ async def sync_subtitles(db: AsyncSession, item_id: str, data: dict[str, Any]) -
     }
 
 
-async def _image(db: AsyncSession, path: str) -> tuple[bytes, str]:
+async def _image(db: AsyncSession, path: str, resize: bool = True) -> tuple[bytes, str]:
+    """Image relayée depuis Jellyfin ; `resize` : réduite à 480 px (pas une planche trickplay)."""
     cfg = await jellyfin.get_config(db)
     if not cfg:
         raise UpstreamError(503, "Jellyfin non configuré")
     base, key = cfg
-    params = {jellyfin.KEY_PARAM: key, "maxWidth": 480, "quality": 85}
+    params: dict[str, Any] = {jellyfin.KEY_PARAM: key}
+    if resize:
+        params.update({"maxWidth": 480, "quality": 85})
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             r = await client.get(f"{base}{path}?{urlencode(params)}")
@@ -838,6 +891,15 @@ async def chapter_image(db: AsyncSession, item_id: str, index: int) -> tuple[byt
     if not ITEM_ID.match(item_id) or not 0 <= index <= 999:
         raise UpstreamError(404, "Vignette inconnue")
     return await _image(db, f"/Items/{item_id}/Images/Chapter/{index}")
+
+
+async def trickplay_tile(
+    db: AsyncSession, item_id: str, width: int, index: int
+) -> tuple[bytes, str]:
+    """Planche de vignettes trickplay (JPEG), relayée telle quelle (la TV la découpe)."""
+    if not ITEM_ID.match(item_id) or not 1 <= width <= 1920 or not 0 <= index <= 9999:
+        raise UpstreamError(404, "Planche inconnue")
+    return await _image(db, f"/Videos/{item_id}/Trickplay/{width}/{index}.jpg", resize=False)
 
 
 async def item_image(db: AsyncSession, item_id: str) -> tuple[bytes, str]:

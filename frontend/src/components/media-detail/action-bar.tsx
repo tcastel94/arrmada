@@ -49,6 +49,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { CastDialog } from "@/components/cast-button";
 import { TrailerModal } from "@/components/media/trailer-modal";
+import { WatchlistButton } from "@/components/watchlist/watchlist-button";
 import { PlayOnTvButton, seriesTarget } from "@/components/media/play-on-tv";
 import { episodeCode, useWatchSummary } from "@/hooks/use-watch";
 import { useKodiPlay, useKodiSettings, type KodiInstance, type KodiRoom } from "@/hooks/use-kodi";
@@ -162,6 +163,20 @@ export function ActionBar({ media, onEdit, onMove, onDelete, onManualSearch }: A
             )}
 
             {/* ── Bande-annonce (discrète, lecteur intégré) ─────── */}
+            {/* ── Ma liste (« À voir ») du profil choisi ───────────── */}
+            <WatchlistButton
+                iconOnly
+                className="h-12 w-12 rounded-2xl"
+                target={{
+                    media_type: isMovie ? "movie" : "series",
+                    tmdb_id: media.tmdb_id,
+                    tvdb_id: media.tvdb_id,
+                    title: media.title,
+                    year: media.year,
+                    poster_url: media.images?.poster,
+                }}
+            />
+
             <TrailerModal youtubeId={media.youtube_trailer_id} title={media.title} />
 
             {/* ── Menu « ⋯ » ─────────────────────────────────────── */}

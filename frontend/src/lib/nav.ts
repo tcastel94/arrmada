@@ -31,6 +31,7 @@ import {
     BarChart3,
     Settings,
     BookMarked,
+    Bookmark,
     Bell,
     CalendarDays,
     HardDrive,
@@ -106,6 +107,15 @@ export const NAV_GROUPS: NavGroup[] = [
                 description: "Films et épisodes commencés sur tes TV",
                 shortcut: "e",
                 keywords: ["en cours", "reprise", "continuer", "vu", "kodi", "tv"],
+            },
+            {
+                href: "/watchlist",
+                label: "Ma liste",
+                icon: Bookmark,
+                tint: "bg-[#FF375F]",
+                description: "Films et séries à voir, par profil",
+                shortcut: "l",
+                keywords: ["à voir", "watchlist", "liste", "envies", "favoris"],
             },
             {
                 href: "/media/missing",

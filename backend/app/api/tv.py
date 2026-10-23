@@ -202,6 +202,21 @@ async def chapter_image(item_id: str, index: int, db: AsyncSession = Depends(get
     )
 
 
+@router.get("/trickplay/{item_id}/{width}/{index}")
+async def trickplay(
+    item_id: str, width: int, index: int, db: AsyncSession = Depends(get_db)
+) -> Response:
+    """Planche de vignettes de la barre de lecture (aperçu quand on avance)."""
+    try:
+        content, media_type = await tv_playback.trickplay_tile(db, item_id, width, index)
+    except tv_playback.UpstreamError as exc:
+        raise HTTPException(exc.status_code, exc.detail) from exc
+    # Les vignettes d'un fichier ne changent pas : gardées une journée par la TV
+    return Response(
+        content, media_type=media_type, headers={"Cache-Control": "private, max-age=86400"}
+    )
+
+
 @router.get("/item-image/{item_id}")
 async def item_image(item_id: str, db: AsyncSession = Depends(get_db)) -> Response:
     """Vignette d'un épisode (écran Série)."""

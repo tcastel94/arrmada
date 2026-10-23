@@ -181,6 +181,15 @@ fun SeriesScreen(
         onMark = ::mark,
         onDownload = { onDownload(s) },
         onSendToTv = if (LocalScreen.current.isTouch && s.tvdbId != null) ({ row: EpisodeRow -> sendTo = row }) else null,
+        // Liste « À voir » du profil qui regarde (repérée par l'id TVDB, comme Sonarr)
+        extraActions = {
+            s.tvdbId?.let { tvdb ->
+                fr.arrmada.app.ui.components.WatchlistButton(
+                    fr.arrmada.app.data.WatchlistTarget("series", tvdb, s.title, s.year, s.images.poster),
+                    repository,
+                )
+            }
+        },
     )
 
     // « Sur la TV » : épisode envoyé à une TV de la maison
@@ -229,6 +238,8 @@ fun SeriesContent(
     onMark: (EpisodeRow, watched: Boolean) -> Unit,
     onDownload: (() -> Unit)?, // null : série maison, pas de Sonarr
     onSendToTv: ((EpisodeRow) -> Unit)? = null, // téléphone / tablette : « Sur la TV »
+    // Boutons en plus, après « Télécharger » (« Ma liste » ; rien pour une série maison)
+    extraActions: @Composable () -> Unit = {},
 ) {
     val mainFocus = remember { FocusRequester() }
     var focused by remember(season) { mutableStateOf<EpisodeRow?>(null) }
@@ -293,6 +304,7 @@ fun SeriesContent(
                 if (onDownload != null) {
                     ArrButton("Télécharger", onDownload, modifier = if (nextUp == null) Modifier.focusRequester(mainFocus) else Modifier)
                 }
+                extraActions()
             }
 
             // ── Saisons ──

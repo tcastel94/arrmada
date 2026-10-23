@@ -51,6 +51,8 @@ import fr.arrmada.app.data.LocalSeriesLogic
 import fr.arrmada.app.data.Repository
 import fr.arrmada.app.data.ResumeEntry
 import fr.arrmada.app.data.TmdbItem
+import fr.arrmada.app.data.WatchlistItem
+import fr.arrmada.app.data.WatchlistLogic
 import fr.arrmada.app.ui.components.ArrButton
 import fr.arrmada.app.ui.components.ContentRow
 import fr.arrmada.app.ui.components.KenBurnsBackdrop
@@ -78,6 +80,7 @@ data class HomeState(
     val loading: Boolean = true,
     val error: String? = null,
     val resume: List<ResumeEntry> = emptyList(),
+    val watchlist: List<WatchlistItem> = emptyList(), // « Ma liste » du profil qui regarde
     val recent: List<LibraryItem> = emptyList(),
     val forYou: List<TmdbItem> = emptyList(),
     val upcoming: List<CalendarEntry> = emptyList(),
@@ -103,6 +106,7 @@ class HomeViewModel(private val repository: Repository) : ViewModel() {
             val recent = async { runCatching { repository.recent() } }
             val forYou = async { runCatching { repository.recommendations() } }
             val upcoming = async { runCatching { repository.upcoming() } }
+            val watchlist = async { runCatching { WatchlistLogic.ordered(repository.watchlist()) } }
             val resume = async {
                 runCatching {
                     val states = repository.watchStates()
@@ -127,6 +131,7 @@ class HomeViewModel(private val repository: Repository) : ViewModel() {
                 // Erreur bloquante seulement si même la médiathèque ne répond pas
                 error = recentItems.exceptionOrNull()?.message,
                 resume = resume.await().getOrDefault(emptyList()),
+                watchlist = watchlist.await().getOrDefault(emptyList()),
                 recent = recentItems.getOrDefault(emptyList()),
                 forYou = recos?.let { r ->
                     (r.trendingMovies + r.becauseYouHave.flatMap { it.recommendations })
@@ -149,6 +154,7 @@ class HomeActions(
     val openMovieId: (Int) -> Unit = {}, // fiche film par identifiant Radarr
     val openSeriesId: (Int) -> Unit = {}, // écran Série par identifiant Sonarr
     val resume: (ResumeEntry) -> Unit = {},
+    val openWatchlist: (WatchlistItem) -> Unit = {}, // « Ma liste » : fiche, ou feuille « Télécharger »
     val request: (TmdbItem) -> Unit = {}, // titre absent : feuille « Télécharger »
     val go: (String) -> Unit = {},
     val prefetch: (LibraryItem) -> Unit = {}, // carte survolée : fiche préchargée
@@ -240,6 +246,17 @@ fun HomeContent(state: HomeState, absolute: (String?) -> String?, onRetry: () ->
                     }
                 }
                 item {
+                    ContentRow("Ma liste", state.watchlist, key = { "w" + it.key }) { item ->
+                        PosterCard(
+                            imageUrl = absolute(item.posterUrl),
+                            title = item.title,
+                            onClick = { actions.openWatchlist(item) },
+                            onFocus = { hero = heroOf(item, absolute) },
+                            modifier = if (state.resume.isEmpty() && item == state.watchlist.first()) Modifier.focusRequester(firstFocus) else Modifier,
+                        )
+                    }
+                }
+                item {
                     ContentRow("Ajouts récents", state.recent, key = { it.type + it.externalId }) { item ->
                         PosterCard(
                             imageUrl = absolute(item.posterUrl),
@@ -249,7 +266,7 @@ fun HomeContent(state: HomeState, absolute: (String?) -> String?, onRetry: () ->
                                 hero = heroOf(item, absolute)
                                 actions.prefetch(item)
                             },
-                            modifier = if (state.resume.isEmpty() && item == state.recent.first()) Modifier.focusRequester(firstFocus) else Modifier,
+                            modifier = if (state.resume.isEmpty() && state.watchlist.isEmpty() && item == state.recent.first()) Modifier.focusRequester(firstFocus) else Modifier,
                         )
                     }
                 }
@@ -280,7 +297,7 @@ fun HomeContent(state: HomeState, absolute: (String?) -> String?, onRetry: () ->
     }
 
     // Focus de départ sur la première carte (sinon la télécommande ne « voit » rien)
-    LaunchedEffect(state.resume.isNotEmpty() || state.recent.isNotEmpty()) {
+    LaunchedEffect(state.resume.isNotEmpty() || state.watchlist.isNotEmpty() || state.recent.isNotEmpty()) {
         runCatching { firstFocus.requestFocus() }
     }
 }
@@ -335,6 +352,15 @@ private fun heroOf(entry: ResumeEntry, absolute: (String?) -> String?) = Hero(
     meta = meta(entry.item?.year, entry.item?.genres?.take(2)?.joinToString(", ")?.ifBlank { null }),
     overview = entry.item?.overview,
     note = if (entry.isEpisode) entry.subtitle + "  ·  reprendre à " + formatClock(entry.state.position.toLong()) else entry.subtitle,
+)
+
+private fun heroOf(item: WatchlistItem, absolute: (String?) -> String?) = Hero(
+    backdrop = absolute(item.fanartUrl ?: item.posterUrl),
+    logo = null,
+    title = item.title,
+    meta = meta(item.year, if (item.isMovie) "Film" else "Série"),
+    overview = item.overview.ifBlank { null },
+    note = WatchlistLogic.note(item),
 )
 
 fun heroOf(item: TmdbItem) = Hero(

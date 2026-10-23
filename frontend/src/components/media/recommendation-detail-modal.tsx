@@ -54,6 +54,7 @@ import {
     type AddableItem,
 } from "@/components/library/adder";
 import { translateGenre } from "@/lib/genres";
+import { WatchlistButton } from "@/components/watchlist/watchlist-button";
 import { formatDuration, formatShortDate, plural } from "@/lib/format";
 import { EASE_OUT, SPRING_SOFT, scaleIn, stagger } from "@/lib/motion";
 import { cn } from "@/lib/utils";
@@ -274,6 +275,22 @@ function DetailBody({
                     className="mt-5 flex flex-wrap items-center gap-2"
                 >
                     {addable && <AddAction item={addable} detail={detail} onShowTracking={onShowTracking} onNavigate={onClose} />}
+                    {addable && (
+                        // « + Ma liste » : s'il n'est pas sur le NAS, le titre est aussi demandé
+                        <WatchlistButton
+                            size="default"
+                            request
+                            target={{
+                                media_type: addable.type,
+                                tmdb_id: addable.tmdb_id ?? tmdbId,
+                                tvdb_id: addable.tvdb_id,
+                                title: addable.title,
+                                year: addable.year,
+                                poster_url: addable.poster_url,
+                            }}
+                            className="flex-none"
+                        />
+                    )}
                     {trailerKey && (
                         <Button
                             variant="glow"

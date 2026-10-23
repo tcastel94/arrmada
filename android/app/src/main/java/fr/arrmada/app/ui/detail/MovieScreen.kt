@@ -3,6 +3,8 @@ package fr.arrmada.app.ui.detail
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import fr.arrmada.app.data.PlayOnTv
+import fr.arrmada.app.data.WatchlistTarget
+import fr.arrmada.app.ui.components.WatchlistButton
 import fr.arrmada.app.ui.request.SendToTvDialog
 import fr.arrmada.app.ui.components.touchScroll
 import fr.arrmada.app.ui.components.LocalScreen
@@ -302,6 +304,10 @@ fun MovieContent(
                     ArrButton("Télécharger", { onDownload(m) }, primary = true, modifier = Modifier.focusRequester(playFocus))
                 }
                 if (onSendToTv != null && playable) ArrButton("Sur la TV", onSendToTv, leading = "📺")
+                // Liste « À voir » du profil qui regarde
+                m.tmdbId?.let { tmdb ->
+                    WatchlistButton(WatchlistTarget("movie", tmdb, m.title, m.year, m.images.poster), repository)
+                }
                 m.trailerId?.takeIf { it.isNotBlank() }?.let { id ->
                     ArrButton("Bande-annonce", { openTrailer(context, id) })
                 }

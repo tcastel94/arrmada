@@ -170,10 +170,17 @@ _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         ("GET", r"/api/tv/play/(movie/\d+|episode/\d+/\d+/\d+)"),
         ("GET", r"/api/tv/stream/[0-9a-f]{32}"),
         ("GET", r"/api/tv/chapter-image/[0-9a-f]{32}/\d+"),
+        # Planches de vignettes trickplay (aperçu quand on avance)
+        ("GET", r"/api/tv/trickplay/[0-9a-f]{32}/\d+/\d+"),
         ("GET", r"/api/tv/item-image/[0-9a-f]{32}"),
         ("GET", r"/api/tv/trailer/movie/\d+"),
         # Profils famille (ADR-008) : écran « Qui regarde ? » (lecture seule)
         ("GET", r"/api/profiles"),
+        # Liste « À voir » du profil qui regarde : lire, ajouter, retirer un
+        # titre de SA liste (jamais de la médiathèque)
+        ("GET", r"/api/watchlist"),
+        ("POST", r"/api/watchlist"),
+        ("DELETE", r"/api/watchlist/(movie|series)/\d+"),
         # Téléphone / tablette : envoyer un titre sur une TV de la maison
         ("GET", r"/api/tv/targets"),
         ("POST", r"/api/tv/targets/\d+/play"),
@@ -212,6 +219,9 @@ _SCREEN_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         ("GET", r"/api/devices/me"),
         ("GET", r"/api/ambient"),
         ("POST", r"/api/ambient/command"),
+        # « Ce soir » : lancer sur la TV de SA pièce un titre que l'écran propose
+        # (le serveur vérifie qu'il fait partie de « Ce soir »)
+        ("POST", r"/api/ambient/play"),
         # Filmographie d'un acteur (fiche du film sur la tablette), lecture seule
         ("GET", r"/api/ambient/person/\d+"),
     )
