@@ -9,21 +9,26 @@
  *  - backend injoignable     → écran d'erreur avec « Réessayer »
  *    (avant : redirection vers l'assistant d'installation, ce qui
  *    renvoyait un utilisateur DÉJÀ configuré dans le wizard → erreur 409).
+ *
+ * Mise en page (refonte « Épuré ») :
+ *  - ordinateur : barre latérale fixe à gauche, contenu décalé de sa largeur ;
+ *  - mobile : barre d'onglets en bas, contenu qui s'arrête au-dessus
+ *    (hauteur de la barre + zone de la barre d'accueil de l'iPhone).
  */
-import { BrandIcon } from "@/components/brand/brand-mark";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { RefreshCw, ServerCrash } from "lucide-react";
+import { Loader2, RefreshCw, ServerCrash } from "lucide-react";
+import { BrandIcon } from "@/components/brand/brand-mark";
 import { Sidebar } from "@/components/layout/sidebar";
 import { MobileNav } from "@/components/layout/mobile-nav";
 import { CommandPalette } from "@/components/layout/command-palette";
 import { KeyboardShortcuts } from "@/components/layout/keyboard-shortcuts";
 import { MiniPlayer } from "@/components/layout/mini-player";
 import { SidebarProvider, useSidebar, SIDEBAR_WIDTH, SIDEBAR_COLLAPSED_WIDTH } from "@/components/layout/sidebar-context";
-import { AuroraBackground } from "@/components/fx/aurora-background";
 import { Button } from "@/components/ui/button";
 import { isAuthenticated } from "@/lib/api-client";
+import { markNavigation } from "@/lib/nav-history";
 import { useSetupStatus } from "@/hooks/use-setup";
 import { useSSE } from "@/hooks/use-sse";
 
@@ -48,13 +53,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (isError) {
         return (
             <Splash>
-                <div className="flex flex-col items-center gap-3 text-center">
-                    <ServerCrash className="h-8 w-8 text-red-400" />
-                    <p className="text-lg font-semibold">Backend injoignable</p>
-                    <p className="max-w-xs text-sm text-muted-foreground">
+                <div className="flex flex-col items-center gap-2 text-center">
+                    <ServerCrash className="h-7 w-7 text-destructive" />
+                    <p className="text-[17px] font-semibold">Serveur injoignable</p>
+                    <p className="max-w-xs text-[14px] text-muted-foreground">
                         L&apos;API ArrMada ne répond pas. Vérifie que le conteneur <span className="font-mono text-foreground">arrmada-backend</span> tourne.
                     </p>
-                    <Button onClick={() => refetch()} disabled={isFetching} className="mt-2">
+                    <Button onClick={() => refetch()} disabled={isFetching} className="mt-3">
                         <RefreshCw className={isFetching ? "animate-spin" : ""} /> Réessayer
                     </Button>
                 </div>
@@ -65,7 +70,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (setupLoading || !ready) {
         return (
             <Splash>
-                <p className="text-sm text-muted-foreground">Hissez les voiles…</p>
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </Splash>
         );
     }
@@ -77,23 +82,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
 }
 
-/** Écran de chargement / erreur de marque (logo pulsant sur fond aurora). */
+/** Écran de chargement / erreur : logo sur fond noir, comme le lancement d'une app iOS. */
 function Splash({ children }: { children: React.ReactNode }) {
     return (
-        <div className="flex min-h-screen flex-col items-center justify-center gap-6">
-            <AuroraBackground intense />
+        <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-6 px-6">
             <motion.div
-                initial={{ scale: 0.8, opacity: 0 }}
+                initial={{ scale: 0.92, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
-                transition={{ type: "spring", stiffness: 200, damping: 18 }}
-                className="relative"
+                transition={{ duration: 0.35, ease: [0.25, 1, 0.5, 1] }}
+                className="h-20 w-20 overflow-hidden rounded-[22px]"
             >
-                <div className="absolute inset-0 -m-8 animate-pulse-glow rounded-full bg-primary/30 blur-3xl" />
-                <div className="border-beam relative h-24 w-24 rounded-3xl p-[2px]">
-                    <div className="h-full w-full overflow-hidden rounded-[22px]">
-                        <BrandIcon title="ArrMada" animated />
-                    </div>
-                </div>
+                <BrandIcon title="ArrMada" />
             </motion.div>
             {children}
         </div>
@@ -103,18 +102,21 @@ function Splash({ children }: { children: React.ReactNode }) {
 /** Contenu une fois authentifié : active le flux temps réel (SSE). */
 function AppContent({ children }: { children: React.ReactNode }) {
     useSSE();
+    const pathname = usePathname();
     const { collapsed } = useSidebar();
     const sidebarWidth = collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_WIDTH;
 
+    // Compte les navigations internes (bouton « ‹ Retour » de la barre du haut).
+    useEffect(() => markNavigation(), [pathname]);
+
     return (
-        <div className="min-h-screen" style={{ ["--sb-w" as string]: `${sidebarWidth + 24}px` }}>
-            <AuroraBackground />
+        <div className="min-h-[100dvh]" style={{ ["--sb-w" as string]: `${sidebarWidth}px` }}>
             <Sidebar />
             <MobileNav />
             <CommandPalette />
             <KeyboardShortcuts />
             <MiniPlayer />
-            <main className="pb-[calc(6.5rem+env(safe-area-inset-bottom))] transition-[padding] duration-300 ease-smooth lg:pb-8 lg:pl-[var(--sb-w)]">
+            <main className="pb-[calc(var(--tabbar-h)+env(safe-area-inset-bottom)+var(--miniplayer-h,0px)+1rem)] transition-[padding] duration-300 ease-smooth lg:pb-[calc(var(--miniplayer-h,0px)+2.5rem)] lg:pl-[var(--sb-w)]">
                 {children}
             </main>
         </div>

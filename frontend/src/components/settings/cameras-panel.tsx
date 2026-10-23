@@ -60,8 +60,8 @@ export function CamerasPanel() {
         : !data.configured
           ? { text: "Non configuré", tone: "bg-white/5 text-muted-foreground" }
           : data.connected
-            ? { text: "Connecté", tone: "bg-emerald-500/10 text-emerald-300" }
-            : { text: "Déconnecté", tone: "bg-amber-500/10 text-amber-300" };
+            ? { text: "Connecté", tone: "bg-success/10 text-success" }
+            : { text: "Déconnecté", tone: "bg-warning/10 text-warning" };
 
     return (
         <Panel

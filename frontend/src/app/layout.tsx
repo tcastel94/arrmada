@@ -23,7 +23,7 @@ export const metadata: Metadata = {
         default: "ArrMada",
         template: "%s — ArrMada",
     },
-    description: "Le poste de commandement unifié de ta stack *arr",
+    description: "Ta médiathèque, tes téléchargements et ton salon, au même endroit",
     applicationName: "ArrMada",
     // Icônes servies par convention App Router : src/app/{icon,apple-icon}.png + favicon.ico
     openGraph: {
@@ -47,7 +47,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-    themeColor: "#05080f",
+    themeColor: "#000000",
     colorScheme: "dark",
     width: "device-width",
     initialScale: 1,

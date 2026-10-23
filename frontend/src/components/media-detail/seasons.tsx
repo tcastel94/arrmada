@@ -129,8 +129,8 @@ export function SeasonsSection({ media }: { media: MediaDetail }) {
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="text-sm text-muted-foreground">
                     <span className="font-semibold text-foreground tabular-nums">{totals.have}</span>/{totals.aired} épisodes diffusés présents
-                    {totals.missing > 0 && <span className="text-amber-400"> · {totals.missing} manquant{totals.missing > 1 ? "s" : ""}</span>}
-                    {totals.upcoming > 0 && <span className="text-sky-300"> · {totals.upcoming} à venir</span>}
+                    {totals.missing > 0 && <span className="text-warning"> · {totals.missing} manquant{totals.missing > 1 ? "s" : ""}</span>}
+                    {totals.upcoming > 0 && <span className="text-primary"> · {totals.upcoming} à venir</span>}
                 </p>
                 <Button
                     variant="ghost"
@@ -257,7 +257,7 @@ function SeasonCard({
                                     {stats.missing} manquant{stats.missing > 1 ? "s" : ""}
                                 </Badge>
                             ) : stats.aired === 0 ? (
-                                <Badge variant="secondary" className="rounded-full text-sky-300">À venir</Badge>
+                                <Badge variant="secondary" className="rounded-full text-primary">À venir</Badge>
                             ) : null}
                             {!season.monitored && (
                                 <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
@@ -274,7 +274,7 @@ function SeasonCard({
                             />
                             <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
                                 {stats.have}/{stats.aired}
-                                {stats.upcoming > 0 && <span className="text-sky-300/80"> +{stats.upcoming} à venir</span>}
+                                {stats.upcoming > 0 && <span className="text-primary/80"> +{stats.upcoming} à venir</span>}
                             </span>
                         </span>
                     </span>
@@ -338,9 +338,9 @@ function SeasonCard({
 }
 
 const STATE_META: Record<EpisodeState, { icon: typeof CircleCheck; className: string; label: string }> = {
-    present: { icon: CircleCheck, className: "text-emerald-400", label: "Présent" },
-    missing: { icon: CircleAlert, className: "text-amber-400", label: "Manquant" },
-    upcoming: { icon: CalendarClock, className: "text-sky-300", label: "À venir" },
+    present: { icon: CircleCheck, className: "text-success", label: "Présent" },
+    missing: { icon: CircleAlert, className: "text-warning", label: "Manquant" },
+    upcoming: { icon: CalendarClock, className: "text-primary", label: "À venir" },
 };
 
 function EpisodeRow({
@@ -387,7 +387,7 @@ function EpisodeRow({
                 <Button
                     size="icon-sm"
                     variant="ghost"
-                    className="shrink-0 text-muted-foreground hover:text-sky-300"
+                    className="shrink-0 text-muted-foreground hover:text-primary"
                     aria-label={`Caster l'épisode ${code}`}
                     title="Caster sur un appareil"
                     onClick={onCast}
@@ -396,7 +396,7 @@ function EpisodeRow({
                 </Button>
             )}
             {state === "upcoming" && (
-                <Badge variant="secondary" className="shrink-0 text-[10px] text-sky-300">
+                <Badge variant="secondary" className="shrink-0 text-[10px] text-primary">
                     À venir
                 </Badge>
             )}
@@ -409,7 +409,7 @@ function EpisodeRow({
                     <Button
                         size="icon-sm"
                         variant="ghost"
-                        className="shrink-0 text-amber-300 hover:text-amber-200"
+                        className="shrink-0 text-warning hover:text-warning"
                         disabled={launching}
                         aria-label={`Rechercher l'épisode ${code}`}
                         onClick={onSearch}

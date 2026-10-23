@@ -31,7 +31,7 @@ interface HealthTabHeaderProps {
 
 export function HealthTabHeader({
     icon: Icon,
-    iconClassName = "text-fuchsia-300",
+    iconClassName = "text-primary",
     title,
     description,
     updatedAt,
@@ -102,7 +102,7 @@ export function ShownCount({
                 <span
                     tabIndex={0}
                     className={cn(
-                        "inline-flex cursor-help items-center gap-1.5 rounded-lg border border-amber-400/25 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-300 tabular-nums",
+                        "inline-flex cursor-help items-center gap-1.5 rounded-lg border border-warning/25 bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning tabular-nums",
                         className,
                     )}
                 >

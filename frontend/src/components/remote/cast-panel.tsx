@@ -40,7 +40,7 @@ export function CastPanel() {
         <Panel
             title="Appareils Cast"
             icon={Cast}
-            iconClassName="text-sky-300"
+            iconClassName="text-primary"
             action={
                 <Button variant="outline" size="sm" onClick={scan} disabled={discover.isPending}>
                     {discover.isPending ? <Loader2 className="animate-spin" /> : <Radar />}
@@ -52,9 +52,9 @@ export function CastPanel() {
             {jellyfin && !jellyfin.configured && (
                 <Link
                     href="/settings/cast"
-                    className="flex items-center gap-2.5 rounded-xl border border-amber-500/25 bg-amber-500/[0.07] px-3.5 py-2.5 text-xs text-amber-200 transition-colors hover:bg-amber-500/[0.12]"
+                    className="flex items-center gap-2.5 rounded-xl border border-warning/25 bg-warning/[0.07] px-3.5 py-2.5 text-xs text-warning transition-colors hover:bg-warning/[0.12]"
                 >
-                    <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />
+                    <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
                     <span className="flex-1">Jellyfin n&apos;est pas configuré : impossible de caster un film pour l&apos;instant.</span>
                     <span className="shrink-0 font-semibold underline-offset-2 hover:underline">Configurer</span>
                 </Link>
@@ -122,7 +122,7 @@ function CastTile({ device }: { device: CastDevice }) {
             <span
                 className={cn(
                     "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ring-1",
-                    device.video_capable ? "bg-sky-500/15 text-sky-300 ring-sky-400/20" : "bg-white/[0.05] text-muted-foreground ring-white/10",
+                    device.video_capable ? "bg-primary/15 text-primary ring-primary/20" : "bg-white/[0.05] text-muted-foreground ring-white/10",
                 )}
             >
                 <Icon className="h-5 w-5" />
@@ -140,7 +140,7 @@ function CastTile({ device }: { device: CastDevice }) {
                 disabled={control.isPending}
                 aria-label={`Arrêter la diffusion sur ${device.name}`}
                 title="Arrêter la diffusion"
-                className="text-muted-foreground hover:text-red-300"
+                className="text-muted-foreground hover:text-destructive"
             >
                 {control.isPending ? <Loader2 className="animate-spin" /> : <Square className="fill-current" />}
             </Button>

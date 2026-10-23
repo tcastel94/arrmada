@@ -25,8 +25,8 @@ import { fadeUp, stagger } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 const TYPE_BADGE: Record<string, { label: string; icon: typeof Film; cls: string }> = {
-    movie: { label: "Film", icon: Film, cls: "bg-violet-500/15 text-violet-300 ring-violet-400/25" },
-    series: { label: "Série", icon: Tv, cls: "bg-sky-500/15 text-sky-300 ring-sky-400/25" },
+    movie: { label: "Film", icon: Film, cls: "bg-primary/15 text-primary ring-primary/25" },
+    series: { label: "Série", icon: Tv, cls: "bg-primary/15 text-primary ring-primary/25" },
 };
 const UNKNOWN_TYPE = { label: "Type inconnu", icon: HelpCircle, cls: "bg-white/[0.06] text-muted-foreground ring-white/[0.1]" };
 
@@ -88,7 +88,7 @@ export function AutoImportReports() {
     return (
         <div className="space-y-3">
             <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-                <Activity className="h-3.5 w-3.5 text-emerald-400" />
+                <Activity className="h-3.5 w-3.5 text-success" />
                 {reports.length > 1 ? `${reports.length} dernières exécutions` : "Dernière exécution"}
                 {interval ? <span>· {intervalLabel(interval)}</span> : null}
                 <span>· actualisé toutes les 30 s</span>
@@ -132,8 +132,8 @@ function ReportCard({ report }: { report: AutoImportReport }) {
                         empty
                             ? "bg-white/[0.05] text-muted-foreground ring-white/[0.08]"
                             : hasErrors
-                              ? "bg-red-500/15 text-red-300 ring-red-400/25"
-                              : "bg-emerald-500/15 text-emerald-300 ring-emerald-400/25",
+                              ? "bg-destructive/15 text-destructive ring-destructive/25"
+                              : "bg-success/15 text-success ring-success/25",
                     )}
                 >
                     {empty ? "Rien à importer" : hasErrors ? plural(report.failed_count, "échec") : "Tout est lancé"}
@@ -145,11 +145,11 @@ function ReportCard({ report }: { report: AutoImportReport }) {
                     <span className="inline-flex items-center gap-1">
                         <ScanSearch className="h-3 w-3" /> {plural(report.scanned_count, "élément analysé", "éléments analysés")}
                     </span>
-                    <span className="inline-flex items-center gap-1 text-emerald-300">
+                    <span className="inline-flex items-center gap-1 text-success">
                         <Rocket className="h-3 w-3" /> {plural(report.imported_count, "import lancé", "imports lancés")}
                     </span>
                     {hasErrors && (
-                        <span className="inline-flex items-center gap-1 text-red-300">
+                        <span className="inline-flex items-center gap-1 text-destructive">
                             <XCircle className="h-3 w-3" /> {plural(report.failed_count, "échec")}
                         </span>
                     )}
@@ -191,7 +191,7 @@ function ReportItemRow({ item }: { item: AutoImportReportItem }) {
                 <span
                     className={cn(
                         "inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-px text-[10px] font-semibold",
-                        ok ? "bg-emerald-500/15 text-emerald-300" : "bg-red-500/15 text-red-300",
+                        ok ? "bg-success/15 text-success" : "bg-destructive/15 text-destructive",
                     )}
                 >
                     {ok ? <Rocket className="h-2.5 w-2.5" /> : <XCircle className="h-2.5 w-2.5" />}
@@ -199,7 +199,7 @@ function ReportItemRow({ item }: { item: AutoImportReportItem }) {
                 </span>
             </div>
             {!ok && item.message && (
-                <p className="mt-1.5 rounded-lg border border-red-500/15 bg-red-500/[0.06] px-2 py-1 text-[10px] text-red-300">{item.message}</p>
+                <p className="mt-1.5 rounded-lg border border-destructive/15 bg-destructive/[0.06] px-2 py-1 text-[10px] text-destructive">{item.message}</p>
             )}
         </li>
     );

@@ -132,11 +132,11 @@ const SOURCE_LABEL: Record<ArtworkSource, string> = {
     sonarr: "Sonarr",
 };
 const SOURCE_TONE: Record<ArtworkSource, string> = {
-    local: "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30",
+    local: "bg-success/15 text-success ring-success/30",
     "fanart.tv": "bg-primary/15 text-primary ring-primary/30",
-    tmdb: "bg-cyan-500/15 text-cyan-300 ring-cyan-500/30",
-    radarr: "bg-amber-500/15 text-amber-300 ring-amber-500/30",
-    sonarr: "bg-sky-500/15 text-sky-300 ring-sky-500/30",
+    tmdb: "bg-cyan-500/15 text-primary ring-cyan-500/30",
+    radarr: "bg-warning/15 text-warning ring-warning/30",
+    sonarr: "bg-primary/15 text-primary ring-primary/30",
 };
 const DISC_LABEL: Record<string, string> = { bluray: "Blu-ray", dvd: "DVD", "3d": "Blu-ray 3D" };
 
@@ -305,7 +305,7 @@ export function ArtworksTab({ media }: { media: MediaDetail }) {
                 </div>
 
                 {noSite && (
-                    <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+                    <p className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">
                         Seules les images du dossier et de {type === "movie" ? "Radarr" : "Sonarr"} sont disponibles : ajoute{" "}
                         <code>FANART_CLIENT_KEY</code> (clé personnelle d&apos;un compte fanart.tv gratuit) dans le{" "}
                         <code>.env</code> du serveur pour les logos HD, disques, clearart et toutes les variantes.

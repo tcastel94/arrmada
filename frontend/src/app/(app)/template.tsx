@@ -1,22 +1,21 @@
 "use client";
 
 /**
- * Transition d'entrée de chaque page.
- * Un `template` Next.js est re-monté à chaque navigation (contrairement au
- * `layout`), ce qui permet de rejouer l'animation à chaque changement de page.
+ * Transition entre deux pages.
+ * ----------------------------------------------------------------
+ * Next.js recrée ce « template » à chaque changement d'URL (contrairement
+ * au layout, qui reste en place) : c'est l'endroit idéal pour un court
+ * fondu d'entrée, qui évite l'effet « page qui clignote » au changement.
+ *
+ * Seule l'opacité est animée, volontairement : un déplacement (transform)
+ * sur ce conteneur casserait les éléments « fixed » des pages (barres
+ * d'actions flottantes, lecteur) pendant l'animation.
  */
 import { motion } from "framer-motion";
-import { EASE_OUT } from "@/lib/motion";
 
-export default function Template({ children }: { children: React.ReactNode }) {
+export default function AppTemplate({ children }: { children: React.ReactNode }) {
     return (
-        <motion.div
-            initial={{ opacity: 0, y: 14, filter: "blur(6px)" }}
-            // transitionEnd : on retire le filtre à la fin, sinon il « piège » les
-            // éléments position:fixed des pages (barres flottantes…).
-            animate={{ opacity: 1, y: 0, filter: "blur(0px)", transitionEnd: { filter: "none", transform: "none" } }}
-            transition={{ duration: 0.5, ease: EASE_OUT }}
-        >
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.22, ease: [0.25, 1, 0.5, 1] }}>
             {children}
         </motion.div>
     );

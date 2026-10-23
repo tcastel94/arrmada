@@ -166,7 +166,7 @@ export function QualityTab() {
                             <Panel
                                 title="Résolution des films"
                                 icon={Layers}
-                                iconClassName="text-fuchsia-300"
+                                iconClassName="text-primary"
                                 action={
                                     <span className="text-xs text-muted-foreground tabular-nums">
                                         {plural(totalMovies, "film")}
@@ -185,7 +185,7 @@ export function QualityTab() {
                         </motion.div>
 
                         <motion.div variants={fadeUp}>
-                            <Panel title="Séries" icon={Tv} iconClassName="text-sky-300" className="h-full">
+                            <Panel title="Séries" icon={Tv} iconClassName="text-primary" className="h-full">
                                 <div className="flex items-end gap-6">
                                     <div>
                                         <p className="text-3xl font-bold tracking-tight">
@@ -210,7 +210,7 @@ export function QualityTab() {
 
                     {/* Détail par qualité */}
                     <motion.div variants={fadeUp}>
-                        <Panel title="Détail par qualité" icon={Sparkles} iconClassName="text-violet-300">
+                        <Panel title="Détail par qualité" icon={Sparkles} iconClassName="text-primary">
                             <ul className="grid gap-x-8 gap-y-3 md:grid-cols-2">
                                 {qualities.map((q) => (
                                     <li key={q.name} className="grid grid-cols-[minmax(0,9rem)_1fr_auto] items-center gap-3">
@@ -238,7 +238,7 @@ export function QualityTab() {
                 <Panel
                     title="Films à améliorer"
                     icon={ArrowUpCircle}
-                    iconClassName="text-amber-300"
+                    iconClassName="text-warning"
                     bodyClassName="p-0"
                     action={<ShownCount shown={upgradeable.items.length} total={upgradeable.count} sortHint="les moins bons d'abord" />}
                 >
@@ -335,7 +335,7 @@ export function QualityTab() {
                                                                 {isSearching ? (
                                                                     <Loader2 className="animate-spin" />
                                                                 ) : isLaunched ? (
-                                                                    <Check className="text-emerald-400" />
+                                                                    <Check className="text-success" />
                                                                 ) : (
                                                                     <Search />
                                                                 )}

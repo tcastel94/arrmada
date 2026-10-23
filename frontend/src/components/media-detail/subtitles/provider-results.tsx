@@ -73,9 +73,9 @@ export function ProviderResults({
                                         className={cn(
                                             "rounded-md border px-1.5 py-px font-bold tabular-nums",
                                             s.score >= 80
-                                                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                                                ? "border-success/30 bg-success/10 text-success"
                                                 : s.score >= 50
-                                                  ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
+                                                  ? "border-warning/30 bg-warning/10 text-warning"
                                                   : "border-white/10 text-muted-foreground",
                                         )}
                                         title="Correspondance avec ton fichier (sur 100)"

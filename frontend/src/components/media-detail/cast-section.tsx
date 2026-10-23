@@ -42,7 +42,7 @@ export function CastSection({ cast = [], crew = [] }: { cast?: CastMember[]; cre
     return (
         <div className="space-y-6">
             {crewByJob.size > 0 && (
-                <Panel title="Équipe" icon={Clapperboard} iconClassName="text-violet-300">
+                <Panel title="Équipe" icon={Clapperboard} iconClassName="text-primary">
                     <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                         {Array.from(crewByJob.entries()).map(([job, names]) => (
                             <div key={job} className="space-y-0.5">
@@ -104,7 +104,7 @@ function ActorAvatar({ actor, onOpen }: { actor: CastMember; onOpen: () => void 
                 <span
                     aria-hidden
                     className={cn(
-                        "absolute -inset-1.5 rounded-full bg-gradient-to-br from-primary via-sky-400 to-brand opacity-0 blur-md transition-opacity duration-500",
+                        "absolute -inset-1.5 rounded-full bg-gradient-to-br from-primary via-primary to-brand opacity-0 blur-md transition-opacity duration-500",
                         clickable && "group-hover:opacity-70 group-focus-visible:opacity-90",
                     )}
                 />

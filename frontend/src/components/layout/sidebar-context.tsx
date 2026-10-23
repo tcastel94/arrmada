@@ -43,5 +43,5 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
 
 export const useSidebar = () => useContext(Ctx);
 
-export const SIDEBAR_WIDTH = 268;
-export const SIDEBAR_COLLAPSED_WIDTH = 76;
+export const SIDEBAR_WIDTH = 240;
+export const SIDEBAR_COLLAPSED_WIDTH = 64;

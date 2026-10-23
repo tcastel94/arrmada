@@ -103,7 +103,7 @@ export function LogAnalysisPanel({ services, onPickService }: LogAnalysisPanelPr
         <Panel
             title="Diagnostic IA"
             icon={Sparkles}
-            iconClassName="text-violet-300"
+            iconClassName="text-primary"
             action={
                 hasOutcome ? (
                     <Button variant="ghost" size="sm" onClick={run} aria-label="Relancer l'analyse des journaux">
@@ -134,7 +134,7 @@ function AnalysisIntro({ onRun, aborted }: { onRun: () => void; aborted: boolean
     return (
         <div className="space-y-4">
             <div className="flex items-start gap-3">
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500/30 to-fuchsia-500/10 text-violet-300 ring-1 ring-violet-400/25 shadow-[0_0_24px_-8px] shadow-violet-500/60">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500/30 to-fuchsia-500/10 text-primary ring-1 ring-primary/25">
                     <BrainCircuit className="h-5 w-5" />
                 </span>
                 <p className="text-sm leading-relaxed text-muted-foreground">
@@ -145,11 +145,11 @@ function AnalysisIntro({ onRun, aborted }: { onRun: () => void; aborted: boolean
             </div>
             <ul className="space-y-1.5 text-xs text-muted-foreground">
                 <li className="flex items-center gap-2">
-                    <Cpu className="h-3.5 w-3.5 shrink-0 text-violet-300" />
+                    <Cpu className="h-3.5 w-3.5 shrink-0 text-primary" />
                     IA locale Ollama en priorité, OpenRouter en secours.
                 </li>
                 <li className="flex items-center gap-2">
-                    <Loader2 className="h-3.5 w-3.5 shrink-0 text-violet-300" />
+                    <Loader2 className="h-3.5 w-3.5 shrink-0 text-primary" />
                     Compte environ 30 secondes.
                 </li>
             </ul>
@@ -180,7 +180,7 @@ function AnalysisLoading({ startedAt }: { startedAt: number }) {
     return (
         <div className="space-y-4" role="status" aria-live="polite">
             <div className="flex items-center gap-3">
-                <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500/35 to-fuchsia-500/15 text-violet-200 ring-1 ring-violet-400/30 animate-pulse-glow">
+                <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500/35 to-fuchsia-500/15 text-primary ring-1 ring-primary/30 animate-pulse-glow">
                     <Sparkles className="h-5 w-5 animate-spin-slow" />
                 </span>
                 <div className="min-w-0 flex-1">
@@ -204,7 +204,7 @@ function AnalysisLoading({ startedAt }: { startedAt: number }) {
             </div>
             <GradientProgress value={progress} tone="violet" active />
             {elapsed > 60 && (
-                <p className="text-xs text-amber-300">
+                <p className="text-xs text-warning">
                     C&apos;est plus long que prévu : l&apos;IA locale charge peut-être son modèle en mémoire (premier appel).
                 </p>
             )}
@@ -234,7 +234,7 @@ function NoAiConfigured({ detail, onRetry }: { detail: string; onRetry: () => vo
     return (
         <div className="space-y-4">
             <div className="flex items-start gap-3">
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500/30 to-orange-500/10 text-amber-300 ring-1 ring-amber-400/25">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500/30 to-orange-500/10 text-warning ring-1 ring-warning/25">
                     <BrainCircuit className="h-5 w-5" />
                 </span>
                 <div className="min-w-0">
@@ -244,7 +244,7 @@ function NoAiConfigured({ detail, onRetry }: { detail: string; onRetry: () => vo
                     </p>
                 </div>
             </div>
-            <ol className="list-decimal space-y-1.5 pl-5 text-xs leading-relaxed text-muted-foreground marker:text-amber-300">
+            <ol className="list-decimal space-y-1.5 pl-5 text-xs leading-relaxed text-muted-foreground marker:text-warning">
                 <li>
                     IA locale : vérifie qu&apos;Ollama tourne et renseigne <code className={code}>OLLAMA_URL</code> et{" "}
                     <code className={code}>OLLAMA_MODEL</code> dans le <code className={code}>.env</code> du backend.
@@ -297,16 +297,16 @@ function AnalysisResult({
     return (
         <div className="space-y-4">
             {/* Synthèse */}
-            <div className="rounded-xl border border-violet-400/20 bg-violet-500/[0.07] p-4">
+            <div className="rounded-xl border border-primary/20 bg-primary/[0.07] p-4">
                 <p className="flex items-start gap-2.5 text-sm leading-relaxed">
-                    <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-violet-300" />
+                    <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                     <span>{analysis.summary || "L'IA n'a pas fourni de synthèse."}</span>
                 </p>
                 {(meta.length > 0 || errors + warnings > 0) && (
                     <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-                        {errors > 0 && <span className="rounded-md bg-red-500/15 px-1.5 py-0.5 font-semibold text-red-300">{plural(errors, "erreur")}</span>}
+                        {errors > 0 && <span className="rounded-md bg-destructive/15 px-1.5 py-0.5 font-semibold text-destructive">{plural(errors, "erreur")}</span>}
                         {warnings > 0 && (
-                            <span className="rounded-md bg-amber-500/15 px-1.5 py-0.5 font-semibold text-amber-300">{plural(warnings, "avertissement")}</span>
+                            <span className="rounded-md bg-warning/15 px-1.5 py-0.5 font-semibold text-warning">{plural(warnings, "avertissement")}</span>
                         )}
                         {meta.length > 0 && <span>{meta.join(" · ")}</span>}
                     </div>
@@ -396,8 +396,8 @@ function ProblemCard({
                 </div>
             )}
             {p.solution && (
-                <div className="mt-3 rounded-lg bg-emerald-500/[0.07] p-3 ring-1 ring-emerald-400/15">
-                    <p className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-300">
+                <div className="mt-3 rounded-lg bg-success/[0.07] p-3 ring-1 ring-success/15">
+                    <p className="flex items-center gap-1.5 text-[11px] font-semibold text-success">
                         <Wrench className="h-3.5 w-3.5" />
                         Solution
                     </p>

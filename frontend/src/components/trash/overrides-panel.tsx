@@ -210,7 +210,7 @@ export function OverridesPanel() {
                                             <span
                                                 className={cn(
                                                     "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ring-1",
-                                                    isSeries ? "bg-sky-500/15 text-sky-300 ring-sky-400/25" : "bg-violet-500/15 text-violet-300 ring-violet-400/25",
+                                                    isSeries ? "bg-primary/15 text-primary ring-primary/25" : "bg-primary/15 text-primary ring-primary/25",
                                                 )}
                                             >
                                                 <Icon className="h-4 w-4" />
@@ -241,7 +241,7 @@ export function OverridesPanel() {
                                                 {p === "apply" ? (
                                                     <Loader2 className="animate-spin" />
                                                 ) : applied.has(o.id) ? (
-                                                    <Check className="text-emerald-400" />
+                                                    <Check className="text-success" />
                                                 ) : (
                                                     <Zap />
                                                 )}
@@ -256,7 +256,7 @@ export function OverridesPanel() {
                                                     setDeleteOpen(true);
                                                 }}
                                                 aria-label={`Supprimer l'override de ${o.title}`}
-                                                className="text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                                                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                                             >
                                                 {p === "delete" ? <Loader2 className="animate-spin" /> : <Trash2 />}
                                             </Button>

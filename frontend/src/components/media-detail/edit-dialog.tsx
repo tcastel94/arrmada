@@ -260,7 +260,7 @@ export function EditMediaDialog({
                     </div>
                 )}
 
-                <DialogFooter className="gap-2 sm:gap-0">
+                <DialogFooter>
                     <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={updateMedia.isPending}>
                         Annuler
                     </Button>

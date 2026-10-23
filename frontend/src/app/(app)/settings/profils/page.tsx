@@ -117,7 +117,7 @@ export default function FamilyProfilesPage() {
             <Panel
                 title="Profils famille"
                 icon={Users}
-                iconClassName="text-sky-300"
+                iconClassName="text-primary"
                 action={
                     <Button size="sm" onClick={() => setAdding(true)} disabled={full || isLoading}>
                         <Plus />

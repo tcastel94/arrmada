@@ -48,22 +48,21 @@ import {
 } from "@/lib/media-filters";
 
 /**
- * Barre collante sous le header (68 px + marge). Sur mobile elle reste dans
- * le flux (non collante) pour ne pas manger la moitié de l'écran.
+ * Barre d'outils de liste (recherche, filtres, tri…).
+ * Ordinateur / tablette : elle se colle sous la barre du haut au défilement,
+ * sur fond flouté comme les barres iOS. Mobile : elle reste dans le flux
+ * (non collante) pour ne pas manger la moitié de l'écran.
  */
 export function StickyToolbar({ children, className }: { children: ReactNode; className?: string }) {
     return (
-        <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, delay: 0.1 }}
+        <div
             className={cn(
-                "glass z-20 rounded-2xl p-2 shadow-[0_18px_40px_-24px_rgba(0,0,0,0.9)] sm:sticky sm:top-[84px]",
+                "z-20 -mx-4 px-4 py-1 md:sticky md:top-[calc(var(--navbar-h)+env(safe-area-inset-top))] md:-mx-6 md:bg-black/80 md:px-6 md:py-2 md:backdrop-blur-xl lg:-mx-8 lg:px-8",
                 className,
             )}
         >
             {children}
-        </motion.div>
+        </div>
     );
 }
 
@@ -91,8 +90,8 @@ export const SearchField = forwardRef<HTMLInputElement, SearchFieldProps>(functi
             <Search
                 aria-hidden
                 className={cn(
-                    "pointer-events-none absolute top-1/2 -translate-y-1/2 text-muted-foreground/60",
-                    lg ? "left-4 h-5 w-5" : "left-3 h-4 w-4",
+                    "pointer-events-none absolute top-1/2 -translate-y-1/2 text-muted-foreground",
+                    lg ? "left-3.5 h-5 w-5" : "left-2.5 h-4 w-4",
                 )}
             />
             <Input
@@ -114,7 +113,7 @@ export const SearchField = forwardRef<HTMLInputElement, SearchFieldProps>(functi
                 className={cn(
                     // Masque la croix native du type=search (on a la nôtre).
                     "[&::-webkit-search-cancel-button]:appearance-none",
-                    lg ? "h-14 rounded-2xl pl-12 pr-12 text-base md:text-lg" : "h-9 pl-9 pr-9",
+                    lg ? "h-12 rounded-xl pl-11 pr-11 text-[17px]" : "h-9 rounded-[10px] pl-8 pr-9 md:text-[15px]",
                 )}
             />
             <div className={cn("absolute top-1/2 flex -translate-y-1/2 items-center", lg ? "right-3" : "right-2")}>
@@ -128,9 +127,9 @@ export const SearchField = forwardRef<HTMLInputElement, SearchFieldProps>(functi
                         transition={SPRING}
                         onClick={() => onChange("")}
                         aria-label="Effacer la recherche"
-                        className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
+                        className="flex h-[18px] w-[18px] items-center justify-center rounded-full bg-white/30 text-black transition-colors hover:bg-white/45"
                     >
-                        <X className={lg ? "h-4 w-4" : "h-3.5 w-3.5"} />
+                        <X className="h-3 w-3" strokeWidth={3} />
                     </motion.button>
                 ) : null}
             </div>
@@ -280,8 +279,8 @@ export function FilterPresetsMenu({
             <DropdownMenu modal={false}>
                 <DropdownMenuTrigger asChild>
                     <Button
-                        variant="outline"
-                        className={cn("max-w-[13rem]", active && "border-primary/40 text-primary", className)}
+                        variant="secondary"
+                        className={cn("max-w-[13rem]", active && "text-primary", className)}
                         aria-label={active ? `Filtres enregistrés (actif : ${active.name})` : "Filtres enregistrés"}
                         title={active ? `Filtre enregistré appliqué : ${active.name}` : "Filtres enregistrés"}
                     >
@@ -340,7 +339,7 @@ export function FilterPresetsMenu({
                                             }}
                                             aria-label={`Supprimer le filtre « ${p.name} »`}
                                             title="Supprimer"
-                                            className="shrink-0 self-stretch px-2 text-muted-foreground focus:bg-red-500/10 focus:text-red-300"
+                                            className="shrink-0 self-stretch px-2 text-muted-foreground focus:bg-destructive/10 focus:text-destructive"
                                         >
                                             <Trash2 />
                                         </DropdownMenuItem>
@@ -388,7 +387,7 @@ export function FilterPresetsMenu({
                                 autoFocus
                             />
                             {existing ? (
-                                <p className="text-[11px] text-amber-400">Un filtre porte déjà ce nom : il sera remplacé.</p>
+                                <p className="text-[11px] text-warning">Un filtre porte déjà ce nom : il sera remplacé.</p>
                             ) : duplicate ? (
                                 <p className="text-[11px] text-muted-foreground">Ces filtres sont déjà enregistrés sous « {duplicate.name} ».</p>
                             ) : null}

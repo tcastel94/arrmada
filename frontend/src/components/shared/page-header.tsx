@@ -1,12 +1,18 @@
 "use client";
 
 /**
- * En-tête « héros » standard de chaque page.
+ * En-tête de page : « grand titre » iOS.
  * ----------------------------------------------------------------
- * Avant : chaque page dessinait son propre bandeau (couleurs, tailles,
- * largeurs différentes). Ce composant unifie : tuile d'icône lumineuse,
- * titre, description, zone d'actions à droite et rangée de statistiques.
- * Seule la teinte (`accent`) varie d'une page à l'autre.
+ * Gros titre gras aligné à gauche, éventuellement une ligne de
+ * description grise, les actions de la page (à droite sur ordinateur,
+ * sous le titre sur mobile) et une rangée de statistiques en capsules.
+ * Quand on fait défiler, ce titre sort de l'écran et la barre du haut
+ * reprend le nom de la page en petit (voir Header) : exactement le
+ * comportement des apps Apple.
+ *
+ * Les props `icon`, `accent` et `eyebrow` de l'ancien bandeau « néon »
+ * sont toujours acceptées (15 pages les passent) ; `icon` et `accent`
+ * ne s'affichent plus : un grand titre iOS n'a pas d'icône.
  */
 import { motion } from "framer-motion";
 import type { LucideIcon } from "lucide-react";
@@ -14,98 +20,71 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { EASE_OUT } from "@/lib/motion";
 
+/** Ancienne palette de teintes, gardée pour compatibilité des appels. */
 export const ACCENTS = {
-    primary: { tile: "from-primary/30 to-brand/10 text-primary", orb: "hsl(var(--primary))", ring: "ring-primary/30" },
-    brand: { tile: "from-brand/30 to-primary/10 text-brand", orb: "hsl(var(--brand))", ring: "ring-brand/30" },
-    violet: { tile: "from-violet-500/30 to-fuchsia-500/10 text-violet-300", orb: "hsl(262 83% 65%)", ring: "ring-violet-400/30" },
-    emerald: { tile: "from-emerald-500/30 to-teal-500/10 text-emerald-300", orb: "hsl(152 69% 47%)", ring: "ring-emerald-400/30" },
-    amber: { tile: "from-amber-500/30 to-orange-500/10 text-amber-300", orb: "hsl(38 95% 58%)", ring: "ring-amber-400/30" },
-    rose: { tile: "from-rose-500/30 to-pink-500/10 text-rose-300", orb: "hsl(350 89% 64%)", ring: "ring-rose-400/30" },
-    sky: { tile: "from-sky-500/30 to-cyan-500/10 text-sky-300", orb: "hsl(199 89% 60%)", ring: "ring-sky-400/30" },
-    orange: { tile: "from-orange-500/30 to-red-500/10 text-orange-300", orb: "hsl(24 95% 58%)", ring: "ring-orange-400/30" },
-    fuchsia: { tile: "from-fuchsia-500/30 to-pink-500/10 text-fuchsia-300", orb: "hsl(292 84% 65%)", ring: "ring-fuchsia-400/30" },
-    slate: { tile: "from-slate-400/25 to-slate-500/10 text-slate-200", orb: "hsl(215 20% 60%)", ring: "ring-slate-400/30" },
+    primary: {},
+    brand: {},
+    violet: {},
+    emerald: {},
+    amber: {},
+    rose: {},
+    sky: {},
+    orange: {},
+    fuchsia: {},
+    slate: {},
 } as const;
 
 export type Accent = keyof typeof ACCENTS;
 
 interface PageHeaderProps {
-    icon: LucideIcon;
+    /** Ancien pictogramme du bandeau (ignoré). */
+    icon?: LucideIcon;
     title: ReactNode;
     description?: ReactNode;
-    /** Petit libellé au-dessus du titre (ex: nom du groupe de menu). */
+    /** Petit libellé au-dessus du titre (ex : nom de la section). */
     eyebrow?: string;
+    /** Ancienne teinte du bandeau (ignorée). */
     accent?: Accent;
-    /** Boutons d'action à droite. */
+    /** Boutons d'action. */
     actions?: ReactNode;
-    /** Rangée de statistiques / chips sous le titre. */
+    /** Rangée de statistiques / filtres sous le titre. */
     children?: ReactNode;
     className?: string;
 }
 
-export function PageHeader({
-    icon: Icon,
-    title,
-    description,
-    eyebrow,
-    accent = "primary",
-    actions,
-    children,
-    className,
-}: PageHeaderProps) {
-    const a = ACCENTS[accent];
+export function PageHeader({ title, description, eyebrow, actions, children, className }: PageHeaderProps) {
     return (
         <motion.section
-            initial={{ opacity: 0, y: 14 }}
+            initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, ease: EASE_OUT }}
-            className={cn("glass border-gradient relative overflow-hidden rounded-3xl p-5 md:p-7", className)}
+            transition={{ duration: 0.3, ease: EASE_OUT }}
+            className={cn("pt-1", className)}
         >
-            {/* Halo coloré + grille décorative */}
-            <div
-                aria-hidden
-                className="pointer-events-none absolute -right-24 -top-28 h-72 w-72 rounded-full opacity-40 animate-pulse-glow"
-                style={{ background: `radial-gradient(closest-side, ${a.orb}, transparent)` }}
-            />
-            <div
-                aria-hidden
-                className="pointer-events-none absolute -bottom-32 left-1/4 h-56 w-96 rounded-full opacity-20"
-                style={{ background: `radial-gradient(closest-side, ${a.orb}, transparent)` }}
-            />
-            <div aria-hidden className="pointer-events-none absolute inset-0 bg-grid opacity-40 [mask-image:linear-gradient(110deg,transparent_35%,#000)]" />
-
-            <div className="relative flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-                <div className="flex min-w-0 items-start gap-4">
-                    <motion.div
-                        initial={{ scale: 0.6, rotate: -12, opacity: 0 }}
-                        animate={{ scale: 1, rotate: 0, opacity: 1 }}
-                        transition={{ type: "spring", stiffness: 260, damping: 18, delay: 0.1 }}
-                        className={cn(
-                            "relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ring-1 md:h-14 md:w-14",
-                            a.tile,
-                            a.ring,
-                        )}
-                        style={{ boxShadow: `0 0 32px -6px ${a.orb}` }}
-                    >
-                        <Icon className="h-6 w-6 md:h-7 md:w-7" strokeWidth={1.75} />
-                    </motion.div>
-                    <div className="min-w-0">
-                        {eyebrow && <p className="eyebrow mb-1">{eyebrow}</p>}
-                        <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{title}</h1>
-                        {description && (
-                            <p className="mt-1 max-w-2xl text-sm text-muted-foreground text-balance">{description}</p>
-                        )}
-                    </div>
+            {/* Titre et actions sur la même ligne (actions alignées sur le bas du titre) */}
+            {/* Les actions passent sous le titre quand la place manque (le
+                grand titre n'est jamais tronqué). */}
+            <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-2 md:gap-x-6">
+                <div className="min-w-0 max-w-full">
+                    {eyebrow && <p className="mb-0.5 text-[13px] font-semibold text-muted-foreground">{eyebrow}</p>}
+                    <h1 className="break-words text-ios-large md:text-[2rem] md:leading-[2.375rem]">{title}</h1>
                 </div>
-                {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
+                {actions && <div className="flex flex-wrap items-center gap-1 pb-0.5 md:gap-2">{actions}</div>}
             </div>
+            {/* Description : ordinateur seulement (sur mobile, elle repousserait
+                le contenu ; le grand titre suffit, comme dans les apps iOS). */}
+            {description && <p className="mt-1 hidden max-w-2xl text-[15px] leading-snug text-muted-foreground text-balance md:block">{description}</p>}
 
-            {children && <div className="relative mt-5 flex flex-wrap items-center gap-2">{children}</div>}
+            {children && (
+                // Mobile : les capsules défilent horizontalement plutôt que de s'empiler
+                <div className="scrollbar-none -mx-4 mt-4 flex items-center gap-2 overflow-x-auto px-4 md:mx-0 md:flex-wrap md:overflow-visible md:px-0">
+                    {children}
+                </div>
+            )}
         </motion.section>
     );
 }
 
-/** Statistique compacte à placer dans le PageHeader (ou ailleurs). */
+/** Statistique compacte en capsule grise (sous le grand titre ou ailleurs). */
 export function StatPill({
     label,
     value,
@@ -120,15 +99,15 @@ export function StatPill({
     const tones = {
         default: "text-foreground",
         primary: "text-primary",
-        success: "text-emerald-400",
-        warning: "text-amber-400",
-        danger: "text-red-400",
+        success: "text-success",
+        warning: "text-warning",
+        danger: "text-destructive",
     };
     return (
-        <div className="flex items-center gap-2 rounded-xl border border-white/[0.06] bg-background/40 px-3 py-1.5 backdrop-blur">
+        <div className="flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-white/[0.07] px-3">
             {Icon && <Icon className={cn("h-3.5 w-3.5", tones[tone])} />}
-            <span className={cn("text-sm font-semibold tabular-nums", tones[tone])}>{value}</span>
-            <span className="text-xs text-muted-foreground">{label}</span>
+            <span className={cn("text-[13px] font-semibold tabular-nums", tones[tone])}>{value}</span>
+            <span className="text-[13px] text-muted-foreground">{label}</span>
         </div>
     );
 }

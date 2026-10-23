@@ -181,11 +181,6 @@ export function QueueTab({ data, isLoading, isError, error, refetch, throughput,
             {/* ── Barre résumé ─────────────────────────────────── */}
             <motion.div variants={fadeUp} initial="hidden" animate="show">
                 <SpotlightCard interactive={false} className="relative overflow-hidden p-4 sm:p-5">
-                    <div
-                        aria-hidden
-                        className="pointer-events-none absolute -left-16 -top-20 h-56 w-56 rounded-full opacity-30"
-                        style={{ background: "radial-gradient(closest-side, hsl(var(--primary) / 0.6), transparent)" }}
-                    />
                     <div className="relative flex flex-col gap-5 md:flex-row md:items-center">
                         <div className="flex items-center gap-4">
                             <RingGauge value={globalPct} size={84} stroke={7} tone="primary">
@@ -209,7 +204,7 @@ export function QueueTab({ data, isLoading, isError, error, refetch, throughput,
                         <div className="grid flex-1 grid-cols-2 gap-2 sm:grid-cols-4">
                             <MiniStat icon={ArrowDownToLine} label="En cours" value={bucketCounts.downloading} tone="text-primary" />
                             <MiniStat icon={Clock} label="En attente" value={bucketCounts.waiting} tone="text-slate-300" />
-                            <MiniStat icon={PackageCheck} label="Import" value={bucketCounts.importing} tone="text-emerald-300" />
+                            <MiniStat icon={PackageCheck} label="Import" value={bucketCounts.importing} tone="text-success" />
                             <MiniStat icon={AlertTriangle} label="Problèmes" value={bucketCounts.problem} tone="text-rose-300" />
                         </div>
                     </div>
@@ -291,7 +286,7 @@ export function QueueTab({ data, isLoading, isError, error, refetch, throughput,
                         { value: "all", label: "Tous", count: byClient.length },
                         { value: "downloading", label: "En cours", count: bucketCounts.downloading, icon: ArrowDownToLine },
                         { value: "waiting", label: "En attente", count: bucketCounts.waiting, icon: Clock, tone: "text-slate-300" },
-                        { value: "importing", label: "Import", count: bucketCounts.importing, icon: CheckCircle2, tone: "text-emerald-300" },
+                        { value: "importing", label: "Import", count: bucketCounts.importing, icon: CheckCircle2, tone: "text-success" },
                         { value: "problem", label: "Problèmes", count: bucketCounts.problem, icon: AlertTriangle, tone: "text-rose-300" },
                     ]}
                 />

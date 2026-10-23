@@ -419,7 +419,7 @@ function AddAction({
         const href = lib?.id ? `/media/${libType}/${lib.id}` : `/media?q=${encodeURIComponent(item.title)}`;
         return (
             <>
-                <span className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-emerald-500/10 px-3 text-sm text-emerald-300 ring-1 ring-emerald-500/25">
+                <span className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-success/10 px-3 text-sm text-success ring-1 ring-success/25">
                     <Check className="h-4 w-4" /> Dans ta médiathèque
                 </span>
                 <Button variant="outline" asChild>
@@ -437,7 +437,7 @@ function AddAction({
                 <motion.span
                     initial={{ scale: 0.9, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
-                    className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-emerald-500/10 px-3 text-sm text-emerald-300 ring-1 ring-emerald-500/25"
+                    className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-success/10 px-3 text-sm text-success ring-1 ring-success/25"
                 >
                     <Check className="h-4 w-4" /> Ajouté — recherche lancée
                 </motion.span>
@@ -544,10 +544,10 @@ function DetailError({ error, retrying, onRetry }: { error: unknown; retrying: b
     // Seule erreur « attendue » : la clé TMDB n'est pas configurée (HTTP 400).
     const noKey = /TMDB_API_KEY/i.test(message);
     return (
-        <div className="mt-5 flex items-start gap-3 rounded-xl bg-amber-500/10 p-3 text-xs ring-1 ring-amber-500/25">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+        <div className="mt-5 flex items-start gap-3 rounded-xl bg-warning/10 p-3 text-xs ring-1 ring-warning/25">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
             <div className="min-w-0 flex-1">
-                <p className="font-medium text-amber-200">Détails TMDB indisponibles</p>
+                <p className="font-medium text-warning">Détails TMDB indisponibles</p>
                 <p className="mt-0.5 break-words text-muted-foreground">
                     {noKey
                         ? "Ajoute TMDB_API_KEY au fichier .env du backend pour voir le casting et la bande-annonce."

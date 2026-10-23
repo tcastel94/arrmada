@@ -278,7 +278,7 @@ export function IndexerTable({
                         { value: "all", label: "Tous", count: counts.all },
                         { value: "active", label: "Actifs", count: counts.active },
                         { value: "disabled", label: "Désactivés", count: counts.disabled },
-                        { value: "issues", label: "À surveiller", count: counts.issues, icon: AlertTriangle, iconClassName: "text-amber-400" },
+                        { value: "issues", label: "À surveiller", count: counts.issues, icon: AlertTriangle, iconClassName: "text-warning" },
                     ]}
                 />
                 <div className="flex gap-2">
@@ -399,7 +399,7 @@ function RateCell({ rate, emptyLabel }: { rate: number | null | undefined; empty
         return <span className="text-xs text-muted-foreground">— <span className="text-[10px]">{emptyLabel}</span></span>;
     }
     const tone = rate >= 90 ? "emerald" : rate >= 70 ? "amber" : "rose";
-    const text = rate >= 90 ? "text-emerald-300" : rate >= 70 ? "text-amber-300" : "text-rose-300";
+    const text = rate >= 90 ? "text-success" : rate >= 70 ? "text-warning" : "text-rose-300";
     return (
         <div className="flex items-center gap-2">
             <span className={cn("w-12 shrink-0 text-xs font-semibold tabular-nums", text)}>
@@ -460,7 +460,7 @@ const IndexerLine = forwardRef<HTMLLIElement, IndexerLineProps>(function Indexer
                         <span
                             className={cn(
                                 "shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold",
-                                row.protocol === "usenet" ? "bg-amber-500/15 text-amber-300" : "bg-sky-500/15 text-sky-300",
+                                row.protocol === "usenet" ? "bg-warning/15 text-warning" : "bg-primary/15 text-primary",
                             )}
                         >
                             {row.protocol === "usenet" ? "Usenet" : row.protocol === "torrent" ? "Torrent" : row.protocol}
@@ -482,13 +482,13 @@ const IndexerLine = forwardRef<HTMLLIElement, IndexerLineProps>(function Indexer
                     {row.orphan ? " · n'existe plus dans Prowlarr" : ""} · {row.source}
                 </p>
                 {errorText && (
-                    <p className="mt-1 line-clamp-2 text-[11px] text-red-300" title={errorText}>
+                    <p className="mt-1 line-clamp-2 text-[11px] text-destructive" title={errorText}>
                         <AlertTriangle className="mr-1 inline h-3 w-3" />
                         {errorText}
                     </p>
                 )}
                 {outcome && (
-                    <p className={cn("mt-1 flex items-start gap-1 text-[11px]", outcome.ok ? "text-emerald-300" : "text-red-300")}>
+                    <p className={cn("mt-1 flex items-start gap-1 text-[11px]", outcome.ok ? "text-success" : "text-destructive")}>
                         {outcome.ok ? <CheckCircle2 className="mt-px h-3 w-3 shrink-0" /> : <XCircle className="mt-px h-3 w-3 shrink-0" />}
                         <span className="line-clamp-2">{outcome.ok ? "Test réussi" : `Test échoué : ${outcome.message ?? "erreur inconnue"}`}</span>
                     </p>
@@ -542,7 +542,7 @@ const IndexerLine = forwardRef<HTMLLIElement, IndexerLineProps>(function Indexer
                             disabled={locked}
                             onClick={onDelete}
                             aria-label={`Supprimer ${row.name}`}
-                            className="text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                         >
                             <Trash2 />
                         </Button>

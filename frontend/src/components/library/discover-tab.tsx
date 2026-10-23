@@ -151,7 +151,7 @@ export function DiscoverTab({ onPreview }: { onPreview: (item: AddableItem) => v
             )}
 
             {trendingSeries.length > 0 && (
-                <PosterRail title="Séries tendance" subtitle="Les plus suivies cette semaine" icon={Tv} iconClassName="text-sky-400">
+                <PosterRail title="Séries tendance" subtitle="Les plus suivies cette semaine" icon={Tv} iconClassName="text-primary">
                     {trendingSeries.map((it) => (
                         <SuggestionTile key={it.key} item={it} onPreview={onPreview} />
                     ))}
@@ -163,7 +163,7 @@ export function DiscoverTab({ onPreview }: { onPreview: (item: AddableItem) => v
                     title="Toujours attendus"
                     subtitle="Surveillés, mais encore sans fichier"
                     icon={PackageX}
-                    iconClassName="text-amber-400"
+                    iconClassName="text-warning"
                     action={
                         <Button variant="ghost" size="sm" asChild className="text-muted-foreground">
                             <Link href="/media/missing">Tout voir</Link>
@@ -215,7 +215,7 @@ function SuggestionTile({ item, onPreview }: { item: AddableItem; onPreview: (it
                 badges={
                     item.rating ? (
                         <PosterBadge title="Note TMDB">
-                            <Star className="h-2.5 w-2.5 fill-amber-400 text-amber-400" />
+                            <Star className="h-2.5 w-2.5 fill-amber-400 text-warning" />
                             {item.rating.toFixed(1)}
                         </PosterBadge>
                     ) : undefined
@@ -285,13 +285,11 @@ function BasedOnSection({ items, onPreview }: { items: LibrarySelectItem[]; onPr
 
     return (
         <motion.section variants={fadeUp} className="glass border-gradient relative overflow-hidden rounded-3xl p-4 md:p-6">
-            <div aria-hidden className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-violet-500/15 blur-3xl" />
-            <div aria-hidden className="pointer-events-none absolute -bottom-28 -left-10 h-56 w-72 rounded-full bg-primary/10 blur-3xl" />
 
             <div className="relative space-y-4">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div className="flex min-w-0 items-start gap-3">
-                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500/30 to-primary/10 text-violet-300 ring-1 ring-violet-400/30">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500/30 to-primary/10 text-primary ring-1 ring-primary/30">
                             <Compass className="h-5 w-5" />
                         </span>
                         <div className="min-w-0">
@@ -544,9 +542,8 @@ function BasedOnResults({
 function TmdbGuide() {
     return (
         <motion.div variants={fadeUp} className="glass border-gradient relative overflow-hidden rounded-2xl p-5 md:p-6">
-            <div aria-hidden className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-amber-500/20 blur-3xl" />
             <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start">
-                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500/30 to-orange-500/10 text-amber-300 ring-1 ring-amber-400/30">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500/30 to-orange-500/10 text-warning ring-1 ring-warning/30">
                     <KeyRound className="h-6 w-6" />
                 </span>
                 <div className="space-y-2 text-sm">

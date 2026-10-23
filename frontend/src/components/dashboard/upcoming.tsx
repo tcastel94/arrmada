@@ -1,19 +1,19 @@
 "use client";
 
 /**
- * Widget « À venir » : les sorties des 7 prochains jours, groupées par
- * jour (Aujourd'hui, Demain, puis jour de la semaine).
+ * Section « À venir » de l'Accueil : les prochaines sorties (7 jours) en
+ * liste groupée iOS, une ligne par titre avec sa vignette, le jour
+ * (« Aujourd'hui », « Demain », « jeudi 24 »…) et une coche verte s'il
+ * est déjà disponible.
  */
 /* eslint-disable @next/next/no-img-element */
-import Link from "next/link";
-import { motion } from "framer-motion";
-import { CalendarDays, Film, Tv, CheckCircle2 } from "lucide-react";
+import { CalendarDays, CheckCircle2, Film, Tv } from "lucide-react";
 import { useCalendar, type CalendarEntry } from "@/hooks/use-calendar";
-import { Panel } from "@/components/shared/panel";
+import { Section } from "@/components/shared/section";
+import { GroupedList, ListRow } from "@/components/shared/grouped-list";
 import { Shimmer } from "@/components/shared/loading-skeleton";
 import { EmptyState } from "@/components/shared/empty-state";
 import { parseApiDate } from "@/lib/format";
-import { stagger, slideIn } from "@/lib/motion";
 
 /** Clé de jour en heure LOCALE (évite le décalage UTC de toISOString). */
 function localDayKey(d: Date) {
@@ -26,7 +26,7 @@ function dayLabel(d: Date) {
     tomorrow.setDate(today.getDate() + 1);
     if (localDayKey(d) === localDayKey(today)) return "Aujourd'hui";
     if (localDayKey(d) === localDayKey(tomorrow)) return "Demain";
-    return d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "short" });
+    return d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric" });
 }
 
 /** Les dates « jour seul » (YYYY-MM-DD) sont lues en local, les autres via parseApiDate. */
@@ -40,70 +40,52 @@ function entryDate(e: CalendarEntry): Date | null {
 
 export function UpcomingWidget() {
     const { data, isLoading } = useCalendar(14);
-
     const limit = new Date();
     limit.setDate(limit.getDate() + 7);
-    const groups = new Map<string, { date: Date; items: CalendarEntry[] }>();
-    for (const e of data?.items ?? []) {
-        const d = entryDate(e);
-        if (!d || d > limit) continue;
-        const key = localDayKey(d);
-        if (!groups.has(key)) groups.set(key, { date: d, items: [] });
-        groups.get(key)!.items.push(e);
-    }
-    const days = Array.from(groups.values()).sort((a, b) => a.date.getTime() - b.date.getTime()).slice(0, 5);
+
+    const items = (data?.items ?? [])
+        .map((e) => ({ e, d: entryDate(e) }))
+        .filter((x): x is { e: CalendarEntry; d: Date } => !!x.d && x.d <= limit)
+        .sort((a, b) => a.d.getTime() - b.d.getTime())
+        .slice(0, 6);
 
     const hrefOf = (e: CalendarEntry) =>
         e.type === "movie" && e.movie_id ? `/media/movie/${e.movie_id}` : e.series_id ? `/media/series/${e.series_id}` : "/calendar";
 
     return (
-        <Panel title="À venir cette semaine" icon={CalendarDays} iconClassName="text-sky-300" href="/calendar" hrefLabel="Calendrier">
+        <Section title="À venir" href="/calendar" hrefLabel="Calendrier">
             {isLoading ? (
-                <div className="space-y-3">
-                    {[0, 1, 2].map((i) => (
-                        <Shimmer key={i} className="h-12" />
-                    ))}
+                <Shimmer className="h-[220px] rounded-xl" />
+            ) : items.length === 0 ? (
+                <div className="rounded-xl bg-card">
+                    <EmptyState compact icon={CalendarDays} title="Semaine calme" description="Aucune sortie prévue dans les 7 jours." />
                 </div>
-            ) : days.length === 0 ? (
-                <EmptyState compact icon={CalendarDays} title="Semaine calme" description="Aucune sortie prévue dans les 7 jours." />
             ) : (
-                <motion.div variants={stagger(0.05, 0.05)} initial="hidden" animate="show" className="space-y-4">
-                    {days.map(({ date, items }) => (
-                        <div key={localDayKey(date)}>
-                            <p className="eyebrow mb-2 capitalize">{dayLabel(date)}</p>
-                            <ul className="space-y-1.5">
-                                {items.slice(0, 4).map((e) => (
-                                    <motion.li key={e.id} variants={slideIn}>
-                                        <Link
-                                            href={hrefOf(e)}
-                                            className="group flex items-center gap-3 rounded-xl p-1.5 transition-colors hover:bg-white/[0.04]"
-                                        >
-                                            <div className="h-11 w-8 shrink-0 overflow-hidden rounded-md bg-muted ring-1 ring-white/10">
-                                                {e.poster_url ? (
-                                                    <img src={e.poster_url} alt="" loading="lazy" className="h-full w-full object-cover" />
-                                                ) : (
-                                                    <div className="flex h-full w-full items-center justify-center">
-                                                        {e.type === "movie" ? <Film className="h-3.5 w-3.5 opacity-50" /> : <Tv className="h-3.5 w-3.5 opacity-50" />}
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <div className="min-w-0 flex-1">
-                                                <p className="truncate text-sm font-medium transition-colors group-hover:text-primary">{e.title}</p>
-                                                <p className="truncate text-[11px] text-muted-foreground">
-                                                    {e.type === "episode" ? e.label : "Film"}
-                                                    {e.subtitle ? ` · ${e.subtitle}` : ""}
-                                                </p>
-                                            </div>
-                                            {e.has_file && <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" aria-label="Déjà disponible" />}
-                                        </Link>
-                                    </motion.li>
-                                ))}
-                                {items.length > 4 && <li className="pl-12 text-[11px] text-muted-foreground">+{items.length - 4} autre(s)</li>}
-                            </ul>
-                        </div>
+                <GroupedList>
+                    {items.map(({ e, d }) => (
+                        <ListRow
+                            key={e.id}
+                            href={hrefOf(e)}
+                            chevron={false}
+                            leading={
+                                <span className="my-2 h-[54px] w-9 shrink-0 overflow-hidden rounded-[6px] bg-white/[0.06]">
+                                    {e.poster_url ? (
+                                        <img src={e.poster_url} alt="" loading="lazy" className="h-full w-full object-cover" />
+                                    ) : (
+                                        <span className="flex h-full items-center justify-center">
+                                            {e.type === "movie" ? <Film className="h-4 w-4 text-white/25" /> : <Tv className="h-4 w-4 text-white/25" />}
+                                        </span>
+                                    )}
+                                </span>
+                            }
+                            title={e.title}
+                            subtitle={[e.type === "episode" ? e.label : "Film", e.subtitle].filter(Boolean).join(" · ")}
+                            detail={<span className="capitalize">{dayLabel(d)}</span>}
+                            accessory={e.has_file ? <CheckCircle2 className="h-[18px] w-[18px] text-success" aria-label="Déjà disponible" /> : undefined}
+                        />
                     ))}
-                </motion.div>
+                </GroupedList>
             )}
-        </Panel>
+        </Section>
     );
 }

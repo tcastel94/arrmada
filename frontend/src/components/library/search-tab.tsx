@@ -31,7 +31,7 @@ import { AddButton } from "./add-button";
 import { fromLookup, useAdder, type AddableItem } from "./adder";
 import { mediaHref, mediaKey, qualityLabel } from "./media-card";
 
-const GRID = "grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8";
+const GRID = "grid grid-cols-3 gap-x-3 gap-y-5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8";
 
 const AI_EXAMPLES = [
     "Films de science-fiction des années 80",
@@ -101,9 +101,7 @@ export function SearchTab({
     return (
         <motion.div variants={stagger(0, 0.08)} initial="hidden" animate="show" className="space-y-6">
             {/* ── Champ « hero » ── */}
-            <motion.div variants={fadeUp} className="glass border-gradient relative overflow-hidden rounded-3xl p-4 md:p-6">
-                <div aria-hidden className="pointer-events-none absolute -left-20 -top-24 h-64 w-64 rounded-full bg-brand/20 blur-3xl" />
-                <div aria-hidden className="pointer-events-none absolute -bottom-24 right-0 h-56 w-72 rounded-full bg-primary/15 blur-3xl" />
+            <motion.div variants={fadeUp} className="relative">
                 <div className="relative space-y-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                         <SegmentedControl
@@ -124,7 +122,7 @@ export function SearchTab({
                                 { value: "ai", label: "IA", icon: Brain },
                             ]}
                         />
-                        <p className="text-xs text-muted-foreground">
+                        <p className="hidden text-[13px] text-muted-foreground sm:block">
                             {mode === "ai" ? "Recherche dans ta bibliothèque, en langage naturel" : "Bibliothèque + catalogues Radarr / Sonarr"}
                         </p>
                     </div>
@@ -141,7 +139,7 @@ export function SearchTab({
                             placeholder={mode === "ai" ? "Ex : films de SF des années 80 que je n'ai pas…" : "Titre d'un film ou d'une série…"}
                         />
                         {mode === "ai" && (
-                            <Button size="lg" onClick={() => runAi()} disabled={input.trim().length < 3 || ai.isFetching} className="h-14 rounded-2xl">
+                            <Button size="lg" onClick={() => runAi()} disabled={input.trim().length < 3 || ai.isFetching} className="h-12 rounded-xl">
                                 <Wand2 /> Analyser
                             </Button>
                         )}
@@ -156,8 +154,7 @@ export function SearchTab({
                                 transition={{ duration: 0.25, ease: EASE_OUT }}
                                 className="flex flex-wrap items-center gap-2"
                             >
-                                <span className="eyebrow mr-1">Idées</span>
-                                {AI_EXAMPLES.map((ex) => (
+                                                                {AI_EXAMPLES.map((ex) => (
                                     <button
                                         key={ex}
                                         type="button"
@@ -178,7 +175,7 @@ export function SearchTab({
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, y: -4 }}
                                 transition={{ duration: 0.25, ease: EASE_OUT }}
-                                className="text-xs text-muted-foreground"
+                                className="hidden text-[13px] text-muted-foreground sm:block"
                             >
                                 Résultats en direct : ce que tu possèdes déjà, et ce que tu peux ajouter en un clic à Radarr ou Sonarr.
                             </motion.p>
@@ -189,7 +186,7 @@ export function SearchTab({
 
             {/* ── Résultats ── */}
             {!active ? (
-                <motion.div variants={fadeUp} className="glass rounded-2xl">
+                <motion.div variants={fadeUp}>
                     <EmptyState
                         icon={mode === "ai" ? Brain : Search}
                         title={mode === "ai" ? "Pose ta question à l'IA" : "Que veux-tu regarder ?"}
@@ -222,7 +219,7 @@ export function SearchTab({
                         <section className="space-y-3">
                             <SectionTitle
                                 icon={CheckCircle2}
-                                iconClassName="text-emerald-400"
+                                iconClassName="text-success"
                                 title="Dans ta bibliothèque"
                                 count={libraryItems.length}
                             />
@@ -350,8 +347,8 @@ function AiNotice({
 }) {
     if (!available) {
         return (
-            <div className="glass rounded-2xl border border-amber-500/20 p-4 text-sm">
-                <p className="font-semibold text-amber-300">Recherche IA non configurée</p>
+            <div className="glass rounded-2xl border border-warning/20 p-4 text-sm">
+                <p className="font-semibold text-warning">Recherche IA non configurée</p>
                 <p className="mt-1 text-muted-foreground">
                     Ajoute <code className="kbd">OPENROUTER_API_KEY</code> dans le fichier <code className="kbd">.env</code> du backend, puis redémarre
                     le conteneur. En attendant, le mode Titre fonctionne sans IA.
@@ -361,8 +358,8 @@ function AiNotice({
     }
     if (error) {
         return (
-            <div className="glass rounded-2xl border border-red-500/20 p-4 text-sm">
-                <p className="font-semibold text-red-300">L&apos;IA n&apos;a pas pu interpréter ta demande</p>
+            <div className="glass rounded-2xl border border-destructive/20 p-4 text-sm">
+                <p className="font-semibold text-destructive">L&apos;IA n&apos;a pas pu interpréter ta demande</p>
                 <p className="mt-1 break-words text-muted-foreground">{error}</p>
             </div>
         );
@@ -370,7 +367,7 @@ function AiNotice({
     if (!description) return null;
     return (
         <div className="glass flex items-start gap-3 rounded-2xl p-4 text-sm">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-violet-500/15 text-violet-300 ring-1 ring-violet-400/30">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary ring-1 ring-primary/30">
                 <Brain className="h-4 w-4" />
             </span>
             <div>

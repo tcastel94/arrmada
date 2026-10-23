@@ -110,18 +110,19 @@ export function ActionBar({ media, onEdit, onMove, onDelete, onManualSearch }: A
     const searchButton = (primary: boolean) => (
         <Button
             size="lg"
-            variant={primary ? "default" : "outline"}
-            className="flex-1 sm:flex-none"
+            variant={primary ? "default" : "secondary"}
+            className={primary ? "basis-full sm:basis-auto" : "flex-1 sm:flex-none"}
             disabled={triggerSearch.isPending}
             onClick={autoSearch}
         >
             {triggerSearch.isPending ? <Loader2 className="animate-spin" /> : <Search />}
-            Recherche auto
+            <span className="sm:hidden">Rechercher</span>
+            <span className="hidden sm:inline">Recherche auto</span>
             {missing > 0 && (
                 <span
                     className={cn(
                         "rounded-md px-1.5 py-px text-[11px] font-bold tabular-nums",
-                        primary ? "bg-black/20" : "bg-amber-500/15 text-amber-300",
+                        primary ? "bg-black/20" : "bg-warning/15 text-warning",
                     )}
                     aria-label={`${missing} épisodes manquants`}
                 >
@@ -155,7 +156,7 @@ export function ActionBar({ media, onEdit, onMove, onDelete, onManualSearch }: A
             {playable ? (
                 searchButton(false)
             ) : (
-                <Button size="lg" variant="outline" className="flex-1 sm:flex-none" onClick={onManualSearch}>
+                <Button size="lg" variant="secondary" className="flex-1 sm:flex-none" onClick={onManualSearch}>
                     <Radar /> Recherche manuelle
                 </Button>
             )}
@@ -168,7 +169,7 @@ export function ActionBar({ media, onEdit, onMove, onDelete, onManualSearch }: A
                 quand un item ouvre une boîte de dialogue. */}
             <DropdownMenu modal={false}>
                 <DropdownMenuTrigger asChild>
-                    <Button size="lg" variant="outline" className="w-11 px-0" aria-label="Plus d'actions">
+                    <Button size="lg" variant="secondary" className="w-12 px-0" aria-label="Plus d'actions">
                         <MoreHorizontal />
                     </Button>
                 </DropdownMenuTrigger>
@@ -188,7 +189,7 @@ export function ActionBar({ media, onEdit, onMove, onDelete, onManualSearch }: A
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                         onSelect={onDelete}
-                        className="text-red-400 focus:bg-red-500/10 focus:text-red-300"
+                        className="text-destructive focus:bg-destructive/10 focus:text-destructive"
                     >
                         <Trash2 /> Supprimer…
                     </DropdownMenuItem>
@@ -323,7 +324,8 @@ function PlayAction({ media }: { media: MediaDetail }) {
     return (
         <>
             {canKodi ? (
-                <div className="flex flex-1 rounded-xl sm:flex-none">
+                // Mobile : bouton principal sur toute la largeur, comme l'app TV
+                <div className="flex basis-full rounded-2xl sm:basis-auto">
                     <Button
                         size="lg"
                         className="min-w-0 flex-1 rounded-r-none pr-4 sm:flex-none"
@@ -339,7 +341,7 @@ function PlayAction({ media }: { media: MediaDetail }) {
                             initial={{ opacity: 0, y: 6 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.25 }}
-                            className="inline-flex shrink-0 items-center gap-1 rounded-md bg-black/20 px-1.5 py-0.5 text-xs font-semibold"
+                            className="inline-flex shrink-0 items-center gap-1 rounded-md bg-white/20 px-1.5 py-0.5 text-xs font-semibold"
                         >
                             <RoomIcon className="!size-3.5" aria-hidden />
                             {current.short}
@@ -349,7 +351,7 @@ function PlayAction({ media }: { media: MediaDetail }) {
                         <DropdownMenuTrigger asChild>
                             <Button
                                 size="lg"
-                                className="rounded-l-none border-l border-black/20 px-2.5"
+                                className="rounded-l-none border-l border-white/25 px-3"
                                 aria-label="Choisir la pièce ou l'appareil de lecture"
                                 title="Choisir la pièce (Salon / Salle de cinéma)"
                                 disabled={kodiPlay.isPending}
@@ -398,7 +400,7 @@ function PlayAction({ media }: { media: MediaDetail }) {
                     </DropdownMenu>
                 </div>
             ) : (
-                <Button size="lg" className="flex-1 sm:flex-none" onClick={() => setCastOpen(true)}>
+                <Button size="lg" className="basis-full sm:basis-auto" onClick={() => setCastOpen(true)}>
                     <Cast /> Caster
                 </Button>
             )}

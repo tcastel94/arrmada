@@ -1,7 +1,7 @@
 /**
- * Conteneur standard du contenu d'une page : marges alignées sur le header,
- * largeur max homogène, espacement vertical entre sections.
- * (Avant : chaque page avait sa largeur — 3xl, 4xl, 1400px, 1500px, rien…)
+ * Conteneur standard du contenu d'une page : marges latérales identiques
+ * partout (16 px sur mobile comme iOS, plus large sur ordinateur),
+ * largeur maximale homogène, espacement vertical entre sections.
  */
 import { cn } from "@/lib/utils";
 
@@ -12,12 +12,12 @@ export function PageContainer({
 }: {
     children: React.ReactNode;
     className?: string;
-    /** wide = grilles de médias / dashboards ; narrow = formulaires, réglages. */
+    /** wide = grilles de médias / tableaux de bord ; narrow = formulaires, réglages. */
     size?: "wide" | "narrow";
 }) {
     return (
-        <div className="px-3 pb-6 pt-5 md:px-5 lg:pl-0 lg:pr-5">
-            <div className={cn("mx-auto w-full space-y-6", size === "wide" ? "max-w-[1680px]" : "max-w-5xl", className)}>
+        <div className="px-4 pb-8 pt-1 md:px-6 lg:px-8">
+            <div className={cn("mx-auto w-full space-y-7", size === "wide" ? "max-w-[1600px]" : "max-w-4xl", className)}>
                 {children}
             </div>
         </div>

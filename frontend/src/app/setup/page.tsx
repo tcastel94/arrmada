@@ -39,7 +39,6 @@ import {
     Zap,
     type LucideIcon,
 } from "lucide-react";
-import { AuroraBackground } from "@/components/fx/aurora-background";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -272,7 +271,6 @@ export default function SetupPage() {
     /* ── Rendu ──────────────────────────────────────────────── */
     return (
         <div className="relative min-h-screen overflow-x-hidden">
-            <AuroraBackground intense />
             <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col items-center px-4 pb-10 pt-8 sm:pt-12">
                 <BrandMark />
 
@@ -282,7 +280,7 @@ export default function SetupPage() {
                     </div>
                 ) : isError ? (
                     <div className="glass-strong mt-10 w-full max-w-md rounded-3xl p-6 text-center">
-                        <AlertCircle className="mx-auto h-8 w-8 text-red-400" />
+                        <AlertCircle className="mx-auto h-8 w-8 text-destructive" />
                         <p className="mt-3 font-semibold">Backend injoignable</p>
                         <p className="mt-1 text-sm text-muted-foreground">{error instanceof Error ? error.message : ""}</p>
                         <Button className="mt-5" onClick={() => refetch()} disabled={isFetching}>
@@ -358,11 +356,11 @@ export default function SetupPage() {
 
                                             <div className="flex flex-wrap items-center gap-2 text-xs">
                                                 <span className="chip">
-                                                    <CheckCircle2 className="h-3 w-3 text-emerald-400" /> {plural(readyCount, "prêt", "prêts")}
+                                                    <CheckCircle2 className="h-3 w-3 text-success" /> {plural(readyCount, "prêt", "prêts")}
                                                 </span>
                                                 {invalidCount > 0 && (
                                                     <span className="chip">
-                                                        <AlertCircle className="h-3 w-3 text-amber-400" /> {plural(invalidCount, "incomplet", "incomplets")}
+                                                        <AlertCircle className="h-3 w-3 text-warning" /> {plural(invalidCount, "incomplet", "incomplets")}
                                                     </span>
                                                 )}
                                             </div>
@@ -374,7 +372,7 @@ export default function SetupPage() {
                                                         animate={{ opacity: 1, y: 0 }}
                                                         exit={{ opacity: 0 }}
                                                         role="alert"
-                                                        className="flex items-start gap-2 rounded-xl border border-red-500/25 bg-red-500/10 px-3.5 py-2.5 text-sm text-red-300"
+                                                        className="flex items-start gap-2 rounded-xl border border-destructive/25 bg-destructive/10 px-3.5 py-2.5 text-sm text-destructive"
                                                     >
                                                         <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> {submitError}
                                                     </motion.p>
@@ -417,11 +415,6 @@ function BrandMark() {
             <div className="relative">
                 {/* Halo en radial-gradient (et non `blur`) : l'animation pulse-glow
                     réécrit la propriété CSS `filter`, ce qui annulerait un flou. */}
-                <div
-                    aria-hidden
-                    className="absolute inset-0 -m-10 animate-pulse-glow rounded-full"
-                    style={{ background: "radial-gradient(closest-side, hsl(var(--primary) / 0.45), transparent)" }}
-                />
                 <div className="border-beam relative h-16 w-16 rounded-2xl p-[2px] sm:h-20 sm:w-20">
                     <div className="h-full w-full overflow-hidden rounded-[14px] sm:rounded-[18px]">
                         <BrandIcon title="ArrMada" />
@@ -454,7 +447,7 @@ function Stepper({ step }: { step: number }) {
                                 className={cn(
                                     "relative flex h-10 w-10 items-center justify-center rounded-full border transition-colors duration-300",
                                     done && "border-primary/60 bg-primary text-primary-foreground",
-                                    active && "border-primary/60 bg-primary/15 text-primary shadow-[0_0_24px_-4px_hsl(var(--primary)/0.8)]",
+                                    active && "border-primary/60 bg-primary/15 text-primary",
                                     !done && !active && "border-white/10 bg-white/[0.04] text-muted-foreground",
                                 )}
                             >
@@ -634,7 +627,7 @@ function DiscoveryStep({
             )}
 
             {scanError && (
-                <p role="alert" className="flex items-start gap-2 rounded-xl border border-red-500/25 bg-red-500/10 px-3.5 py-2.5 text-sm text-red-300">
+                <p role="alert" className="flex items-start gap-2 rounded-xl border border-destructive/25 bg-destructive/10 px-3.5 py-2.5 text-sm text-destructive">
                     <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> {scanError}
                 </p>
             )}
@@ -681,7 +674,7 @@ function DiscoveryStep({
                                                 <span
                                                     className={cn(
                                                         "rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                                                        svc.needs_api_key ? "bg-amber-500/15 text-amber-300" : "bg-emerald-500/15 text-emerald-300",
+                                                        svc.needs_api_key ? "bg-warning/15 text-warning" : "bg-success/15 text-success",
                                                     )}
                                                 >
                                                     {svc.needs_api_key ? "Clé requise" : "Accessible"}
@@ -743,7 +736,7 @@ function ServiceRow({
             transition={{ duration: 0.35, ease: EASE_OUT }}
             className={cn(
                 "glass space-y-4 rounded-2xl p-4 transition-shadow",
-                hasErrors && "shadow-[inset_0_0_0_1px_rgb(239_68_68/0.35)]",
+                hasErrors && "",
             )}
         >
             <div className="flex items-center gap-3">
@@ -760,7 +753,7 @@ function ServiceRow({
                     <Button
                         size="icon-sm"
                         variant="ghost"
-                        className="text-muted-foreground hover:bg-red-500/10 hover:text-red-400"
+                        className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                         onClick={() => onRemove(row.id)}
                         aria-label={`Retirer le service n°${index + 1}`}
                     >
@@ -830,7 +823,7 @@ function ServiceRow({
                         aria-live="polite"
                         className={cn(
                             "flex items-start gap-2 overflow-hidden text-xs font-medium",
-                            test.result.ok ? "text-emerald-400" : "text-red-400",
+                            test.result.ok ? "text-success" : "text-destructive",
                         )}
                     >
                         {test.result.ok ? <CheckCircle2 className="mt-px h-3.5 w-3.5 shrink-0" /> : <XCircle className="mt-px h-3.5 w-3.5 shrink-0" />}
@@ -866,9 +859,9 @@ function DoneStep({ added, onLogin }: { added: number; onLogin: () => void }) {
                     initial={{ scale: 0, rotate: -40 }}
                     animate={{ scale: 1, rotate: 0 }}
                     transition={{ type: "spring", stiffness: 260, damping: 16 }}
-                    className="relative flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400/30 to-teal-500/10 ring-1 ring-emerald-400/40 shadow-[0_0_48px_-6px_rgb(52_211_153/0.7)]"
+                    className="relative flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400/30 to-teal-500/10 ring-1 ring-success/40"
                 >
-                    <CheckCircle2 className="h-12 w-12 text-emerald-300" strokeWidth={1.6} />
+                    <CheckCircle2 className="h-12 w-12 text-success" strokeWidth={1.6} />
                 </motion.div>
             </div>
             <div>

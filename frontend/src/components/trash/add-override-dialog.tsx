@@ -193,7 +193,7 @@ export function AddOverrideDialog({
                                     {debounced.length >= 2 && (
                                         <div className="max-h-64 overflow-y-auto rounded-2xl bg-white/[0.02] p-1 ring-1 ring-white/[0.06]">
                                             {search.isError ? (
-                                                <p className="p-3 text-xs text-red-300">Recherche impossible : {search.error.message}</p>
+                                                <p className="p-3 text-xs text-destructive">Recherche impossible : {search.error.message}</p>
                                             ) : results.length === 0 && !search.isFetching ? (
                                                 <p className="p-3 text-xs text-muted-foreground">Aucun média trouvé pour « {debounced} ».</p>
                                             ) : (
@@ -255,7 +255,7 @@ export function AddOverrideDialog({
                                     ))}
                                 </SelectContent>
                             </Select>
-                            {profiles.isError && <p className="text-xs text-red-300">Profils indisponibles : synchronise TRaSH.</p>}
+                            {profiles.isError && <p className="text-xs text-destructive">Profils indisponibles : synchronise TRaSH.</p>}
                         </div>
                     </div>
 
@@ -279,7 +279,7 @@ export function AddOverrideDialog({
                     </label>
 
                     {replaces && (
-                        <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-xs text-amber-300 ring-1 ring-amber-400/20">
+                        <p className="rounded-xl bg-warning/10 px-3 py-2 text-xs text-warning ring-1 ring-warning/20">
                             Ce média a déjà un override : il sera remplacé.
                         </p>
                     )}

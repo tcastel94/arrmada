@@ -359,7 +359,7 @@ function QualityProfilePanel({ media }: { media: MediaDetail }) {
     };
 
     return (
-        <Panel title="Profil de qualité" icon={Target} iconClassName="text-amber-300">
+        <Panel title="Profil de qualité" icon={Target} iconClassName="text-warning">
             <div className="space-y-5">
                 {/* Profil actuellement appliqué dans Radarr/Sonarr */}
                 <div className="flex items-center justify-between gap-3">
@@ -389,7 +389,7 @@ function QualityProfilePanel({ media }: { media: MediaDetail }) {
                             <Button
                                 size="icon-sm"
                                 variant="ghost"
-                                className="shrink-0 text-muted-foreground hover:text-red-400"
+                                className="shrink-0 text-muted-foreground hover:text-destructive"
                                 aria-label="Retirer le profil personnalisé"
                                 onClick={() => setConfirmRemove(true)}
                             >

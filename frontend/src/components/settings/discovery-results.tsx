@@ -75,7 +75,7 @@ export function DiscoveryResults({
                                             <span className="block truncate font-mono text-[11px] text-muted-foreground">{d.url}</span>
                                         </span>
                                         {d.known ? (
-                                            <span className="flex shrink-0 items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
+                                            <span className="flex shrink-0 items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-[10px] font-semibold text-success">
                                                 <Check className="h-3 w-3" /> Déjà ajouté
                                             </span>
                                         ) : (

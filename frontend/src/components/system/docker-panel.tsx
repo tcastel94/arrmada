@@ -35,10 +35,10 @@ type State = "running" | "paused" | "restarting" | "stopped";
 type Filter = "all" | "running" | "stopped";
 
 const STATE_META: Record<State, { label: string; dot: string; chip: string }> = {
-    running: { label: "En marche", dot: "online", chip: "bg-emerald-500/15 text-emerald-300" },
-    paused: { label: "En pause", dot: "warning", chip: "bg-amber-500/15 text-amber-300" },
+    running: { label: "En marche", dot: "online", chip: "bg-success/15 text-success" },
+    paused: { label: "En pause", dot: "warning", chip: "bg-warning/15 text-warning" },
     restarting: { label: "Redémarrage…", dot: "primary", chip: "bg-primary/15 text-primary" },
-    stopped: { label: "Arrêté", dot: "offline", chip: "bg-red-500/15 text-red-300" },
+    stopped: { label: "Arrêté", dot: "offline", chip: "bg-destructive/15 text-destructive" },
 };
 
 const ACTION_META: Record<DockerActionName, { label: string; doing: string; done: string; icon: LucideIcon }> = {
@@ -174,7 +174,7 @@ export function DockerPanel() {
     return (
         <div className="space-y-4">
             {isRefetchError && (
-                <div className="flex items-center gap-2 rounded-xl bg-amber-500/10 px-3 py-2 text-xs text-amber-300 ring-1 ring-amber-400/20">
+                <div className="flex items-center gap-2 rounded-xl bg-warning/10 px-3 py-2 text-xs text-warning ring-1 ring-warning/20">
                     <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                     Unraid ne répond plus : l&apos;état affiché date de la dernière lecture réussie.
                 </div>
@@ -301,7 +301,7 @@ const ContainerCard = forwardRef<HTMLLIElement, ContainerCardProps>(function Con
                         <span
                             className={cn(
                                 "mr-1 text-xs",
-                                /unhealthy/i.test(c.status_text ?? "") ? "text-amber-300" : "text-muted-foreground",
+                                /unhealthy/i.test(c.status_text ?? "") ? "text-warning" : "text-muted-foreground",
                             )}
                         >
                             {statusText}
@@ -356,7 +356,7 @@ const ContainerCard = forwardRef<HTMLLIElement, ContainerCardProps>(function Con
                                 size="sm"
                                 disabled={busy}
                                 onClick={() => onAction("stop")}
-                                className="text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                             >
                                 {pending === "stop" ? <Loader2 className="animate-spin" /> : st === "paused" ? <Pause /> : <Square />}
                                 Arrêter

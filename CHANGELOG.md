@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Web app redesign, part 1: clean design system and iOS-style navigation
+
+#### Changed
+- **New design system ("Épuré")**, inspired by Apple's dark-mode apps: pure black background, neutral grey surfaces (#1C1C1E / #2C2C2E), a single accent (#4A9EFF), iOS system colours for status (green, orange, red), Apple's system font (SF Pro on iPhone / Mac, Geist elsewhere). The "Neon Armada" effects are gone everywhere: aurora background, glows, gradient borders, rotating beams, mouse spotlight, 3D tilt, animated gradient text (64 hard-coded glows and the decorative halos removed from the pages; the old CSS class names are kept but now render plainly, so pages not yet redesigned already look sober)
+- **Mobile navigation like a native iOS app**: a full-width blurred tab bar at the bottom (Accueil, Médiathèque, Rechercher, Transferts, Plus) with red count badges; tapping the active tab scrolls back to the top. A new **Plus** screen (`/more`) lists every other page as grouped lists with coloured icon tiles, like the iPhone Settings app, plus Déconnexion
+- **iOS navigation bar**: transparent at the top of the page, blurred once you scroll, with the page's small title fading in when the large title leaves the screen; "‹ Parent" back button on sub-pages (it returns to the previous screen with its filters and scroll position when you came from the app) and "‹ Plus" on pages reached from the Plus tab
+- **Large titles**: page headers are now iOS large titles (no more neon banner); stats become grey capsules that scroll horizontally on mobile; section headers are bold titles with a blue "Tout voir ›"
+- **Desktop sidebar** restyled like macOS: attached to the edge, compact rows, grey highlight that slides to the active row, plain counters
+- **Components**: buttons (solid blue, grey "filled", tinted), segmented-control tabs, filled inputs (16 px on mobile so Safari does not zoom), iOS green switches, borderless badges, simple progress bars and activity rings; dialogs become bottom sheets with a grab handle on mobile; the ⌘K search becomes a full-height sheet with "Annuler" on mobile; posters show the title under the artwork (Apple TV style) with a light lift on hover
+- **Mini player** restyled like the Music app's, just above the tab bar; short fade between pages; new login screen (app icon, password, blue button)
+- **Installable app**: web app manifest (standalone, black theme) for "Add to Home Screen"
+
+### Web app redesign, parts 2–5: every page
+
+#### Changed
+- **Accueil rethought** (like the Apple TV app's Home): large greeting title and date, alerts only when something is wrong (service down, disk ≥ 90 %), "À l'écran" (what a TV is playing, with pause / stop), **new "Reprendre" row** (landscape cards with progress, time left, TV, ▶ to resume on a TV), "Ajoutés récemment" poster row, "À venir" and "Transferts" as iOS grouped lists, four key-figure tiles (films, séries, storage, services), "Activité récente". The TRaSH compliance panel, disk details and the radar banner left the home screen (still in TRaSH Guides / Serveur)
+- **Médiathèque**: iOS search field, Tout / Films / Séries segmented control with counts, filters in a bottom sheet (window on desktop), sort + view + actions in one "⋯" menu, "Sélectionner" like Photos, 3 posters per row on iPhone; posters only show what matters (Manquant, a watched check mark, progress) and reveal the tech details on hover; home-made series as a scrolling row
+- **Media page** in the Apple TV app style: full-bleed backdrop fading to black, centred logo / title and one info line on mobile, grey tech labels (4K, Dolby Vision, Atmos…), full-width play button, plain-text ratings, underlined tab strip that sticks under the navigation bar; the Blu-ray case animation stays on desktop (without the glow)
+- **Reprendre** page in landscape cards; **Manquants** with a compact "Rechercher (n)" button and plain-text statuses
+- **Rechercher** (was "Rechercher & Ajouter") without the card around the field; **Transferts** (was "Téléchargements", same name in the tab bar, sidebar and title)
+- Settings pages are titled after their section; page descriptions show on desktop only; large titles are never truncated (actions move under the title when space runs out)
+- Colours unified across ~100 files: pastel greens / ambers / reds / violets of the old theme mapped to the iOS system colours (857 classes), decorative halos and coloured gradients removed (progress bars, sliders, rings)
+- New shared components: `Section`, `Shelf` (scrolling row with arrows on desktop), `GroupedList` / `ListRow` (iOS Settings lists), `StatTile`, `ContinueCard`
+
+
 ### Tablet: volume and actor filmography (APK 2.11.4)
 
 #### Added

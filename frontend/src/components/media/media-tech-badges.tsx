@@ -169,29 +169,31 @@ export function cardTechBadges(specs?: MediaTechSpecs | null, max = 3): TechBadg
  * la 4K a un fond en dégradé de marque (c'est l'info qui « claque »).
  */
 const CARD_TONES: Record<TechTone, string> = {
-    premium: "bg-gradient-to-r from-primary/90 to-brand/80 text-white ring-white/25 shadow-[0_0_14px_-4px_hsl(var(--primary)/0.9)]",
+    premium: "bg-gradient-to-r from-primary/90 to-brand/80 text-white ring-white/25",
     sky: "bg-black/65 text-sky-200 ring-sky-300/30",
     neutral: "bg-black/65 text-white/90 ring-white/15",
     muted: "bg-black/65 text-white/60 ring-white/10",
-    dv: "bg-black/65 text-fuchsia-200 ring-fuchsia-300/40",
+    dv: "bg-black/65 text-primary ring-primary/40",
     hdr: "bg-black/65 text-orange-200 ring-orange-300/35",
     dolby: "bg-black/65 text-cyan-200 ring-cyan-300/35",
     dts: "bg-black/65 text-rose-200 ring-rose-300/35",
-    lossless: "bg-black/65 text-emerald-200 ring-emerald-300/30",
+    lossless: "bg-black/65 text-success ring-success/30",
 };
 
-/** Fiche : verre teinté, même grammaire que les pastilles de statut du hero. */
+/** Fiche : étiquettes grises sobres. */
 const HERO_TONES: Record<TechTone, string> = {
-    premium:
-        "border-primary/40 bg-gradient-to-r from-primary/20 to-brand/15 text-sky-100 shadow-[0_0_20px_-6px_hsl(var(--primary)/0.8)]",
-    sky: "border-sky-400/30 bg-sky-500/10 text-sky-200",
-    neutral: "border-white/10 bg-white/[0.05] text-foreground/85",
-    muted: "border-white/[0.08] bg-white/[0.03] text-muted-foreground",
-    dv: "border-fuchsia-400/30 bg-fuchsia-500/10 text-fuchsia-200",
-    hdr: "border-orange-400/30 bg-orange-500/10 text-orange-200",
-    dolby: "border-cyan-400/30 bg-cyan-500/10 text-cyan-200",
-    dts: "border-rose-400/30 bg-rose-500/10 text-rose-200",
-    lossless: "border-emerald-400/30 bg-emerald-500/10 text-emerald-200",
+    // Refonte « Épuré » : étiquettes grises uniformes (l'icône et le texte
+    // suffisent à distinguer 4K, Dolby Vision, Atmos…), la plus importante
+    // (résolution premium) juste un peu plus claire.
+    premium: "border-transparent bg-white/[0.14] text-foreground",
+    sky: "border-transparent bg-white/[0.09] text-foreground/90",
+    neutral: "border-transparent bg-white/[0.09] text-foreground/90",
+    muted: "border-transparent bg-white/[0.06] text-muted-foreground",
+    dv: "border-transparent bg-white/[0.09] text-foreground/90",
+    hdr: "border-transparent bg-white/[0.09] text-foreground/90",
+    dolby: "border-transparent bg-white/[0.09] text-foreground/90",
+    dts: "border-transparent bg-white/[0.09] text-foreground/90",
+    lossless: "border-transparent bg-white/[0.09] text-foreground/90",
 };
 
 const KIND_ICONS: Record<TechKind, LucideIcon> = {
@@ -204,7 +206,7 @@ const KIND_ICONS: Record<TechKind, LucideIcon> = {
 };
 
 /** Pastille de la fiche (la teinte s'ajoute par-dessus). */
-const heroPill = "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold backdrop-blur-md";
+const heroPill = "inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-1 text-[12px] font-medium";
 
 /** Léger soulèvement au survol (via framer : le transform CSS serait écrasé par l'animation d'entrée). */
 const HOVER_LIFT = { y: -2 };

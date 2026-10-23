@@ -87,7 +87,7 @@ export default function YamahaSettingsPage() {
             {/* Raccourci vers la télécommande (désormais dans le Salon) */}
             <Link href="/remote" className="block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                 <SpotlightCard interactive className="group flex items-center gap-4 p-4">
-                    <span className="relative z-[2] flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500/30 to-fuchsia-500/10 text-violet-300 ring-1 ring-violet-400/25">
+                    <span className="relative z-[2] flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500/30 to-fuchsia-500/10 text-primary ring-1 ring-primary/25">
                         <Sofa className="h-5 w-5" />
                     </span>
                     <div className="relative z-[2] min-w-0 flex-1">

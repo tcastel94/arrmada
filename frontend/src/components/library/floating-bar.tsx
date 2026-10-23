@@ -33,13 +33,13 @@ export function FloatingBar({
                     animate={{ y: 0, opacity: 1, scale: 1 }}
                     exit={{ y: 48, opacity: 0, scale: 0.94 }}
                     transition={SPRING}
-                    className="pointer-events-none fixed inset-x-3 bottom-[calc(6.25rem+env(safe-area-inset-bottom))] z-[45] flex justify-center lg:bottom-6 lg:left-[var(--sb-w)] lg:right-5"
+                    className="pointer-events-none fixed inset-x-3 bottom-[calc(var(--tabbar-h)+env(safe-area-inset-bottom)+0.75rem)] z-[45] flex justify-center lg:bottom-6 lg:left-[calc(var(--sb-w)+1.5rem)] lg:right-6"
                 >
                     <div
                         role="toolbar"
                         aria-label={label}
                         className={cn(
-                            "glass-strong border-gradient pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-1.5 rounded-2xl p-2 shadow-[0_24px_70px_-20px_rgba(0,0,0,0.9),0_0_40px_-12px_hsl(var(--primary)/0.45)]",
+                            "material pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-1.5 rounded-2xl border border-white/[0.08] p-2 shadow-[0_16px_48px_-12px_rgb(0_0_0/0.8)]",
                             className,
                         )}
                     >
@@ -54,7 +54,7 @@ export function FloatingBar({
 /** Compteur « 12 sélectionnés » qui roule à chaque changement. */
 export function SelectionCount({ count, label = "sélectionné" }: { count: number; label?: string }) {
     return (
-        <span className="flex items-center gap-1.5 rounded-xl bg-primary/10 px-3 py-1.5 text-sm ring-1 ring-primary/25">
+        <span className="flex items-center gap-1.5 px-2 text-[14px]">
             <AnimatePresence mode="popLayout" initial={false}>
                 <motion.span
                     key={count}

@@ -141,7 +141,7 @@ export function TrashWizard() {
                                     <motion.span
                                         layoutId="trash-step"
                                         transition={SPRING}
-                                        className="absolute inset-0 rounded-xl bg-gradient-to-r from-orange-500/80 to-amber-500/70 shadow-[0_0_24px_-6px_hsl(24_95%_58%/0.8)]"
+                                        className="absolute inset-0 rounded-xl bg-gradient-to-r from-orange-500/80 to-amber-500/70"
                                     />
                                 )}
                                 <Icon className="relative h-3.5 w-3.5 shrink-0" />
@@ -197,7 +197,7 @@ export function TrashWizard() {
                                         className={cn(
                                             "flex cursor-pointer items-center gap-4 rounded-2xl p-4 ring-1 transition-all",
                                             prefs[t.key]
-                                                ? "bg-orange-500/10 ring-orange-400/40 shadow-[0_0_30px_-12px_hsl(24_95%_58%/0.7)]"
+                                                ? "bg-orange-500/10 ring-orange-400/40"
                                                 : "bg-white/[0.025] ring-white/[0.06] hover:ring-white/[0.12]",
                                         )}
                                     >
@@ -305,7 +305,7 @@ function OptionGrid<V extends string>({
                             <motion.span
                                 layoutId={`trash-opt-${id}`}
                                 transition={SPRING}
-                                className="absolute inset-0 rounded-2xl bg-gradient-to-br from-orange-500/15 to-amber-500/[0.04] shadow-[0_0_34px_-12px_hsl(24_95%_58%/0.8)]"
+                                className="absolute inset-0 rounded-2xl bg-gradient-to-br from-orange-500/15 to-amber-500/[0.04]"
                             />
                         )}
                         <span className="relative">
@@ -315,7 +315,7 @@ function OptionGrid<V extends string>({
                             <span className="flex flex-wrap items-center gap-1.5 text-sm font-semibold">
                                 {opt.label}
                                 {opt.recommended && (
-                                    <span className="rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-300">
+                                    <span className="rounded-md bg-success/15 px-1.5 py-0.5 text-[10px] font-semibold text-success">
                                         Recommandé
                                     </span>
                                 )}
@@ -436,7 +436,7 @@ function RecommendationCard({ rec }: { rec: RecommendedProfile }) {
                     <span
                         className={cn(
                             "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ring-1",
-                            isSonarr ? "bg-sky-500/15 text-sky-300 ring-sky-400/25" : "bg-violet-500/15 text-violet-300 ring-violet-400/25",
+                            isSonarr ? "bg-primary/15 text-primary ring-primary/25" : "bg-primary/15 text-primary ring-primary/25",
                         )}
                     >
                         <Icon className="h-4 w-4" />

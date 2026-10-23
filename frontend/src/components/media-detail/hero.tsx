@@ -5,9 +5,9 @@
  * ----------------------------------------------------------------
  * - `HeroBackdrop` : l'image de fond (fanart) plein cadre, placée DERRIÈRE
  *   la barre du haut, avec parallaxe au défilement (l'image descend moins vite
- *   que la page), vignettage vers la couleur de fond et grain argentique.
+ *   que la page) et fondu vers le noir en bas, comme l'app TV d'Apple.
  * - `MediaHero` : le vrai boîtier Blu-ray / 4K / DVD du titre (l'affiche en
- *   jaquette) qui s'ouvre pour recevoir son disque, avec halo coloré ; grand
+ *   jaquette) qui s'ouvre pour recevoir son disque (ordinateur) ; grand
  *   titre (ou ClearLogo, le logo-titre officiel, quand il est connu),
  *   studio / chaîne et badges techniques du fichier (4K, HDR, Atmos…),
  *   méta (année, durée, certification, statut traduit), genres, notes
@@ -20,14 +20,11 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
 import {
-    Calendar,
-    Clock,
     Eye,
     EyeOff,
     Film,
     Globe,
     HardDrive,
-    Layers,
     Star,
     Tv,
     ExternalLink,
@@ -40,7 +37,6 @@ import { OpeningCase, caseFormat } from "@/components/media/disc-art";
 import { AnimatedNumber } from "@/components/fx/animated-number";
 import { RingGauge } from "@/components/fx/ring-gauge";
 import { StatusDot } from "@/components/fx/status-dot";
-import { Badge } from "@/components/ui/badge";
 import { formatBytes, formatDuration } from "@/lib/format";
 import { EASE_OUT, fadeUp, scaleIn, stagger } from "@/lib/motion";
 import { cn } from "@/lib/utils";
@@ -71,7 +67,7 @@ export function HeroBackdrop({ src }: { src?: string | null }) {
     return (
         <div
             aria-hidden
-            className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[560px] overflow-hidden sm:h-[640px] lg:h-[720px]"
+            className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[78vw] max-h-[560px] overflow-hidden sm:h-[600px] sm:max-h-none lg:h-[700px]"
         >
             <motion.div style={{ y, opacity }} className="absolute inset-0 will-change-transform">
                 {src ? (
@@ -87,79 +83,29 @@ export function HeroBackdrop({ src }: { src?: string | null }) {
                         className="h-full w-full object-cover object-[center_25%]"
                     />
                 ) : (
-                    // Pas de fanart : nappe de lumière de marque à la place.
-                    <div
-                        className="h-full w-full"
-                        style={{
-                            background:
-                                "radial-gradient(ellipse 70% 60% at 30% 20%, hsl(var(--primary) / 0.28), transparent 70%), radial-gradient(ellipse 60% 50% at 80% 10%, hsl(var(--brand) / 0.18), transparent 70%)",
-                        }}
-                    />
+                    // Pas d'image : simple dégradé gris neutre.
+                    <div className="h-full w-full bg-gradient-to-b from-[hsl(240_3%_16%)] to-background" />
                 )}
             </motion.div>
 
-            {/* Vignettage : bas → fond de page, gauche → lisibilité du texte, coins assombris */}
-            <div className="absolute inset-0 bg-gradient-to-t from-background via-background/70 to-background/5" />
-            <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/45 to-transparent" />
-            <div
-                className="absolute inset-0"
-                style={{ background: "radial-gradient(ellipse 120% 90% at 60% 0%, transparent 45%, hsl(var(--background) / 0.85) 100%)" }}
-            />
-            {/* Grain argentique très léger (évite l'aplat « numérique ») */}
-            <div className="absolute inset-0 bg-noise opacity-[0.08] mix-blend-overlay" />
-            <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-background to-transparent" />
+            {/* Fondu vers le noir : en bas (mobile et ordinateur) et à gauche
+                (ordinateur, pour la lisibilité du texte posé sur l'image). */}
+            <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
+            <div className="absolute inset-0 hidden bg-gradient-to-r from-background/90 via-background/40 to-transparent md:block" />
+            <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/50 to-transparent" />
         </div>
     );
 }
 
 /* ════════════════════════════════════════════════════════════════
-   Affiche
+   Boîtier
    ════════════════════════════════════════════════════════════════ */
 
-function PosterImage({
-    src,
-    title,
-    isMovie,
-    className,
-    iconClassName,
-}: {
-    src: string | null;
-    title: string;
-    isMovie: boolean;
-    className?: string;
-    iconClassName?: string;
-}) {
-    const [loaded, setLoaded] = useState(false);
-    const [failed, setFailed] = useState(false);
-    const Icon = isMovie ? Film : Tv;
-    return (
-        <div className={cn("relative aspect-[2/3] overflow-hidden bg-muted/40", className)}>
-            {src && !failed ? (
-                <img
-                    src={src}
-                    alt={`Affiche de ${title}`}
-                    onLoad={() => setLoaded(true)}
-                    onError={() => setFailed(true)}
-                    className={cn(
-                        "h-full w-full object-cover transition-all duration-700 ease-smooth",
-                        loaded ? "opacity-100 blur-0" : "opacity-0 blur-md",
-                    )}
-                />
-            ) : (
-                <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-muted/60 via-muted/30 to-primary/15">
-                    <Icon className={cn("h-14 w-14 text-muted-foreground/30", iconClassName)} strokeWidth={1.4} />
-                </div>
-            )}
-            {src && !loaded && !failed && <div className="shimmer absolute inset-0" />}
-        </div>
-    );
-}
-
 /**
- * Grand boîtier desktop : le vrai boîtier du titre (format d'après le fichier)
- * qui s'ouvre et reçoit son disque, + halo = copie floutée de l'affiche
- * (couleurs du film). Le disque : rond imprimé (dossier du film ou
- * fanart.tv), sinon dessiné à partir de l'affiche.
+ * Grand boîtier (tablette / ordinateur) : le vrai boîtier du titre (format
+ * d'après le fichier) qui s'ouvre et reçoit son disque, posé avec une ombre
+ * portée. Le disque : rond imprimé (dossier du film ou fanart.tv), sinon
+ * dessiné à partir de l'affiche.
  */
 function HeroCase({ media, techFile }: { media: MediaDetail; techFile: FileInfo | null }) {
     const poster = media.images?.poster ?? null;
@@ -168,22 +114,7 @@ function HeroCase({ media, techFile }: { media: MediaDetail; techFile: FileInfo 
             ? caseFormat(media.file?.resolution, !!media.has_file)
             : caseFormat(techFile?.resolution, !!techFile);
     return (
-        <div className="relative isolate">
-            {poster ? (
-                // Halo « respirant » : on anime seulement l'opacité (la classe
-                // animate-pulse-glow écraserait le `filter: blur` du halo).
-                <motion.img
-                    aria-hidden
-                    src={poster}
-                    alt=""
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: [0.45, 0.7, 0.45] }}
-                    transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-                    className="absolute inset-0 -z-10 h-full w-full scale-105 rounded-3xl object-cover blur-3xl saturate-150"
-                />
-            ) : (
-                <div aria-hidden className="absolute inset-0 -z-10 rounded-3xl bg-primary/30 blur-3xl" />
-            )}
+        <div className="relative isolate drop-shadow-[0_24px_40px_rgb(0_0_0/0.7)]">
             <OpeningCase
                 poster={poster}
                 discart={media.images?.discart}
@@ -199,11 +130,11 @@ function HeroCase({ media, techFile }: { media: MediaDetail; techFile: FileInfo 
    ════════════════════════════════════════════════════════════════ */
 
 const STATUS_TONE_STYLE: Record<StatusTone, { dot: "online" | "warning" | "primary" | "unknown" | "error"; badge: string }> = {
-    success: { dot: "online", badge: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" },
-    warning: { dot: "warning", badge: "border-amber-500/30 bg-amber-500/10 text-amber-300" },
+    success: { dot: "online", badge: "border-success/30 bg-success/10 text-success" },
+    warning: { dot: "warning", badge: "border-warning/30 bg-warning/10 text-warning" },
     primary: { dot: "primary", badge: "border-primary/30 bg-primary/10 text-primary" },
     muted: { dot: "unknown", badge: "border-white/10 bg-white/[0.04] text-muted-foreground" },
-    danger: { dot: "error", badge: "border-red-500/30 bg-red-500/10 text-red-300" },
+    danger: { dot: "error", badge: "border-destructive/30 bg-destructive/10 text-destructive" },
 };
 
 /** Note avec étoile et compteur animé (IMDb 7,8 /10, RT 92 %…). */
@@ -219,13 +150,13 @@ function RatingPill({
 }) {
     if (!value) return null;
     return (
-        <div className="glass flex items-center gap-2 rounded-xl px-3 py-1.5">
-            <Star className="h-4 w-4 fill-amber-400 text-amber-400 drop-shadow-[0_0_6px_rgb(251_191_36/0.7)]" aria-hidden />
-            <span className="text-sm font-bold">
+        <div className="flex items-center gap-1.5">
+            <Star className="h-3.5 w-3.5 fill-current text-foreground/80" aria-hidden />
+            <span className="text-[15px] font-semibold">
                 <AnimatedNumber value={value} decimals={percent ? 0 : 1} suffix={percent ? " %" : ""} />
             </span>
             {!percent && <span className="-ml-1 text-[10px] text-muted-foreground">/10</span>}
-            <span className="text-xs font-medium text-muted-foreground">{label}</span>
+            <span className="text-[13px] text-muted-foreground">{label}</span>
         </div>
     );
 }
@@ -268,7 +199,7 @@ function Overview({ text }: { text: string }) {
 
     return (
         <div className="max-w-3xl">
-            <p ref={ref} className={cn("text-sm leading-relaxed text-foreground/80 md:text-[15px]", !expanded && "line-clamp-4")}>
+            <p ref={ref} className={cn("text-[15px] leading-relaxed text-foreground/85", !expanded && "line-clamp-4")}>
                 {text}
             </p>
             {(clamped || expanded) && (
@@ -276,7 +207,7 @@ function Overview({ text }: { text: string }) {
                     type="button"
                     onClick={() => setExpanded((v) => !v)}
                     aria-expanded={expanded}
-                    className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                    className="mt-1 inline-flex items-center gap-1 text-[14px] font-medium text-primary"
                 >
                     {expanded ? "Réduire" : "Lire la suite"}
                     <ChevronDown className={cn("h-3 w-3 transition-transform", expanded && "rotate-180")} aria-hidden />
@@ -287,8 +218,7 @@ function Overview({ text }: { text: string }) {
 }
 
 /** Classes du grand titre texte (aussi utilisé en repli du ClearLogo). */
-const TITLE_CLASS =
-    "text-balance bg-gradient-to-b from-white via-white to-white/65 bg-clip-text pb-1 text-3xl font-bold leading-[1.05] tracking-tight text-transparent drop-shadow-[0_4px_24px_rgb(0_0_0/0.6)] sm:text-4xl lg:text-5xl xl:text-6xl";
+const TITLE_CLASS = "text-balance pb-1 text-[30px] font-bold leading-[1.05] tracking-tight sm:text-4xl lg:text-5xl";
 
 /**
  * Titre du média : le ClearLogo (logo-titre transparent) s'il existe, sinon
@@ -316,7 +246,7 @@ function HeroTitle({ media }: { media: MediaDetail }) {
     return (
         <h1 className="pb-1">
             <span className="sr-only">{media.title}</span>
-            <span className="block h-16 sm:h-20 lg:h-28" aria-hidden>
+            <span className="flex h-16 justify-center sm:h-20 md:justify-start lg:h-28" aria-hidden>
                 <motion.img
                     ref={imgRef}
                     src={logo}
@@ -328,7 +258,7 @@ function HeroTitle({ media }: { media: MediaDetail }) {
                     transition={{ duration: 0.8, ease: EASE_OUT }}
                     // object-contain + ancrage en bas à gauche : un logo très large
                     // rétrécit dans la boîte au lieu de déborder.
-                    className="h-full w-auto max-w-full object-contain object-left-bottom drop-shadow-[0_6px_24px_rgb(0_0_0/0.75)]"
+                    className="h-full w-auto max-w-full object-contain object-bottom md:object-left-bottom"
                 />
             </span>
         </h1>
@@ -393,42 +323,56 @@ export function MediaHero({ media, actions }: { media: MediaDetail; actions?: Re
     if (!isMovie && media.tvdb_id) links.push({ href: `https://www.thetvdb.com/dereferrer/series/${media.tvdb_id}`, label: "TVDB" });
     if (media.website) links.push({ href: media.website, label: "Site officiel", icon: Globe });
 
+    // Ligne d'infos unique, façon app TV : « 2024 · 2 h 46 · 3 saisons · Science-fiction, Aventure »
+    const metaParts = [
+        media.year ? String(media.year) : null,
+        media.runtime ? `${formatDuration(media.runtime * 60)}${isMovie ? "" : " / ép."}` : null,
+        !isMovie && regularSeasons > 0 ? `${regularSeasons} saison${regularSeasons > 1 ? "s" : ""}` : null,
+        genres.length ? genres.slice(0, 3).map(translateGenre).join(", ") : null,
+    ].filter(Boolean);
+
     return (
         <motion.section
-            variants={stagger(0.05, 0.07)}
+            variants={stagger(0.05, 0.06)}
             initial="hidden"
             animate="show"
             aria-label={`Présentation de ${media.title}`}
-            className="relative grid gap-6 pt-4 md:grid-cols-[220px_minmax(0,1fr)] md:gap-8 md:pt-14 lg:grid-cols-[260px_minmax(0,1fr)] lg:gap-10 lg:pt-20"
+            // Mobile : le texte commence en bas de l'image de fond (≈ 16:9)
+            className="relative grid gap-6 pt-[44vw] sm:pt-48 md:grid-cols-[220px_minmax(0,1fr)] md:gap-8 md:pt-20 lg:grid-cols-[260px_minmax(0,1fr)] lg:gap-10 lg:pt-24"
         >
-            {/* Affiche (desktop / tablette) */}
+            {/* Boîtier animé (tablette / ordinateur) */}
             <motion.div variants={scaleIn} className="hidden self-start md:block">
                 <HeroCase media={media} techFile={techFile} />
             </motion.div>
 
-            <div className="min-w-0 space-y-5">
-                {/* Titre (+ mini-affiche sur mobile) */}
-                <motion.div variants={fadeUp} className="flex items-end gap-4">
-                    <div className="w-24 shrink-0 overflow-hidden rounded-xl shadow-[0_16px_40px_-12px_rgb(0_0_0/0.9)] ring-1 ring-white/10 sm:w-28 md:hidden">
-                        <PosterImage src={media.images?.poster ?? null} title={media.title} isMovie={isMovie} iconClassName="h-8 w-8" />
-                    </div>
-                    <div className="min-w-0 space-y-2">
-                        <p className="eyebrow flex items-center gap-1.5 text-foreground/60">
-                            {isMovie ? <Film className="h-3 w-3" aria-hidden /> : <Tv className="h-3 w-3" aria-hidden />}
-                            {isMovie ? "Film" : "Série"}
+            <div className="min-w-0 space-y-4">
+                {/* Titre (ou logo-titre), centré sur mobile comme l'app TV */}
+                <motion.div variants={fadeUp} className="space-y-1.5 text-center md:text-left">
+                    <p className="flex items-center justify-center gap-1.5 text-[13px] font-medium text-foreground/70 md:justify-start">
+                        {isMovie ? <Film className="h-3.5 w-3.5" aria-hidden /> : <Tv className="h-3.5 w-3.5" aria-hidden />}
+                        {isMovie ? "Film" : "Série"}
+                    </p>
+                    <HeroTitle key={media.id} media={media} />
+                    {media.original_title && media.original_title !== media.title && (
+                        <p className="text-[14px] italic text-muted-foreground">{media.original_title}</p>
+                    )}
+                    {metaParts.length > 0 && (
+                        <p className="flex flex-wrap items-center justify-center gap-x-1.5 text-[14px] text-foreground/75 md:justify-start">
+                            {metaParts.join(" · ")}
+                            {media.certification && (
+                                <span className="ml-1 rounded-[4px] border border-white/30 px-1 text-[11px] font-semibold leading-4 text-foreground/80">
+                                    {media.certification}
+                                </span>
+                            )}
                         </p>
-                        <HeroTitle key={media.id} media={media} />
-                        {media.original_title && media.original_title !== media.title && (
-                            <p className="text-sm italic text-muted-foreground">{media.original_title}</p>
-                        )}
-                    </div>
+                    )}
                 </motion.div>
 
                 {/* Studio / chaîne + badges techniques du fichier principal */}
                 {(studioName || hasTech) && (
                     <motion.div
                         variants={fadeUp}
-                        className="flex flex-wrap items-center gap-1.5"
+                        className="flex flex-wrap items-center justify-center gap-1.5 md:justify-start"
                         title={!isMovie && hasTech ? "Badges techniques : qualité la plus fréquente parmi les épisodes" : undefined}
                     >
                         <StudioNetworkLogo name={studioName} kind={isMovie ? "studio" : "network"} variant="hero" />
@@ -437,74 +381,19 @@ export function MediaHero({ media, actions }: { media: MediaDetail; actions?: Re
                     </motion.div>
                 )}
 
-                {/* Méta : année · durée · certification · statut · surveillance · taille */}
-                <motion.div variants={fadeUp} className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground">
-                    {!!media.year && (
-                        <span className="flex items-center gap-1.5">
-                            <Calendar className="h-3.5 w-3.5" aria-hidden /> {media.year}
-                        </span>
-                    )}
-                    {!!media.runtime && (
-                        <span className="flex items-center gap-1.5">
-                            <Clock className="h-3.5 w-3.5" aria-hidden />
-                            {formatDuration(media.runtime * 60)}
-                            {!isMovie && <span className="text-muted-foreground/70">/ épisode</span>}
-                        </span>
-                    )}
-                    {!isMovie && regularSeasons > 0 && (
-                        <span className="flex items-center gap-1.5">
-                            <Layers className="h-3.5 w-3.5" aria-hidden />
-                            {regularSeasons} saison{regularSeasons > 1 ? "s" : ""}
-                        </span>
-                    )}
-                    {media.certification && (
-                        <span className="rounded-md border border-white/20 px-1.5 py-px text-[11px] font-semibold text-foreground/80">
-                            {media.certification}
-                        </span>
-                    )}
-                    {status && statusStyle && (
-                        <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium", statusStyle.badge)}>
-                            <StatusDot tone={statusStyle.dot} size="sm" pulse={status.tone === "success" && !isMovie} />
-                            {status.label}
-                        </span>
-                    )}
-                    <span
-                        className={cn(
-                            "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium",
-                            media.monitored
-                                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-                                : "border-white/10 bg-white/[0.04] text-muted-foreground",
-                        )}
-                    >
-                        {media.monitored ? <Eye className="h-3 w-3" aria-hidden /> : <EyeOff className="h-3 w-3" aria-hidden />}
-                        {media.monitored ? "Surveillé" : "Non surveillé"}
-                    </span>
-                    {media.size_on_disk > 0 && (
-                        <span className="flex items-center gap-1.5">
-                            <HardDrive className="h-3.5 w-3.5" aria-hidden /> {formatBytes(media.size_on_disk)}
-                        </span>
-                    )}
-                </motion.div>
+                {/* Actions (Sur la TV, recherche…) */}
+                {actions && <motion.div variants={fadeUp}>{actions}</motion.div>}
 
-                {/* Genres (+ alerte fichier manquant) */}
-                {(genres.length > 0 || (isMovie && !media.has_file)) && (
-                    <motion.div variants={fadeUp} className="flex flex-wrap items-center gap-1.5">
-                        {isMovie && !media.has_file && (
-                            <Badge variant="warning" className="rounded-full px-2.5">
-                                Fichier manquant
-                            </Badge>
-                        )}
-                        {genres.map((g) => (
-                            <span key={g} className="chip">
-                                {translateGenre(g)}
-                            </span>
-                        ))}
+                {/* Synopsis */}
+                {media.overview && (
+                    <motion.div variants={fadeUp}>
+                        <Overview text={media.overview} />
                     </motion.div>
                 )}
 
                 {/* Notes + complétude (série) */}
                 {(hasRatings || (stats && stats.total > 0)) && (
-                    <motion.div variants={fadeUp} className="flex flex-wrap items-center gap-2">
+                    <motion.div variants={fadeUp} className="flex flex-wrap items-center gap-x-5 gap-y-2">
                         {isMovie ? (
                             <>
                                 <RatingPill label="IMDb" value={ratings.imdb} />
@@ -516,21 +405,19 @@ export function MediaHero({ media, actions }: { media: MediaDetail; actions?: Re
                             <RatingPill label="Note" value={ratings.value} />
                         )}
                         {stats && stats.total > 0 && (
-                            <div className="glass flex items-center gap-3 rounded-xl py-1 pl-1.5 pr-3">
-                                <RingGauge value={stats.pct} size={36} stroke={4} tone={stats.missing === 0 ? "emerald" : "amber"}>
-                                    <span className="text-[9px] font-bold tabular-nums">{stats.pct}%</span>
-                                </RingGauge>
+                            <div className="flex items-center gap-2.5">
+                                <RingGauge value={stats.pct} size={32} stroke={4} tone={stats.missing === 0 ? "emerald" : "amber"} />
                                 <div className="leading-tight">
-                                    <p className="text-sm font-bold tabular-nums">
+                                    <p className="text-[14px] font-semibold tabular-nums">
                                         <AnimatedNumber value={stats.have} />
                                         <span className="text-muted-foreground">/{stats.aired}</span>
-                                        <span className="ml-1 text-xs font-medium text-muted-foreground">épisodes</span>
+                                        <span className="ml-1 text-[13px] font-normal text-muted-foreground">épisodes</span>
                                     </p>
-                                    <p className="text-[11px] text-muted-foreground">
+                                    <p className="text-[12px] text-muted-foreground">
                                         {stats.missing > 0 ? (
-                                            <span className="text-amber-400">{stats.missing} manquant{stats.missing > 1 ? "s" : ""}</span>
+                                            <span className="text-warning">{stats.missing} manquant{stats.missing > 1 ? "s" : ""}</span>
                                         ) : (
-                                            <span className="text-emerald-400">Complète</span>
+                                            <span className="text-success">Complète</span>
                                         )}
                                         {stats.upcoming > 0 && ` · ${stats.upcoming} à venir`}
                                     </p>
@@ -540,20 +427,29 @@ export function MediaHero({ media, actions }: { media: MediaDetail; actions?: Re
                     </motion.div>
                 )}
 
-                {/* Synopsis */}
-                {media.overview && (
-                    <motion.div variants={fadeUp}>
-                        <Overview text={media.overview} />
-                    </motion.div>
-                )}
-
-                {/* Actions */}
-                {actions && <motion.div variants={fadeUp}>{actions}</motion.div>}
+                {/* État : statut, surveillance, taille, fichier manquant */}
+                <motion.div variants={fadeUp} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13px] text-muted-foreground">
+                    {isMovie && !media.has_file && <span className="font-medium text-warning">Fichier manquant</span>}
+                    {status && statusStyle && (
+                        <span className="inline-flex items-center gap-1.5">
+                            <StatusDot tone={statusStyle.dot} size="sm" />
+                            {status.label}
+                        </span>
+                    )}
+                    <span className="inline-flex items-center gap-1.5">
+                        {media.monitored ? <Eye className="h-3.5 w-3.5" aria-hidden /> : <EyeOff className="h-3.5 w-3.5" aria-hidden />}
+                        {media.monitored ? "Surveillé" : "Non surveillé"}
+                    </span>
+                    {media.size_on_disk > 0 && (
+                        <span className="inline-flex items-center gap-1.5">
+                            <HardDrive className="h-3.5 w-3.5" aria-hidden /> {formatBytes(media.size_on_disk)}
+                        </span>
+                    )}
+                </motion.div>
 
                 {/* Liens externes */}
                 {links.length > 0 && (
                     <motion.div variants={fadeUp} className="flex flex-wrap items-center gap-1.5">
-                        <span className="eyebrow mr-1">Voir sur</span>
                         {links.map((l) => (
                             <ExternalChip key={l.label} {...l} />
                         ))}
