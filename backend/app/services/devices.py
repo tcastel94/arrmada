@@ -224,6 +224,8 @@ _SCREEN_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         ("POST", r"/api/ambient/play"),
         # Filmographie d'un acteur (fiche du film sur la tablette), lecture seule
         ("GET", r"/api/ambient/person/\d+"),
+        # Fiche d'un téléchargement au toucher (vitesse, sources…), lecture seule
+        ("GET", r"/api/ambient/download/[A-Za-z0-9_.-]{1,120}"),
     )
 )
 

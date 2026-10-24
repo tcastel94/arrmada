@@ -112,6 +112,24 @@ def _pick_radarr_release(
     return None, None
 
 
+def _remote_image(images: list[dict[str, Any]] | None, cover: str) -> str | None:
+    """Adresse web (remoteUrl) d'une image *arr : « poster », « fanart »…"""
+    return next(
+        (
+            img.get("remoteUrl")
+            for img in images or []
+            if img.get("coverType") == cover and img.get("remoteUrl")
+        ),
+        None,
+    )
+
+
+def _best_rating(raw: Any) -> dict[str, Any]:
+    from app.services.ratings import best, from_radarr
+
+    return best(from_radarr(raw))
+
+
 async def _fetch_calendar_data(
     db: AsyncSession, start: str, end: str, unmonitored: bool = False
 ) -> list[dict[str, Any]]:
@@ -175,6 +193,13 @@ async def _fetch_calendar_data(
                                 "service_type": "sonarr",
                                 "series_id": ep.get("seriesId"),
                                 "network": series.get("network"),
+                                # Fiche « À venir » de la tablette : avant la diffusion,
+                                # le résumé de l'épisode est souvent vide → celui de la série
+                                "fanart_url": _remote_image(images, "fanart"),
+                                "series_overview": series.get("overview", ""),
+                                "runtime": ep.get("runtime") or series.get("runtime"),
+                                "genres": series.get("genres", []),
+                                "finale_type": ep.get("finaleType") or "",
                             }
                         )
                 finally:
@@ -218,6 +243,11 @@ async def _fetch_calendar_data(
                                 "service_type": "radarr",
                                 "movie_id": movie.get("id"),
                                 "genres": movie.get("genres", []),
+                                "fanart_url": _remote_image(images, "fanart"),
+                                "runtime": movie.get("runtime"),
+                                "studio": movie.get("studio"),
+                                # Note la plus fiable (IMDb, sinon TMDB)
+                                **_best_rating(movie.get("ratings")),
                             }
                         )
                 finally:

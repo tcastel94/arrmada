@@ -25,6 +25,7 @@ export const ARR_SERVICE_TYPES: ServiceType[] = [
     "bazarr",
     "jellyfin",
     "sabnzbd",
+    "deluge",
 ];
 
 /** Vrai si l'entrée est un service *arr (et pas un appareil Kodi/Yamaha). */

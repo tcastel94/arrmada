@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### IMDb ratings, interactive tablet, clearer Radarr / Sonarr errors (APK 2.13.0)
+
+#### Added
+- **Ratings from the most reliable source.** Every film now shows **one** rating with its source: **IMDb** (from 1,000 votes), otherwise **TMDB** (from 50 votes), otherwise none. IMDb is the most reliable single score (hundreds of thousands of votes per known film, weighted against vote stuffing); Metacritic and Rotten Tomatoes are often missing for French or older films and Rotten Tomatoes is a % of positive reviews rather than a grade, so they stay as extra information on the film page. A rating whose vote count is unknown (older Radarr) is kept.
+  - Library films: taken from Radarr's own data (no extra call); new `rating_source` / `rating_votes` fields next to `rating` in `/api/media`
+  - Suggested films (trending, "Parce que tu as…", Découvrir, similar titles, suggestion page): IMDb rating looked up once through Radarr (`movie/lookup tmdb:<id>`), then kept 14 days in the new `movie_ratings` table. At most 40 lookups per list and 8 s in total; titles not completed yet keep their TMDB rating until the next pass
+  - **Web app**: "IMDb 8,5" badge (IMDb yellow) or "TMDB 7,1" on film posters (Médiathèque, Ajoutés récemment, suggestions); the suggestion page shows the source, the vote count, Metacritic and Rotten Tomatoes; on a film page TMDB is only shown when IMDb is missing
+  - **TV app**: "IMDb 8,5" instead of "★ 8.5" in the home hero (library and "Pour toi"); film page badges IMDb (or TMDB), Metacritic, Rotten Tomatoes
+- **Interactive tablet.** On the idle screen, touching a line opens a sheet:
+  - **À venir**: poster and backdrop, day and time ("Demain 19:00 · dimanche 25 octobre"), episode code and title, summary (the series' summary when the episode has none yet), channel or studio, runtime, genres, IMDb rating for films, season / series finale tag, and whether Sonarr / Radarr will download it automatically
+  - **Téléchargements**: refreshed every 3 s while open: progress and size, **speed**, time left, quality, indexer, release name; torrents add **sources (seeders)**, peers, upload speed, ratio and tracker; Usenet adds the position in the SABnzbd queue, post age and priority. Errors and import messages are shown
+  - New screen-scope route `GET /api/ambient/download/{key}` (key = torrent hash or SABnzbd nzo_id), cached 3 s; `/api/ambient` downloads now carry their `key`, upcoming items carry the sheet fields (calendar entries gain `fanart_url`, `series_overview`, `runtime`, `genres`, `finale_type`, and the film rating)
+- **Deluge service** (Réglages › Services › Ajouter › Deluge, port 8112): the Web UI password goes in the key field (encrypted like the API keys). Read-only JSON-RPC client (`auth.login`, auto-connect to the daemon, `core.get_torrents_status`); without it, the tablet says how to get torrent speed and seeders
+
+#### Fixed
+- Radarr / Sonarr refusals are explicit when adding or downloading a title: a refused API key (HTTP 401 / 403) says so and where to copy the key; a root folder that is missing or not writable (unmounted share, disk error, permissions) says it is the NAS folder rather than the title
+
+- Tests: 5 rating tests, 5 tablet sheet tests (Deluge client, SABnzbd view, download detail, upcoming fields, screen scope), 1 Radarr error test, 2 JVM tests (RatingLogic)
+
+
 ### Four new features: watchlist, "Ce soir" on the tablet, "Précédemment dans…", seek thumbnails (APK 2.12.0)
 
 #### Added

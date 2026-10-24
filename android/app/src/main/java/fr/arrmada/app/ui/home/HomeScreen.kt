@@ -51,6 +51,7 @@ import fr.arrmada.app.data.LocalSeriesLogic
 import fr.arrmada.app.data.Repository
 import fr.arrmada.app.data.ResumeEntry
 import fr.arrmada.app.data.TmdbItem
+import fr.arrmada.app.data.RatingLogic
 import fr.arrmada.app.data.WatchlistItem
 import fr.arrmada.app.data.WatchlistLogic
 import fr.arrmada.app.ui.components.ArrButton
@@ -341,7 +342,7 @@ private fun heroOf(item: LibraryItem, absolute: (String?) -> String?) = Hero(
     backdrop = absolute(item.fanartUrl ?: item.posterUrl),
     logo = absolute(item.clearlogoUrl),
     title = item.title,
-    meta = meta(item.year, item.genres.take(2).joinToString(", ").ifBlank { null }, item.runtime?.let { "$it min" }, item.rating?.let { "★ %.1f".format(it) }),
+    meta = meta(item.year, item.genres.take(2).joinToString(", ").ifBlank { null }, item.runtime?.let { "$it min" }, if (item.isMovie) RatingLogic.label(item.rating, item.ratingSource) else null),
     overview = item.overview,
 )
 
@@ -367,7 +368,7 @@ fun heroOf(item: TmdbItem) = Hero(
     backdrop = item.backdropUrl,
     logo = null,
     title = item.title,
-    meta = meta(item.year, item.rating?.let { "★ %.1f".format(it) }),
+    meta = meta(item.year, RatingLogic.label(item.rating, item.ratingSource)),
     overview = item.overview,
     note = if (item.inLibrary) "Dans la médiathèque" else "Pas encore dans la médiathèque",
 )

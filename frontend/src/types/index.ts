@@ -7,7 +7,8 @@ export type ServiceType =
     | "prowlarr"
     | "bazarr"
     | "jellyfin"
-    | "sabnzbd";
+    | "sabnzbd"
+    | "deluge";
 
 /** Health status of a service */
 export type HealthStatusType = "online" | "offline" | "degraded" | "unknown";

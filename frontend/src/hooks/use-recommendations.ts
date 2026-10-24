@@ -33,7 +33,13 @@ export interface TMDBItem {
     year?: string | null;
     release_date?: string | null;
     overview: string;
+    /** Note la plus fiable : IMDb (films, via Radarr), sinon TMDB. */
     rating?: number | null;
+    rating_source?: "imdb" | "tmdb" | null;
+    rating_votes?: number | null;
+    /** Films : Metacritic (/100) et Rotten Tomatoes (% de critiques positives). */
+    metacritic?: number | null;
+    rotten_tomatoes?: number | null;
     vote_count?: number;
     popularity?: number;
     poster_url?: string | null;
@@ -109,6 +115,10 @@ export interface TMDBDetail {
     release_date: string | null;
     overview: string;
     rating: number | null;
+    rating_source?: "imdb" | "tmdb" | null;
+    rating_votes?: number | null;
+    metacritic?: number | null;
+    rotten_tomatoes?: number | null;
     vote_count: number;
     popularity?: number;
     /** Durée en minutes (film) ou durée type d'un épisode (série). */

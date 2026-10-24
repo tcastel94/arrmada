@@ -64,7 +64,8 @@ data class LibraryItem(
     @SerialName("fanart_url") val fanartUrl: String? = null,
     @SerialName("clearlogo_url") val clearlogoUrl: String? = null,
     @SerialName("has_file") val hasFile: Boolean = false,
-    val rating: Double? = null,
+    val rating: Double? = null, // la plus fiable : IMDb, sinon TMDB (rating_source)
+    @SerialName("rating_source") val ratingSource: String? = null,
     val runtime: Int? = null,
     val overview: String? = null,
     val added: String? = null,
@@ -94,7 +95,8 @@ data class TmdbItem(
     val type: String = "movie",
     val year: String? = null, // texte ici (« 2024 »), contrairement à la médiathèque
     val overview: String? = null,
-    val rating: Double? = null,
+    val rating: Double? = null, // IMDb pour un film (via Radarr), sinon TMDB (rating_source)
+    @SerialName("rating_source") val ratingSource: String? = null,
     @SerialName("poster_url") val posterUrl: String? = null,
     @SerialName("backdrop_url") val backdropUrl: String? = null,
     @SerialName("in_library") val inLibrary: Boolean = false,

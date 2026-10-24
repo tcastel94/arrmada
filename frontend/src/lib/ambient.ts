@@ -149,6 +149,8 @@ export interface AmbientAmp {
 }
 
 export interface AmbientDownload {
+    /** Clé de la fiche (GET /api/ambient/download/{key}) ; absente : serveur ancien. */
+    key?: string;
     title: string;
     progress: number;
     time_left: string;
@@ -162,6 +164,70 @@ export interface AmbientUpcoming {
     air_date: string;
     kind: "movie" | "episode";
     release_type: string;
+    /* ── Fiche au toucher (absents avec un serveur ancien) ── */
+    overview?: string;
+    poster?: string;
+    fanart?: string;
+    /** Chaîne (série) ou studio (film). */
+    network?: string;
+    /** Minutes. */
+    runtime?: number | null;
+    genres?: string[];
+    /** « season » / « series » : dernier épisode de la saison / de la série. */
+    finale_type?: string;
+    monitored?: boolean;
+    rating?: number | null;
+    rating_source?: "imdb" | "tmdb" | null;
+}
+
+/** Fiche d'un téléchargement (GET /api/ambient/download/{key}), relue toutes les 3 s. */
+export interface AmbientDownloadDetail {
+    key: string;
+    title: string;
+    /** Nom de la release (« Gladiator.II.2024.2160p… »). */
+    release: string;
+    poster: string;
+    fanart: string;
+    kind: "movie" | "series";
+    episodes: number;
+    season: number | null;
+    status: string;
+    tracked_state: string;
+    progress: number;
+    size_bytes: number;
+    size_left_bytes: number;
+    time_left: string;
+    protocol: string;
+    client: string;
+    indexer: string;
+    quality: string;
+    error: string;
+    detail: string;
+    /** En direct du client (Deluge pour un torrent, SABnzbd pour Usenet) ; null si inconnu. */
+    live: AmbientDownloadLive | null;
+    /** Pourquoi il n'y a pas de direct (« Ajoute Deluge dans Réglages › Services… »). */
+    live_hint: string;
+}
+
+export interface AmbientDownloadLive {
+    state?: string;
+    /** Octets par seconde. */
+    download_speed?: number;
+    upload_speed?: number;
+    /* Torrent (Deluge) */
+    seeds?: number;
+    seeds_total?: number;
+    peers?: number;
+    peers_total?: number;
+    eta_seconds?: number | null;
+    ratio?: number | null;
+    tracker?: string;
+    /* Usenet (SABnzbd) */
+    position?: number;
+    queue_size?: number;
+    priority?: string;
+    age?: string;
+    paused_all?: boolean;
 }
 
 export interface Ambient {
@@ -270,6 +336,68 @@ export function remainingLabel(seconds: number): string {
     const m = minutes % 60;
     if (h === 0) return `${m} min`;
     return m === 0 ? `${h} h` : `${h} h ${String(m).padStart(2, "0")}`;
+}
+
+/** Débit : « 5,2 Mo/s », « 820 Ko/s » (octets par seconde, unités de 1 024). */
+export function formatSpeed(bytesPerSecond: number | null | undefined): string {
+    const b = bytesPerSecond ?? 0;
+    if (b <= 0) return "—";
+    if (b >= 1024 ** 2) return `${(b / 1024 ** 2).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} Mo/s`;
+    return `${Math.max(1, Math.round(b / 1024))} Ko/s`;
+}
+
+/** Taille : « 61,2 Go », « 840 Mo ». */
+export function formatSize(bytes: number | null | undefined): string {
+    const b = bytes ?? 0;
+    if (b >= 1024 ** 3) return `${(b / 1024 ** 3).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} Go`;
+    return `${Math.round(b / 1024 ** 2)} Mo`;
+}
+
+/** Durée restante : « 11 min », « 1 h 05 », « 45 s ». */
+export function formatEta(seconds: number | null | undefined): string {
+    if (!seconds || seconds <= 0) return "";
+    if (seconds < 60) return `${Math.round(seconds)} s`;
+    const minutes = Math.round(seconds / 60);
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    if (h === 0) return `${m} min`;
+    return m === 0 ? `${h} h` : `${h} h ${String(m).padStart(2, "0")}`;
+}
+
+/** « 00:11:42 » (Radarr / Sonarr) → « 11 min » ; texte inchangé sinon. */
+export function prettyTimeLeft(value: string): string {
+    const match = /^(?:(\d+)\.)?(\d{1,2}):(\d{2}):(\d{2})$/.exec(value.trim());
+    if (!match) return value;
+    const [, days, h, m, sec] = match;
+    return formatEta(Number(days ?? 0) * 86_400 + Number(h) * 3600 + Number(m) * 60 + Number(sec)) || "bientôt fini";
+}
+
+const DOWNLOAD_STATES: Record<string, string> = {
+    downloading: "Téléchargement",
+    seeding: "Partage (terminé)",
+    paused: "En pause",
+    queued: "En file d'attente",
+    checking: "Vérification",
+    moving: "Déplacement",
+    error: "Erreur",
+    delay: "En attente (délai)",
+    importpending: "Import en attente",
+    importing: "Import en cours",
+    imported: "Importé",
+    failedpending: "Échec, en attente",
+    completed: "Terminé",
+    fetching: "Récupération",
+    grabbing: "Récupération",
+    propagating: "Propagation",
+    extracting: "Extraction",
+    verifying: "Vérification",
+    repairing: "Réparation",
+};
+
+/** État d'un téléchargement en français (Deluge, SABnzbd, Radarr / Sonarr). */
+export function downloadStateLabel(value: string | null | undefined): string {
+    if (!value) return "";
+    return DOWNLOAD_STATES[value.toLowerCase().replace(/[\s_]/g, "")] ?? value;
 }
 
 /** Jour relatif d'une sortie : « ce soir 21:00 », « demain », « lundi ». */

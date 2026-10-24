@@ -28,8 +28,9 @@ export interface AddableItem {
     year: number | null;
     overview: string;
     poster_url: string | null;
-    /** Note TMDB /10 (suggestions uniquement). */
+    /** Note /10 (suggestions uniquement) : IMDb, sinon TMDB (voir rating_source). */
     rating: number | null;
+    rating_source: "imdb" | "tmdb" | null;
     tmdb_id: number | null;
     tvdb_id: number | null;
     in_library: boolean;
@@ -58,6 +59,7 @@ export function fromLookup(it: LookupItem): AddableItem {
         overview: it.overview ?? "",
         poster_url: it.poster_url,
         rating: null,
+        rating_source: null,
         tmdb_id: tmdb,
         tvdb_id: tvdb,
         in_library: it.in_library,
@@ -76,6 +78,8 @@ export function fromTmdb(it: TMDBItem): AddableItem {
         overview: it.overview ?? "",
         poster_url: it.poster_url ?? null,
         rating: typeof it.rating === "number" && it.rating > 0 ? it.rating : null,
+        // Ancien serveur (sans source) : c'était la note TMDB
+        rating_source: it.rating_source ?? (typeof it.rating === "number" && it.rating > 0 ? "tmdb" : null),
         tmdb_id: it.tmdb_id,
         tvdb_id: null,
         in_library: !!it.in_library,
@@ -94,6 +98,7 @@ export function fromTmdbDetail(d: TMDBDetail): AddableItem {
         year: d.year,
         overview: d.overview,
         rating: d.rating,
+        rating_source: d.rating_source,
         poster_url: d.poster_url,
         in_library: d.in_library,
     });

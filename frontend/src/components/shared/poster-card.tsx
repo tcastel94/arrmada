@@ -35,6 +35,8 @@ export interface PosterCardProps {
     meta?: ReactNode;
     /** Barre de progression en bas de l'affiche (0-100). */
     progress?: number;
+    /** Note en bas à gauche de l'affiche (« IMDb 8,5 »), voir RatingBadge. */
+    rating?: ReactNode;
     /** Bouton flottant (ex : « + Ajouter »). */
     action?: ReactNode;
     /** Mode sélection (cases à cocher). */
@@ -59,6 +61,7 @@ export function PosterCard({
     corner,
     meta,
     progress,
+    rating,
     action,
     selectable,
     selected,
@@ -123,6 +126,13 @@ export function PosterCard({
                 {typeof progress === "number" && (
                     <div className="absolute inset-x-2 bottom-2 z-[4] h-1 overflow-hidden rounded-full bg-black/50">
                         <div className="h-full rounded-full bg-white" style={{ width: `${Math.max(0, Math.min(100, progress))}%` }} />
+                    </div>
+                )}
+
+                {/* Note (au-dessus de la barre de progression s'il y en a une) */}
+                {rating && (
+                    <div className={cn("pointer-events-none absolute left-1.5 z-[5]", typeof progress === "number" ? "bottom-4" : "bottom-1.5")}>
+                        {rating}
                     </div>
                 )}
 

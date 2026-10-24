@@ -16,6 +16,7 @@ import { motion } from "framer-motion";
 import { Check, Eye, EyeOff, Film, HardDrive, Tv } from "lucide-react";
 import type { MediaItem } from "@/hooks/use-media";
 import { PosterBadge, PosterCard } from "@/components/shared/poster-card";
+import { RatingBadge } from "@/components/shared/rating-badge";
 import { formatBytes } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { fadeIn } from "@/lib/motion";
@@ -109,6 +110,7 @@ export function MediaPosterCard({ item, sub, watch, selectable, selected, onTogg
             href={mediaHref(item)}
             dimmed={!item.has_file}
             progress={progress}
+            rating={isMovie ? <RatingBadge value={item.rating} source={item.rating_source} votes={item.rating_votes} /> : undefined}
             corner={
                 !item.has_file ? (
                     <PosterBadge tone="danger">Manquant</PosterBadge>
