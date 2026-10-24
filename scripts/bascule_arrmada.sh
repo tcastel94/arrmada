@@ -73,6 +73,7 @@ OLD_PASSWORD_SET=""      # mot de passe défini avant ?
 OLD_DB_TYPE=""           # postgresql | sqlite
 EXTRA_MOUNTS=()          # montages de l'ancien backend à reprendre
 IMAGE_SOURCE=""          # ghcr | local-existing | local-build
+EUFY_RUNNING=false       # pont caméras Eufy à relancer après la bascule
 BACKUP_DIR=""
 LOG_FILE=""
 STATE_FILE=""
@@ -245,6 +246,7 @@ save_state() {
         printf 'OLD_PROJECT=%q\n' "$OLD_PROJECT"
         printf 'APP_DIR=%q\n' "$APP_DIR"
         printf 'IMAGE_SOURCE=%q\n' "$IMAGE_SOURCE"
+        printf 'EUFY_RUNNING=%q\n' "$EUFY_RUNNING"
         printf 'DATE=%q\n' "$(_ts)"
     } > "$STATE_FILE"
 }
@@ -436,8 +438,11 @@ preflight() {
     if [ -n "$others" ]; then
         warn "Autres conteneurs rattachés au réseau arrmada-network : $(echo "$others" | tr '\n' ' ')(ils y restent)"
     fi
-    if docker container inspect eufy-security-ws > /dev/null 2>&1; then
-        ok "eufy-security-ws présent : laissé tel quel (réseau host, profil eufy)"
+    # « docker compose down » arrête AUSSI les services à profil (eufy) :
+    # on note s'il tournait pour le relancer après la bascule.
+    if [ "$(docker inspect -f '{{.State.Running}}' eufy-security-ws 2>/dev/null)" = "true" ]; then
+        EUFY_RUNNING=true
+        ok "eufy-security-ws en marche : relancé après la bascule (mêmes données data/eufy)"
     fi
 
     # ── Scripts qui appellent deploy.sh (maj-arrmada.sh, User Scripts) ──
@@ -482,6 +487,7 @@ preflight() {
         if [ -n "$roots" ]; then
             warn "Fichiers appartenant à root dans les médias (ArrMada, désormais en ${PUID_VALUE}:${PGID_VALUE}, ne pourra plus les modifier) :"
             printf '        %s\n' "$roots"
+            WARNINGS+=("$(printf '   %s\n' "$roots")")
             warn "→ Tools › New Permissions sur le partage concerné, ou : chown -R nobody:users <dossier>"
         else
             ok "Aucun fichier média, artwork ou sous-titre appartenant à root (6 niveaux)"
@@ -717,6 +723,9 @@ switch_stack() {
 
     info "Démarrage de l'image unique…"
     docker compose up -d --remove-orphans || return 1
+    if $EUFY_RUNNING; then
+        docker compose --profile eufy up -d eufy-security-ws || warn "Relance de eufy-security-ws en échec : docker compose --profile eufy up -d eufy-security-ws"
+    fi
 }
 
 verify_new() {
@@ -773,6 +782,9 @@ rollback() {
     info "Code revenu à $(git rev-parse --short HEAD)"
     # Les anciennes images sont toujours là : redémarrage sans reconstruction.
     docker compose -p "$OLD_PROJECT" up -d --remove-orphans || return 1
+    if $EUFY_RUNNING; then
+        docker compose -p "$OLD_PROJECT" --profile eufy up -d eufy-security-ws || true
+    fi
     if wait_http http://127.0.0.1:8420/api/health "$OLD_HEALTH_TIMEOUT"; then
         ok "Ancienne stack de nouveau en ligne (:8420 et :3420)"
         return 0
