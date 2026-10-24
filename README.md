@@ -1,160 +1,76 @@
 <p align="center">
-  <img src="docs/banner.png" alt="ArrMada Banner" width="100%"/>
+  <img src="docs/banner.png" alt="ArrMada" width="100%"/>
 </p>
 
 <h1 align="center">ArrMada</h1>
 
 <p align="center">
-  <strong>The unified dashboard for your *arr media stack</strong>
+  <strong>Ta médiathèque de films et séries, à la maison, sans prise de tête.</strong><br/>
+  Tu demandes un titre, ArrMada le trouve, le télécharge, le range et l'affiche sur ta TV.
 </p>
 
 <p align="center">
-  <a href="#-features"><img src="https://img.shields.io/badge/Features-✨-blue?style=for-the-badge" alt="Features"/></a>
-  <a href="#-quick-start"><img src="https://img.shields.io/badge/Quick_Start-🚀-green?style=for-the-badge" alt="Quick Start"/></a>
-  <a href="#-screenshots"><img src="https://img.shields.io/badge/Screenshots-📸-purple?style=for-the-badge" alt="Screenshots"/></a>
-  <a href="#-architecture"><img src="https://img.shields.io/badge/Architecture-🏗️-orange?style=for-the-badge" alt="Architecture"/></a>
+  <a href="https://tcastel94.github.io/arrmada/installation/"><img src="https://img.shields.io/badge/Installer-guide_pas_à_pas-4A9EFF?style=for-the-badge" alt="Guide d'installation"/></a>
+  <a href="#-captures-décran"><img src="https://img.shields.io/badge/Captures-📸-1C1C1E?style=for-the-badge" alt="Captures"/></a>
+  <a href="#-pour-les-curieux-et-les-développeurs"><img src="https://img.shields.io/badge/Technique-🛠️-1C1C1E?style=for-the-badge" alt="Technique"/></a>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI"/>
-  <img src="https://img.shields.io/badge/Next.js_14-black?style=flat-square&logo=next.js&logoColor=white" alt="Next.js"/>
-  <img src="https://img.shields.io/badge/PostgreSQL-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL"/>
+  <img src="https://img.shields.io/badge/fonctionne_sur-Synology_·_Unraid_·_Windows_·_Mac_·_Linux-4A9EFF?style=flat-square" alt="Plateformes"/>
   <img src="https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker"/>
-  <img src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript"/>
-  <img src="https://img.shields.io/badge/Python-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python"/>
+  <img src="https://img.shields.io/badge/amd64-arm64-555?style=flat-square" alt="Architectures"/>
 </p>
 
 ---
 
-## 🎯 What is ArrMada?
+## 🎯 C'est quoi ?
 
-**ArrMada** is a self-hosted, unified dashboard that brings all your *arr services together in one beautiful interface. Stop switching between Sonarr, Radarr, Bazarr, and Prowlarr tabs — manage everything from a single pane of glass.
+Pour avoir des films et des séries « comme sur Netflix » chez soi, il faut d'habitude
+**installer et relier six ou sept logiciels** (Sonarr, Radarr, Prowlarr, Bazarr, un logiciel de
+téléchargement, Jellyfin…), recopier des clés entre eux et passer d'un onglet à l'autre.
 
-> Think of it as **Organizr**, but built specifically for the *arr ecosystem, with deep API integration instead of just iframes.
+**ArrMada fait ce travail à ta place :**
 
-### Why ArrMada?
+| Avant | Avec ArrMada |
+|-------|--------------|
+| 7 logiciels à installer un par un | **Une commande** installe tout, adapté à ta machine |
+| Des clés API à recopier partout | **« Tout connecter »** : un bouton relie les applis entre elles |
+| Des réglages qu'on oublie | Une liste **« Ce qu'il te reste à faire »**, vérifiée en direct |
+| 7 onglets ouverts | **Une seule appli**, sur ordinateur, téléphone, tablette et TV |
+| Des menus pour du matériel qu'on n'a pas | **Tu dis ce que tu as** (TV, tablette, ampli, caméras) : le reste disparaît |
 
-| Problem | ArrMada Solution |
-|---------|-----------------|
-| 🔀 Switching between 6+ tabs | One unified dashboard |
-| 🔑 Managing API keys in configs | Setup Wizard with encrypted storage |
-| 🧩 Painful self-hosting | One container, one port, zero config file |
-| 📊 No cross-service analytics | Aggregated library statistics |
-| 🔍 Searching across services | Unified search across all media |
-| 📱 Apps don't look great on mobile | Responsive mobile-first design |
-
----
-
-## ✨ Features
-
-> 🎨 **Interface « Neon Armada »** — dark-only glassmorphism UI with animated aurora background, 3D-tilt posters, animated counters & gauges, page transitions and real-time toasts. Fully responsive (floating mobile tab bar) and `prefers-reduced-motion` aware.
-
-### 🧭 Navigation
-| Group | Pages |
-|-------|-------|
-| — | **Dashboard** (command bridge) · **Salon** (Kodi / Yamaha / Cast remote) |
-| Bibliothèque | Médiathèque · Manquants · Calendrier · Rechercher & Ajouter |
-| Activité | Téléchargements (queue + imports) · Journal · Notifications |
-| Maintenance | Santé médiathèque (qualité, doublons, nettoyage) · TRaSH Guides (profils, overrides, SABnzbd) · Indexers |
-| Système | Serveur & Docker · Statistiques |
-| ⚙️ | Paramètres (général, services *arr, Kodi, Cast & Jellyfin, ampli Yamaha) |
-
-Legacy URLs (`/quality`, `/duplicates`, `/cleanup`, `/fichiers`, `/docker`, `/requests`, `/recommendations`, `/services`, `/settings/profile-overrides`, `/settings/sabnzbd-config`) redirect to their new location.
-
-### ⌨️ Keyboard-first
-| Shortcut | Action |
-|----------|--------|
-| `⌘K` / `Ctrl+K` / `/` | Command palette: open a media sheet, jump to a page, run an action (Kodi sync, refresh, mark all read…) |
-| `g` then `d` `r` `m` `x` `c` `s` `t` `j` `n` `h` `i` `y` `p` | Go to Dashboard, Salon, Médiathèque, Manquants, Calendrier, Recherche, Téléchargements, Journal, Notifications, Santé, Indexers, Serveur, Paramètres |
-| `[` | Collapse / expand the sidebar |
-| `?` | Shortcut cheat-sheet |
-
-### 🧙 Setup Wizard
-Auto-discover your *arr services on the local network or configure them manually. API keys are **encrypted at rest** with Fernet (AES-128-CBC).
-
-### 📊 Command Bridge (Dashboard)
-Greeting with live fleet summary, animated KPIs (films, séries, stockage, téléchargements) with ring gauges, services health strip, recently-added carousel, unified activity timeline, live download queue, this week's releases, disk usage and TRaSH compliance.
-
-### 🔍 Search & Add
-Unified title search, natural-language AI search, TMDB trending / "because you have…" suggestions and request tracking — all in one hub.
-
-### 🎬 Detailed Media View
-Cinematic hero, seasons & episodes, cast & filmography, files & quality, interactive release search, Bazarr subtitles, TRaSH profile overrides, Kodi playback & Chromecast casting.
-
-### 📥 Downloads & Imports
-Live SABnzbd / Deluge queue with per-item actions (retry, blocklist, remove) and an Imports tab for stuck downloads, manual/bulk import and auto-import history.
-
-### 🔔 Real-time
-Server-Sent Events keep every page fresh and raise toasts on imports, grabs and service outages; a floating mini-player follows Kodi playback across pages.
-
-### 🛋️ Home cinema
-- **Android TV app** (`android/`): native app with its own player (ExoPlayer, original files from Jellyfin, audio passthrough), Kodi add-on look, Apple TV-style pause menu (chapters, cast, audio and subtitle tracks), resume shared with the Kodi TVs. See [`android/README.md`](android/README.md) and ADR-007
-- **Kodi add-on** (`kodi-addon/`): scrobbling, add-on dashboard, home-screen widgets, search & add from the couch, subtitle download / audio sync, release upgrade — see [`kodi-addon/README.md`](kodi-addon/README.md)
-- **Shared watched state**: what the TVs watched or started shows in the library ("Vu", "⏵ 27 %", "8 ép."), a **Reprendre** page lists what is in progress, and **"Sur la TV"** starts a film or the next episode on the paired TV of your choice — see [`kodi-addon/README.md` § 24](kodi-addon/README.md)
-- **Paired TVs per room** (Salon / Cinéma / Bureau): each TV drives only its own room's amplifier, the office has none; an unpaired TV opens the pairing screen by itself on the ArrMada home — see [`kodi-addon/README.md` § 7 and § 25](kodi-addon/README.md)
-- **Yamaha room profiles** (Salon / Cinéma): sound program, dialogue lift, DRC… applied automatically when a movie starts on Kodi
-- **Ambient screen** (`/ecran`): a tablet under the TV shows the start and expected end time of what is playing, the amp, downloads and tonight's releases, dimmed during the film (Fully Kiosk brightness control) — read-only paired device, see [`kodi-addon/README.md` § 15](kodi-addon/README.md)
-- **Technical badges** (4K, HDR / Dolby Vision, Atmos, 7.1…), studio / network logos and trailers on media sheets
-
-### 🐳 Docker logs & AI diagnosis
-Aggregated, level-classified logs of every service container (System → Docker, requires `/var/run/docker.sock:ro`), and a one-click AI analysis (local Ollama or OpenRouter) that groups problems with their cause and fix.
-
-### 🛡️ Security First
-- Admin password created in the setup wizard, stored as a scrypt hash (no default password)
-- JWT authentication with a per-instance random secret
-- Fernet-encrypted API keys at rest
-- Rate limiting (anti brute-force)
-- HSTS, CSP, Permissions-Policy headers
-- Non-root Docker container
-- Same-origin API (CORS closed by default)
+> 👵 **Pensé pour tout le monde.** L'installation est guidée de bout en bout : chaque étape dit
+> quoi faire, pourquoi, et quoi faire si ça ne marche pas. Pas besoin d'être informaticien.
 
 ---
 
-## 📸 Screenshots
+## 🚀 Installer
 
-<p align="center">
-  <img src="docs/screenshot-wizard.png" alt="Setup Wizard" width="48%"/>
-  <img src="docs/screenshot-dashboard.png" alt="Dashboard" width="48%"/>
-</p>
+### Le plus simple : le guide pas à pas
 
-<p align="center">
-  <em>Left: Setup Wizard with network discovery — Right: Dashboard overview</em>
-</p>
+👉 **[tcastel94.github.io/arrmada/installation](https://tcastel94.github.io/arrmada/installation/)**
 
-<p align="center">
-  <img src="docs/screenshot-config.png" alt="Service Configuration" width="48%"/>
-</p>
+Tu choisis ton appareil (**Synology**, Unraid, PC Windows, Mac, serveur Linux), tu réponds à
+deux questions, et le guide te donne les étapes exactes avec des cases à cocher, des boutons
+« Copier » et une aide à chaque étape.
 
-<p align="center">
-  <em>Service configuration with type selection, URL, and encrypted API key storage</em>
-</p>
+> **Synology : aucune ligne de commande.** Tout se fait dans l'interface de DSM, avec une tâche du
+> *Planificateur de tâches* qu'on lance une seule fois.
 
----
+### Pour ceux qui connaissent le terminal
 
-## 🚀 Quick Start
-
-**One container, one port, no `.env` file.** Works on any machine running Docker:
-Linux server, Synology, Unraid, TrueNAS, Windows/macOS (Docker Desktop), Raspberry Pi
-(images are published for `amd64` and `arm64`).
-
-### 🧰 Starting from scratch? Install the whole stack
-
-One command installs **Sonarr, Radarr, Prowlarr, Bazarr, SABnzbd, Deluge or qBittorrent,
-Jellyfin and ArrMada**, adapted to the machine (paths, PUID/PGID, compose flavour), with the
-[TRaSH Guides](https://trash-guides.info/) folder layout (hardlinks) and **pre-generated API keys**:
+Installe **toute la pile** (Sonarr, Radarr, Prowlarr, Bazarr, SABnzbd, Deluge ou qBittorrent,
+Jellyfin et ArrMada), avec les dossiers [TRaSH Guides](https://trash-guides.info/) et des clés
+API pré-générées :
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/tcastel94/arrmada/main/install.sh | sudo bash
 ```
 
-Then open ArrMada → setup wizard → *Import automatique* → **Appliquer**: indexers, download
-clients, categories, Bazarr and root folders are wired in one click. Apps already installed are
-detected and left untouched. Details, options and per-platform defaults:
-[docs/installer.md](docs/installer.md).
+Options utiles : `--yes` (aucune question), `--torrent deluge|qbittorrent`, `--no-usenet`,
+`--no-jellyfin`, `--config-root` / `--data-root`. Détails : [docs/installer.md](docs/installer.md).
 
-### Already have your apps? Install ArrMada only
-
-#### Linux server / NAS over SSH
+Tu as **déjà** tes applis ? Installe ArrMada seul :
 
 ```bash
 mkdir -p /opt/arrmada && cd /opt/arrmada
@@ -162,225 +78,208 @@ curl -fsSLO https://raw.githubusercontent.com/tcastel94/arrmada/main/docker-comp
 docker compose up -d
 ```
 
-#### Synology (DSM 7.2+)
+### Ensuite : l'assistant intégré
 
-1. **File Station**: create the folder `docker/arrmada`.
-2. **Container Manager → Project → Create**: path `/volume1/docker/arrmada`,
-   source *Create docker-compose.yml*, paste [docker-compose.yml](docker-compose.yml).
-3. Optionally set `PUID`/`PGID` to your DSM user (`id` over SSH, often `1026`/`100`).
+Ouvre **`http://<adresse-de-ta-machine>:3420`**. L'assistant t'accompagne jusqu'au premier film :
 
-#### Windows / macOS
+| Étape | Ce qui se passe |
+|-------|-----------------|
+| 1. Bienvenue | Le plan de route, rien à faire |
+| 2. Mot de passe | Tu choisis le mot de passe d'ArrMada (pas de fichier à modifier) |
+| 3. Applications | **« Tout connecter »** : ArrMada lit les clés de tes applis et les relie (chaque branchement est testé) |
+| 4. À faire | Ce qu'aucun installeur ne peut faire à ta place (ajouter des sources dans Prowlarr, ton fournisseur Usenet…), **vérifié en direct** dans chaque appli, avec un lien direct et les mots de passe générés |
+| 5. Équipement | TV, tablette, ampli, caméras : **tout est facultatif**, « je n'en ai pas » par défaut |
+| 6. Terminé | Récapitulatif et prochaines étapes |
 
-Install [Docker Desktop](https://www.docker.com/products/docker-desktop/), save
-[docker-compose.yml](docker-compose.yml) in a folder, then `docker compose up -d` in that folder.
-
-### Then
-
-Open **`http://<machine-ip>:3420`**: the setup wizard creates the admin password,
-scans your network for Sonarr/Radarr/Prowlarr/SABnzbd… and stores the API keys encrypted. 🧙
-
-| Task | Command |
-|------|---------|
-| Update | `docker compose pull && docker compose up -d` |
-| Logs | `docker logs -f arrmada` |
-| Forgot password | `docker exec -it arrmada arrmada-cli set-password` |
-| Backup | copy the `./data` folder (database, keys, password hash) |
-
-### 🪄 Auto-configuration (optional)
-
-Mount the folder holding your other apps' config directories **read-only**, and ArrMada
-reads their API keys itself, then wires the stack together:
-
-```yaml
-    volumes:
-      - ./data:/app/data
-      - /mnt/user/appdata:/appdata:ro     # Unraid  (Synology: /volume1/docker:/appdata:ro)
-```
-
-**Settings → Auto-configuration** (also offered in the setup wizard) then shows a plan you
-review before applying, like `terraform plan` / `apply`:
-
-| Action | What it does |
-|--------|--------------|
-| Add to ArrMada | Sonarr, Radarr, Lidarr, Readarr, Prowlarr, Bazarr, SABnzbd, Jellyfin: key read from `config.xml`, `sabnzbd.ini`, `config.yaml`, `jellyfin.db` |
-| Indexers | Prowlarr → Apps → Sonarr/Radarr/… (full sync) |
-| Download clients | SABnzbd, Deluge, qBittorrent added to each *arr with a dedicated category (`tv`, `movies`…); the SABnzbd category is created and Deluge's Label plugin enabled when needed |
-| Subtitles | Bazarr → Sonarr / Radarr |
-
-Every entry is **tested by the target app** (e.g. Sonarr tests its own connection to SABnzbd)
-before it is saved, and re-running never creates duplicates. Deluge and qBittorrent only store
-password *hashes*: their defaults (`deluge`, `adminadmin`) are detected automatically, otherwise
-type the password once in the UI. Keys and passwords never reach the browser.
-
-> **Behind a reverse proxy** (Synology, Traefik, Nginx Proxy Manager, Caddy): proxy
-> everything to port `3420`. The UI calls the API on the same origin, so HTTPS and
-> custom domains work without extra settings.
+| Besoin | Commande |
+|--------|----------|
+| Mettre à jour | `docker compose pull && docker compose up -d` |
+| Voir les journaux | `docker logs -f arrmada` |
+| Mot de passe oublié | `docker exec -it arrmada arrmada-cli set-password` |
+| Sauvegarder | copier le dossier `./data` |
 
 ---
 
-## 🏗️ Architecture
+## 📸 Captures d'écran
+
+### L'assistant d'installation
+
+<p align="center">
+  <img src="docs/screenshots/assistant-1-bienvenue.png" alt="Bienvenue" width="49%"/>
+  <img src="docs/screenshots/assistant-3-applications.png" alt="Relier les applications" width="49%"/>
+</p>
+<p align="center">
+  <img src="docs/screenshots/assistant-4-a-faire.png" alt="Ce qu'il te reste à faire" width="49%"/>
+  <img src="docs/screenshots/assistant-5-equipement.png" alt="Ton équipement" width="49%"/>
+</p>
+<p align="center"><em>Bienvenue · « Tout connecter » · la liste vérifiée de ce qu'il reste à faire · l'équipement facultatif</em></p>
+
+### L'appli web (ordinateur)
+
+<p align="center">
+  <img src="docs/screenshots/web-tableau-de-bord.png" alt="Accueil" width="49%"/>
+  <img src="docs/screenshots/web-mediatheque.png" alt="Médiathèque" width="49%"/>
+</p>
+<p align="center">
+  <img src="docs/screenshots/web-fiche-film.png" alt="Fiche d'un film" width="49%"/>
+  <img src="docs/screenshots/web-telechargements.png" alt="Transferts" width="49%"/>
+</p>
+<p align="center">
+  <img src="docs/screenshots/web-recherche.png" alt="Rechercher et ajouter" width="49%"/>
+  <img src="docs/screenshots/web-equipement.png" alt="Paramètres, mon équipement" width="49%"/>
+</p>
+<p align="center"><em>Accueil · Médiathèque · Fiche d'un film · Transferts · Rechercher & ajouter · Mon équipement</em></p>
+
+### Sur le téléphone
+
+<p align="center">
+  <img src="docs/screenshots/mobile-accueil.png" alt="Accueil sur téléphone" width="24%"/>
+  <img src="docs/screenshots/mobile-mediatheque.png" alt="Médiathèque sur téléphone" width="24%"/>
+  <img src="docs/screenshots/mobile-equipement.png" alt="Équipement sur téléphone" width="24%"/>
+  <img src="https://raw.githubusercontent.com/tcastel94/arrmada/ci/android-screenshots/30-telephone-accueil.png" alt="Appli Android sur téléphone" width="24%"/>
+</p>
+
+### La tablette près de la TV *(facultatif)*
+
+<p align="center">
+  <img src="docs/screenshots/tablette-lecture.png" alt="Tablette pendant un film" width="49%"/>
+  <img src="docs/screenshots/tablette-ce-soir.png" alt="Tablette, ce soir" width="49%"/>
+</p>
+<p align="center"><em>Pendant un film : heure de fin, pistes, ampli, téléchargements · Le reste du temps : quoi regarder ce soir</em></p>
+
+### L'appli TV *(facultatif)*
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/tcastel94/arrmada/ci/android-screenshots/01-accueil.png" alt="Appli TV, accueil" width="49%"/>
+  <img src="https://raw.githubusercontent.com/tcastel94/arrmada/ci/android-screenshots/02-fiche-film.png" alt="Appli TV, fiche d'un film" width="49%"/>
+</p>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/tcastel94/arrmada/ci/android-screenshots/13-lecteur-intro-suivant.png" alt="Lecteur" width="49%"/>
+  <img src="https://raw.githubusercontent.com/tcastel94/arrmada/ci/android-screenshots/36-tablette-accueil.png" alt="Appli Android sur tablette" width="49%"/>
+</p>
+<p align="center"><em>Captures générées automatiquement par la CI Android à chaque mise à jour (affiches factices).</em></p>
+
+> Toutes les affiches des captures sont **factices** (générées) : aucune image protégée dans le dépôt.
+
+---
+
+## ✨ Ce que fait ArrMada
+
+### Pour tout le monde
+- **Rechercher & ajouter** un film ou une série, suivre les demandes, suggestions « Pour toi ».
+- **Médiathèque** unifiée (films + séries), filtres, fiches détaillées (distribution, fichiers,
+  qualité, sous-titres, bande-annonce).
+- **Transferts** en direct (SABnzbd, Deluge, qBittorrent) avec réessai, liste noire, import manuel.
+- **Calendrier** des sorties, **Manquants**, **Notifications** en temps réel.
+- **Santé de la médiathèque** : qualité, doublons, nettoyage, profils [TRaSH Guides](https://trash-guides.info/).
+- **Serveur & Docker** : disques, ressources, journaux de chaque conteneur et diagnostic par IA
+  (Ollama local ou OpenRouter, facultatif).
+- **Palette de commandes** `⌘K` / `Ctrl+K` et raccourcis clavier (`?` pour la liste).
+
+### Selon ton équipement *(Paramètres › Mon équipement)*
+
+| Module | Il te faut | Ce que ça ajoute |
+|--------|------------|------------------|
+| 📺 **Application TV** | TV Android / Google TV, Nvidia Shield ou box Kodi | Appli TV native ([android/](android/README.md)) ou add-on Kodi ([kodi-addon/](kodi-addon/README.md)) : accueil, reprise de lecture partagée, demandes depuis le canapé, page **Reprendre**, profils famille |
+| 📱 **Tablette d'appoint** | N'importe quelle tablette avec un navigateur | Page `/ecran` : ce qui passe, heure de fin, pistes, sorties du soir ; assombrie pendant le film |
+| 🔊 **Ampli home cinéma** | Ampli Yamaha MusicCast | Profils audio par pièce appliqués au lancement d'un film, télécommande dans **Salon** |
+| 📷 **Caméras Eufy** | Caméras Eufy + pont `eufy-security-ws` | Alerte sur la TV quand quelqu'un est détecté pendant un film |
+
+Un module **désactivé disparaît** des menus, des réglages et n'interroge plus rien en tâche de
+fond. Une instance existante garde ce qu'elle utilise déjà (TV appairée, ampli enregistré…) :
+c'est détecté automatiquement.
+
+---
+
+## 🔒 Sécurité
+
+| Couche | Mise en œuvre |
+|--------|---------------|
+| Mot de passe | Créé dans l'assistant, stocké haché (scrypt), aucun mot de passe par défaut |
+| Session | JWT avec secret aléatoire propre à chaque instance |
+| Clés API | Chiffrées au repos (Fernet) ; elles ne transitent jamais par le navigateur |
+| Connexion | Limitation des tentatives (anti force brute) |
+| En-têtes | HSTS, CSP, X-Frame-Options, Permissions-Policy |
+| Conteneur | Utilisateur non-root, API sur la même origine (CORS fermé) |
+| Appareils | TV et tablettes appairées par code, jeton propre révocable à tout moment |
+
+Détails : [ADR-002](docs/adr/002-security-architecture.md).
+
+---
+
+## 🛠️ Pour les curieux et les développeurs
+
+### Architecture
 
 ```
-┌───────────────────── conteneur arrmada ─────────────────────┐
-│                                                             │
+┌───────────────────── conteneur arrmada ──────────────────────┐
 │  :3420  gateway.js ──┬── /api/*  ──► FastAPI   127.0.0.1:8420 │
-│                      ├── /kodi/* ──► FastAPI (dépôt Kodi)    │
+│                      ├── /kodi/* ──► FastAPI (dépôt Kodi)     │
 │                      └── reste   ──► Next.js   127.0.0.1:3421 │
-│                                                             │
-│  /app/data : SQLite · clé Fernet · secret JWT · hash admin   │
-└─────────────────────────────────────────────────────────────┘
+│  /app/data : base · clé Fernet · secret JWT · hash admin      │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-Host port 3420 is the only one needed. The compose also publishes the legacy
-port 8420 → 3420 (same gateway) so Kodi TVs configured on `:8420` keep working.
-
-The gateway is a ~100-line dependency-free Node proxy: it streams Server-Sent Events
-without buffering, has no 30 s timeout, and forwards the client IP (login rate limiting).
-
-### Supported Services
-
-| Service | Type | Default Port | Integration |
-|---------|------|:----:|-------------|
-| 📺 Sonarr | TV Shows | 8989 | Full (library, search, import) |
-| 🎬 Radarr | Movies | 7878 | Full (library, search, import) |
-| 🎵 Lidarr | Music | 8686 | Health monitoring |
-| 📚 Readarr | Books | 8787 | Health monitoring |
-| 🔍 Prowlarr | Indexers | 9696 | Health monitoring |
-| 💬 Bazarr | Subtitles | 6767 | Subtitle management |
-| 🍿 Jellyfin | Media Server | 8096 | Health monitoring |
-| ⬇️ SABnzbd | Downloader | 8080 | Download monitoring |
-
----
-
-## 🐘 Database
-
-**SQLite** by default (`./data/arrmada.db`, WAL mode): nothing to configure.
-
-> Keep `./data` on a **local disk**: SQLite must not live on an NFS/SMB share.
-
-To use **PostgreSQL**, combine the two compose files:
+Un seul port (3420). Le port historique 8420 reste publié pour les TV Kodi déjà configurées.
+Base **SQLite** par défaut (dossier `./data` sur un disque local, jamais sur un partage NFS/SMB),
+**PostgreSQL** en option :
 
 ```bash
 echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)" >> .env
 docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d
 ```
 
-For an external PostgreSQL server, set
-`DATABASE_URL=postgresql+asyncpg://user:password@host:5432/arrmada`.
+### Applications prises en charge
 
-Migrating the former 3-container Unraid deployment: see [docs/deploy-unraid.md](docs/deploy-unraid.md).
+| Appli | Rôle | Port | Intégration |
+|-------|------|:----:|-------------|
+| Sonarr | Séries | 8989 | Complète (médiathèque, recherche, import) |
+| Radarr | Films | 7878 | Complète (médiathèque, recherche, import) |
+| Prowlarr | Sources (indexeurs) | 9696 | Synchro vers Sonarr / Radarr, statistiques |
+| Bazarr | Sous-titres | 6767 | Téléchargement, resynchro |
+| SABnzbd | Téléchargement Usenet | 8080 | File d'attente, configuration TRaSH |
+| Deluge / qBittorrent | Téléchargement torrent | 8112 / 8080 | File d'attente |
+| Jellyfin | Lecture | 8096 | Lecture, transcodage pour Chromecast |
+| Lidarr / Readarr | Musique / livres | 8686 / 8787 | Surveillance |
 
----
-
-## 🛠️ Development
-
-### Backend
+### Développement
 
 ```bash
-cd backend
-python -m venv .venv
-.venv/Scripts/activate  # or source .venv/bin/activate
+# Backend (FastAPI)
+cd backend && python -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
-```
+python -m pytest -q          # tests
+ruff check . && ruff format . # style
 
-### Frontend
+# Frontend (Next.js) — /api est relayé vers :8000 en dev
+cd frontend && npm install && npm run dev
 
-```bash
-cd frontend
-npm install
-npm run dev     # http://localhost:3000 — /api is proxied to :8000 in dev
-```
-
-### Docker image
-
-```bash
+# Image Docker
 docker build -t ghcr.io/tcastel94/arrmada:latest .
-docker compose up -d
 ```
 
-### Running Tests
+### Documentation
 
-```bash
-cd backend
-python -m pytest -v --cov
-```
-
-### Linting
-
-```bash
-cd backend
-ruff check .
-ruff format .
-```
+| Document | Contenu |
+|----------|---------|
+| [Guide d'installation](https://tcastel94.github.io/arrmada/installation/) | Pas à pas par appareil, pour les non-techniciens |
+| [docs/installer.md](docs/installer.md) | `install.sh` : options, chemins par plateforme |
+| [docs/deploy-unraid.md](docs/deploy-unraid.md) | Migration de l'ancien déploiement Unraid |
+| [android/README.md](android/README.md) | Appli TV / téléphone / tablette |
+| [kodi-addon/README.md](kodi-addon/README.md) | Add-on Kodi |
+| [CHANGELOG](CHANGELOG.md) | Historique des versions |
+| [docs/adr/](docs/adr/) | Décisions d'architecture |
 
 ---
 
-## 🔒 Security
+## 🤝 Contribuer
 
-| Layer | Implementation |
-|-------|---------------|
-| **Authentication** | scrypt-hashed admin password · JWT (HS256) with auto-generated secret |
-| **API Key Storage** | Fernet encryption (AES-128-CBC) at rest |
-| **Rate Limiting** | 5 attempts/min on login endpoint |
-| **Headers** | HSTS, CSP, X-Frame-Options, Permissions-Policy |
-| **CORS** | Same-origin by default (no cross-origin access) |
-| **Docker** | Non-root user, multi-stage build |
-| **Database** | Connection pooling, prepared statements |
+Les contributions sont bienvenues : crée une branche, fais tes changements, ouvre une Pull Request.
+Lis le [CHANGELOG](CHANGELOG.md) pour connaître l'état actuel du projet.
 
-> See [ADR-002: Security Architecture](docs/adr/002-security-architecture.md) for detailed rationale.
+## 📜 Licence
 
----
+MIT — voir [LICENSE](LICENSE).
 
-## 📚 Documentation
-
-| Document | Description |
-|----------|-------------|
-| [CHANGELOG](CHANGELOG.md) | Version history (Keep a Changelog format) |
-| [ADR-001](docs/adr/001-unified-arr-stack.md) | Tech stack decisions |
-| [ADR-002](docs/adr/002-security-architecture.md) | Security architecture |
-| [.env.example](.env.example) | Environment variables reference |
-
----
-
-## 🗺️ Roadmap
-
-- [x] Unified dashboard with real-time stats
-- [x] Setup Wizard with network discovery
-- [x] Encrypted API key storage
-- [x] PostgreSQL support
-- [x] CI/CD pipeline (GitHub Actions)
-- [x] Security hardening (HSTS, CSP, rate limiting)
-- [x] Docker multi-stage production build
-- [x] UI v2 « Neon Armada » (design system, command palette, keyboard shortcuts, real-time toasts)
-- [x] Living-room remote (Kodi, Yamaha, Chromecast)
-- [x] Media detail view with cast & subtitles
-- [x] Duplicate media detection (Santé médiathèque)
-- [ ] AI-powered recommendations (TMDB)
-- [ ] Notification center (Telegram, Discord)
-- [ ] Mobile app (React Native)
-- [ ] Multi-user support with RBAC
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please read the [CHANGELOG](CHANGELOG.md) to understand the current state of the project.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'feat: add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
----
-
-## 📜 License
-
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
-
----
-
-<p align="center">
-  Made with ☠️ by the ArrMada crew
-</p>
+<p align="center">Fait avec ☠️ par l'équipage d'ArrMada</p>

@@ -12,6 +12,7 @@ import Link from "next/link";
 import { Film, Pause, Play, Square, Tv } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { useModuleEnabled } from "@/hooks/use-modules";
 import { useKodiNowPlaying, useKodiControl } from "@/hooks/use-kodi";
 import { formatClock } from "@/lib/format";
 import { EASE_OUT } from "@/lib/motion";
@@ -27,7 +28,8 @@ function fmtChannels(ch?: number | null): string | null {
 }
 
 export function NowPlayingCard() {
-    const { data: np } = useKodiNowPlaying(true);
+    // Sans TV (module désactivé), pas d'interrogation de Kodi toutes les secondes
+    const { data: np } = useKodiNowPlaying(useModuleEnabled()("tv"));
     const control = useKodiControl();
 
     const visible = !!np?.playing;

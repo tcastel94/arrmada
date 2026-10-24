@@ -42,6 +42,7 @@ import {
     Sofa,
     type LucideIcon,
 } from "lucide-react";
+import type { ModuleKey } from "@/hooks/use-modules";
 
 export interface NavItem {
     href: string;
@@ -57,6 +58,11 @@ export interface NavItem {
     badge?: "downloads" | "notifications" | "missing";
     /** Couleur de la vignette d'icône (écran « Plus »), classe Tailwind de fond. */
     tint?: string;
+    /**
+     * Équipement facultatif dont dépend l'entrée (TV, ampli…) : masquée si
+     * aucun de ces modules n'est actif. Absent = toujours visible.
+     */
+    module?: ModuleKey | ModuleKey[];
 }
 
 export interface NavGroup {
@@ -83,6 +89,7 @@ export const TOP_ITEMS: NavItem[] = [
         description: "Télécommandes Kodi & ampli, lecture en cours",
         shortcut: "r",
         keywords: ["kodi", "yamaha", "ampli", "télécommande", "remote", "lecture", "cast"],
+        module: ["tv", "amplifier"],
     },
 ];
 
@@ -107,6 +114,7 @@ export const NAV_GROUPS: NavGroup[] = [
                 description: "Films et épisodes commencés sur tes TV",
                 shortcut: "e",
                 keywords: ["en cours", "reprise", "continuer", "vu", "kodi", "tv"],
+                module: "tv",
             },
             {
                 href: "/watchlist",

@@ -32,6 +32,7 @@ import {
     KeyRound,
     Loader2,
     MonitorPlay,
+    PackageCheck,
     Send,
     Server,
     ShieldCheck,
@@ -56,6 +57,7 @@ import { useKodiSettings } from "@/hooks/use-kodi";
 import { useYamahaSettings } from "@/hooks/use-yamaha";
 import { useCastDevices, useJellyfinConfig } from "@/hooks/use-cast";
 import { useSetupStatus } from "@/hooks/use-setup";
+import { useModuleEnabled, useModules } from "@/hooks/use-modules";
 import { plural, percent } from "@/lib/format";
 import { fadeUp, stagger } from "@/lib/motion";
 import { cn } from "@/lib/utils";
@@ -176,6 +178,10 @@ export default function SettingsGeneralPage() {
     const cast = useCastDevices();
     const jellyfin = useJellyfinConfig();
     const testTelegram = useTestTelegram();
+    // Tuiles des équipements absents (pas de TV, pas d'ampli…) masquées
+    const moduleOn = useModuleEnabled();
+    const modules = useModules();
+    const activeModules = modules.data ? Object.values(modules.data).filter((m) => m.enabled) : [];
 
     const enabled = services.data?.filter((s) => s.is_enabled) ?? [];
     const online = enabled.filter((s) => s.last_status === "online").length;
@@ -217,14 +223,28 @@ export default function SettingsGeneralPage() {
                         gauge={enabled.length ? servicesGauge : undefined}
                     />
                     <OverviewTile
-                        href="/settings/kodi"
-                        icon={MonitorPlay}
+                        href="/settings/equipement"
+                        icon={PackageCheck}
                         iconClass="bg-primary/15 text-primary"
-                        title="Kodi"
-                        loading={kodis.isLoading}
-                        tone={kodis.data?.length ? "online" : "unknown"}
-                        status={kodis.data?.length ? plural(kodis.data.length, "lecteur configuré", "lecteurs configurés") : "Aucun lecteur"}
+                        title="Mon équipement"
+                        loading={modules.isLoading}
+                        status={
+                            activeModules.length
+                                ? activeModules.map((m) => m.label).join(" · ")
+                                : "Ni TV, ni tablette, ni ampli, ni caméra"
+                        }
                     />
+                    {moduleOn(["tv", "tablet", "cameras"]) && (
+                        <OverviewTile
+                            href="/settings/kodi"
+                            icon={MonitorPlay}
+                            iconClass="bg-primary/15 text-primary"
+                            title="Kodi"
+                            loading={kodis.isLoading}
+                            tone={kodis.data?.length ? "online" : "unknown"}
+                            status={kodis.data?.length ? plural(kodis.data.length, "lecteur configuré", "lecteurs configurés") : "Aucun lecteur"}
+                        />
+                    )}
                     <OverviewTile
                         href="/settings/cast"
                         icon={Cast}
@@ -238,15 +258,17 @@ export default function SettingsGeneralPage() {
                                 : "Jellyfin à configurer"
                         }
                     />
-                    <OverviewTile
-                        href="/settings/yamaha"
-                        icon={Speaker}
-                        iconClass="bg-orange-500/15 text-orange-300"
-                        title="Ampli Yamaha"
-                        loading={amps.isLoading}
-                        tone={amps.data?.length ? "online" : "unknown"}
-                        status={amps.data?.length ? plural(amps.data.length, "ampli configuré", "amplis configurés") : "Aucun ampli"}
-                    />
+                    {moduleOn("amplifier") && (
+                        <OverviewTile
+                            href="/settings/yamaha"
+                            icon={Speaker}
+                            iconClass="bg-orange-500/15 text-orange-300"
+                            title="Ampli Yamaha"
+                            loading={amps.isLoading}
+                            tone={amps.data?.length ? "online" : "unknown"}
+                            status={amps.data?.length ? plural(amps.data.length, "ampli configuré", "amplis configurés") : "Aucun ampli"}
+                        />
+                    )}
                     <OverviewTile
                         href="/trash-guides"
                         icon={BookMarked}
@@ -254,13 +276,15 @@ export default function SettingsGeneralPage() {
                         title="TRaSH Guides"
                         status="Profils par média & SABnzbd"
                     />
-                    <OverviewTile
-                        href="/remote"
-                        icon={Sofa}
-                        iconClass="bg-primary/15 text-primary"
-                        title="Salon"
-                        status="Télécommandes Kodi, ampli et Cast"
-                    />
+                    {moduleOn(["tv", "amplifier"]) && (
+                        <OverviewTile
+                            href="/remote"
+                            icon={Sofa}
+                            iconClass="bg-primary/15 text-primary"
+                            title="Salon"
+                            status="Télécommandes Kodi, ampli et Cast"
+                        />
+                    )}
                 </motion.div>
             </section>
 

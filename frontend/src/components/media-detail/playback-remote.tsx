@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { MonitorPlay, Pause, Play, Square, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { YamahaRemote } from "@/components/yamaha-remote";
+import { useModuleEnabled } from "@/hooks/use-modules";
 import { useKodiControl, useKodiNowPlaying, type KodiNowPlaying } from "@/hooks/use-kodi";
 import type { MediaDetail } from "@/hooks/use-media";
 import { formatClock } from "@/lib/format";
@@ -61,7 +62,8 @@ export function nowPlayingMatches(np: KodiNowPlaying | undefined, media: MediaDe
 }
 
 export function PlaybackRemote({ media }: { media: MediaDetail }) {
-    const { data: np } = useKodiNowPlaying(true);
+    // Sans TV (module désactivé), pas d'interrogation de Kodi toutes les secondes
+    const { data: np } = useKodiNowPlaying(useModuleEnabled()("tv"));
     const visible = nowPlayingMatches(np, media);
 
     return (

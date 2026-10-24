@@ -57,6 +57,7 @@ import {
     useUpdateKodi,
     type KodiInstance,
 } from "@/hooks/use-kodi";
+import { useModuleEnabled } from "@/hooks/use-modules";
 import { formatNumber, percent, plural } from "@/lib/format";
 import { stagger } from "@/lib/motion";
 
@@ -70,6 +71,10 @@ export default function KodiSettingsPage() {
     const del = useDeleteKodi();
     const test = useTestKodi();
     const discover = useKodiDiscover();
+    // Équipement facultatif : sans TV, seuls l'appairage (tablette) et les
+    // caméras restent ; sans caméras, leur panneau disparaît.
+    const moduleOn = useModuleEnabled();
+    const hasTv = moduleOn("tv");
 
     const [editing, setEditing] = useState<KodiInstance | null>(null);
     // Reste affiché pendant l'animation de fermeture de la boîte « Modifier ».
@@ -100,123 +105,128 @@ export default function KodiSettingsPage() {
             <DevicesPanel />
 
             {/* ── Caméras Eufy : pop-up sur la TV pendant un film ── */}
-            <CamerasPanel />
+            {moduleOn("cameras") && <CamerasPanel />}
 
             {/* ── Dépôt Kodi : mises à jour automatiques de l'add-on ── */}
-            <KodiRepoPanel />
+            {hasTv && <KodiRepoPanel />}
 
-            {/* ── Lecteurs configurés ─────────────────────────── */}
-            <Panel
-                title="Lecteurs Kodi"
-                icon={MonitorPlay}
-                iconClassName="text-primary"
-                action={instances && instances.length > 0 ? <span className="text-xs text-muted-foreground">{plural(instances.length, "lecteur")}</span> : undefined}
-            >
-                {isLoading ? (
-                    <TableSkeleton rows={2} />
-                ) : isError ? (
-                    <ErrorState compact error={error} onRetry={() => refetch()} />
-                ) : !instances || instances.length === 0 ? (
-                    <EmptyState
-                        compact
-                        icon={MonitorPlay}
-                        title="Aucun Kodi pour l'instant"
-                        description="Ajoute ton lecteur ci-dessous pour lancer tes films dessus et piloter la lecture depuis le Salon."
-                    />
-                ) : (
-                    <motion.div variants={stagger(0, 0.05)} initial="hidden" animate="show" className="space-y-2">
-                        <AnimatePresence>
-                            {instances.map((k) => (
-                                <DeviceRow
-                                    key={k.id}
-                                    icon={MonitorPlay}
-                                    tone="violet"
-                                    name={k.name}
-                                    address={k.url}
-                                    badges={!k.is_enabled ? <span className="rounded-full bg-slate-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-slate-300">Désactivé</span> : null}
-                                    meta={
-                                        <span className="flex flex-wrap items-center gap-x-2">
-                                            <span>Utilisateur : {kodiUsername(k) || "aucun"}</span>
-                                            {k.has_password && (
-                                                <span className="inline-flex items-center gap-1">
-                                                    <Lock className="h-3 w-3" /> mot de passe enregistré
-                                                </span>
-                                            )}
-                                        </span>
-                                    }
-                                    autoTest={k.is_enabled}
-                                    onTest={async () => {
-                                        const r = await test.mutateAsync(k.id);
-                                        return r.ok
-                                            ? { ok: true, label: `${r.name ?? "Kodi"} ${r.version ?? ""}`.trim() }
-                                            : { ok: false, label: r.detail || "Injoignable" };
-                                    }}
-                                    onEdit={() => setEditing(k)}
-                                    onDelete={() => del.mutateAsync(k.id)}
-                                    deleteDescription="ArrMada ne pourra plus lancer de lecture ni scanner la bibliothèque de ce Kodi. Kodi lui-même n'est pas modifié."
-                                />
-                            ))}
-                        </AnimatePresence>
-                    </motion.div>
-                )}
-            </Panel>
-
-            {/* ── Ajouter ─────────────────────────────────────── */}
-            <Panel
-                title="Ajouter un Kodi"
-                icon={Plus}
-                iconClassName="text-primary"
-                action={
-                    <Button variant="outline" size="sm" onClick={runDiscover} disabled={discover.isPending}>
-                        {discover.isPending ? <Loader2 className="animate-spin" /> : <Radar />}
-                        Détecter
-                    </Button>
-                }
-                bodyClassName="space-y-5"
-            >
-                <div className="rounded-xl border border-white/[0.06] bg-background/30 p-3.5 text-xs leading-relaxed text-muted-foreground">
-                    <p className="mb-1.5 flex items-center gap-1.5 font-semibold text-foreground">
-                        <Wrench className="h-3.5 w-3.5 text-primary" /> Côté Kodi, une seule fois :
-                    </p>
-                    <ol className="list-inside list-decimal space-y-0.5">
-                        <li>
-                            Paramètres → Services → Contrôle : active <span className="text-foreground">« Autoriser le contrôle à distance via HTTP »</span>.
-                        </li>
-                        <li>Choisis un utilisateur et un mot de passe (et note le port, 8080 par défaut).</li>
-                        <li>Clique « Détecter » ci-dessus ou saisis l&apos;adresse à la main.</li>
-                    </ol>
-                </div>
-
-                <DiscoveryResults
-                    devices={found}
-                    scanning={discover.isPending}
+            {/* Lecteurs, ajout et maintenance : seulement avec une TV */}
+            {hasTv && (
+                <>
+                {/* ── Lecteurs configurés ─────────────────────────── */}
+                <Panel
+                    title="Lecteurs Kodi"
                     icon={MonitorPlay}
-                    selectedKey={prefill ? found?.find((f) => f.url === prefill.url)?.key : null}
-                    onPick={(d) => setPrefill({ name: d.name, url: d.url, nonce: Date.now() })}
-                />
+                    iconClassName="text-primary"
+                    action={instances && instances.length > 0 ? <span className="text-xs text-muted-foreground">{plural(instances.length, "lecteur")}</span> : undefined}
+                >
+                    {isLoading ? (
+                        <TableSkeleton rows={2} />
+                    ) : isError ? (
+                        <ErrorState compact error={error} onRetry={() => refetch()} />
+                    ) : !instances || instances.length === 0 ? (
+                        <EmptyState
+                            compact
+                            icon={MonitorPlay}
+                            title="Aucun Kodi pour l'instant"
+                            description="Ajoute ton lecteur ci-dessous pour lancer tes films dessus et piloter la lecture depuis le Salon."
+                        />
+                    ) : (
+                        <motion.div variants={stagger(0, 0.05)} initial="hidden" animate="show" className="space-y-2">
+                            <AnimatePresence>
+                                {instances.map((k) => (
+                                    <DeviceRow
+                                        key={k.id}
+                                        icon={MonitorPlay}
+                                        tone="violet"
+                                        name={k.name}
+                                        address={k.url}
+                                        badges={!k.is_enabled ? <span className="rounded-full bg-slate-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-slate-300">Désactivé</span> : null}
+                                        meta={
+                                            <span className="flex flex-wrap items-center gap-x-2">
+                                                <span>Utilisateur : {kodiUsername(k) || "aucun"}</span>
+                                                {k.has_password && (
+                                                    <span className="inline-flex items-center gap-1">
+                                                        <Lock className="h-3 w-3" /> mot de passe enregistré
+                                                    </span>
+                                                )}
+                                            </span>
+                                        }
+                                        autoTest={k.is_enabled}
+                                        onTest={async () => {
+                                            const r = await test.mutateAsync(k.id);
+                                            return r.ok
+                                                ? { ok: true, label: `${r.name ?? "Kodi"} ${r.version ?? ""}`.trim() }
+                                                : { ok: false, label: r.detail || "Injoignable" };
+                                        }}
+                                        onEdit={() => setEditing(k)}
+                                        onDelete={() => del.mutateAsync(k.id)}
+                                        deleteDescription="ArrMada ne pourra plus lancer de lecture ni scanner la bibliothèque de ce Kodi. Kodi lui-même n'est pas modifié."
+                                    />
+                                ))}
+                            </AnimatePresence>
+                        </motion.div>
+                    )}
+                </Panel>
 
-                <KodiForm
-                    idPrefix="kodi-add"
-                    prefill={prefill}
-                    submitLabel="Enregistrer"
-                    submitIcon={<Plus />}
-                    pending={add.isPending}
-                    resetOnSuccess
-                    onSubmit={async (payload) => {
-                        try {
-                            const r = await add.mutateAsync(payload);
-                            toast.success(r?.message ?? "Kodi enregistré", { description: payload.url });
-                            setPrefill(null);
-                        } catch (e) {
-                            toast.error("Enregistrement impossible", { description: e instanceof Error ? e.message : undefined });
-                            throw e;
-                        }
-                    }}
-                />
-            </Panel>
+                {/* ── Ajouter ─────────────────────────────────────── */}
+                <Panel
+                    title="Ajouter un Kodi"
+                    icon={Plus}
+                    iconClassName="text-primary"
+                    action={
+                        <Button variant="outline" size="sm" onClick={runDiscover} disabled={discover.isPending}>
+                            {discover.isPending ? <Loader2 className="animate-spin" /> : <Radar />}
+                            Détecter
+                        </Button>
+                    }
+                    bodyClassName="space-y-5"
+                >
+                    <div className="rounded-xl border border-white/[0.06] bg-background/30 p-3.5 text-xs leading-relaxed text-muted-foreground">
+                        <p className="mb-1.5 flex items-center gap-1.5 font-semibold text-foreground">
+                            <Wrench className="h-3.5 w-3.5 text-primary" /> Côté Kodi, une seule fois :
+                        </p>
+                        <ol className="list-inside list-decimal space-y-0.5">
+                            <li>
+                                Paramètres → Services → Contrôle : active <span className="text-foreground">« Autoriser le contrôle à distance via HTTP »</span>.
+                            </li>
+                            <li>Choisis un utilisateur et un mot de passe (et note le port, 8080 par défaut).</li>
+                            <li>Clique « Détecter » ci-dessus ou saisis l&apos;adresse à la main.</li>
+                        </ol>
+                    </div>
 
-            {/* ── Maintenance ─────────────────────────────────── */}
-            <MaintenancePanel instances={instances ?? []} />
+                    <DiscoveryResults
+                        devices={found}
+                        scanning={discover.isPending}
+                        icon={MonitorPlay}
+                        selectedKey={prefill ? found?.find((f) => f.url === prefill.url)?.key : null}
+                        onPick={(d) => setPrefill({ name: d.name, url: d.url, nonce: Date.now() })}
+                    />
+
+                    <KodiForm
+                        idPrefix="kodi-add"
+                        prefill={prefill}
+                        submitLabel="Enregistrer"
+                        submitIcon={<Plus />}
+                        pending={add.isPending}
+                        resetOnSuccess
+                        onSubmit={async (payload) => {
+                            try {
+                                const r = await add.mutateAsync(payload);
+                                toast.success(r?.message ?? "Kodi enregistré", { description: payload.url });
+                                setPrefill(null);
+                            } catch (e) {
+                                toast.error("Enregistrement impossible", { description: e instanceof Error ? e.message : undefined });
+                                throw e;
+                            }
+                        }}
+                    />
+                </Panel>
+
+                {/* ── Maintenance ─────────────────────────────────── */}
+                <MaintenancePanel instances={instances ?? []} />
+                </>
+            )}
 
             {/* ── Modifier (boîte) ────────────────────────────── */}
             <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>

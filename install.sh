@@ -726,6 +726,13 @@ write_stack_json() {
         [ -n "$creds" ] && creds="${creds}, "
         creds="${creds}\"qbittorrent\": {\"username\": \"admin\", \"password\": \"${QBIT_PASSWORD}\"}"
     fi
+    # Compte Jellyfin créé par l'installeur : affiché à l'admin dans l'assistant
+    # d'ArrMada (« Ce qu'il te reste à faire »). credentials.txt appartient à
+    # root : sur un NAS, son propriétaire ne peut souvent pas l'ouvrir.
+    if [ -n "$JELLYFIN_PASSWORD" ]; then
+        [ -n "$creds" ] && creds="${creds}, "
+        creds="${creds}\"jellyfin\": {\"username\": \"admin\", \"password\": \"${JELLYFIN_PASSWORD}\"}"
+    fi
     write_file "$file" 600 <<EOF
 {
   "installer_version": "${SCRIPT_VERSION}",
@@ -1086,6 +1093,7 @@ main() {
     start_stack
     setup_jellyfin
     write_credentials   # complété avec le compte Jellyfin
+    write_stack_json    # idem : ArrMada l'affiche à l'admin dans son assistant
     summary
 }
 

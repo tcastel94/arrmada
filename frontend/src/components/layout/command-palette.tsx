@@ -35,6 +35,7 @@ import { Dialog, DialogContent, DialogTitle, DialogClose } from "@/components/ui
 import { useMediaSearch } from "@/hooks/use-media";
 import { useDebounce } from "@/hooks/use-debounce";
 import { ALL_NAV_ITEMS, findGroupTitle } from "@/lib/nav";
+import { useModuleEnabled } from "@/hooks/use-modules";
 import { apiFetch, logout } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 
@@ -61,6 +62,9 @@ export function CommandPalette() {
     const qc = useQueryClient();
     const debounced = useDebounce(query.trim(), 220);
     const { data: media, isFetching } = useMediaSearch(debounced);
+    // Pages et actions d'un équipement absent (pas de TV…) masquées
+    const moduleOn = useModuleEnabled();
+    const hasTv = moduleOn("tv");
 
     // Raccourcis d'ouverture : ⌘K / Ctrl+K, « / », et l'évènement custom
     // déclenché par les boutons de recherche (header, sidebar).
@@ -180,12 +184,14 @@ export function CommandPalette() {
         () =>
             ALL_NAV_ITEMS.filter(
                 (i) =>
-                    !q ||
-                    norm(`${i.label} ${i.description ?? ""} ${(i.keywords ?? []).join(" ")}`).includes(q),
+                    moduleOn(i.module) &&
+                    (!q || norm(`${i.label} ${i.description ?? ""} ${(i.keywords ?? []).join(" ")}`).includes(q)),
             ),
-        [q],
+        [q, moduleOn],
     );
-    const filteredActions = actions.filter((a) => !q || a.id === "add" || norm(`${a.label} ${a.keywords}`).includes(q));
+    const filteredActions = actions
+        .filter((a) => a.id !== "kodi-sync" || hasTv)
+        .filter((a) => !q || a.id === "add" || norm(`${a.label} ${a.keywords}`).includes(q));
     const mediaItems = debounced.length >= 2 ? media?.items.slice(0, 7) ?? [] : [];
 
     return (

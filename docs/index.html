@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ArrMada</title>
+<meta name="description" content="Ta médiathèque de films et séries à la maison : ArrMada installe, relie et pilote Sonarr, Radarr, Prowlarr, Jellyfin… avec un assistant guidé pour tous.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap">
+<style>
+/* Page d'accueil GitHub Pages (docs/). Même charte que l'appli : fond noir,
+   cartes gris foncé, accent unique #4A9EFF. Les captures viennent de
+   docs/screenshots/ (web, tablette) et de la branche ci/android-screenshots
+   (appli TV, régénérée par la CI Android). */
+:root {
+  --bg: #000; --surface: #1c1c1e; --surface-2: #2c2c2e; --line: #3a3a3c;
+  --fg: #fff; --muted: #9a9aa1; --accent: #4a9eff; --accent-soft: rgba(74,158,255,.14);
+  --ok: #30d158;
+  --font: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) { --bg: #f2f2f7; --surface: #fff; --surface-2: #ebebf0; --line: #d1d1d6; --fg: #000; --muted: #6c6c72; --accent: #0a6fe0; --accent-soft: rgba(10,111,224,.10); --ok: #1f8a3c; color-scheme: light; }
+}
+:root[data-theme="light"] { --bg: #f2f2f7; --surface: #fff; --surface-2: #ebebf0; --line: #d1d1d6; --fg: #000; --muted: #6c6c72; --accent: #0a6fe0; --accent-soft: rgba(10,111,224,.10); --ok: #1f8a3c; color-scheme: light; }
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font); line-height: 1.55; -webkit-font-smoothing: antialiased; }
+a { color: var(--accent); }
+img { max-width: 100%; display: block; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+
+header { display: flex; align-items: center; gap: 12px; padding-block: 24px; }
+header svg { width: 36px; height: 36px; flex: none; }
+header .name { font-weight: 700; font-size: 18px; }
+header .name span, h1 span { color: var(--accent); }
+header nav { margin-left: auto; display: flex; gap: 18px; font-size: 15px; }
+header nav a { color: var(--muted); text-decoration: none; }
+header nav a:hover { color: var(--fg); }
+
+.hero { text-align: center; padding-block: 48px 40px; }
+h1 { font-size: clamp(34px, 6vw, 60px); line-height: 1.05; letter-spacing: -.03em; margin: 0 auto; max-width: 15ch; text-wrap: balance; }
+.lead { color: var(--muted); font-size: clamp(17px, 2.2vw, 20px); max-width: 60ch; margin: 18px auto 0; text-wrap: balance; }
+.cta { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 30px; }
+.btn { display: inline-flex; align-items: center; gap: 8px; padding: 13px 22px; border-radius: 14px; font-weight: 600; font-size: 16px; text-decoration: none; }
+.btn.primary { background: var(--accent); color: #fff; }
+.btn.ghost { background: var(--surface); color: var(--fg); }
+.platforms { margin-top: 18px; font-size: 14px; color: var(--muted); }
+
+.hero-shot { margin-top: 44px; border-radius: 18px; overflow: hidden; border: 1px solid var(--line); box-shadow: 0 30px 80px -30px rgba(74,158,255,.35); }
+
+section { padding-block: 56px 8px; }
+h2 { font-size: clamp(26px, 3.6vw, 36px); letter-spacing: -.02em; margin: 0 0 8px; text-wrap: balance; }
+.sub { color: var(--muted); margin: 0 0 26px; max-width: 65ch; }
+
+.grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.card { background: var(--surface); border-radius: 18px; padding: 20px; min-width: 0; }
+.card h3 { margin: 0 0 6px; font-size: 17px; }
+.card p { margin: 0; color: var(--muted); font-size: 15px; }
+.num { display: inline-flex; width: 28px; height: 28px; border-radius: 999px; align-items: center; justify-content: center; background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 14px; margin-bottom: 10px; }
+.tag { display: inline-block; font-size: 12px; font-weight: 600; color: var(--ok); margin-bottom: 8px; }
+
+.shots { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+figure { margin: 0; min-width: 0; }
+figure img { border-radius: 14px; border: 1px solid var(--line); width: 100%; }
+figcaption { color: var(--muted); font-size: 14px; margin-top: 8px; }
+.phones { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); max-width: 760px; }
+
+.compare { width: 100%; border-collapse: collapse; font-size: 15px; }
+.compare th, .compare td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.compare th { color: var(--muted); font-weight: 500; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; }
+.table-wrap { overflow-x: auto; background: var(--surface); border-radius: 18px; }
+
+footer { color: var(--muted); font-size: 14px; text-align: center; padding-block: 64px 40px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <svg viewBox="0 0 512 512" aria-hidden="true">
+      <defs>
+        <radialGradient id="tb" cx="0.22" cy="0" r="1.25"><stop offset="0" stop-color="#17223A"/><stop offset="0.6" stop-color="#0B111D"/><stop offset="1" stop-color="#080B12"/></radialGradient>
+        <linearGradient id="tg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4A9EFF"/><stop offset="1" stop-color="#22E0EE"/></linearGradient>
+      </defs>
+      <rect width="512" height="512" rx="112" fill="url(#tb)"/>
+      <g transform="translate(96 96) scale(5)">
+        <path d="M11 54 L32 9 L53 54" fill="none" stroke="url(#tg)" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M27 34.8v14.4a1.6 1.6 0 0 0 2.4 1.4l11.4-7.2a1.6 1.6 0 0 0 0-2.8l-11.4-7.2a1.6 1.6 0 0 0-2.4 1.4z" fill="#EAF6FF"/>
+      </g>
+    </svg>
+    <span class="name">Arr<span>Mada</span></span>
+    <nav>
+      <a href="installation/">Installer</a>
+      <a href="#captures">Captures</a>
+      <a href="https://github.com/tcastel94/arrmada">GitHub</a>
+    </nav>
+  </header>
+
+  <div class="hero">
+    <h1>Tes films et séries, <span>sans prise de tête</span>.</h1>
+    <p class="lead">Tu demandes un titre, ArrMada le trouve, le télécharge, le range et l'affiche sur ta TV.
+      L'installation est guidée de bout en bout&nbsp;: pas besoin d'être informaticien.</p>
+    <div class="cta">
+      <a class="btn primary" href="installation/">Installer pas à pas →</a>
+      <a class="btn ghost" href="#captures">Voir les captures</a>
+    </div>
+    <p class="platforms">Synology · Unraid · PC Windows · Mac · serveur Linux</p>
+    <div class="hero-shot"><img src="screenshots/web-tableau-de-bord.png" alt="Accueil de l'appli web ArrMada" width="1440" height="900"></div>
+  </div>
+
+  <section>
+    <h2>Ce qu'ArrMada fait à ta place</h2>
+    <p class="sub">D'habitude, il faut installer six ou sept logiciels, recopier des clés entre eux et jongler entre les onglets.</p>
+    <div class="table-wrap">
+      <table class="compare">
+        <thead><tr><th>Avant</th><th>Avec ArrMada</th></tr></thead>
+        <tbody>
+          <tr><td>7 logiciels à installer un par un</td><td><strong>Une seule installation</strong>, adaptée à ta machine</td></tr>
+          <tr><td>Des clés API à recopier partout</td><td><strong>« Tout connecter »</strong> relie les applis en un clic</td></tr>
+          <tr><td>Des réglages oubliés</td><td>Une liste <strong>« Ce qu'il te reste à faire »</strong>, vérifiée en direct</td></tr>
+          <tr><td>7 onglets ouverts</td><td><strong>Une appli</strong> sur ordinateur, téléphone, tablette et TV</td></tr>
+          <tr><td>Des menus pour du matériel qu'on n'a pas</td><td>Tu dis <strong>ce que tu as</strong>, le reste disparaît</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Installé en trois temps</h2>
+    <p class="sub">Compte une vingtaine de minutes, téléchargements compris.</p>
+    <div class="grid">
+      <div class="card"><span class="num">1</span><h3>Le guide</h3><p>Tu choisis ton appareil et tu suis les étapes, avec des cases à cocher et des boutons « Copier ». Sur Synology, aucune ligne de commande.</p></div>
+      <div class="card"><span class="num">2</span><h3>L'assistant</h3><p>Dans ArrMada&nbsp;: ton mot de passe, puis « Tout connecter ». Chaque branchement est testé avant d'être enregistré.</p></div>
+      <div class="card"><span class="num">3</span><h3>Ce qui reste</h3><p>Ajouter tes sources, ton fournisseur Usenet… ArrMada vérifie chaque point dans l'appli concernée et te dit où cliquer.</p></div>
+    </div>
+  </section>
+
+  <section id="captures">
+    <h2>L'assistant</h2>
+    <p class="sub">Chaque étape dit quoi faire, pourquoi, et quoi faire si ça ne marche pas.</p>
+    <div class="shots">
+      <figure><img src="screenshots/assistant-1-bienvenue.png" alt="Assistant, bienvenue" loading="lazy"><figcaption>Le plan de route</figcaption></figure>
+      <figure><img src="screenshots/assistant-3-applications.png" alt="Assistant, relier les applications" loading="lazy"><figcaption>« Tout connecter »</figcaption></figure>
+      <figure><img src="screenshots/assistant-4-a-faire.png" alt="Assistant, ce qu'il te reste à faire" loading="lazy"><figcaption>Ce qu'il reste, vérifié dans chaque appli</figcaption></figure>
+      <figure><img src="screenshots/assistant-5-equipement.png" alt="Assistant, ton équipement" loading="lazy"><figcaption>TV, tablette, ampli, caméras : facultatif</figcaption></figure>
+    </div>
+  </section>
+
+  <section>
+    <h2>L'appli web</h2>
+    <p class="sub">Sur ordinateur comme sur téléphone.</p>
+    <div class="shots">
+      <figure><img src="screenshots/web-mediatheque.png" alt="Médiathèque" loading="lazy"><figcaption>Médiathèque</figcaption></figure>
+      <figure><img src="screenshots/web-fiche-film.png" alt="Fiche d'un film" loading="lazy"><figcaption>Fiche d'un film</figcaption></figure>
+      <figure><img src="screenshots/web-recherche.png" alt="Rechercher et ajouter" loading="lazy"><figcaption>Rechercher &amp; ajouter</figcaption></figure>
+      <figure><img src="screenshots/web-telechargements.png" alt="Transferts" loading="lazy"><figcaption>Transferts en direct</figcaption></figure>
+    </div>
+    <div class="phones" style="margin-top:14px">
+      <figure><img src="screenshots/mobile-accueil.png" alt="Accueil sur téléphone" loading="lazy"></figure>
+      <figure><img src="screenshots/mobile-mediatheque.png" alt="Médiathèque sur téléphone" loading="lazy"></figure>
+      <figure><img src="screenshots/mobile-equipement.png" alt="Équipement sur téléphone" loading="lazy"></figure>
+      <figure><img src="https://raw.githubusercontent.com/tcastel94/arrmada/ci/android-screenshots/30-telephone-accueil.png" alt="Appli Android sur téléphone" loading="lazy"></figure>
+    </div>
+  </section>
+
+  <section>
+    <span class="tag">FACULTATIF</span>
+    <h2>La tablette près de la TV</h2>
+    <p class="sub">Pendant un film : l'heure de fin, les pistes, l'ampli. Le reste du temps : quoi regarder ce soir.</p>
+    <div class="shots">
+      <figure><img src="screenshots/tablette-lecture.png" alt="Tablette pendant un film" loading="lazy"><figcaption>Pendant un film</figcaption></figure>
+      <figure><img src="screenshots/tablette-ce-soir.png" alt="Tablette, ce soir" loading="lazy"><figcaption>Ce soir</figcaption></figure>
+    </div>
+  </section>
+
+  <section>
+    <span class="tag">FACULTATIF</span>
+    <h2>L'appli TV</h2>
+    <p class="sub">Une appli native pour Android TV, Google TV et Nvidia Shield (ou un add-on Kodi), avec la reprise de lecture partagée.</p>
+    <div class="shots">
+      <figure><img src="https://raw.githubusercontent.com/tcastel94/arrmada/ci/android-screenshots/01-accueil.png" alt="Appli TV, accueil" loading="lazy"><figcaption>Accueil</figcaption></figure>
+      <figure><img src="https://raw.githubusercontent.com/tcastel94/arrmada/ci/android-screenshots/02-fiche-film.png" alt="Appli TV, fiche d'un film" loading="lazy"><figcaption>Fiche d'un film</figcaption></figure>
+      <figure><img src="https://raw.githubusercontent.com/tcastel94/arrmada/ci/android-screenshots/13-lecteur-intro-suivant.png" alt="Appli TV, lecteur" loading="lazy"><figcaption>Lecteur</figcaption></figure>
+      <figure><img src="https://raw.githubusercontent.com/tcastel94/arrmada/ci/android-screenshots/36-tablette-accueil.png" alt="Appli Android sur tablette" loading="lazy"><figcaption>Sur tablette Android</figcaption></figure>
+    </div>
+  </section>
+
+  <section style="text-align:center">
+    <h2>Prêt ?</h2>
+    <p class="sub" style="margin-inline:auto">Le guide te pose deux questions et te donne les étapes exactes pour ton appareil.</p>
+    <div class="cta"><a class="btn primary" href="installation/">Installer pas à pas →</a></div>
+  </section>
+
+  <footer>Affiches des captures factices (générées). · <a href="https://github.com/tcastel94/arrmada">Code source sur GitHub</a> · Licence MIT</footer>
+</div>
+</body>
+</html>

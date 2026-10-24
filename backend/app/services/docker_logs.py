@@ -158,7 +158,7 @@ Classe les problèmes du plus critique au moins critique. Concret, technique mai
 
 
 def _ollama_cfg() -> tuple[str, str]:
-    url = (getattr(settings, "OLLAMA_URL", "") or "http://192.168.2.3:11434").rstrip("/")
+    url = (getattr(settings, "OLLAMA_URL", "") or "").rstrip("/")
     model = getattr(settings, "OLLAMA_MODEL", "") or "qwen2.5:3b-instruct-q4_K_M"
     return url, model
 
@@ -166,6 +166,8 @@ def _ollama_cfg() -> tuple[str, str]:
 async def _chat_ollama(system: str, user: str) -> str:
     """Local Ollama on the NAS — primary engine (no cost, no external call)."""
     url, model = _ollama_cfg()
+    if not url:
+        raise RuntimeError("OLLAMA_URL non défini")
     async with httpx.AsyncClient(timeout=180) as client:
         resp = await client.post(
             f"{url}/api/chat",
