@@ -89,7 +89,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: ShellCheck
-        run: shellcheck install.sh docker/entrypoint.sh docker/arrmada-cli deploy.sh
+        run: shellcheck install.sh docker/entrypoint.sh docker/arrmada-cli deploy.sh scripts/bascule_arrmada.sh
 
       - name: Dry-run on every platform
         run: |
