@@ -77,6 +77,7 @@ EUFY_RUNNING=false       # pont caméras Eufy à relancer après la bascule
 BACKUP_DIR=""
 LOG_FILE=""
 STATE_FILE=""
+PRE_LOG=""
 TMP_DIR=""
 WARNINGS=()
 
@@ -856,6 +857,10 @@ main() {
     $OPT_ROLLBACK && manual_rollback
 
     TMP_DIR="$(mktemp -d)"
+    # Journal dès la 1re ligne (contrôles compris) : d'abord dans le dossier
+    # temporaire, puis recopié dans le dossier de sauvegarde une fois créé.
+    PRE_LOG="$TMP_DIR/bascule.log"
+    exec > >(tee -a "$PRE_LOG") 2>&1
     preflight
 
     step "2/6 Plan"
@@ -885,6 +890,7 @@ EOF
     chmod 700 "$BACKUP_DIR"
     LOG_FILE="$BACKUP_DIR/bascule.log"
     STATE_FILE="$BACKUP_DIR/state"
+    cp "$PRE_LOG" "$LOG_FILE"
     exec > >(tee -a "$LOG_FILE") 2>&1
     info "Journal : $LOG_FILE"
 
