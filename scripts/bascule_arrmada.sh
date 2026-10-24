@@ -283,6 +283,25 @@ preflight() {
         err "origin/main ne contient pas encore l'image unique (Dockerfile racine absent)"
         blocking=1
     fi
+    # Un git pull (maj-arrmada.sh…) a déjà amené l'image unique alors que
+    # l'ancienne stack tourne : le retour arrière doit viser le dernier
+    # commit SANS Dockerfile racine (celui des 3 conteneurs), pas HEAD.
+    if git cat-file -e HEAD:Dockerfile 2>/dev/null; then
+        local c
+        OLD_COMMIT=""
+        while IFS= read -r c; do
+            if ! git cat-file -e "$c:Dockerfile" 2>/dev/null; then
+                OLD_COMMIT="$c"
+                break
+            fi
+        done < <(git rev-list --first-parent HEAD)
+        if [ -z "$OLD_COMMIT" ]; then
+            err "Impossible de retrouver le commit de l'ancienne stack dans l'historique"
+            blocking=1
+        else
+            warn "Le code est déjà à jour (git pull fait) : retour arrière éventuel vers $(git rev-parse --short "$OLD_COMMIT")"
+        fi
+    fi
     if ! git merge-base --is-ancestor HEAD origin/main; then
         err "La branche locale a des commits absents de origin/main : avance rapide impossible"
         blocking=1
@@ -452,15 +471,20 @@ preflight() {
     if $OPT_CHECK_PERMS && [ -d /mnt/user ]; then
         info "Recherche de fichiers appartenant à root dans /mnt/user (60 s max)…"
         local roots
-        roots="$(timeout 60 find /mnt/user -maxdepth 5 \
+        # Seulement ce qu'ArrMada modifie : vidéos (import, nettoyage),
+        # images et .nfo (artworks), sous-titres. Les autres fichiers root
+        # (sauvegardes Immich, APK copiées à la main…) ne le gênent pas.
+        roots="$(timeout 60 find /mnt/user -maxdepth 6 \
             \( -path /mnt/user/appdata -o -path /mnt/user/system -o -path /mnt/user/domains -o -path /mnt/user/isos \) -prune \
-            -o -user root -type f -print 2>/dev/null | head -n 20 || true)"
+            -o -user root -type f \( -iname '*.mkv' -o -iname '*.mp4' -o -iname '*.avi' -o -iname '*.m4v' \
+                -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.nfo' \
+                -o -iname '*.srt' -o -iname '*.ass' -o -iname '*.sub' \) -print 2>/dev/null | head -n 20 || true)"
         if [ -n "$roots" ]; then
             warn "Fichiers appartenant à root dans les médias (ArrMada, désormais en ${PUID_VALUE}:${PGID_VALUE}, ne pourra plus les modifier) :"
             printf '        %s\n' "$roots"
             warn "→ Tools › New Permissions sur le partage concerné, ou : chown -R nobody:users <dossier>"
         else
-            ok "Aucun fichier root trouvé dans les médias (5 niveaux)"
+            ok "Aucun fichier média, artwork ou sous-titre appartenant à root (6 niveaux)"
         fi
     fi
 
