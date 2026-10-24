@@ -6,6 +6,7 @@
  * Contrôles d'accès :
  *  - setup non fait          → /setup
  *  - pas de jeton            → /login
+ *  - pas de mot de passe     → /login (qui propose de le créer)
  *  - backend injoignable     → écran d'erreur avec « Réessayer »
  *    (avant : redirection vers l'assistant d'installation, ce qui
  *    renvoyait un utilisateur DÉJÀ configuré dans le wizard → erreur 409).
@@ -43,7 +44,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             router.replace("/setup");
             return;
         }
-        if (!isAuthenticated()) {
+        // Pas encore de mot de passe → la page de connexion propose de le créer.
+        if (!isAuthenticated() || (setupStatus && !setupStatus.password_set)) {
             router.replace("/login");
         } else {
             setReady(true);
@@ -57,7 +59,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     <ServerCrash className="h-7 w-7 text-destructive" />
                     <p className="text-[17px] font-semibold">Serveur injoignable</p>
                     <p className="max-w-xs text-[14px] text-muted-foreground">
-                        L&apos;API ArrMada ne répond pas. Vérifie que le conteneur <span className="font-mono text-foreground">arrmada-backend</span> tourne.
+                        L&apos;API ArrMada ne répond pas. Vérifie que le conteneur <span className="font-mono text-foreground">arrmada</span> tourne.
                     </p>
                     <Button onClick={() => refetch()} disabled={isFetching} className="mt-3">
                         <RefreshCw className={isFetching ? "animate-spin" : ""} /> Réessayer

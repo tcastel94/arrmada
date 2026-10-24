@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# ArrMada — outil d'administration, à lancer DANS le conteneur :
+#   docker exec -it arrmada arrmada-cli set-password
+#   docker exec -it arrmada arrmada-cli reset-password
+#   docker exec -it arrmada arrmada-cli status
+#
+# `docker exec` entre en root : on repasse sous PUID:PGID pour que les
+# fichiers créés dans /app/data restent lisibles par l'application.
+set -euo pipefail
+cd /app
+export HOME=/tmp
+if [ "$(id -u)" = "0" ]; then
+    exec setpriv --reuid="${PUID:-1000}" --regid="${PGID:-1000}" --clear-groups -- python -m app.cli "$@"
+fi
+exec python -m app.cli "$@"

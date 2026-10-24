@@ -1,6 +1,6 @@
 """API de l'add-on Kodi face à un faux Radarr/Sonarr (cf. tests/fake_arr.py).
 
-L'add-on s'authentifie avec l'en-tête X-Api-Key = ARRMADA_AUTH_SECRET ;
+L'add-on s'authentifie avec l'en-tête X-Api-Key = mot de passe admin ;
 ces tests passent par le JWT habituel (`arr_stack`) et vérifient surtout
 qu'aucun endpoint ne plante quand la pile *arr répond normalement.
 """
@@ -13,13 +13,11 @@ from app.config import settings
 
 
 class TestAddonAuth:
-    async def test_api_key_header(self, client: AsyncClient) -> None:
+    async def test_api_key_header(self, client: AsyncClient, admin_password: str) -> None:
         assert (await client.get("/api/kodi/addon-status")).status_code == 401
         bad = await client.get("/api/kodi/addon-status", headers={"X-Api-Key": "mauvaise"})
         assert bad.status_code == 401
-        ok = await client.get(
-            "/api/kodi/addon-status", headers={"X-Api-Key": settings.ARRMADA_AUTH_SECRET}
-        )
+        ok = await client.get("/api/kodi/addon-status", headers={"X-Api-Key": admin_password})
         assert ok.status_code == 200
 
 

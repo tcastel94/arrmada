@@ -19,11 +19,13 @@ export interface AppSettings {
     };
     auth: {
         jwt_expiration_hours: number;
-        /**
-         * Vrai si ARRMADA_AUTH_SECRET vaut encore la valeur d'exemple.
-         * Champ optionnel : affiché seulement si le backend l'expose.
-         */
+        /** Vrai tant qu'aucun mot de passe admin n'existe. */
         default_secret?: boolean;
+        /**
+         * Origine du mot de passe : "file" (haché, modifiable dans l'UI),
+         * "env" (ancien ARRMADA_AUTH_SECRET du .env) ou "none".
+         */
+        password_source?: "file" | "env" | "none";
     };
     cors: {
         origins: string[];

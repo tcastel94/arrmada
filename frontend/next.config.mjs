@@ -17,6 +17,21 @@ const nextConfig = {
      * `permanent: false` → redirection 307, non mise en cache par le
      * navigateur, donc réversible facilement.
      */
+    /**
+     * Développement uniquement (`npm run dev`) : relaie /api vers le backend
+     * lancé à part (uvicorn :8000), pour que le front appelle l'API en
+     * relatif comme en production. En production c'est docker/gateway.js
+     * qui fait ce travail (le proxy intégré de Next coupe les flux SSE au
+     * bout de 30 s, les compresse et masque l'IP du client).
+     */
+    async rewrites() {
+        if (process.env.NODE_ENV === "production") return [];
+        const backend = process.env.ARRMADA_DEV_API_URL || "http://127.0.0.1:8000";
+        return [
+            { source: "/api/:path*", destination: `${backend}/api/:path*` },
+            { source: "/kodi/:path*", destination: `${backend}/kodi/:path*` },
+        ];
+    },
     async redirects() {
         return [
             { source: "/quality", destination: "/health?tab=quality", permanent: false },

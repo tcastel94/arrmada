@@ -1,0 +1,45 @@
+# ╔════════════════════════════════════════════════════════════╗
+# ║     ArrMada — option PostgreSQL (au lieu de SQLite)        ║
+# ╚════════════════════════════════════════════════════════════╝
+#
+# SQLite suffit pour un usage perso. PostgreSQL est utile si tu en as déjà
+# un, ou si le dossier data est sur un partage réseau (NFS/SMB), où SQLite
+# risque la corruption.
+#
+# Ce fichier COMPLÈTE docker-compose.yml (il ne le remplace pas) :
+#   echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)" >> .env
+#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d
+#
+# PostgreSQL externe existant : ne garde que le bloc `arrmada` ci-dessous,
+# retire `depends_on` et mets ton DATABASE_URL.
+#
+# ⚠️ Passer de SQLite à PostgreSQL repart d'une base vide (services à
+#    ressaisir dans l'assistant) : pas de migration automatique.
+
+services:
+  arrmada:
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://arrmada:${POSTGRES_PASSWORD:?définis POSTGRES_PASSWORD dans .env}@arrmada-db:5432/arrmada
+    depends_on:
+      arrmada-db:
+        condition: service_healthy
+
+  arrmada-db:
+    image: postgres:16-alpine
+    container_name: arrmada-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: arrmada
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?définis POSTGRES_PASSWORD dans .env}
+      POSTGRES_DB: arrmada
+    volumes:
+      - arrmada-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U arrmada"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Port non exposé : accessible uniquement depuis le réseau Docker.
+
+volumes:
+  arrmada-pgdata:

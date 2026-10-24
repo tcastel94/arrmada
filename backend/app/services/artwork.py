@@ -54,6 +54,7 @@ from sqlalchemy.orm import undefer
 from app.config import settings
 from app.database import async_session_factory
 from app.models.artwork import MediaArtwork
+from app.services import auth_store
 from app.services.scraper_service import map_path
 from app.utils.logger import get_logger
 
@@ -493,7 +494,7 @@ def scan_local_folder(folder: str | Path) -> list[dict[str, Any]]:
 
 def _sign(path: str) -> str:
     """Signature d'un chemin (HMAC-SHA256 avec le secret du serveur)."""
-    secret = settings.effective_jwt_secret.encode()
+    secret = auth_store.jwt_secret().encode()
     return hmac.new(secret, path.encode("utf-8"), hashlib.sha256).hexdigest()[:32]
 
 

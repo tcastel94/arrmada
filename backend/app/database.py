@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -33,6 +34,20 @@ if _is_sqlite:
         future=True,
         connect_args={"check_same_thread": False},
     )
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def _sqlite_pragmas(dbapi_conn, _record) -> None:
+        """WAL + busy timeout: the scheduler writes while the UI reads.
+
+        Without them SQLite answers "database is locked" under load.
+        WAL needs a LOCAL disk: never put the data dir on NFS/SMB.
+        """
+        cursor = dbapi_conn.cursor()
+        if ":memory:" not in settings.DATABASE_URL:
+            cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=5000")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.close()
 else:
     # PostgreSQL (or other async DBs)
     engine = create_async_engine(

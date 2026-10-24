@@ -18,6 +18,9 @@ httpx==0.28.1
 # uvicorn[standard], épinglé ici car importé directement
 websockets==17.2
 
+# Config parsing (Bazarr config.yaml, stack auto-configuration)
+PyYAML==6.0.3
+
 # Auth
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4

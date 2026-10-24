@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hmac
 from datetime import UTC, datetime, timedelta
 
 from fastapi import Depends, HTTPException, Request, status
@@ -11,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import verify_token
 from app.database import get_db as _get_db
+from app.services import auth_store
 
 # Re-export for convenience
 get_db = _get_db
@@ -83,18 +83,16 @@ async def get_current_user(request: Request, db: AsyncSession = Depends(get_db))
     Also accepts a paired device token (`X-Device-Token`, ADR-003 § 4), limited
     to the "TV" scope. Returns the decoded token payload.
     """
-    from app.config import settings
-
     # 0a. Jeton d'appareil (Kodi appairé)
     device_token = request.headers.get("X-Device-Token")
     if device_token:
         return await _authenticate_device(request, db, device_token)
 
     # 0b. Try X-Api-Key header or apikey query param (add-on Kodi, scripts).
-    # compare_digest : comparaison à temps constant, pour ne pas laisser
-    # deviner le secret caractère par caractère via le temps de réponse.
+    # La clé est le mot de passe admin (haché dans DATA_DIR, ou l'ancien
+    # ARRMADA_AUTH_SECRET) : comparaison à temps constant dans auth_store.
     api_key = request.headers.get("X-Api-Key") or request.query_params.get("apikey")
-    if api_key and hmac.compare_digest(api_key.encode(), settings.ARRMADA_AUTH_SECRET.encode()):
+    if api_key and auth_store.verify_api_key(api_key):
         return {"sub": "api_client", "role": "admin"}
 
     token: str | None = None

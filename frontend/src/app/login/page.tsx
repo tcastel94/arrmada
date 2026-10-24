@@ -9,12 +9,16 @@
  *   - 401 → mot de passe incorrect (+ secousse du champ, comme iOS)
  *   - 429 → trop de tentatives (limite 5/min côté API)
  *   - réseau → backend injoignable
+ * Instance sans mot de passe (ancienne install restée sur la valeur
+ * d'exemple du .env, ou `arrmada-cli reset-password`) : la page propose
+ * de le CRÉER au lieu de demander un mot de passe que personne ne connaît.
  */
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { Eye, EyeOff, Loader2, ShieldAlert } from "lucide-react";
 import { BrandIcon } from "@/components/brand/brand-mark";
+import { CreatePasswordForm } from "@/components/auth/create-password-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { login, isAuthenticated } from "@/lib/api-client";
@@ -27,7 +31,8 @@ function explain(err: unknown): string {
     const msg = err instanceof Error ? err.message : String(err);
     if (/not authenticated|401|incorrect|invalid/i.test(msg)) return "Mot de passe incorrect.";
     if (/rate|429|too many/i.test(msg)) return "Trop de tentatives. Patiente une minute avant de réessayer.";
-    if (/failed to fetch|network|load failed/i.test(msg)) return "Serveur injoignable. Vérifie que le conteneur arrmada-backend tourne.";
+    if (/unavailable|502|failed to fetch|network|load failed/i.test(msg)) return "Serveur injoignable. Vérifie que le conteneur arrmada tourne.";
+    if (/no admin password|409/i.test(msg)) return "Aucun mot de passe n'est encore défini : recharge la page pour le créer.";
     return msg || "Connexion impossible.";
 }
 
@@ -40,6 +45,7 @@ export default function LoginPage() {
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
     const { data: setupStatus, isLoading: setupLoading } = useSetupStatus();
+    const mustCreatePassword = !!setupStatus && setupStatus.is_configured && !setupStatus.password_set;
 
     useEffect(() => {
         // Installation non faite → assistant ; déjà connecté → accueil.
@@ -47,8 +53,16 @@ export default function LoginPage() {
             router.replace("/setup");
             return;
         }
+        // Pas encore de mot de passe : rester ici pour le créer.
+        if (setupStatus && !setupStatus.password_set) return;
         if (isAuthenticated()) router.replace("/dashboard");
     }, [router, setupStatus, setupLoading]);
+
+    /** Mot de passe créé : la session est déjà ouverte par l'API. */
+    const handleCreated = () => {
+        setSuccess(true);
+        setTimeout(() => router.push("/dashboard"), 300);
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -80,63 +94,73 @@ export default function LoginPage() {
                         <BrandIcon title="ArrMada" />
                     </div>
                     <h1 className="mt-5 text-[28px] font-bold tracking-tight">ArrMada</h1>
-                    <p className="mt-1 text-[15px] text-muted-foreground">Connecte-toi pour accéder à ta médiathèque.</p>
+                    <p className="mt-1 text-[15px] text-muted-foreground">
+                        {mustCreatePassword
+                            ? "Aucun mot de passe n'est défini : crée celui qui protégera ArrMada."
+                            : "Connecte-toi pour accéder à ta médiathèque."}
+                    </p>
                 </div>
 
-                <form onSubmit={handleSubmit} className="mt-8 space-y-3">
-                    <div key={shakeKey} className={cn("relative", shakeKey > 0 && "animate-shake")}>
-                        <Input
-                            id="password"
-                            type={show ? "text" : "password"}
-                            placeholder="Mot de passe"
-                            value={password}
-                            onChange={(e) => {
-                                setPassword(e.target.value);
-                                if (error) setError("");
-                            }}
-                            className={cn("h-12 rounded-[14px] pr-12 text-[17px]", error && "ring-2 ring-destructive/70 focus-visible:ring-destructive/70")}
-                            autoFocus
-                            autoComplete="current-password"
-                            required
-                            aria-invalid={!!error}
-                            aria-describedby={error ? "login-error" : undefined}
-                        />
-                        <button
-                            type="button"
-                            onClick={() => setShow((s) => !s)}
-                            className="absolute right-1.5 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground"
-                            aria-label={show ? "Masquer le mot de passe" : "Afficher le mot de passe"}
-                        >
-                            {show ? <EyeOff className="h-[18px] w-[18px]" /> : <Eye className="h-[18px] w-[18px]" />}
-                        </button>
-                    </div>
-
-                    <AnimatePresence mode="wait">
-                        {error && (
-                            <motion.p
-                                id="login-error"
-                                role="alert"
-                                initial={{ opacity: 0, height: 0 }}
-                                animate={{ opacity: 1, height: "auto" }}
-                                exit={{ opacity: 0, height: 0 }}
-                                className="flex items-start gap-2 overflow-hidden px-1 text-[14px] text-destructive"
+                {mustCreatePassword ? (
+                    <CreatePasswordForm onCreated={handleCreated} submitLabel="Créer et se connecter" className="mt-8 text-left" />
+                ) : (
+                    <form onSubmit={handleSubmit} className="mt-8 space-y-3">
+                        <div key={shakeKey} className={cn("relative", shakeKey > 0 && "animate-shake")}>
+                            <Input
+                                id="password"
+                                type={show ? "text" : "password"}
+                                placeholder="Mot de passe"
+                                value={password}
+                                onChange={(e) => {
+                                    setPassword(e.target.value);
+                                    if (error) setError("");
+                                }}
+                                className={cn("h-12 rounded-[14px] pr-12 text-[17px]", error && "ring-2 ring-destructive/70 focus-visible:ring-destructive/70")}
+                                autoFocus
+                                autoComplete="current-password"
+                                required
+                                aria-invalid={!!error}
+                                aria-describedby={error ? "login-error" : undefined}
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShow((s) => !s)}
+                                className="absolute right-1.5 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground"
+                                aria-label={show ? "Masquer le mot de passe" : "Afficher le mot de passe"}
                             >
-                                <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
-                                {error}
-                            </motion.p>
-                        )}
-                    </AnimatePresence>
+                                {show ? <EyeOff className="h-[18px] w-[18px]" /> : <Eye className="h-[18px] w-[18px]" />}
+                            </button>
+                        </div>
 
-                    <Button type="submit" size="lg" className="w-full rounded-[14px]" disabled={loading || !password}>
-                        {loading && <Loader2 className="animate-spin" />}
-                        {loading ? "Connexion…" : "Se connecter"}
-                    </Button>
-                </form>
+                        <AnimatePresence mode="wait">
+                            {error && (
+                                <motion.p
+                                    id="login-error"
+                                    role="alert"
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: "auto" }}
+                                    exit={{ opacity: 0, height: 0 }}
+                                    className="flex items-start gap-2 overflow-hidden px-1 text-[14px] text-destructive"
+                                >
+                                    <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                                    {error}
+                                </motion.p>
+                            )}
+                        </AnimatePresence>
 
-                <p className="mt-8 text-center text-[12px] leading-relaxed text-muted-foreground/80">
-                    Mot de passe = variable <span className="font-mono text-muted-foreground">ARRMADA_AUTH_SECRET</span> du fichier{" "}
-                    <span className="font-mono text-muted-foreground">.env</span>
-                </p>
+                        <Button type="submit" size="lg" className="w-full rounded-[14px]" disabled={loading || !password}>
+                            {loading && <Loader2 className="animate-spin" />}
+                            {loading ? "Connexion…" : "Se connecter"}
+                        </Button>
+                    </form>
+                )}
+
+                {!mustCreatePassword && (
+                    <p className="mt-8 text-center text-[12px] leading-relaxed text-muted-foreground/80">
+                        Mot de passe oublié ?{" "}
+                        <span className="font-mono text-muted-foreground">docker exec -it arrmada arrmada-cli set-password</span>
+                    </p>
+                )}
             </motion.div>
         </div>
     );

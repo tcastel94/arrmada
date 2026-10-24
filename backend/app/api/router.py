@@ -43,6 +43,7 @@ from app.api.search import router as search_router
 from app.api.services import router as services_router
 from app.api.settings import router as settings_router
 from app.api.setup import router as setup_router
+from app.api.stack import router as stack_router
 from app.api.subtitles import router as subtitles_router
 from app.api.system import router as system_router
 from app.api.trash_guides import router as trash_guides_router
@@ -74,6 +75,7 @@ api_router.include_router(duplicates_router)
 api_router.include_router(search_router)
 api_router.include_router(requests_router)
 api_router.include_router(settings_router)
+api_router.include_router(stack_router)
 api_router.include_router(recommendations_router)
 api_router.include_router(files_router)
 api_router.include_router(trash_guides_router)

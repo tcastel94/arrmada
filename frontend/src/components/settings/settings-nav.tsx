@@ -23,6 +23,7 @@ import {
     Sofa,
     Speaker,
     Users,
+    Wand2,
     type LucideIcon,
 } from "lucide-react";
 import { SPRING } from "@/lib/motion";
@@ -52,6 +53,13 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
         short: "Services",
         icon: Server,
         description: "Connecte Sonarr, Radarr, Prowlarr… teste-les et active-les en un clic.",
+    },
+    {
+        href: "/settings/autoconfig",
+        label: "Auto-configuration",
+        short: "Auto-config",
+        icon: Wand2,
+        description: "Lit les clés API de tes applis et les branche entre elles : Prowlarr, clients de téléchargement, Bazarr.",
     },
     {
         href: "/settings/kodi",

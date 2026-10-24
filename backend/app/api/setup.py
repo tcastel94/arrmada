@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_db
 from app.config import settings
 from app.models.service import Service
-from app.services import encryption
+from app.services import auth_store, encryption
 from app.services.discovery import discover_services
 from app.utils.logger import get_logger
 
@@ -26,6 +26,7 @@ class SetupStatus(BaseModel):
     """Current setup state of the application."""
 
     is_configured: bool = Field(description="Whether initial setup has been completed")
+    password_set: bool = Field(description="Whether an admin password exists (instance claimed)")
     has_services: bool = Field(description="Whether any services are configured")
     services_count: int = Field(description="Number of configured services")
     database_type: str = Field(description="Database backend in use (sqlite or postgresql)")
@@ -85,6 +86,7 @@ async def setup_status(db: AsyncSession = Depends(get_db)) -> SetupStatus:
 
     return SetupStatus(
         is_configured=count > 0,
+        password_set=auth_store.is_password_set(),
         has_services=count > 0,
         services_count=count,
         database_type=db_type,
@@ -132,6 +134,14 @@ async def complete_setup(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Setup already completed. Use the Services page to add more services.",
+        )
+
+    # The wizard creates the admin password (POST /api/auth/password) first:
+    # never leave an instance with services but no way to log in.
+    if not auth_store.is_password_set():
+        raise HTTPException(
+            status_code=status.HTTP_428_PRECONDITION_REQUIRED,
+            detail="Create the admin password first.",
         )
 
     if not body.services:

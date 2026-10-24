@@ -1,0 +1,28 @@
+# Contexte de build de l'image unique (Dockerfile à la racine).
+# Tout ce qui est listé ici n'est PAS envoyé au daemon Docker : build plus
+# rapide, image plus légère, et aucun secret local embarqué par erreur.
+
+.git
+.github
+docs
+*.md
+.env
+.env.*
+data
+docker-compose*.yml
+
+**/node_modules
+**/.next
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+**/.venv
+**/coverage.xml
+**/.coverage
+
+backend/data
+backend/tests
+backend/scripts
+backend/.env
+frontend/.env*

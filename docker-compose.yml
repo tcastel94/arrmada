@@ -1,40 +1,87 @@
+# ╔════════════════════════════════════════════════════════════╗
+# ║                 ArrMada — installation                     ║
+# ╚════════════════════════════════════════════════════════════╝
+#
+#   1. Copie ce fichier dans un dossier vide (ex : /opt/arrmada,
+#      /volume1/docker/arrmada sur Synology, /mnt/user/appdata/arrmada…)
+#   2. docker compose up -d
+#   3. Ouvre http://<ip-de-la-machine>:3420 → l'assistant fait le reste
+#      (mot de passe admin, détection de tes services *arr, clés API).
+#
+# Aucun fichier .env n'est nécessaire. Mise à jour :
+#   docker compose pull && docker compose up -d
+#
+# Synology (DSM 7.2+) : Container Manager → Projet → Créer → colle ce fichier.
+# Base PostgreSQL au lieu de SQLite : voir docker-compose.postgres.yml.
+# Réglages propres à TA machine : docker-compose.override.yml (non versionné,
+# fusionné automatiquement par docker compose — voir docs/deploy-unraid.md).
+
+name: arrmada
+
 services:
-  # ── Backend (FastAPI) ───────────────────────────────────────
-  arrmada-backend:
-    build: ./backend
-    container_name: arrmada-backend
+  arrmada:
+    image: ghcr.io/tcastel94/arrmada:latest
+    container_name: arrmada
     restart: unless-stopped
+    init: true                 # mini-init Docker : signaux + processus zombies
     ports:
-      - "${BACKEND_PORT:-8420}:8000"
+      - "3420:3420"            # interface + API : le seul port nécessaire
+      # Ancien port de l'API, redirigé vers le même service : TV Kodi déjà
+      # configurées (http://<serveur>:8420), source du dépôt Kodi et webhooks
+      # *arr existants continuent de marcher. Supprimable sinon.
+      - "8420:3420"
     volumes:
-      - ./data:/app/data
-      - ./backend/app:/app/app
-      # Add-on Kodi servi en dépôt (/kodi/repo) : un `git pull` suffit pour
-      # proposer la nouvelle version aux TV, sans reconstruire l'image.
-      - ./kodi-addon:/app/kodi-addon:ro
-      - /mnt/user:/mnt/user:rw
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./data:/app/data       # base SQLite, clés de chiffrement, mot de passe haché
+      # Optionnel, LECTURE SEULE : dossier des configs de tes autres applis.
+      # ArrMada y lit les clés API (Sonarr, Radarr, SABnzbd…) et les branche
+      # entre elles (Paramètres → Auto-configuration). Exemples :
+      #   Unraid   : /mnt/user/appdata:/appdata:ro
+      #   Synology : /volume1/docker:/appdata:ro
+      # - /chemin/de/tes/configs:/appdata:ro
+      # Optionnel : accès aux fichiers médias (nettoyage, doublons, artworks
+      # des dossiers, auto-import…).
+      # - /chemin/vers/medias:/mnt/user:rw
+      # Optionnel : logs des conteneurs pour l'analyse IA. ⚠️ Le socket Docker
+      # donne le contrôle de tous les conteneurs de la machine.
+      # - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Optionnel : add-on Kodi d'un clone Git, à la place de celui de l'image
+      # (nouvelle version proposée aux TV après un simple git pull).
+      # - ./kodi-addon:/app/kodi-addon:ro
     environment:
-      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://arrmada:${POSTGRES_PASSWORD:-arrmada}@arrmada-db:5432/arrmada}
-      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3420,http://192.168.2.3:3420}
-      - PUBLIC_WEB_URL=${PUBLIC_WEB_URL:-}
-      - ARRMADA_AUTH_SECRET=${ARRMADA_AUTH_SECRET:-changeme}
+      - TZ=${TZ:-Europe/Paris}
+      # Propriétaire des fichiers créés dans ./data (commande `id` sur l'hôte).
+      # Synology : souvent 1026/100 — Unraid : 99/100.
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      # ── Optionnel (vide = désactivé) ──
+      # ⚠️ Une variable du .env n'arrive dans le conteneur QUE si elle est
+      # listée ici (docker compose ne s'en sert sinon que pour ce fichier).
+      # Détail de chaque variable : .env.example.
+      - TMDB_API_KEY=${TMDB_API_KEY:-}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
-      - TMDB_API_KEY=${TMDB_API_KEY:-}
+      # TV Kodi : adresse de la web app pour le QR code d'appairage
+      - PUBLIC_WEB_URL=${PUBLIC_WEB_URL:-}
+      # TV et téléphones appairés hors de la maison (VPN hors 10.x/192.168.x,
+      # ex. Tailscale : 100.64.0.0/10)
+      - DEVICE_TRUSTED_NETWORKS=${DEVICE_TRUSTED_NETWORKS:-}
+      # Appli Android : release GitHub d'où viennent les mises à jour
+      # (vide = seulement les APK déposées dans data/apk)
+      - ANDROID_UPDATE_REPO=${ANDROID_UPDATE_REPO:-tcastel94/arrmada}
+      - ANDROID_UPDATE_TAG=${ANDROID_UPDATE_TAG:-android-latest}
+      # Écran « Vidéos » : les dossiers déclarés doivent être sous ce chemin
+      - VIDEO_ALLOWED_BASE=${VIDEO_ALLOWED_BASE:-/mnt/user}
+      # IA : Ollama local (prioritaire) ou OpenRouter
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - AI_MODEL=${AI_MODEL:-google/gemini-2.0-flash-001}
-      - UNRAID_URL=${UNRAID_URL:-}
-      - UNRAID_API_KEY=${UNRAID_API_KEY:-}
       - OLLAMA_URL=${OLLAMA_URL:-}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-}
+      - UNRAID_URL=${UNRAID_URL:-}
+      - UNRAID_API_KEY=${UNRAID_API_KEY:-}
       # Caméras Eufy (pop-up sur la TV) : adresse de eufy-security-ws
       - EUFY_WS_URL=${EUFY_WS_URL:-}
       - EUFY_DETECTIONS=${EUFY_DETECTIONS:-person}
-      # Artworks : fanart.tv (clé personnelle d'un compte gratuit et/ou clé de
-      # projet), images des dossiers des médias, tâche quotidienne.
-      # ⚠️ Une variable du .env n'arrive dans le conteneur QUE si elle est
-      # listée ici (docker compose ne s'en sert sinon que pour ce fichier).
+      # Artworks : fanart.tv, images des dossiers des médias, tâche périodique
       - FANART_API_KEY=${FANART_API_KEY:-}
       - FANART_CLIENT_KEY=${FANART_CLIENT_KEY:-}
       - ARTWORK_LOCAL_ENABLED=${ARTWORK_LOCAL_ENABLED:-true}
@@ -46,81 +93,15 @@ services:
       - AUTO_IMPORT_ALLOW_OVERWRITE=${AUTO_IMPORT_ALLOW_OVERWRITE:-false}
       - AUTO_IMPORT_BLOCKED_PACKS=${AUTO_IMPORT_BLOCKED_PACKS:-true}
       - ARR_DOWNLOADS_PATH=${ARR_DOWNLOADS_PATH:-/media/downloads/complete}
-    depends_on:
-      arrmada-db:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: "1.0"
-
-  # ── Frontend (Next.js) ──────────────────────────────────────
-  # NEXT_PUBLIC_API_URL must be the URL the USER's BROWSER uses to
-  # reach the backend — NOT the Docker-internal hostname.
-  # Default: http://localhost:8420 (same machine, default port)
-  arrmada-frontend:
-    build:
-      context: ./frontend
-      args:
-        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8420}
-    container_name: arrmada-frontend
-    restart: unless-stopped
-    ports:
-      - "${FRONTEND_PORT:-3420}:3000"
-    environment:
-      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8420}
-    depends_on:
-      arrmada-backend:
-        condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-          cpus: "0.5"
-
-  # ── PostgreSQL ──────────────────────────────────────────────
-  # Integrated by default. To use an EXTERNAL PostgreSQL instead,
-  # remove this service and set DATABASE_URL in the backend env.
-  arrmada-db:
-    image: postgres:16-alpine
-    container_name: arrmada-db
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: arrmada
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-arrmada}
-      POSTGRES_DB: arrmada
-    volumes:
-      - arrmada-pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U arrmada"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-          cpus: "0.5"
-    # Port NOT exposed by default (only accessible inside Docker network)
-    # Uncomment to access from host tools (pgAdmin, DBeaver, etc.):
-    # ports:
-    #   - "5432:5432"
 
   # ── Caméras Eufy (optionnel) ────────────────────────────────
   # Pont vers le cloud Eufy : publie les détections sur le réseau local
   # (ws://<IP>:${EUFY_WS_PORT}). Démarré seulement à la demande :
   #   docker compose --profile eufy up -d eufy-security-ws
   # Compte Eufy SECONDAIRE (invité par le compte principal), sans 2FA.
-  # Réseau « host » : le conteneur écoute DIRECTEMENT sur un port du NAS (pas
-  # de correspondance de ports possible). Défaut 8424, à côté des 8420 d'ArrMada
-  # (3000, le défaut du pont, est souvent déjà pris). Vérifier qu'il est libre :
+  # Réseau « host » : le conteneur écoute DIRECTEMENT sur un port de la
+  # machine (pas de correspondance de ports possible). Défaut 8424 (3000, le
+  # défaut du pont, est souvent déjà pris). Vérifier qu'il est libre :
   #   ss -ltn | grep -w 8424
   eufy-security-ws:
     image: bropat/eufy-security-ws:latest
@@ -136,10 +117,3 @@ services:
       - PORT=${EUFY_WS_PORT:-8424}
     volumes:
       - ./data/eufy:/data
-
-volumes:
-  arrmada-pgdata:
-
-networks:
-  default:
-    name: arrmada-network

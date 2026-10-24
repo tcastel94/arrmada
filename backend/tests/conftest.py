@@ -2,26 +2,42 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
 from collections.abc import AsyncGenerator
 
 import pytest
+
+# Isolated data dir (JWT secret, password hash, Fernet key) — must be set
+# BEFORE app.config is imported, so it never touches a real ./data.
+os.environ["DATA_DIR"] = tempfile.mkdtemp(prefix="arrmada-test-")
+
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app.config import settings
 from app.database import get_db
 from app.main import app, limiter
 from app.models import Base
-from app.services import artwork, fully_kiosk, jellyfin, media_aggregator, tv_priority
+from app.services import artwork, auth_store, fully_kiosk, jellyfin, media_aggregator, tv_priority
 from app.utils.cache import cache
 from tests import fake_arr
+
+TEST_PASSWORD = "test-password-123"
 
 # In-memory SQLite for tests
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 engine = create_async_engine(TEST_DATABASE_URL, echo=False)
 TestSessionFactory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def admin_password():
+    """Every test starts from a claimed instance (password = TEST_PASSWORD)."""
+    auth_store.set_password(TEST_PASSWORD)
+    yield TEST_PASSWORD
+    auth_store.clear_password()
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -108,7 +124,7 @@ async def auth_headers(client: AsyncClient) -> dict[str, str]:
     """Get valid auth headers for protected endpoints."""
     resp = await client.post(
         "/api/auth/login",
-        json={"password": settings.ARRMADA_AUTH_SECRET},
+        json={"password": TEST_PASSWORD},
     )
     token = resp.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}

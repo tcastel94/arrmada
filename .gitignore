@@ -55,6 +55,9 @@ htmlcov/
 # Misc
 *.log
 
+# Réglages propres à un hôte (PostgreSQL, montages, PUID…) — voir docs/deploy-unraid.md
+docker-compose.override.yml
+
 # Copies de .env : mêmes secrets que l'original
 .env.*
 !.env.example

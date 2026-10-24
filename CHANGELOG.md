@@ -258,6 +258,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI `android.yml`: injected scripts tested in Chromium (20 checks), Kotlin unit tests, APK uploaded as an artifact (release-signed when the `ARRMADA_KEYSTORE_*` secrets exist, debug otherwise)
 - `branding/export.py` also generates the Android vector icon (adaptive, themed) and the TV banner from the logo SVG
 
+### Installeur de stack complète
+
+#### Added
+- `install.sh`: one-command install of Sonarr, Radarr, Prowlarr, Bazarr, SABnzbd, Deluge or qBittorrent, Jellyfin and ArrMada — platform detection (Unraid, Synology, Linux, macOS/WSL) for paths, PUID/PGID, timezone, IP, `/dev/dri`; TRaSH `/data` layout; pre-generated API keys and passwords in each app's config (never overwriting an existing file); existing containers detected and kept; port check; `docker:cli` fallback when Compose is missing; generated `compose.sh`, `credentials.txt` and `stack.json`; Jellyfin first-run wizard automated (admin account, libraries, API key); `--dry-run`, `--uninstall`; bash 3.2 compatible, shellcheck clean
+- Wiring: root folders `/data/media/tv` / `/data/media/movies` for installer-created stacks; torrent passwords read from `stack.json`
+- CI: installer shellcheck, dry-run matrix (4 platforms × 3 torrent options) and bash 3.2 run
+- `docs/installer.md`
+
+#### Fixed
+- Jellyfin API key read from `jellyfin.db` even while still in the WAL journal (read-only mount)
+- Jellyfin without an API key is reported as "create a key", not "unreachable"
+
+### Auto-configuration de la stack
+
+#### Added
+- **Settings → Auto-configuration** (and in the setup wizard): reads API keys from the apps' own config files (appdata folder mounted read-only at `/appdata`) — Sonarr, Radarr, Lidarr, Readarr, Prowlarr (`config.xml`), Bazarr (`config.yaml` / `config.ini`), SABnzbd (`sabnzbd.ini`), Jellyfin (`jellyfin.db`), Deluge (`web.conf` / `core.conf`), qBittorrent (`qBittorrent.conf`)
+- Address probing: each app is located (LAN IP, Docker DNS name, Docker host) and validated **with its own key**
+- Plan / apply wiring: register apps in ArrMada, Prowlarr → apps (full sync), download clients in every *arr with a dedicated category, Bazarr → Sonarr/Radarr; idempotent, each entry tested by the target app before saving, warnings saved with `forceSave`, one retry on transient failures
+- SABnzbd categories created when missing; Deluge Label plugin enabled automatically for categories
+- Deluge / qBittorrent default passwords detected from their hashes; qBittorrent 5 login (204 + `QBT_SID_<port>` cookie) supported
+- `POST /api/stack/plan`, `POST /api/stack/apply` (authenticated; secrets never sent to the browser)
+
+### Installation zéro configuration — image unique
+
+#### Added
+- **Single Docker image** `ghcr.io/tcastel94/arrmada` (amd64 + arm64): UI + API in one container, **one port (3420)**, no `.env` required
+- `docker/gateway.js`: dependency-free Node gateway routing `/api/*` to FastAPI and the rest to Next.js; streams SSE unbuffered, no 30 s timeout, forwards the client IP (per-client login rate limiting) and the original Host/Proto (works behind any HTTPS reverse proxy)
+- First-run **admin password creation** in the setup wizard (new « Sécurité » step) and on the login page for instances without a password; stored as a scrypt hash in `data/.admin_password`
+- Password change in Settings (current password required); migrates a legacy `ARRMADA_AUTH_SECRET` to a hash
+- `arrmada-cli` inside the container: `set-password`, `reset-password`, `status`
+- JWT secret auto-generated per instance (`data/.jwt_secret`)
+- `PUID` / `PGID` support (data dir ownership, processes run unprivileged)
+- SSE keep-alive comment every 15 s (proxies no longer drop idle streams, dead clients are detected)
+- `docker-compose.postgres.yml` overlay for optional PostgreSQL; `docs/deploy-unraid.md` migration guide
+- CI: image build + smoke test; release workflow publishing multi-arch images on `main` and `v*` tags
+- Kodi add-on embedded in the image: the Kodi repository (`/kodi/repo`, routed by the gateway) works without a Git checkout; mounting `./kodi-addon` still overrides it
+- Mounted Docker socket: its group is granted to the unprivileged app user (Docker logs analysis keeps working with `PUID`/`PGID`)
+- `deploy.sh` refuses to run without `docker-compose.override.yml` when a previous installation is detected (`arrmada-backend` container, `arrmada_arrmada-pgdata` volume or a pending `.next` override): no more empty SQLite instance replacing the old stack after `git pull` (override with `ARRMADA_ALLOW_NO_OVERRIDE=1`)
+- `docker-compose.yml` passes `DEVICE_TRUSTED_NETWORKS`, `ANDROID_UPDATE_REPO`, `ANDROID_UPDATE_TAG` and `VIDEO_ALLOWED_BASE` to the container
+
+#### Changed
+- SQLite is now the default database (WAL mode + busy timeout)
+- The UI calls the API on the same origin (`/api/...`): no more hard-coded `:8420`, CORS closed by default
+- `ARRMADA_AUTH_SECRET` is optional and legacy; shipped placeholders (`changeme…`) are **refused**
+- Webhook URLs can use port 3420 (`http://<host>:3420/api/webhooks/sonarr`); the legacy port 8420 is still published and routed to the same service, so existing Kodi TVs, the Kodi repository source and *arr webhooks keep working unchanged
+- `X-Api-Key` / `?apikey=` (Kodi add-on, scripts) is checked against the admin password (hash or legacy `ARRMADA_AUTH_SECRET`), memoised until the password changes; placeholders are refused
+
+#### Removed
+- `backend/Dockerfile`, `frontend/Dockerfile`, the 3-container compose and the hard-coded `/mnt/user` mount
+
 ### Jellyfin: "Passer l'intro" without chapters, cast episodes (Kodi add-on 1.25.0)
 
 #### Added

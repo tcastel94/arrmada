@@ -14,12 +14,23 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
+    # ── Storage ───────────────────────────────────────────────
+    # Everything persistent lives here (SQLite DB, Fernet key, JWT secret,
+    # admin password hash): mount this ONE directory as a volume.
+    DATA_DIR: str = "data"
+    # Optional, read-only: the folder holding the OTHER apps' config dirs
+    # (Sonarr, Radarr, SABnzbd…). Lets ArrMada read their API keys itself.
+    APPDATA_DIR: str = "/appdata"
+
     # ── Database ──────────────────────────────────────────────
+    # SQLite by default (zero config). PostgreSQL: see docker-compose.postgres.yml
     DATABASE_URL: str = "sqlite+aiosqlite:///./data/arrmada.db"
 
     # ── Auth ──────────────────────────────────────────────────
-    ARRMADA_AUTH_SECRET: str = "changeme_use_a_strong_password"
-    JWT_SECRET_KEY: str = ""  # auto-derived from AUTH_SECRET if empty
+    # The admin password is created in the setup wizard and stored hashed in
+    # DATA_DIR. ARRMADA_AUTH_SECRET is only a legacy fallback (see auth_store).
+    ARRMADA_AUTH_SECRET: str = ""
+    JWT_SECRET_KEY: str = ""  # auto-generated in DATA_DIR if empty
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRATION_HOURS: int = 24
 
@@ -27,7 +38,10 @@ class Settings(BaseSettings):
     FERNET_KEY: str = ""  # auto-generated on first run if empty
 
     # ── CORS ──────────────────────────────────────────────────
-    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:3420,http://192.168.2.3:3420"
+    # Empty by default: the UI calls the API on the SAME origin (/api is
+    # proxied by Next.js), so no cross-origin access is needed. Only set this
+    # when the frontend is served from another host/port than the API.
+    CORS_ORIGINS: str = ""
 
     # ── Web app vue depuis le réseau local ────────────────────
     # Sert aux QR codes affichés sur les TV (appairage). Vide = déduite de
@@ -145,11 +159,6 @@ class Settings(BaseSettings):
     def cors_origin_list(self) -> list[str]:
         """Parse comma-separated CORS origins."""
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
-
-    @property
-    def effective_jwt_secret(self) -> str:
-        """Return JWT secret, falling back to auth secret."""
-        return self.JWT_SECRET_KEY or self.ARRMADA_AUTH_SECRET
 
 
 settings = Settings()

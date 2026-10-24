@@ -12,6 +12,8 @@ import { API_URL } from "@/lib/constants";
 
 export interface SetupStatus {
     is_configured: boolean;
+    /** Faux tant qu'aucun mot de passe admin n'a été créé (instance « libre »). */
+    password_set: boolean;
     has_services: boolean;
     services_count: number;
     database_type: string;
@@ -37,7 +39,7 @@ export interface ServiceSetupItem {
 }
 
 /** Message FR quand le backend est injoignable (réseau, conteneur arrêté…). */
-const UNREACHABLE = "Impossible de joindre le backend ArrMada. Vérifie que le conteneur tourne.";
+const UNREACHABLE = "Impossible de joindre le backend ArrMada. Vérifie que le conteneur arrmada tourne.";
 
 export function useSetupStatus() {
     return useQuery<SetupStatus>({
@@ -46,6 +48,7 @@ export function useSetupStatus() {
             const res = await fetch(`${API_URL}/api/setup/status`).catch(() => {
                 throw new Error(UNREACHABLE);
             });
+            if (res.status === 502) throw new Error("Le backend ArrMada démarre ou est arrêté. Patiente quelques secondes puis réessaie.");
             if (!res.ok) throw new Error(`Le backend a répondu une erreur (HTTP ${res.status}).`);
             return res.json();
         },
@@ -129,6 +132,7 @@ function setupErrorMessage(status: number, body: unknown): string {
         return "ArrMada est déjà configuré : connecte-toi, puis ajoute tes services dans Paramètres → Services *arr.";
     }
     if (status === 400) return "Ajoute au moins un service complet pour terminer.";
+    if (status === 428) return "Crée d'abord le mot de passe administrateur (étape Sécurité).";
     const detail = (body as { detail?: unknown } | null)?.detail;
     if (status === 422 && Array.isArray(detail)) {
         // ex: loc = ["body","services",0,"url"] → « service n°1 : champ url »

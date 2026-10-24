@@ -8,6 +8,9 @@ from fastapi.responses import StreamingResponse
 from app.api.deps import get_current_user
 from app.utils.event_bus import event_bus
 
+# Below the 30 s idle timeout of the Next.js proxy (and nginx's 60 s).
+SSE_HEARTBEAT_SECONDS = 15
+
 router = APIRouter(
     prefix="/api/events",
     tags=["events"],
@@ -28,11 +31,12 @@ async def event_stream(request: Request, _user=Depends(get_current_user)):
         # Send initial connection event
         yield f'event: connected\ndata: {{"clients": {event_bus.client_count + 1}}}\n\n'
 
-        async for event in event_bus.subscribe():
+        async for event in event_bus.subscribe(heartbeat=SSE_HEARTBEAT_SECONDS):
             # Check if client disconnected
             if await request.is_disconnected():
                 break
-            yield event.format()
+            # SSE comment line: ignored by EventSource, keeps proxies awake.
+            yield ": ping\n\n" if event is None else event.format()
 
     return StreamingResponse(
         generate(),

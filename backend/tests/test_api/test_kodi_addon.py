@@ -5,18 +5,16 @@ from __future__ import annotations
 import pytest
 from httpx import AsyncClient
 
-from app.config import settings
-
 
 @pytest.mark.asyncio
-async def test_kodi_addon_api_key_auth(client: AsyncClient):
+async def test_kodi_addon_api_key_auth(client: AsyncClient, admin_password: str):
     """Verify that X-Api-Key authenticates requests properly."""
     # Without auth -> 401
     resp = await client.get("/api/kodi/addon-status")
     assert resp.status_code == 401
 
-    # With X-Api-Key -> 200
-    headers = {"X-Api-Key": settings.ARRMADA_AUTH_SECRET}
+    # With X-Api-Key (= admin password) -> 200
+    headers = {"X-Api-Key": admin_password}
     resp = await client.get("/api/kodi/addon-status", headers=headers)
     assert resp.status_code == 200
     data = resp.json()
