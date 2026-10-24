@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Bascule Unraid automatisée
+
+#### Added
+- `scripts/bascule_arrmada.sh`: migrates the legacy 3-container stack to the single image in one command — preflight checks (clean git, running stack, PostgreSQL volume, `.env` password matching the running container, mounts, `deploy.sh` callers, disk space, root-owned media files), image pulled (or built) **while the old stack keeps running**, override **generated from the old container** and validated (same database, password and signing secret, compared by fingerprint), backup (`pg_dump`, `data/`, `.env`, compose), ~30 s switch, checks (health on 3420/8420, Kodi repository, same database type and **same service count**), automatic rollback on failure, `--rollback`, `--dry-run`
+
+#### Fixed
+- Image build without buildx (classic builder, common on NAS): `ARG BUILDPLATFORM` now has a default and `deploy.sh` passes it, instead of failing with "failed to parse platform"
+- `deploy.sh` accepts the legacy `--backend` / `--frontend` options again (ignored, single image) so existing update scripts keep working; `--full` implies `--build` as before
+
 ### IMDb ratings, interactive tablet, clearer Radarr / Sonarr errors (APK 2.13.0)
 
 #### Added

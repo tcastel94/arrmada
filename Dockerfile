@@ -16,6 +16,12 @@
 
 ARG NODE_VERSION=20
 ARG PYTHON_VERSION=3.11
+# Plateforme de la machine de build. BuildKit (buildx) la renseigne lui-même
+# et remplace cette valeur ; le builder classique (Docker sans buildx, courant
+# sur les NAS) ne le fait pas : sans valeur par défaut, le
+# « FROM --platform=$BUILDPLATFORM » ci-dessous échoue (« failed to parse
+# platform »). deploy.sh la passe explicitement (--build-arg).
+ARG BUILDPLATFORM=linux/amd64
 
 # ── 1. Build de l'interface (Next.js → sortie « standalone ») ─────────
 FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-bookworm-slim AS web-build

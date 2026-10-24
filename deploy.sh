@@ -6,7 +6,7 @@
 # Usage :
 #   ./deploy.sh              # récupère l'image publiée (GHCR) et redémarre
 #   ./deploy.sh --build      # construit l'image depuis les sources locales
-#   ./deploy.sh --build --full   # idem, sans cache Docker
+#   ./deploy.sh --full       # idem, sans cache Docker
 #   ./deploy.sh --logs       # déploie puis suit les logs
 #
 # Le compose utilisé est docker-compose.yml + docker-compose.override.yml
@@ -41,8 +41,13 @@ TAIL_LOGS=false
 for arg in "$@"; do
     case $arg in
         --build)     BUILD=true ;;
-        --full)      NO_CACHE="--no-cache" ;;
+        --full)      BUILD=true; NO_CACHE="--no-cache" ;;
         --logs)      TAIL_LOGS=true ;;
+        # Options de l'ancienne stack (backend / frontend séparés) : acceptées
+        # pour ne pas casser les scripts existants (maj-arrmada.sh…), mais
+        # sans effet : il n'y a plus qu'une image.
+        --backend|--frontend)
+            warn "$arg ignoré : une seule image désormais (interface + API)" ;;
         --help|-h)
             sed -n '5,13p' "$0"
             exit 0
@@ -110,7 +115,11 @@ echo ""
 STARTED=$(date +%s)
 if $BUILD; then
     log "Construction de l'image depuis les sources… ${NO_CACHE:+(sans cache)}"
-    docker build $NO_CACHE -t "$IMAGE" .
+    # Plateforme passée explicitement : sans buildx (builder classique,
+    # fréquent sur NAS), $BUILDPLATFORM n'est pas fournie par Docker.
+    ARCH="$(docker info --format '{{.Architecture}}')"
+    case "$ARCH" in x86_64) ARCH=amd64 ;; aarch64) ARCH=arm64 ;; esac
+    docker build $NO_CACHE --build-arg "BUILDPLATFORM=linux/${ARCH}" -t "$IMAGE" .
     ok "Image construite en $(($(date +%s) - STARTED)) s"
 else
     log "Récupération de l'image publiée…"

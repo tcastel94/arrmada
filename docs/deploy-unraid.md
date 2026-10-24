@@ -20,6 +20,39 @@ automatiquement, et il est ignoré par git.
 > déploierait. On le prépare donc sous le nom `.next`, et on le renomme
 > pendant la bascule.
 
+## Méthode automatique (recommandée) : `scripts/bascule_arrmada.sh`
+
+Le script fait tout ce qui suit, contrôles compris, et revient tout seul à
+l'ancienne stack si une vérification échoue :
+
+```bash
+ssh root@unraid
+cd /mnt/user/appdata/arrmada
+git fetch origin main
+git show origin/main:scripts/bascule_arrmada.sh > /tmp/bascule_arrmada.sh
+bash /tmp/bascule_arrmada.sh --dry-run   # contrôles + override généré, rien n'est modifié
+bash /tmp/bascule_arrmada.sh             # la bascule (confirmation demandée)
+```
+
+1. **Contrôles** (rien n'est modifié) : git propre, ancienne stack en marche,
+   base et volume PostgreSQL, mot de passe du `.env` identique à celui du
+   conteneur, montages, scripts qui appellent `deploy.sh`, place disque,
+   fichiers root dans les médias.
+2. **Préparation, ArrMada toujours en ligne** : l'image est téléchargée (ou
+   construite si GHCR est injoignable), puis l'override est **généré à partir
+   de l'ancien conteneur** (montages, base, PUID 99/100). Il est validé : même
+   base, même mot de passe, même secret de signature, comparés par empreinte.
+3. **Sauvegarde** dans `/mnt/user/appdata/arrmada-backups/bascule-<date>/` :
+   `pg_dump`, `data/`, `.env`, compose, journal.
+4. **Bascule** (coupure ~30 s) : `down` sans `-v`, `git merge --ff-only`,
+   override en place, `up -d`.
+5. **Vérifications** : santé sur 3420 et 8420, dépôt Kodi, même type de base,
+   **même nombre de services qu'avant**, mot de passe reconnu.
+6. **Échec** : retour automatique à l'ancienne stack (code retour 6).
+   Retour arrière manuel plus tard : `bash /tmp/bascule_arrmada.sh --rollback`.
+
+La suite décrit les mêmes étapes, à la main.
+
 ## 1. Préparer l'override (une seule fois)
 
 ```bash
