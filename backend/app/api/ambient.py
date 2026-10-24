@@ -22,6 +22,7 @@ feraient pas dix fois les appels aux services.
 
 from __future__ import annotations
 
+import re
 import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -147,31 +148,49 @@ async def _amp(db: AsyncSession, avr_service_id: int | None) -> dict[str, Any] |
     }
 
 
-async def _downloads(db: AsyncSession) -> list[dict[str, Any]]:
+async def _queue(db: AsyncSession) -> list[dict[str, Any]]:
+    """File Radarr / Sonarr (20 s de cache, partagée par la liste et les fiches)."""
     from app.services import media_aggregator
 
     async def _fetch():
         return await media_aggregator.get_queue_items(db)
 
     try:
-        items = await cache.get_or_set("ambient:queue", _fetch, ttl_seconds=20)
+        return await cache.get_or_set("ambient:queue", _fetch, ttl_seconds=20) or []
     except Exception as exc:
         logger.debug("[Ambient] file : %s", exc)
         return []
-    active = [
+
+
+# Clé d'un téléchargement pour sa fiche : nzo_id SABnzbd ou hash du torrent,
+# sinon « radarr-12 » (identifiant de l'élément dans la file *arr)
+DOWNLOAD_KEY = re.compile(r"[A-Za-z0-9_.-]{1,120}")
+
+
+def download_key(item: dict[str, Any]) -> str:
+    return str(item.get("download_id") or f"{item.get('service_type')}-{item.get('id')}")
+
+
+def _active(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows = [
         item
-        for item in items or []
+        for item in items
         if str(item.get("status") or "").lower() in ("downloading", "queued", "delay", "paused")
     ]
-    active.sort(key=lambda item: -float(item.get("progress") or 0))
+    rows.sort(key=lambda item: -float(item.get("progress") or 0))
+    return rows
+
+
+async def _downloads(db: AsyncSession) -> list[dict[str, Any]]:
     return [
         {
-            "title": item.get("title") or "Téléchargement",
+            "key": download_key(item),
+            "title": item.get("media_title") or item.get("title") or "Téléchargement",
             "progress": round(float(item.get("progress") or 0)),
             "time_left": item.get("time_left") or "",
             "paused": str(item.get("status") or "").lower() == "paused",
         }
-        for item in active[:MAX_DOWNLOADS]
+        for item in _active(await _queue(db))[:MAX_DOWNLOADS]
     ]
 
 
@@ -201,6 +220,17 @@ async def _upcoming(db: AsyncSession) -> list[dict[str, Any]]:
             "kind": "episode" if item.get("type") == "episode" else "movie",
             # Films : digital | physical | cinema (sortie numérique, Blu-ray, salle)
             "release_type": item.get("release_type") or "",
+            # Fiche au toucher (tablette)
+            "overview": (item.get("overview") or item.get("series_overview") or "")[:900],
+            "poster": web_image(item.get("poster_url")),
+            "fanart": web_image(item.get("fanart_url")),
+            "network": item.get("network") or item.get("studio") or "",
+            "runtime": item.get("runtime") or None,
+            "genres": [str(g) for g in (item.get("genres") or [])][:3],
+            "finale_type": item.get("finale_type") or "",
+            "monitored": bool(item.get("monitored")),
+            "rating": item.get("rating"),
+            "rating_source": item.get("rating_source"),
         }
         for item in rows[:MAX_UPCOMING]
     ]
@@ -424,4 +454,135 @@ async def play(
         "status": "sent",
         "device": device.name,
         "online": watch_summary.is_online(device.last_seen_at, now),
+    }
+
+
+async def _live_torrent(db: AsyncSession, torrent_hash: str) -> dict[str, Any] | None:
+    """Vitesse, sources, pairs d'un torrent, lus dans Deluge (None : pas de Deluge)."""
+    from app.models.service import Service
+    from app.services.deluge import DelugeClient, torrent_view
+    from app.services.encryption import decrypt_api_key
+
+    svc = (
+        (await db.execute(select(Service).where(Service.is_enabled, Service.type == "deluge")))
+        .scalars()
+        .first()
+    )
+    if svc is None:
+        return None
+
+    async def _fetch():
+        client = DelugeClient(url=svc.url, api_key=decrypt_api_key(svc.api_key), timeout=6)
+        try:
+            found = await client.torrents([torrent_hash])
+        finally:
+            await client.close()
+        status = found.get(torrent_hash.lower())
+        return torrent_view(status) if status else {}
+
+    return await cache.get_or_set(f"ambient:torrent:{torrent_hash}", _fetch, ttl_seconds=3)
+
+
+async def _live_usenet(db: AsyncSession, nzo_id: str) -> dict[str, Any] | None:
+    """Vitesse et place dans la file SABnzbd d'un téléchargement Usenet."""
+    from app.models.service import Service
+    from app.services.encryption import decrypt_api_key
+    from app.services.sabnzbd import SabnzbdClient
+
+    svc = (
+        (await db.execute(select(Service).where(Service.is_enabled, Service.type == "sabnzbd")))
+        .scalars()
+        .first()
+    )
+    if svc is None:
+        return None
+
+    async def _fetch():
+        client = SabnzbdClient(url=svc.url, api_key=decrypt_api_key(svc.api_key), timeout=6)
+        try:
+            queue = await client.get_queue()
+        finally:
+            await client.close()
+        return usenet_view(queue, nzo_id)
+
+    return await cache.get_or_set(f"ambient:usenet:{nzo_id}", _fetch, ttl_seconds=3)
+
+
+def usenet_view(queue: Any, nzo_id: str) -> dict[str, Any]:
+    """File SABnzbd → état d'un élément ({} s'il n'y est plus)."""
+    queue = queue if isinstance(queue, dict) else {}
+    slots = [s for s in queue.get("slots") or [] if isinstance(s, dict)]
+    index = next((i for i, slot in enumerate(slots) if slot.get("nzo_id") == nzo_id), None)
+    if index is None:
+        return {}
+    slot = slots[index]
+    downloading = str(slot.get("status") or "").lower() == "downloading"
+    try:
+        speed = int(float(queue.get("kbpersec") or 0) * 1024) if downloading else 0
+    except (TypeError, ValueError):
+        speed = 0
+    return {
+        "state": str(slot.get("status") or ""),  # Downloading, Queued, Paused…
+        "download_speed": speed,  # SABnzbd télécharge un élément à la fois
+        "position": index + 1,
+        "queue_size": len(slots),
+        "priority": str(slot.get("priority") or ""),
+        "age": str(slot.get("avg_age") or ""),  # ancienneté du post (« 3d »)
+        "paused_all": bool(queue.get("paused")),
+    }
+
+
+@router.get("/download/{key}")
+async def download_detail(
+    key: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)
+) -> dict[str, Any]:
+    """Fiche d'un téléchargement (tablette, au toucher) : la file *arr + le client en direct.
+
+    Torrent : vitesse, sources (seeders), pairs, ratio, tracker (Deluge, si
+    configuré dans Réglages › Services). Usenet : vitesse et place dans la
+    file SABnzbd. La tablette relit cette fiche toutes les 3 s tant qu'elle
+    est ouverte (cache de 3 s : plusieurs écrans ne multiplient pas les appels).
+    """
+    if not DOWNLOAD_KEY.fullmatch(key):
+        raise HTTPException(status_code=404, detail="Téléchargement inconnu")
+    item = next((i for i in await _queue(db) if download_key(i) == key), None)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Téléchargement terminé ou retiré de la file")
+    protocol = str(item.get("protocol") or "").lower()
+    download_id = str(item.get("download_id") or "")
+    live: dict[str, Any] | None = None
+    hint = ""
+    try:
+        if protocol == "torrent" and download_id:
+            live = await _live_torrent(db, download_id)
+            if live is None:
+                hint = "Ajoute Deluge dans Réglages › Services pour voir la vitesse et les sources"
+        elif protocol == "usenet" and download_id:
+            live = await _live_usenet(db, download_id)
+    except Exception as exc:  # client injoignable : la fiche reste utile sans le direct
+        logger.debug("[Ambient] direct de %s : %s", key, exc)
+        hint = f"{item.get('download_client') or 'Client'} injoignable"
+    return {
+        "key": key,
+        "title": item.get("media_title") or item.get("title") or "Téléchargement",
+        "release": item.get("title") or "",
+        "poster": web_image(item.get("poster_url")),
+        "fanart": web_image(item.get("fanart_url")),
+        "kind": "series" if item.get("service_type") == "sonarr" else "movie",
+        "episodes": int(item.get("episode_count") or 0),
+        "season": item.get("season_number"),
+        "status": str(item.get("status") or ""),
+        "tracked_state": str(item.get("tracked_state") or ""),
+        "progress": round(float(item.get("progress") or 0), 1),
+        "size_bytes": int(item.get("size_bytes") or 0),
+        "size_left_bytes": int(item.get("size_left_bytes") or 0),
+        "time_left": item.get("time_left") or "",
+        "protocol": protocol,
+        "client": item.get("download_client") or "",
+        "indexer": item.get("indexer") or "",
+        "quality": item.get("quality") or "",
+        "error": item.get("error") or "",
+        "detail": item.get("detail") or "",
+        "live": live or None,
+        "live_hint": hint,
     }

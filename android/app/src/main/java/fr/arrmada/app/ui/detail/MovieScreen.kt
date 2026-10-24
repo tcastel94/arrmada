@@ -281,9 +281,8 @@ fun MovieContent(
                 modifier = Modifier.padding(top = 12.dp),
             )
             Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                m.ratings.tmdb?.let { Badge("TMDB %.1f".format(it)) }
-                m.ratings.imdb?.let { Badge("IMDb %.1f".format(it)) }
-                m.ratings.rottenTomatoes?.let { Badge("RT %d %%".format(it.toInt())) }
+                // IMDb d'abord (la plus fiable), TMDB seulement sans IMDb, puis la critique
+                fr.arrmada.app.data.RatingLogic.detailBadges(m.ratings).forEach { Badge(it) }
                 techBadges(m.file).forEach { Badge(it, highlight = true) }
             }
 

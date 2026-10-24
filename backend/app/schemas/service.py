@@ -13,7 +13,7 @@ class ServiceCreate(BaseModel):
 
     name: str = Field(min_length=1, max_length=100, description="Display name for the service")
     type: str = Field(
-        pattern=r"^(sonarr|radarr|lidarr|readarr|prowlarr|bazarr|jellyfin|sabnzbd)$",
+        pattern=r"^(sonarr|radarr|lidarr|readarr|prowlarr|bazarr|jellyfin|sabnzbd|deluge)$",
         description="Service type",
     )
     url: str = Field(min_length=1, max_length=500, description="Service base URL")

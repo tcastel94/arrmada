@@ -121,6 +121,7 @@ export function ManualAddDialog({
             overview: "",
             poster_url: poster,
             rating: null,
+            rating_source: null,
             tmdb_id: useTvdb ? null : id,
             tvdb_id: useTvdb ? id : null,
             in_library: false,

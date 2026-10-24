@@ -42,6 +42,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { Button } from "@/components/ui/button";
 import { Shimmer } from "@/components/shared/loading-skeleton";
 import { ErrorState } from "@/components/shared/empty-state";
+import { formatRating } from "@/components/shared/rating-badge";
 import { RingGauge } from "@/components/fx/ring-gauge";
 import { TiltCard } from "@/components/fx/tilt-card";
 import { useRecommendationDetail, type TMDBCastMember, type TMDBDetail } from "@/hooks/use-recommendations";
@@ -161,6 +162,8 @@ function DetailBody({
     const overview = detail?.overview || preview?.overview || "";
     const year = detail?.year ?? (preview?.year ? String(preview.year) : null);
     const rating = detail?.rating ?? preview?.rating ?? null;
+    // Ancien serveur (sans source) : c'était la note TMDB
+    const ratingSource = detail?.rating_source ?? preview?.rating_source ?? (rating ? "tmdb" : null);
     const genres = detail?.genres ?? [];
     const cast = detail?.cast ?? [];
     const trailerKey = detail?.trailer_key ?? null;
@@ -310,7 +313,15 @@ function DetailBody({
                             </a>
                         </Button>
                     )}
-                    {rating ? <RatingBlock rating={rating} votes={detail?.vote_count} /> : null}
+                    {rating ? (
+                        <RatingBlock
+                            rating={rating}
+                            source={ratingSource}
+                            votes={detail?.rating_votes ?? detail?.vote_count}
+                            metacritic={detail?.metacritic}
+                            rottenTomatoes={detail?.rotten_tomatoes}
+                        />
+                    ) : null}
                 </motion.div>
 
                 {/* ── Bande-annonce (chargée uniquement à la demande) ── */}
@@ -475,16 +486,35 @@ function AddAction({
     );
 }
 
-/** Note TMDB /10 en jauge circulaire + nombre de votes. */
-function RatingBlock({ rating, votes }: { rating: number; votes?: number }) {
+/**
+ * Note la plus fiable (IMDb, sinon TMDB) en jauge circulaire + nombre de
+ * votes ; pour un film, Metacritic (critiques de presse) et Rotten Tomatoes
+ * (% de critiques positives) en dessous quand ils existent.
+ */
+function RatingBlock({
+    rating,
+    source,
+    votes,
+    metacritic,
+    rottenTomatoes,
+}: {
+    rating: number;
+    source: "imdb" | "tmdb" | null | undefined;
+    votes?: number | null;
+    metacritic?: number | null;
+    rottenTomatoes?: number | null;
+}) {
+    const label = source === "imdb" ? "IMDb" : "TMDB";
+    const critics = [metacritic ? `Metacritic ${metacritic}` : null, rottenTomatoes ? `Rotten Tomatoes ${rottenTomatoes} %` : null].filter(Boolean);
     return (
-        <div className="ml-auto flex items-center gap-2.5" title="Note moyenne des spectateurs sur TMDB">
+        <div className="ml-auto flex items-center gap-2.5" title={`Note moyenne des spectateurs sur ${label}`}>
             <RingGauge value={rating * 10} size={44} stroke={4} tone="amber">
-                <span className="text-xs font-bold tabular-nums">{rating.toFixed(1)}</span>
+                <span className="text-xs font-bold tabular-nums">{formatRating(rating)}</span>
             </RingGauge>
             <div className="leading-tight">
-                <p className="text-xs font-medium">Note TMDB</p>
+                <p className="text-xs font-medium">Note {label}</p>
                 {votes ? <p className="text-[11px] text-muted-foreground">{plural(votes, "vote")}</p> : null}
+                {critics.length > 0 && <p className="text-[11px] text-muted-foreground">{critics.join(" · ")}</p>}
             </div>
         </div>
     );

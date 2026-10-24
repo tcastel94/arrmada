@@ -397,7 +397,8 @@ export function MediaHero({ media, actions }: { media: MediaDetail; actions?: Re
                         {isMovie ? (
                             <>
                                 <RatingPill label="IMDb" value={ratings.imdb} />
-                                <RatingPill label="TMDb" value={ratings.tmdb} />
+                                {/* TMDB seulement sans IMDb (la plus fiable) : même règle que les affiches */}
+                                <RatingPill label="TMDB" value={ratings.imdb ? null : ratings.tmdb} />
                                 <RatingPill label="Rotten Tomatoes" value={ratings.rotten_tomatoes} percent />
                                 <RatingPill label="Metacritic" value={ratings.metacritic} percent />
                             </>

@@ -34,7 +34,6 @@ import {
     Search,
     Shuffle,
     Sparkles,
-    Star,
     Tv,
     X,
 } from "lucide-react";
@@ -46,6 +45,7 @@ import {
     type LibrarySelectItem,
 } from "@/hooks/use-recommendations";
 import { useDebounce } from "@/hooks/use-debounce";
+import { RatingBadge } from "@/components/shared/rating-badge";
 import { PosterBadge, PosterCard } from "@/components/shared/poster-card";
 import { EmptyState, ErrorState } from "@/components/shared/empty-state";
 import { Shimmer } from "@/components/shared/loading-skeleton";
@@ -212,14 +212,7 @@ function SuggestionTile({ item, onPreview }: { item: AddableItem; onPreview: (it
                 posterUrl={item.poster_url}
                 type={item.type}
                 onClick={() => onPreview(item)}
-                badges={
-                    item.rating ? (
-                        <PosterBadge title="Note TMDB">
-                            <Star className="h-2.5 w-2.5 fill-amber-400 text-warning" />
-                            {item.rating.toFixed(1)}
-                        </PosterBadge>
-                    ) : undefined
-                }
+                rating={<RatingBadge value={item.rating} source={item.rating_source} />}
                 corner={
                     item.in_library ? (
                         <PosterBadge tone="success" title="Déjà dans ta bibliothèque">

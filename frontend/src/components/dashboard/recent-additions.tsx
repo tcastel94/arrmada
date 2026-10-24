@@ -7,6 +7,7 @@
 import { Clapperboard } from "lucide-react";
 import { useMedia } from "@/hooks/use-media";
 import { PosterCard, PosterBadge } from "@/components/shared/poster-card";
+import { RatingBadge } from "@/components/shared/rating-badge";
 import { Section } from "@/components/shared/section";
 import { Shelf } from "@/components/shared/shelf";
 import { Shimmer } from "@/components/shared/loading-skeleton";
@@ -49,6 +50,7 @@ export function RecentAdditions() {
                             dimmed={!m.has_file}
                             badges={!m.has_file ? <PosterBadge tone="warning">Manquant</PosterBadge> : undefined}
                             progress={m.type === "series" && m.episodes_total ? ((m.episodes_have ?? 0) / m.episodes_total) * 100 : undefined}
+                            rating={m.type === "movie" ? <RatingBadge value={m.rating} source={m.rating_source} votes={m.rating_votes} /> : undefined}
                         />
                     ))}
                 </Shelf>

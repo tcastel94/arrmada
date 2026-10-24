@@ -111,7 +111,7 @@ function ServiceForm({
     const errors = {
         name: !name.trim() ? "Donne un nom à ce service." : null,
         url: validateHttpUrl(url, "http://192.168.1.10:8989"),
-        apiKey: !isEditing && !apiKey.trim() ? "La clé API est obligatoire." : null,
+        apiKey: !isEditing && !apiKey.trim() ? (type === "deluge" ? "Le mot de passe est obligatoire." : "La clé API est obligatoire.") : null,
     };
     const hasErrors = Object.values(errors).some(Boolean);
     const saving = create.isPending || update.isPending;
@@ -270,7 +270,7 @@ function ServiceForm({
 
             <FormField
                 id="service-api-key"
-                label="Clé API"
+                label={type === "deluge" ? "Mot de passe de l'interface web" : "Clé API"}
                 hint={isEditing ? "Laisse vide pour conserver la clé actuelle." : API_KEY_HINTS[type]}
                 error={submitted ? errors.apiKey : null}
             >

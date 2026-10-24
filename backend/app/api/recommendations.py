@@ -53,6 +53,16 @@ async def _tmdb_get(endpoint: str, params: dict[str, Any] | None = None) -> Any:
         return resp.json()
 
 
+async def _rate(db: AsyncSession, items: list[dict[str, Any]]) -> None:
+    """Note IMDb des films proposés (TMDB en secours) ; jamais bloquant."""
+    from app.services import ratings
+
+    try:
+        await ratings.enrich(db, items)
+    except Exception as exc:  # Radarr ou base indisponible : la note TMDB reste
+        logger.warning("Notes IMDb indisponibles : %s", exc)
+
+
 def _format_tmdb_movie(raw: dict[str, Any]) -> dict[str, Any]:
     """Normalize a TMDB movie result."""
     return {
@@ -282,6 +292,13 @@ async def get_recommendations(
             except Exception as exc:
                 logger.debug("TMDB recs for %s failed: %s", base_item.get("title"), exc)
 
+        # Note la plus fiable (IMDb) à la place de celle de TMDB, pour tous les films proposés
+        await _rate(
+            db,
+            result["trending_movies"]
+            + result["trending_series"]
+            + [rec for group in result["because_you_have"] for rec in group["recommendations"]],
+        )
         return result
 
     profile_id = user.get("profile_id")
@@ -356,7 +373,7 @@ async def get_tmdb_detail(
         title = raw.get("title") or raw.get("name") or "Inconnu"
         release_date = raw.get("release_date") or raw.get("first_air_date")
 
-        return {
+        detail = {
             "tmdb_id": raw.get("id"),
             "title": title,
             "original_title": raw.get("original_title") or raw.get("original_name") or "",
@@ -387,6 +404,8 @@ async def get_tmdb_detail(
             if library_match
             else None,
         }
+        await _rate(db, [detail])
+        return detail
 
     return await cache.get_or_set(cache_key, _fetch, ttl_seconds=3600)
 
@@ -437,6 +456,7 @@ async def get_recommendations_based_on(
             )
             items.append(item)
 
+        await _rate(db, items)
         return {"items": items}
 
     return await cache.get_or_set(cache_key, _fetch, ttl_seconds=1800)
@@ -448,6 +468,7 @@ async def discover_media(
     media_type: str = Query("movie", description="movie or tv"),
     sort_by: str = Query("popularity.desc", description="TMDB sort field"),
     page: int = Query(1, ge=1, le=10),
+    db: AsyncSession = Depends(get_db),
 ):
     """Discover new media from TMDB with filters."""
     if not settings.TMDB_API_KEY:
@@ -484,6 +505,7 @@ async def discover_media(
 
         formatter = _format_tmdb_movie if media_type == "movie" else _format_tmdb_series
         items = [formatter(raw) for raw in data.get("results", [])]
+        await _rate(db, items)
 
         return {
             "items": items,

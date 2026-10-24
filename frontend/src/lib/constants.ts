@@ -18,4 +18,5 @@ export const SERVICE_META: Record<
     bazarr: { label: "Bazarr", color: "#2196f3", icon: "subtitles" },
     jellyfin: { label: "Jellyfin", color: "#00a4dc", icon: "play-circle" },
     sabnzbd: { label: "SABnzbd", color: "#fec72e", icon: "download" },
+    deluge: { label: "Deluge", color: "#4a8fce", icon: "download" },
 };
