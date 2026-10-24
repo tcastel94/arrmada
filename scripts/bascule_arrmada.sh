@@ -232,7 +232,9 @@ confirm() {
     [[ "$answer" =~ ^[oOyY]$ ]]
 }
 
-# shellcheck disable=SC2329  # appelée par le trap EXIT
+# Appelée par le trap EXIT : shellcheck la croit inaccessible (SC2317 avant
+# la 0.10, SC2329 depuis).
+# shellcheck disable=SC2317,SC2329
 cleanup() {
     [ -n "$TMP_DIR" ] && [ -d "$TMP_DIR" ] && rm -rf "$TMP_DIR"
     return 0
@@ -795,8 +797,11 @@ rollback() {
 
 manual_rollback() {
     local last
-    last="$(find "$BACKUP_ROOT" -maxdepth 1 -type d -name 'bascule-*' 2>/dev/null | sort | tail -n 1)"
-    [ -n "$last" ] && [ -f "$last/state" ] || die "Aucune bascule enregistrée dans $BACKUP_ROOT" "$E_CONFIG"
+    # « || true » : dossier absent → find échoue, et pipefail arrêterait le script
+    last="$(find "$BACKUP_ROOT" -maxdepth 1 -type d -name 'bascule-*' 2>/dev/null | sort | tail -n 1 || true)"
+    if [ -z "$last" ] || [ ! -f "$last/state" ]; then
+        die "Aucune bascule enregistrée dans $BACKUP_ROOT" "$E_CONFIG"
+    fi
     # shellcheck source=/dev/null
     source "$last/state"
     info "Bascule du $DATE (dossier $last), commit d'origine ${OLD_COMMIT:0:7}"
