@@ -81,6 +81,27 @@ ok "Docker et Compose disponibles"
 if [ -f docker-compose.override.yml ]; then
     ok "docker-compose.override.yml détecté (réglages propres à l'hôte)"
 else
+    # Garde-fou migration : une ANCIENNE stack (3 conteneurs + PostgreSQL)
+    # tourne ou a tourné ici. Sans l'override, on la remplacerait par une
+    # instance vide sur SQLite, sans mot de passe (la 1re personne qui ouvre
+    # la page le choisirait). Cas typique : maj-arrmada.sh (git pull +
+    # deploy.sh) lancé juste après la fusion de l'image unique.
+    OLD_STACK=""
+    if docker container inspect arrmada-backend > /dev/null 2>&1; then
+        OLD_STACK="conteneur arrmada-backend"
+    elif docker volume inspect arrmada_arrmada-pgdata > /dev/null 2>&1; then
+        OLD_STACK="volume PostgreSQL arrmada_arrmada-pgdata"
+    elif [ -f docker-compose.override.yml.next ]; then
+        OLD_STACK="docker-compose.override.yml.next en attente"
+    fi
+    if [ -n "$OLD_STACK" ] && [ "${ARRMADA_ALLOW_NO_OVERRIDE:-0}" != "1" ]; then
+        err "Ancienne installation détectée ($OLD_STACK) mais pas de docker-compose.override.yml."
+        err "Rien n'a été modifié : les conteneurs actuels tournent toujours."
+        echo "     Bascule à faire une fois : docs/deploy-unraid.md (§ 2 : sauvegarde, down,"
+        echo "     mv docker-compose.override.yml.next docker-compose.override.yml, ./deploy.sh --build)."
+        echo "     Pour démarrer quand même sur SQLite vide : ARRMADA_ALLOW_NO_OVERRIDE=1 ./deploy.sh"
+        exit 2
+    fi
     warn "Pas de docker-compose.override.yml : configuration par défaut (SQLite dans ./data)"
 fi
 echo ""

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Généré par branding/export.py depuis arrmada-mark.svg : ne pas modifier à la main. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.8"
+        android:scaleY="0.8"
+        android:translateX="28.4"
+        android:translateY="28.8">
+        <path
+            android:pathData="M11 54 L32 9 L53 54"
+            android:strokeWidth="9"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round">
+            <aapt:attr name="android:strokeColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="11"
+                    android:startY="9"
+                    android:endX="53"
+                    android:endY="54">
+                    <item android:offset="0" android:color="#FF4A9EFF" />
+                    <item android:offset="1" android:color="#FF22E0EE" />
+                </gradient>
+            </aapt:attr>
+        </path>
+        <path
+            android:fillColor="#FFEAF6FF"
+            android:pathData="M27 34.8v14.4a1.6 1.6 0 0 0 2.4 1.4l11.4-7.2a1.6 1.6 0 0 0 0-2.8l-11.4-7.2a1.6 1.6 0 0 0-2.4 1.4z" />
+    </group>
+</vector>

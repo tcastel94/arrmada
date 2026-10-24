@@ -44,6 +44,7 @@ export const DEFAULT_PORTS: Record<ServiceType, number> = {
     bazarr: 6767,
     jellyfin: 8096,
     sabnzbd: 8080,
+    deluge: 8112,
 };
 
 /** Où trouver la clé API dans chaque application (aide sous le champ). */
@@ -56,6 +57,8 @@ export const API_KEY_HINTS: Record<ServiceType, string> = {
     bazarr: "Bazarr → Settings → General → Security → API Key",
     jellyfin: "Jellyfin → Tableau de bord → Clés API → +",
     sabnzbd: "SABnzbd → Config → General → Security → API Key",
+    // Deluge n'a pas de clé API : c'est le mot de passe de son interface web
+    deluge: "Mot de passe de l'interface web de Deluge (« deluge » par défaut) : vitesse et seeders des torrents",
 };
 
 /** Rôle de chaque application, affiché sous le nom (« Radarr » → « Films »). */
@@ -68,6 +71,7 @@ export const SERVICE_ROLES: Record<ServiceType, string> = {
     bazarr: "Sous-titres",
     jellyfin: "Serveur multimédia",
     sabnzbd: "Téléchargements Usenet",
+    deluge: "Téléchargements torrent",
 };
 
 export interface ServiceVisual {

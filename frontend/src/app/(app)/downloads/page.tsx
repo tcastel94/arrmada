@@ -69,13 +69,12 @@ export default function DownloadsPage() {
 
     return (
         <>
-            <Header title="Téléchargements" />
+            <Header title="Transferts" />
             <PageContainer>
                 <PageHeader
                     icon={Download}
                     accent="primary"
-                    eyebrow="Activité"
-                    title="Téléchargements"
+                    title="Transferts"
                     description="La file Radarr & Sonarr en direct, et les imports à débloquer quand un téléchargement reste coincé."
                     actions={
                         <Button
@@ -128,7 +127,7 @@ export default function DownloadsPage() {
                             <FolderInput className="h-4 w-4" />
                             Imports
                             {stuckCount > 0 && (
-                                <span className="rounded-md bg-amber-500/20 px-1.5 text-[10px] tabular-nums leading-4 text-amber-300">
+                                <span className="rounded-md bg-warning/20 px-1.5 text-[10px] tabular-nums leading-4 text-warning">
                                     {stuckCount}
                                 </span>
                             )}

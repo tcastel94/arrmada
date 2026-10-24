@@ -112,7 +112,7 @@ export function HealthHero({
 
             <MetricTile
                 icon={HardDrive}
-                iconClass="bg-emerald-500/15 text-emerald-300 ring-emerald-400/25"
+                iconClass="bg-success/15 text-success ring-success/25"
                 label="Espace récupérable"
                 hint={reclaimable && !reclaimable.exact ? "au moins · non surveillés + séries incomplètes" : "non surveillés + séries incomplètes"}
                 loading={reclaimableLoading}
@@ -128,7 +128,7 @@ export function HealthHero({
             />
             <MetricTile
                 icon={Copy}
-                iconClass="bg-fuchsia-500/15 text-fuchsia-300 ring-fuchsia-400/25"
+                iconClass="bg-primary/15 text-primary ring-primary/25"
                 label="Doublons"
                 hint="titres présents dans plusieurs services"
                 loading={duplicatesLoading}
@@ -137,7 +137,7 @@ export function HealthHero({
             />
             <MetricTile
                 icon={ArrowUpCircle}
-                iconClass="bg-amber-500/15 text-amber-300 ring-amber-400/25"
+                iconClass="bg-warning/15 text-warning ring-warning/25"
                 label="Upgrades possibles"
                 hint="films sous le 1080p Bluray"
                 loading={upgradesLoading}

@@ -70,9 +70,9 @@ import { BrandIcon } from "@/components/brand/brand-mark";
 type RowTone = "ok" | "warning" | "error" | "info";
 
 const ROW_TONES: Record<RowTone, { tile: string; badge: string; label: string; icon: LucideIcon }> = {
-    ok: { tile: "bg-emerald-500/10 text-emerald-400", badge: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300", label: "Configuré", icon: CheckCircle2 },
-    warning: { tile: "bg-amber-500/10 text-amber-400", badge: "border-amber-500/30 bg-amber-500/10 text-amber-300", label: "À configurer", icon: CircleDashed },
-    error: { tile: "bg-red-500/10 text-red-400", badge: "border-red-500/30 bg-red-500/10 text-red-300", label: "Manquant", icon: XCircle },
+    ok: { tile: "bg-success/10 text-success", badge: "border-success/30 bg-success/10 text-success", label: "Configuré", icon: CheckCircle2 },
+    warning: { tile: "bg-warning/10 text-warning", badge: "border-warning/30 bg-warning/10 text-warning", label: "À configurer", icon: CircleDashed },
+    error: { tile: "bg-destructive/10 text-destructive", badge: "border-destructive/30 bg-destructive/10 text-destructive", label: "Manquant", icon: XCircle },
     info: { tile: "bg-white/[0.05] text-slate-300", badge: "", label: "", icon: Info },
 };
 
@@ -219,7 +219,7 @@ export default function SettingsGeneralPage() {
                     <OverviewTile
                         href="/settings/kodi"
                         icon={MonitorPlay}
-                        iconClass="bg-violet-500/15 text-violet-300"
+                        iconClass="bg-primary/15 text-primary"
                         title="Kodi"
                         loading={kodis.isLoading}
                         tone={kodis.data?.length ? "online" : "unknown"}
@@ -228,7 +228,7 @@ export default function SettingsGeneralPage() {
                     <OverviewTile
                         href="/settings/cast"
                         icon={Cast}
-                        iconClass="bg-sky-500/15 text-sky-300"
+                        iconClass="bg-primary/15 text-primary"
                         title="Cast & Jellyfin"
                         loading={cast.isLoading || jellyfin.isLoading}
                         tone={jellyfin.data?.configured ? "online" : "warning"}
@@ -250,14 +250,14 @@ export default function SettingsGeneralPage() {
                     <OverviewTile
                         href="/trash-guides"
                         icon={BookMarked}
-                        iconClass="bg-amber-500/15 text-amber-300"
+                        iconClass="bg-warning/15 text-warning"
                         title="TRaSH Guides"
                         status="Profils par média & SABnzbd"
                     />
                     <OverviewTile
                         href="/remote"
                         icon={Sofa}
-                        iconClass="bg-fuchsia-500/15 text-fuchsia-300"
+                        iconClass="bg-primary/15 text-primary"
                         title="Salon"
                         status="Télécommandes Kodi, ampli et Cast"
                     />
@@ -269,12 +269,12 @@ export default function SettingsGeneralPage() {
                 <motion.div
                     variants={fadeUp}
                     role="alert"
-                    className="flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4"
+                    className="flex items-start gap-3 rounded-2xl border border-warning/30 bg-warning/10 p-4"
                 >
-                    <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
+                    <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
                     <div className="text-sm">
-                        <p className="font-semibold text-amber-200">Mot de passe stocké en clair</p>
-                        <p className="mt-0.5 text-amber-100/80">
+                        <p className="font-semibold text-warning">Mot de passe stocké en clair</p>
+                        <p className="mt-0.5 text-warning/80">
                             Il vient de <code className="rounded bg-black/30 px-1 font-mono text-xs">ARRMADA_AUTH_SECRET</code> (.env).
                             Redéfinis-le ci-dessous : il sera stocké haché et tu pourras retirer la variable.
                         </p>
@@ -304,13 +304,13 @@ export default function SettingsGeneralPage() {
                         <Panel
                             title="Notifications Telegram"
                             icon={BellRing}
-                            iconClassName="text-sky-400"
+                            iconClassName="text-primary"
                             className="h-full"
                             action={
                                 <span
                                     className={cn(
                                         "flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold",
-                                        settings.telegram.configured ? "bg-emerald-500/10 text-emerald-300" : "bg-slate-500/10 text-slate-300",
+                                        settings.telegram.configured ? "bg-success/10 text-success" : "bg-slate-500/10 text-slate-300",
                                     )}
                                 >
                                     <StatusDot tone={settings.telegram.configured ? "online" : "unknown"} size="sm" />
@@ -368,7 +368,7 @@ export default function SettingsGeneralPage() {
 
                     {/* ── Application ──────────────────────────── */}
                     <motion.div variants={fadeUp}>
-                        <Panel title="Application" icon={ShieldCheck} iconClassName="text-emerald-400" className="h-full" bodyClassName="py-2">
+                        <Panel title="Application" icon={ShieldCheck} iconClassName="text-success" className="h-full" bodyClassName="py-2">
                             <div className="divide-y divide-white/[0.05]">
                                 <ConfigRow
                                     icon={ShieldCheck}
@@ -426,7 +426,7 @@ export default function SettingsGeneralPage() {
             <motion.div variants={fadeUp}>
                 <SpotlightCard interactive={false} className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
                     <div className="relative z-[2] flex items-center gap-3">
-                        <div className="h-11 w-11 shrink-0 overflow-hidden rounded-xl ring-1 ring-primary/30 shadow-[0_0_20px_-4px_hsl(var(--primary)/0.7)]">
+                        <div className="h-11 w-11 shrink-0 overflow-hidden rounded-xl ring-1 ring-primary/30">
                             <BrandIcon />
                         </div>
                         <div>

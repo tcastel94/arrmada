@@ -134,12 +134,12 @@ export function SeriesSubtitlePanel({ media, episodes }: { media: MediaDetail; e
                     <p className="flex items-center gap-2 font-semibold">
                         {frMissing > 0 ? (
                             <>
-                                <CircleAlert className="h-5 w-5 text-amber-400" aria-hidden />
+                                <CircleAlert className="h-5 w-5 text-warning" aria-hidden />
                                 {frMissing} épisode{frMissing > 1 ? "s" : ""} sans sous-titre FR
                             </>
                         ) : (
                             <>
-                                <CircleCheck className="h-5 w-5 text-emerald-400" aria-hidden />
+                                <CircleCheck className="h-5 w-5 text-success" aria-hidden />
                                 Tous les épisodes ont un sous-titre FR
                             </>
                         )}
@@ -178,7 +178,7 @@ export function SeriesSubtitlePanel({ media, episodes }: { media: MediaDetail; e
                                 <Panel
                                     title={seasonLabel(season)}
                                     action={
-                                        <span className={cn("text-xs tabular-nums", ok === list.length ? "text-emerald-400" : "text-amber-400")}>
+                                        <span className={cn("text-xs tabular-nums", ok === list.length ? "text-success" : "text-warning")}>
                                             {ok}/{list.length} avec ST FR
                                         </span>
                                     }
@@ -193,9 +193,9 @@ export function SeriesSubtitlePanel({ media, episodes }: { media: MediaDetail; e
                                                 <li key={e.episode_id} className={cn("rounded-xl transition-colors", isOpen && "bg-white/[0.03]")}>
                                                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 p-2">
                                                         {fr ? (
-                                                            <CircleCheck className="h-4 w-4 shrink-0 text-emerald-400" aria-label="Sous-titre FR présent" />
+                                                            <CircleCheck className="h-4 w-4 shrink-0 text-success" aria-label="Sous-titre FR présent" />
                                                         ) : (
-                                                            <CircleAlert className="h-4 w-4 shrink-0 text-amber-400" aria-label="Sous-titre FR manquant" />
+                                                            <CircleAlert className="h-4 w-4 shrink-0 text-warning" aria-label="Sous-titre FR manquant" />
                                                         )}
                                                         <span className="w-8 shrink-0 font-mono text-[11px] text-muted-foreground">E{pad2(e.episode)}</span>
                                                         <span className="min-w-0 flex-1 truncate text-sm" title={e.title}>

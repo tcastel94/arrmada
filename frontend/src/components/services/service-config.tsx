@@ -111,7 +111,7 @@ function ServiceForm({
     const errors = {
         name: !name.trim() ? "Donne un nom à ce service." : null,
         url: validateHttpUrl(url, "http://192.168.1.10:8989"),
-        apiKey: !isEditing && !apiKey.trim() ? "La clé API est obligatoire." : null,
+        apiKey: !isEditing && !apiKey.trim() ? (type === "deluge" ? "Le mot de passe est obligatoire." : "La clé API est obligatoire.") : null,
     };
     const hasErrors = Object.values(errors).some(Boolean);
     const saving = create.isPending || update.isPending;
@@ -270,7 +270,7 @@ function ServiceForm({
 
             <FormField
                 id="service-api-key"
-                label="Clé API"
+                label={type === "deluge" ? "Mot de passe de l'interface web" : "Clé API"}
                 hint={isEditing ? "Laisse vide pour conserver la clé actuelle." : API_KEY_HINTS[type]}
                 error={submitted ? errors.apiKey : null}
             >
@@ -371,18 +371,18 @@ function TestBanner({
     if (result.success) {
         const r = result;
         return (
-            <div className="flex items-center gap-2.5 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3.5 py-2.5 text-sm text-emerald-300">
+            <div className="flex items-center gap-2.5 rounded-xl border border-success/25 bg-success/10 px-3.5 py-2.5 text-sm text-success">
                 <CheckCircle2 className="h-4 w-4 shrink-0" />
                 <span>
                     {label} répond
                     {r.latency_ms != null && <span className="tabular-nums"> en {r.latency_ms} ms</span>}
-                    {r.version && <span className="font-mono text-emerald-200/80"> · v{r.version}</span>}
+                    {r.version && <span className="font-mono text-success/80"> · v{r.version}</span>}
                 </span>
             </div>
         );
     }
     return (
-        <div className="flex items-start gap-2.5 rounded-xl border border-red-500/25 bg-red-500/10 px-3.5 py-2.5 text-sm text-red-300">
+        <div className="flex items-start gap-2.5 rounded-xl border border-destructive/25 bg-destructive/10 px-3.5 py-2.5 text-sm text-destructive">
             <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
             <span className="min-w-0 break-words">
                 Échec de la connexion{result.error ? ` : ${result.error}` : "."}

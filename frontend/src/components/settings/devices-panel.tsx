@@ -85,7 +85,7 @@ export function DevicesPanel() {
             <Panel
                 title="Appareils (TV et écrans)"
                 icon={Tv}
-                iconClassName="text-sky-300"
+                iconClassName="text-primary"
                 action={
                     <Button
                         variant="glow"

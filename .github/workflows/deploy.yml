@@ -86,9 +86,20 @@ jobs:
     needs: [build]
     if: github.ref == 'refs/heads/main'
     environment: production
+    # Déploiement SSH facultatif : sans le secret UNRAID_HOST, l'étape est
+    # sautée (pas d'échec rouge à chaque fusion). Mise à jour à la main sur le
+    # NAS : maj-arrmada.sh (git pull + deploy.sh).
+    env:
+      UNRAID_HOST: ${{ secrets.UNRAID_HOST }}
 
     steps:
+      - name: SSH deploy not configured
+        if: env.UNRAID_HOST == ''
+        run: |
+          echo "::notice::Déploiement SSH non configuré (secret UNRAID_HOST absent) : mettre à jour le NAS avec maj-arrmada.sh"
+
       - name: Deploy via SSH
+        if: env.UNRAID_HOST != ''
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.UNRAID_HOST }}
@@ -136,7 +147,7 @@ jobs:
             exit 1
 
       - name: Notify success
-        if: success()
+        if: success() && env.UNRAID_HOST != ''
         run: |
           echo "✅ Deployed commit ${{ github.sha }} to Unraid"
           echo "   ArrMada: http://${{ secrets.UNRAID_HOST }}:3420"

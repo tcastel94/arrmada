@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.database import get_db
 from app.main import app, limiter
 from app.models import Base
-from app.services import artwork, auth_store, fully_kiosk, media_aggregator, tv_priority
+from app.services import artwork, auth_store, fully_kiosk, jellyfin, media_aggregator, tv_priority
 from app.utils.cache import cache
 from tests import fake_arr
 
@@ -60,6 +60,16 @@ def _clear_cache():
     cache.clear()
     yield
     cache.clear()
+
+
+@pytest.fixture(autouse=True)
+def _clear_jellyfin_indexes():
+    """Index Jellyfin (films par TMDB, séries par TVDB) : vides à chaque test."""
+    jellyfin._movie_cache.clear()
+    jellyfin._series_cache.clear()
+    yield
+    jellyfin._movie_cache.clear()
+    jellyfin._series_cache.clear()
 
 
 @pytest.fixture(autouse=True)

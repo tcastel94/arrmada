@@ -27,7 +27,10 @@ export interface MediaItem {
     monitored: boolean;
     status: string;
     added: string | null;
+    /** Note la plus fiable : IMDb (dès 1 000 votes), sinon TMDB. */
     rating: number | null;
+    rating_source?: "imdb" | "tmdb" | null;
+    rating_votes?: number | null;
     runtime: number | null;
     overview: string;
     /*

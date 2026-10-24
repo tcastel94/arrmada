@@ -3,61 +3,77 @@
 @tailwind utilities;
 
 /* ════════════════════════════════════════════════════════════════
-   ArrMada — Design system "Neon Armada"
+   ArrMada — Design system « Épuré » (refonte 2026)
    ----------------------------------------------------------------
-   Thème sombre unique (le logo et ses halos sont pensés pour un fond nuit).
-   Toutes les couleurs passent par des variables CSS HSL : un composant
-   ne doit JAMAIS coder une couleur de fond/bordure en dur, il utilise
-   ces tokens (bg-card, border-border, text-primary…) ou les utilitaires
-   ci-dessous (.glass, .text-gradient…).
+   Inspiré des apps Apple en mode sombre : fond noir, surfaces gris
+   neutres superposées, un seul accent (#4A9EFF) utilisé avec
+   parcimonie, aucune lueur ni dégradé décoratif. La couleur vient
+   des affiches, pas de l'interface.
+
+   Règle d'or (inchangée) : un composant ne code JAMAIS une couleur
+   en dur, il passe par ces variables (bg-card, text-muted-foreground,
+   border-border…). Changer une valeur ici = toute l'app suit, comme
+   une variable dans un fichier de conf partagé.
+
+   Niveaux de surface (du plus bas au plus haut) :
+     background  #000000  fond de page (noir OLED, comme iOS)
+     card        #1C1C1E  cartes, cellules de liste
+     secondary   #2C2C2E  éléments posés sur une carte (champs, puces)
+     accent      #3A3A3C  survol / appui
    ════════════════════════════════════════════════════════════════ */
 
 @layer base {
   :root,
   .dark {
-    /* Fond « nuit en mer » : bleu marine très profond, pas du gris. */
-    --background: 226 50% 4%;
-    --foreground: 213 40% 97%;
+    --background: 0 0% 0%;
+    --foreground: 0 0% 100%;
 
-    --card: 225 42% 7%;
-    --card-foreground: 213 40% 97%;
-    --popover: 225 44% 7%;
-    --popover-foreground: 213 40% 97%;
+    --card: 240 3% 11%;
+    --card-foreground: 0 0% 100%;
+    --popover: 240 3% 13%;
+    --popover-foreground: 0 0% 100%;
 
-    /* Accent principal #4A9EFF + cyan de marque (logo). */
+    /* Accent unique #4A9EFF. « brand » pointe dessus : les anciens
+       dégradés bleu→cyan deviennent des aplats bleus sans retoucher
+       chaque page. */
     --primary: 212 100% 65%;
-    --primary-foreground: 226 60% 7%;
-    --brand: 183 88% 52%;
-    --brand-foreground: 226 60% 7%;
+    --primary-foreground: 0 0% 100%;
+    --brand: 212 100% 65%;
+    --brand-foreground: 0 0% 100%;
 
-    --secondary: 224 32% 12%;
-    --secondary-foreground: 213 40% 97%;
-    --muted: 224 30% 11%;
-    --muted-foreground: 218 18% 63%;
-    --accent: 223 32% 14%;
-    --accent-foreground: 213 40% 97%;
+    --secondary: 240 2% 18%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 240 2% 18%;
+    /* Texte secondaire : le gris « secondaryLabel » d'iOS. */
+    --muted-foreground: 240 4% 62%;
+    --accent: 240 2% 23%;
+    --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 84% 62%;
+    /* Couleurs système iOS (variantes sombres). */
+    --destructive: 3 100% 61%;
     --destructive-foreground: 0 0% 100%;
-    --success: 152 69% 47%;
-    --success-foreground: 226 60% 7%;
-    --warning: 38 95% 58%;
-    --warning-foreground: 226 60% 7%;
+    --success: 135 64% 50%;
+    --success-foreground: 0 0% 100%;
+    --warning: 35 100% 52%;
+    --warning-foreground: 0 0% 0%;
 
-    --border: 223 30% 15%;
-    --input: 223 30% 17%;
+    /* Séparateurs fins (« hairline ») : à peine visibles, jamais blancs. */
+    --border: 240 3% 20%;
+    --input: 240 2% 18%;
     --ring: 212 100% 65%;
 
-    /* Palette graphes : bleu, cyan, violet, ambre, rose. */
+    /* Graphes : couleurs système (bleu, vert, orange, violet, rose). */
     --chart-1: 212 100% 65%;
-    --chart-2: 183 88% 52%;
-    --chart-3: 262 83% 70%;
-    --chart-4: 38 95% 58%;
-    --chart-5: 330 85% 66%;
+    --chart-2: 135 64% 50%;
+    --chart-3: 35 100% 52%;
+    --chart-4: 280 68% 66%;
+    --chart-5: 349 100% 64%;
 
-    --radius: 0.85rem;
-    --sidebar-width: 272px;
-    --sidebar-collapsed-width: 76px;
+    --radius: 0.75rem;
+
+    /* Hauteurs de la navigation (barre d'onglets mobile, barre du haut). */
+    --tabbar-h: 3.25rem;
+    --navbar-h: 3rem;
 
     color-scheme: dark;
   }
@@ -70,17 +86,30 @@
 
   html {
     -webkit-tap-highlight-color: transparent;
-    scroll-behavior: smooth;
+    /* Pas de défilement animé global : il ralentit le retour en haut
+       et les ancres ; iOS ne le fait pas non plus. */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
 
   body {
     @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
+    font-feature-settings: "cv11", "ss01";
     text-rendering: optimizeLegibility;
+    /* Rebond iOS limité à la page (pas de « tirer pour rafraîchir »
+       accidentel de Safari dans l'app installée). */
+    overscroll-behavior-y: none;
+  }
+
+  /* Titres plus serrés, comme les grands titres iOS. */
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.02em;
   }
 
   ::selection {
-    background: hsl(var(--primary) / 0.35);
+    background: hsl(var(--primary) / 0.4);
     color: hsl(var(--foreground));
   }
 
@@ -96,10 +125,17 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* Scrollbar globale discrète (Chrome/Edge/Safari + Firefox). */
+  /* Pas de menu « copier / ouvrir l'image » sur un appui long dans l'app :
+     les affiches ressemblent à des boutons, pas à des images web. */
+  img {
+    -webkit-touch-callout: none;
+    -webkit-user-drag: none;
+  }
+
+  /* Scrollbar discrète (desktop). Sur iOS / Android elle reste native. */
   * {
     scrollbar-width: thin;
-    scrollbar-color: hsl(var(--muted-foreground) / 0.25) transparent;
+    scrollbar-color: hsl(0 0% 100% / 0.18) transparent;
   }
   *::-webkit-scrollbar {
     width: 8px;
@@ -109,219 +145,120 @@
     background: transparent;
   }
   *::-webkit-scrollbar-thumb {
-    background: hsl(var(--muted-foreground) / 0.22);
+    background: hsl(0 0% 100% / 0.16);
     border-radius: 999px;
     border: 2px solid transparent;
     background-clip: padding-box;
   }
   *::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--muted-foreground) / 0.4);
+    background: hsl(0 0% 100% / 0.3);
     background-clip: padding-box;
   }
 }
 
 /* ════════════════════════════════════════════════════════════════
    Composants visuels réutilisables
+   ----------------------------------------------------------------
+   Les anciens noms (.glass, .border-gradient, .spotlight…) sont
+   conservés mais redéfinis en version sobre : les pages qui les
+   utilisent encore prennent le nouveau style sans être réécrites.
    ════════════════════════════════════════════════════════════════ */
 @layer components {
-  /* Panneau « verre dépoli » : la brique de base de toutes les cartes. */
+  /* Surface standard : carte gris foncé, coins arrondis, filet discret.
+     (Ex « verre dépoli » : le flou coûtait cher en batterie sur mobile.) */
+  .surface,
   .glass {
-    background: linear-gradient(
-      180deg,
-      hsl(var(--card) / 0.72) 0%,
-      hsl(var(--card) / 0.5) 100%
-    );
-    backdrop-filter: blur(18px) saturate(150%);
-    -webkit-backdrop-filter: blur(18px) saturate(150%);
-    border: 1px solid hsl(0 0% 100% / 0.065);
-    box-shadow:
-      inset 0 1px 0 0 hsl(0 0% 100% / 0.05),
-      0 10px 40px -18px rgb(0 0 0 / 0.75);
-  }
-
-  /* Variante plus opaque (menus, popovers, dialogues). */
-  .glass-strong {
-    background: hsl(var(--popover) / 0.88);
-    backdrop-filter: blur(24px) saturate(160%);
-    -webkit-backdrop-filter: blur(24px) saturate(160%);
-    border: 1px solid hsl(0 0% 100% / 0.08);
-    box-shadow:
-      inset 0 1px 0 0 hsl(0 0% 100% / 0.06),
-      0 24px 64px -16px rgb(0 0 0 / 0.8);
-  }
-
-  /* Survol interactif standard d'une carte en verre. */
-  .glass-hover {
-    transition:
-      border-color 0.3s ease,
-      box-shadow 0.3s ease,
-      transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
-  }
-  .glass-hover:hover {
-    border-color: hsl(var(--primary) / 0.28);
-    box-shadow:
-      inset 0 1px 0 0 hsl(0 0% 100% / 0.07),
-      0 0 0 1px hsl(var(--primary) / 0.08),
-      0 18px 50px -20px hsl(var(--primary) / 0.45);
-  }
-
-  /* Bordure en dégradé (1px) via masque — pour les éléments « premium ». */
-  .border-gradient {
-    position: relative;
-    isolation: isolate;
-  }
-  .border-gradient::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    padding: 1px;
-    border-radius: inherit;
-    background: linear-gradient(
-      135deg,
-      hsl(var(--primary) / 0.7),
-      hsl(var(--brand) / 0.35) 40%,
-      hsl(0 0% 100% / 0.04) 70%,
-      hsl(var(--primary) / 0.4)
-    );
-    -webkit-mask:
-      linear-gradient(#000 0 0) content-box,
-      linear-gradient(#000 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    pointer-events: none;
-    z-index: -1;
-  }
-
-  /* Bordure lumineuse qui tourne (faisceau) — badges « live ». */
-  .border-beam {
-    position: relative;
-    isolation: isolate;
-    overflow: hidden;
-  }
-  .border-beam::before {
-    content: "";
-    position: absolute;
-    inset: -150%;
-    background: conic-gradient(
-      from 0deg,
-      transparent 0deg,
-      hsl(var(--brand)) 40deg,
-      hsl(var(--primary)) 80deg,
-      transparent 120deg
-    );
-    animation: spin 4s linear infinite;
-    z-index: -2;
-  }
-  .border-beam::after {
-    content: "";
-    position: absolute;
-    inset: 1px;
-    border-radius: inherit;
     background: hsl(var(--card));
-    z-index: -1;
+    border: 1px solid hsl(0 0% 100% / 0.06);
   }
 
-  /* Halo qui suit la souris (variables --mx/--my posées en JS). */
-  .spotlight {
-    position: relative;
-    isolation: isolate;
-  }
-  .spotlight::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.35s ease;
-    background: radial-gradient(
-      420px circle at var(--mx, 50%) var(--my, 50%),
-      hsl(var(--primary) / 0.13),
-      transparent 45%
-    );
-    z-index: 1;
-  }
-  .spotlight:hover::after {
-    opacity: 1;
+  /* Surface surélevée : menus, popovers, dialogues. */
+  .glass-strong {
+    background: hsl(var(--popover));
+    border: 1px solid hsl(0 0% 100% / 0.08);
+    box-shadow: 0 16px 48px -12px rgb(0 0 0 / 0.7);
   }
 
-  /* Reflet qui balaie l'élément au survol (posters, boutons premium). */
+  /* Survol d'une carte cliquable : léger éclaircissement, rien d'autre. */
+  .glass-hover {
+    transition: background-color 0.2s ease;
+  }
+  @media (hover: hover) {
+    .glass-hover:hover {
+      background: hsl(240 3% 14%);
+    }
+  }
+
+  /* Barres de navigation (haut / onglets) : flou iOS « matériau ».
+     Seul endroit où le flou est gardé : il laisse deviner le contenu
+     qui défile dessous, c'est ce qui donne l'effet « app native ». */
+  .material {
+    background: hsl(0 0% 6% / 0.72);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+  }
+
+  /* Effets supprimés de l'ancien thème (néant volontaire). */
+  .border-gradient,
+  .border-beam,
+  .spotlight,
   .shine {
     position: relative;
-    overflow: hidden;
-  }
-  .shine::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: -75%;
-    z-index: 2;
-    width: 50%;
-    height: 100%;
-    background: linear-gradient(
-      100deg,
-      transparent,
-      hsl(0 0% 100% / 0.18),
-      transparent
-    );
-    transform: skewX(-20deg);
-    pointer-events: none;
-    opacity: 0;
-  }
-  .shine:hover::before {
-    animation: shine-sweep 0.9s cubic-bezier(0.22, 1, 0.36, 1);
   }
 
-  /* Squelette de chargement avec reflet animé (remplace animate-pulse). */
+  /* Squelette de chargement : pulsation douce, sans reflet coloré. */
   .shimmer {
-    position: relative;
-    overflow: hidden;
-    background: hsl(var(--muted) / 0.55);
-  }
-  .shimmer::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    transform: translateX(-100%);
-    background: linear-gradient(
-      90deg,
-      transparent,
-      hsl(var(--primary) / 0.07),
-      hsl(0 0% 100% / 0.05),
-      transparent
-    );
-    animation: shimmer 1.6s infinite;
+    background: hsl(var(--muted));
+    animation: skeleton-pulse 1.6s ease-in-out infinite;
   }
 
-  /* Pastille en verre pour chips / filtres. */
+  /* Pastille de filtre (style « capsule » iOS). */
   .chip {
-    @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-all;
-    background: hsl(var(--muted) / 0.5);
-    border: 1px solid hsl(0 0% 100% / 0.06);
-    color: hsl(var(--muted-foreground));
+    @apply inline-flex h-8 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-medium transition-colors;
+    background: hsl(var(--secondary));
+    color: hsl(var(--foreground) / 0.85);
   }
-  .chip:hover {
-    color: hsl(var(--foreground));
-    border-color: hsl(0 0% 100% / 0.12);
+  @media (hover: hover) {
+    .chip:hover {
+      background: hsl(var(--accent));
+    }
   }
   .chip[data-active="true"] {
-    color: hsl(var(--primary));
-    background: hsl(var(--primary) / 0.12);
-    border-color: hsl(var(--primary) / 0.35);
-    box-shadow: 0 0 20px -6px hsl(var(--primary) / 0.55);
+    background: hsl(var(--foreground));
+    color: hsl(var(--background));
   }
 
-  /* Libellé de section (petites capitales espacées). */
+  /* Titre de section (« Ajoutés récemment », « Services »…). */
   .eyebrow {
-    @apply text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/70;
+    @apply text-[13px] font-semibold text-muted-foreground;
   }
 
-  /* Touche clavier (raccourcis). */
+  /* Touche clavier (raccourcis, desktop). */
   .kbd {
-    @apply inline-flex h-5 min-w-5 items-center justify-center rounded-md px-1.5 font-mono text-[10px] font-medium text-muted-foreground;
-    background: hsl(var(--muted) / 0.8);
-    border: 1px solid hsl(0 0% 100% / 0.08);
-    box-shadow: inset 0 -1px 0 hsl(0 0% 0% / 0.4);
+    @apply inline-flex h-5 min-w-5 items-center justify-center rounded-md px-1.5 font-sans text-[11px] font-medium text-muted-foreground;
+    background: hsl(var(--secondary));
+  }
+
+  /* Liste groupée iOS : cellules empilées dans une carte arrondie,
+     séparées par un filet qui commence après l'icône. */
+  .grouped {
+    @apply overflow-hidden rounded-xl;
+    background: hsl(var(--card));
+  }
+  .grouped > * + * {
+    box-shadow: inset 0 0.5px 0 hsl(0 0% 100% / 0.1);
+  }
+
+  /* Retour visuel d'appui sur mobile (cellules, tuiles). */
+  .pressable {
+    transition:
+      transform 0.18s cubic-bezier(0.25, 1, 0.5, 1),
+      opacity 0.18s ease,
+      background-color 0.2s ease;
+  }
+  .pressable:active {
+    transform: scale(0.97);
+    opacity: 0.85;
   }
 }
 
@@ -333,70 +270,33 @@
     text-wrap: balance;
   }
 
-  /* Texte en dégradé de marque (bleu → cyan). */
-  .text-gradient {
-    background-image: linear-gradient(
-      110deg,
-      hsl(var(--primary)) 0%,
-      hsl(200 100% 75%) 45%,
-      hsl(var(--brand)) 100%
-    );
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-  }
-
-  /* Même dégradé, animé en boucle (titres héros). */
+  /* Anciens textes en dégradé : désormais simple texte (sobriété). */
+  .text-gradient,
   .text-gradient-animated {
-    background-image: linear-gradient(
-      110deg,
-      hsl(var(--primary)),
-      hsl(var(--brand)),
-      hsl(262 83% 75%),
-      hsl(var(--primary))
-    );
-    background-size: 300% 100%;
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    animation: gradient-x 8s ease infinite;
+    color: hsl(var(--foreground));
   }
 
-  /* Halo lumineux autour d'un élément. */
-  .glow-primary {
-    box-shadow:
-      0 0 0 1px hsl(var(--primary) / 0.35),
-      0 0 28px -6px hsl(var(--primary) / 0.6);
-  }
+  /* Anciennes lueurs : neutralisées. */
+  .glow-primary,
   .glow-brand {
-    box-shadow:
-      0 0 0 1px hsl(var(--brand) / 0.35),
-      0 0 28px -6px hsl(var(--brand) / 0.6);
+    box-shadow: none;
+  }
+  .bg-grid,
+  .bg-noise {
+    background-image: none;
   }
 
-  /* Grille fine en fond, estompée sur les bords. */
-  .bg-grid {
-    background-image:
-      linear-gradient(hsl(0 0% 100% / 0.035) 1px, transparent 1px),
-      linear-gradient(90deg, hsl(0 0% 100% / 0.035) 1px, transparent 1px);
-    background-size: 44px 44px;
-  }
   .mask-radial {
     -webkit-mask-image: radial-gradient(ellipse at center, #000 20%, transparent 75%);
     mask-image: radial-gradient(ellipse at center, #000 20%, transparent 75%);
   }
   .mask-fade-x {
-    -webkit-mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent);
-    mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent);
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 3%, #000 97%, transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 3%, #000 97%, transparent);
   }
   .mask-fade-b {
     -webkit-mask-image: linear-gradient(180deg, #000 60%, transparent);
     mask-image: linear-gradient(180deg, #000 60%, transparent);
-  }
-
-  /* Grain argentique très léger par-dessus le fond (anti « aplat numérique »). */
-  .bg-noise {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
   }
 
   .scrollbar-none {
@@ -410,6 +310,16 @@
     scrollbar-width: thin;
   }
 
+  /* Carrousel horizontal « à crans » (rangées d'affiches sur mobile). */
+  .snap-row {
+    scroll-snap-type: x mandatory;
+    scroll-padding-inline: 1rem;
+    -webkit-overflow-scrolling: touch;
+  }
+  .snap-row > * {
+    scroll-snap-align: start;
+  }
+
   .perspective {
     perspective: 1000px;
   }
@@ -420,34 +330,30 @@
   .safe-bottom {
     padding-bottom: env(safe-area-inset-bottom);
   }
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  /* Filet de 0,5 px (écrans Retina), comme les séparateurs iOS. */
+  .hairline-b {
+    box-shadow: inset 0 -0.5px 0 hsl(0 0% 100% / 0.12);
+  }
+  .hairline-t {
+    box-shadow: inset 0 0.5px 0 hsl(0 0% 100% / 0.12);
+  }
 }
 
 /* ════════════════════════════════════════════════════════════════
    Keyframes partagées (aussi déclarées dans tailwind.config pour les
    classes animate-*)
    ════════════════════════════════════════════════════════════════ */
-@keyframes shimmer {
-  100% {
-    transform: translateX(100%);
-  }
-}
-@keyframes shine-sweep {
-  0% {
-    left: -75%;
-    opacity: 1;
-  }
-  100% {
-    left: 130%;
-    opacity: 1;
-  }
-}
-@keyframes gradient-x {
+@keyframes skeleton-pulse {
   0%,
   100% {
-    background-position: 0% 50%;
+    opacity: 1;
   }
   50% {
-    background-position: 100% 50%;
+    opacity: 0.55;
   }
 }
 @keyframes spin {
@@ -456,7 +362,8 @@
   }
 }
 
-/* Accessibilité : on coupe les animations décoratives si l'OS le demande. */
+/* Accessibilité : on coupe les animations si l'OS le demande
+   (Réglages iPhone › Accessibilité › Réduire les animations). */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -65,7 +65,7 @@ export function RoomProfilesPanel({ hasAmp }: { hasAmp: boolean }) {
     const [dirtyRooms, setDirtyRooms] = useState<Record<YamahaRoom, boolean>>({ salon: false, cinema: false });
 
     return (
-        <Panel title="Profils audio par pièce" icon={AudioLines} iconClassName="text-violet-300" bodyClassName="space-y-5">
+        <Panel title="Profils audio par pièce" icon={AudioLines} iconClassName="text-primary" bodyClassName="space-y-5">
             <p className="text-xs leading-relaxed text-muted-foreground">
                 Appliqués d&apos;un clic depuis le Salon (« Préréglages »). Si Kodi lit quelque chose, le programme sonore suit le
                 type de média : film, série ou musique.
@@ -109,7 +109,7 @@ export function RoomProfilesPanel({ hasAmp }: { hasAmp: boolean }) {
                                         <motion.span
                                             layoutId="room-profile-tab"
                                             transition={SPRING}
-                                            className="absolute inset-0 rounded-xl border border-primary/35 bg-primary/[0.08] shadow-[0_0_28px_-10px_hsl(var(--primary)/0.9)]"
+                                            className="absolute inset-0 rounded-xl border border-primary/35 bg-primary/[0.08]"
                                         />
                                     )}
                                     <span className={cn("relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ring-1 sm:h-10 sm:w-10", meta.tile)}>
@@ -121,7 +121,7 @@ export function RoomProfilesPanel({ hasAmp }: { hasAmp: boolean }) {
                                             <span className="truncate sm:hidden">{meta.short}</span>
                                             <span className="hidden truncate sm:inline">{meta.label}</span>
                                             {dirtyRooms[r] && (
-                                                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" title="Modifications non enregistrées">
+                                                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-warning" title="Modifications non enregistrées">
                                                     <span className="sr-only">(non enregistré)</span>
                                                 </span>
                                             )}

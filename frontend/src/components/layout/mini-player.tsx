@@ -1,12 +1,13 @@
 "use client";
 
 /**
- * Mini-lecteur flottant : apparaît sur toutes les pages dès que Kodi lit
- * quelque chose (sauf Dashboard et Salon qui ont déjà leur carte « En
- * lecture »). Lecture/pause, stop, progression, lien vers la fiche.
+ * Mini-lecteur flottant (façon app Musique) : apparaît sur toutes les pages
+ * dès que Kodi lit quelque chose (sauf Accueil et Salon qui ont déjà leur
+ * carte « En lecture »). Lecture/pause, stop, progression, lien vers la fiche.
  */
 /* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
+import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { Pause, Play, Square, Sofa } from "lucide-react";
@@ -31,87 +32,68 @@ export function MiniPlayer() {
 
     const href = np?.media_id && np?.media_type ? `/media/${np.media_type}/${np.media_id}` : "/remote";
 
+    // Réserve la place du lecteur en bas de page (variable CSS lue par le
+    // layout) : sinon il masquerait la dernière rangée de contenu.
+    useEffect(() => {
+        document.documentElement.style.setProperty("--miniplayer-h", visible ? "4.5rem" : "0px");
+        return () => document.documentElement.style.setProperty("--miniplayer-h", "0px");
+    }, [visible]);
+
     return (
         <AnimatePresence>
             {visible && np && (
                 // Le positionnement (fixed + centrage) est porté par un conteneur
-                // statique : framer-motion réécrit `transform` sur l'élément animé,
-                // ce qui annulait le -translate-x-1/2 (lecteur décalé sur mobile).
-                <div className="pointer-events-none fixed inset-x-3 bottom-[calc(5.75rem+env(safe-area-inset-bottom))] z-40 flex justify-center lg:inset-x-auto lg:bottom-5 lg:right-5">
-                <motion.div
-                    initial={{ y: 80, opacity: 0, scale: 0.95 }}
-                    animate={{ y: 0, opacity: 1, scale: 1 }}
-                    exit={{ y: 80, opacity: 0, scale: 0.95 }}
-                    transition={SPRING_SOFT}
-                    className="pointer-events-auto w-full max-w-[440px] lg:w-[400px]"
-                >
-                    <div className="glass-strong border-gradient relative overflow-hidden rounded-2xl">
-                        {np.poster && (
-                            <div
-                                aria-hidden
-                                className="absolute inset-0 scale-125 opacity-25 blur-2xl"
-                                style={{ backgroundImage: `url("${np.poster}")`, backgroundSize: "cover", backgroundPosition: "center" }}
-                            />
-                        )}
-                        <div className="relative flex items-center gap-3 p-2.5 pr-3">
-                            <Link href={href} className="shrink-0">
-                                {np.poster ? (
-                                    <img src={np.poster} alt="" className="h-14 w-10 rounded-lg object-cover ring-1 ring-white/15" />
-                                ) : (
-                                    <div className="flex h-14 w-10 items-center justify-center rounded-lg bg-primary/15">
-                                        <Sofa className="h-4 w-4 text-primary" />
-                                    </div>
-                                )}
-                            </Link>
-                            <Link href={href} className="min-w-0 flex-1">
-                                <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
-                                    {/* Égaliseur animé */}
-                                    <span className="flex h-2.5 items-end gap-[2px]">
-                                        {[0, 1, 2].map((i) => (
-                                            <motion.span
-                                                key={i}
-                                                className="w-[2px] rounded-full bg-primary"
-                                                animate={np.paused ? { height: 3 } : { height: [3, 10, 5, 9, 3] }}
-                                                transition={{ duration: 1, repeat: Infinity, delay: i * 0.15 }}
-                                            />
-                                        ))}
-                                    </span>
-                                    {np.paused ? "En pause" : "En lecture"}
-                                    {np.kodi ? ` · ${np.kodi}` : ""}
-                                </p>
-                                <p className="truncate text-sm font-semibold">{np.title}</p>
-                                <p className="truncate text-[11px] text-muted-foreground">
-                                    {np.subtitle ? `${np.subtitle} · ` : ""}
-                                    {formatClock(np.position)} / {formatClock(np.total)}
-                                </p>
-                            </Link>
-                            <div className="flex shrink-0 items-center gap-1">
+                // statique : framer-motion réécrit `transform` sur l'élément animé.
+                // Mobile : juste au-dessus de la barre d'onglets, comme le
+                // mini-lecteur de l'app Musique.
+                <div className="pointer-events-none fixed inset-x-2 bottom-[calc(var(--tabbar-h)+env(safe-area-inset-bottom)+0.5rem)] z-40 flex justify-center lg:inset-x-auto lg:bottom-5 lg:right-6">
+                    <motion.div
+                        initial={{ y: 24, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        exit={{ y: 24, opacity: 0 }}
+                        transition={SPRING_SOFT}
+                        className="pointer-events-auto w-full max-w-[440px] lg:w-[380px]"
+                    >
+                        <div className="material relative overflow-hidden rounded-[14px] border border-white/[0.08] shadow-[0_12px_40px_-8px_rgb(0_0_0/0.7)]">
+                            <div className="flex items-center gap-3 p-2 pr-2.5">
+                                <Link href={href} className="shrink-0">
+                                    {np.poster ? (
+                                        <img src={np.poster} alt="" className="h-12 w-8 rounded-[6px] object-cover" />
+                                    ) : (
+                                        <div className="flex h-12 w-8 items-center justify-center rounded-[6px] bg-white/[0.08]">
+                                            <Sofa className="h-4 w-4 text-muted-foreground" />
+                                        </div>
+                                    )}
+                                </Link>
+                                <Link href={href} className="min-w-0 flex-1">
+                                    <p className="truncate text-[15px] font-medium leading-tight">{np.title}</p>
+                                    <p className="truncate text-[12px] text-muted-foreground">
+                                        {np.paused ? "En pause" : np.kodi ? `Sur ${np.kodi}` : "En lecture"}
+                                        {" · "}
+                                        {formatClock(np.position)} / {formatClock(np.total)}
+                                    </p>
+                                </Link>
                                 <button
                                     onClick={() => send("playpause")}
-                                    className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-[0_0_20px_-2px_hsl(var(--primary)/0.8)] transition-transform hover:scale-105 active:scale-95"
+                                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-foreground transition-transform active:scale-90"
                                     aria-label={np.paused ? "Lecture" : "Pause"}
                                 >
-                                    {np.paused ? <Play className="h-4 w-4 translate-x-px fill-current" /> : <Pause className="h-4 w-4 fill-current" />}
+                                    {np.paused ? <Play className="h-[22px] w-[22px] fill-current" /> : <Pause className="h-[22px] w-[22px] fill-current" />}
                                 </button>
                                 <button
                                     onClick={() => send("stop")}
-                                    className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
+                                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground active:scale-90"
                                     aria-label="Arrêter"
                                 >
-                                    <Square className="h-3.5 w-3.5 fill-current" />
+                                    <Square className="h-4 w-4 fill-current" />
                                 </button>
                             </div>
+                            {/* Progression (filet en bas) */}
+                            <div className="absolute inset-x-0 bottom-0 h-[2px] bg-white/10">
+                                <motion.div className="h-full bg-foreground/80" animate={{ width: `${pct}%` }} transition={{ duration: 0.8, ease: "linear" }} />
+                            </div>
                         </div>
-                        {/* Progression */}
-                        <div className="relative h-[3px] bg-white/10">
-                            <motion.div
-                                className="h-full bg-gradient-to-r from-primary to-brand shadow-[0_0_10px_hsl(var(--primary))]"
-                                animate={{ width: `${pct}%` }}
-                                transition={{ duration: 0.8, ease: "linear" }}
-                            />
-                        </div>
-                    </div>
-                </motion.div>
+                    </motion.div>
                 </div>
             )}
         </AnimatePresence>

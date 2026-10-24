@@ -11,6 +11,13 @@ la TV (30 s au plus pendant une lecture).
 
 L'écran calcule lui-même la position seconde par seconde entre deux
 nouvelles : position + (maintenant − `updated_at`) pendant la lecture.
+
+L'appli Android (2.11+) envoie en plus de quoi enrichir l'écran : formats
+(4K, Dolby Vision, Atmos…), pistes son / sous-titres (choisies depuis la
+tablette), chapitre, marqueurs « Passer l'intro », générique et épisode
+suivant, résumé et distribution, et `remote` (la TV accepte la
+télécommande tactile). Tout est borné ici : la tablette n'affiche que du
+texte court et des listes courtes.
 """
 
 from __future__ import annotations
@@ -30,6 +37,79 @@ def _number(value: Any) -> float:
         return max(0.0, float(value))
     except (TypeError, ValueError):
         return 0.0
+
+
+def _text(value: Any, limit: int = 120) -> str:
+    return str(value or "").strip()[:limit]
+
+
+def _items(value: Any, limit: int) -> list[dict[str, Any]]:
+    return [v for v in value if isinstance(v, dict)][:limit] if isinstance(value, list) else []
+
+
+def extras(data: dict[str, Any]) -> dict[str, Any]:
+    """Champs de l'appli Android, vérifiés et bornés (absents chez Kodi)."""
+    out: dict[str, Any] = {}
+    for key, limit in (
+        ("video", 80),
+        ("audio", 120),
+        ("subtitle_track", 80),
+        ("subtitle_note", 160),
+        ("chapter", 120),
+        ("next_up", 160),
+        ("meta_line", 200),
+        ("overview", 1500),
+    ):
+        if key in data:
+            out[key] = _text(data.get(key), limit)
+    if "credits_at" in data:
+        out["credits_at"] = _number(data.get("credits_at"))
+    if "remote" in data:
+        out["remote"] = bool(data.get("remote"))
+    # Outils sous-titres : Bazarr disponible pour ce titre, travail en cours, décalage
+    for key in ("subtitle_tools", "subtitle_busy"):
+        if key in data:
+            out[key] = bool(data.get(key))
+    if "subtitle_shift_ms" in data:
+        try:
+            out["subtitle_shift_ms"] = max(-600_000, min(600_000, int(data["subtitle_shift_ms"])))
+        except (TypeError, ValueError):
+            out["subtitle_shift_ms"] = 0
+    if "skips" in data:
+        out["skips"] = [
+            {
+                "kind": _text(s.get("kind"), 20),
+                "label": _text(s.get("label"), 40),
+                "start": _number(s.get("start")),
+                "end": _number(s.get("end")),
+            }
+            for s in _items(data.get("skips"), 10)
+        ]
+    if "cast" in data:
+        out["cast"] = [
+            {
+                "name": _text(c.get("name"), 80),
+                "character": _text(c.get("character"), 80),
+                "photo": _text(c.get("photo"), 400),
+                # Identifiant TMDB de l'acteur (films) : sa filmographie au toucher
+                "tmdb_id": c["tmdb_id"] if isinstance(c.get("tmdb_id"), int) else None,
+            }
+            for c in _items(data.get("cast"), 8)
+            if c.get("name")
+        ]
+    for key in ("subtitle_tracks", "audio_tracks"):
+        if key in data:
+            out[key] = [
+                {
+                    "index": t["index"],
+                    "label": _text(t.get("label"), 60),
+                    "detail": _text(t.get("detail"), 80),
+                    "selected": bool(t.get("selected")),
+                }
+                for t in _items(data.get(key), 30)
+                if isinstance(t.get("index"), int)
+            ]
+    return out
 
 
 def _same_item(state: dict[str, Any], data: dict[str, Any]) -> bool:
@@ -89,6 +169,7 @@ class NowPlaying:
             ):
                 if data.get(key) not in (None, ""):
                     state[key] = data[key]
+            state.update(extras(data))
             if data.get("total"):
                 state["duration"] = _number(data["total"])
             before = state.get("position")

@@ -211,6 +211,24 @@ class TestAddonAddFromSuggestions:
             "Sonarr injoignable (ConnectError)"
         )
 
+        # Clé API refusée : la consigne, pas « HTTP 401 »
+        unauthorized = httpx.Response(401, request=request)
+        exc401 = httpx.HTTPStatusError("401", request=request, response=unauthorized)
+        assert _arr_error("Radarr", exc401).startswith(
+            "Radarr refuse la clé API d'ArrMada (HTTP 401)"
+        )
+        # Dossier racine inaccessible (partage démonté, disque en erreur)
+        folder = httpx.Response(
+            400,
+            json=[{"propertyName": "RootFolderPath",
+                   "errorMessage": "Folder '/movies/' is not writable by user 'abc'"}],
+            request=request,
+        )  # fmt: skip
+        exc_folder = httpx.HTTPStatusError("400", request=request, response=folder)
+        assert _arr_error("Radarr", exc_folder).startswith(
+            "Radarr ne peut pas écrire dans son dossier racine"
+        )
+
     async def test_series_releases_need_a_season(
         self, client: AsyncClient, arr_stack: dict
     ) -> None:

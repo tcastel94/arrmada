@@ -46,11 +46,11 @@ export function getClientMeta(client?: string | null, protocol?: string | null):
         return {
             label: client || "Usenet",
             icon: Newspaper,
-            color: "text-amber-300",
-            bg: "bg-amber-500/15",
-            ring: "ring-amber-400/25",
+            color: "text-warning",
+            bg: "bg-warning/15",
+            ring: "ring-warning/25",
             kind: "usenet",
-            solid: "bg-amber-400",
+            solid: "bg-warning",
             glow: "hsl(38 95% 58% / 0.55)",
         };
     }
@@ -58,9 +58,9 @@ export function getClientMeta(client?: string | null, protocol?: string | null):
         return {
             label: client || "Torrent",
             icon: Magnet,
-            color: "text-sky-300",
-            bg: "bg-sky-500/15",
-            ring: "ring-sky-400/25",
+            color: "text-primary",
+            bg: "bg-primary/15",
+            ring: "ring-primary/25",
             kind: "torrent",
             solid: "bg-sky-400",
             glow: "hsl(199 89% 60% / 0.55)",

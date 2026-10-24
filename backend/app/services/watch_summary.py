@@ -21,6 +21,7 @@ l'ignore. Jamais de lecture surprise.
 
 from __future__ import annotations
 
+import re
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -125,7 +126,9 @@ def summarize(states: list[dict[str, Any]], library: list[dict[str, Any]]) -> di
                     "device": state.get("device") or "",
                     "updated_at": state.get("updated_at") or "",
                 }
-        if position and not watched:
+        # Page Reprendre de la web app : films et épisodes (une vidéo de l'écran
+        # Vidéos n'a ni fiche ni lien à ouvrir)
+        if position and not watched and state.get("media_type") in ("movie", "episode"):
             started.append(state)
 
     index = _library_index(library)
@@ -141,6 +144,10 @@ def summarize(states: list[dict[str, Any]], library: list[dict[str, Any]]) -> di
 # ─────────────────────────────────────────────────────────────────────────────
 # « Lire sur la TV »
 # ─────────────────────────────────────────────────────────────────────────────
+
+
+# Jeton d'une vidéo de l'écran Vidéos (base64 d'URL, voir video_files)
+FILE_TOKEN = re.compile(r"[A-Za-z0-9_-]{1,2000}")
 
 
 def play_request(device: dict[str, Any], raw: Any, now: datetime) -> dict[str, Any] | None:
@@ -165,7 +172,22 @@ def play_request(device: dict[str, Any], raw: Any, now: datetime) -> dict[str, A
     )
     if state is None:
         return None
+    extra: dict[str, Any] = {}
+    if state["media_type"] == "file":
+        # Vidéo d'un dossier (série maison) : la TV la lit par son jeton
+        # (chemin opaque, vérifié par le serveur à la lecture) ; l'empreinte
+        # ne sert qu'au vu / à la reprise
+        token = str(raw.get("file") or "")
+        if not FILE_TOKEN.fullmatch(token):
+            return None
+        extra["file"] = token
+        try:
+            extra["local_series"] = max(0, int(raw.get("local_series") or 0))
+            extra["start"] = max(0, min(int(raw.get("start") or 0), 86_400))
+        except (TypeError, ValueError):
+            return None
     return {
+        **extra,
         "device_id": int(device["id"]),
         "device": str(device.get("name") or ""),
         "room": str(device.get("room") or ""),
@@ -196,7 +218,13 @@ async def load_summary(db: Any) -> dict[str, Any]:
     from app.models.watch_state import WatchState
     from app.services.media_aggregator import cached_library
 
-    rows = (await db.execute(select(WatchState))).scalars().all()
+    # Profil « Famille » (celui des TV sous Kodi) : les autres profils ont
+    # leur propre « Reprendre » dans l'appli TV (ADR-008)
+    rows = (
+        (await db.execute(select(WatchState).where(WatchState.profile_id.is_(None))))
+        .scalars()
+        .all()
+    )
     states = [watch_sync.public(row) for row in rows]
     try:
         library = await cached_library(db)

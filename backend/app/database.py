@@ -94,6 +94,10 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("tv_requests", "imported_at", "TIMESTAMP WITH TIME ZONE"),
     ("tv_requests", "subtitles", "VARCHAR(10)"),
     ("tv_requests", "ready_info", "JSON"),
+    # Profils famille (ADR-008) : vu / reprise et demandes par profil
+    ("watch_states", "profile_id", "INTEGER"),
+    ("tv_requests", "profile_id", "INTEGER"),
+    ("tv_requests", "profile_name", "VARCHAR(40)"),
 )
 
 

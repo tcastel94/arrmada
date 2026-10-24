@@ -17,7 +17,7 @@ export interface SegmentOption<T extends string> {
     value: T;
     label: string;
     icon?: LucideIcon;
-    /** Classe Tailwind de couleur de l'icône (ex: "text-amber-400"). */
+    /** Classe Tailwind de couleur de l'icône (ex: "text-warning"). */
     iconClassName?: string;
     /** Compteur affiché à droite du libellé. */
     count?: number;
@@ -76,7 +76,7 @@ export function Segmented<T extends string>({
                             <motion.span
                                 layoutId={layoutId}
                                 transition={SPRING}
-                                className="absolute inset-0 rounded-xl bg-white/[0.08] shadow-[inset_0_0_0_1px_hsl(0_0%_100%/0.1),0_0_24px_-8px_hsl(var(--primary)/0.6)]"
+                                className="absolute inset-0 rounded-xl bg-white/[0.08]"
                             />
                         )}
                         {Icon && <Icon className={cn("relative h-3.5 w-3.5", opt.iconClassName)} />}

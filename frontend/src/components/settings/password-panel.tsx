@@ -64,7 +64,7 @@ export function PasswordPanel({ source }: { source?: "file" | "env" | "none" }) 
         <Panel title="Mot de passe administrateur" icon={KeyRound} iconClassName="text-primary" className="h-full">
             <form onSubmit={handleSubmit} className="space-y-3" noValidate>
                 {source === "env" && (
-                    <p className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3.5 py-2.5 text-xs text-amber-100/90">
+                    <p className="rounded-xl border border-warning/25 bg-warning/10 px-3.5 py-2.5 text-xs text-warning/90">
                         Ton mot de passe vient encore de <span className="font-mono">ARRMADA_AUTH_SECRET</span> (en clair dans le
                         .env). Définis-en un ici : il sera stocké haché et la variable pourra être supprimée.
                     </p>
@@ -95,7 +95,7 @@ export function PasswordPanel({ source }: { source?: "file" | "env" | "none" }) 
                     </FormField>
                 </div>
                 {error && (
-                    <p role="alert" className="text-sm text-red-400">
+                    <p role="alert" className="text-sm text-destructive">
                         {error}
                     </p>
                 )}

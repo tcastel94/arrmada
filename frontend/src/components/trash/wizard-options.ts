@@ -118,12 +118,12 @@ export const DEFAULT_PREFS: MediaPreferences = {
 
 /** Couleurs (statiques) des catégories de formats personnalisés. */
 export const CF_CATEGORY: Record<string, { label: string; cls: string }> = {
-    hdr: { label: "HDR", cls: "border-amber-400/30 bg-amber-500/10 text-amber-300" },
-    audio: { label: "Audio", cls: "border-sky-400/30 bg-sky-500/10 text-sky-300" },
-    language: { label: "Langue", cls: "border-emerald-400/30 bg-emerald-500/10 text-emerald-300" },
+    hdr: { label: "HDR", cls: "border-warning/30 bg-warning/10 text-warning" },
+    audio: { label: "Audio", cls: "border-sky-400/30 bg-primary/10 text-primary" },
+    language: { label: "Langue", cls: "border-success/30 bg-success/10 text-success" },
     anime: { label: "Anime", cls: "border-pink-400/30 bg-pink-500/10 text-pink-300" },
-    unwanted: { label: "Indésirable", cls: "border-red-400/30 bg-red-500/10 text-red-300" },
-    quality: { label: "Qualité", cls: "border-violet-400/30 bg-violet-500/10 text-violet-300" },
+    unwanted: { label: "Indésirable", cls: "border-destructive/30 bg-destructive/10 text-destructive" },
+    quality: { label: "Qualité", cls: "border-primary/30 bg-primary/10 text-primary" },
 };
 
 export const CF_FALLBACK = { label: "Autre", cls: "border-white/10 bg-white/[0.04] text-muted-foreground" };

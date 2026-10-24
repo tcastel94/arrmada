@@ -102,7 +102,7 @@ export function CreatePasswordForm({
                             key={i}
                             className={cn(
                                 "h-1 flex-1 rounded-full bg-white/10 transition-colors duration-300",
-                                s.score >= i && (s.score === 1 ? "bg-amber-400" : s.score === 2 ? "bg-primary" : "bg-emerald-400"),
+                                s.score >= i && (s.score === 1 ? "bg-warning" : s.score === 2 ? "bg-primary" : "bg-success"),
                             )}
                         />
                     ))}
@@ -132,7 +132,7 @@ export function CreatePasswordForm({
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0 }}
                         role="alert"
-                        className="flex items-start gap-2 rounded-xl border border-red-500/25 bg-red-500/10 px-3.5 py-2.5 text-sm text-red-300"
+                        className="flex items-start gap-2 rounded-xl border border-destructive/25 bg-destructive/10 px-3.5 py-2.5 text-sm text-destructive"
                     >
                         <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> {error}
                     </motion.p>

@@ -42,6 +42,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { Button } from "@/components/ui/button";
 import { Shimmer } from "@/components/shared/loading-skeleton";
 import { ErrorState } from "@/components/shared/empty-state";
+import { formatRating } from "@/components/shared/rating-badge";
 import { RingGauge } from "@/components/fx/ring-gauge";
 import { TiltCard } from "@/components/fx/tilt-card";
 import { useRecommendationDetail, type TMDBCastMember, type TMDBDetail } from "@/hooks/use-recommendations";
@@ -54,6 +55,7 @@ import {
     type AddableItem,
 } from "@/components/library/adder";
 import { translateGenre } from "@/lib/genres";
+import { WatchlistButton } from "@/components/watchlist/watchlist-button";
 import { formatDuration, formatShortDate, plural } from "@/lib/format";
 import { EASE_OUT, SPRING_SOFT, scaleIn, stagger } from "@/lib/motion";
 import { cn } from "@/lib/utils";
@@ -160,6 +162,8 @@ function DetailBody({
     const overview = detail?.overview || preview?.overview || "";
     const year = detail?.year ?? (preview?.year ? String(preview.year) : null);
     const rating = detail?.rating ?? preview?.rating ?? null;
+    // Ancien serveur (sans source) : c'était la note TMDB
+    const ratingSource = detail?.rating_source ?? preview?.rating_source ?? (rating ? "tmdb" : null);
     const genres = detail?.genres ?? [];
     const cast = detail?.cast ?? [];
     const trailerKey = detail?.trailer_key ?? null;
@@ -274,6 +278,22 @@ function DetailBody({
                     className="mt-5 flex flex-wrap items-center gap-2"
                 >
                     {addable && <AddAction item={addable} detail={detail} onShowTracking={onShowTracking} onNavigate={onClose} />}
+                    {addable && (
+                        // « + Ma liste » : s'il n'est pas sur le NAS, le titre est aussi demandé
+                        <WatchlistButton
+                            size="default"
+                            request
+                            target={{
+                                media_type: addable.type,
+                                tmdb_id: addable.tmdb_id ?? tmdbId,
+                                tvdb_id: addable.tvdb_id,
+                                title: addable.title,
+                                year: addable.year,
+                                poster_url: addable.poster_url,
+                            }}
+                            className="flex-none"
+                        />
+                    )}
                     {trailerKey && (
                         <Button
                             variant="glow"
@@ -293,7 +313,15 @@ function DetailBody({
                             </a>
                         </Button>
                     )}
-                    {rating ? <RatingBlock rating={rating} votes={detail?.vote_count} /> : null}
+                    {rating ? (
+                        <RatingBlock
+                            rating={rating}
+                            source={ratingSource}
+                            votes={detail?.rating_votes ?? detail?.vote_count}
+                            metacritic={detail?.metacritic}
+                            rottenTomatoes={detail?.rotten_tomatoes}
+                        />
+                    ) : null}
                 </motion.div>
 
                 {/* ── Bande-annonce (chargée uniquement à la demande) ── */}
@@ -419,7 +447,7 @@ function AddAction({
         const href = lib?.id ? `/media/${libType}/${lib.id}` : `/media?q=${encodeURIComponent(item.title)}`;
         return (
             <>
-                <span className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-emerald-500/10 px-3 text-sm text-emerald-300 ring-1 ring-emerald-500/25">
+                <span className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-success/10 px-3 text-sm text-success ring-1 ring-success/25">
                     <Check className="h-4 w-4" /> Dans ta médiathèque
                 </span>
                 <Button variant="outline" asChild>
@@ -437,7 +465,7 @@ function AddAction({
                 <motion.span
                     initial={{ scale: 0.9, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
-                    className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-emerald-500/10 px-3 text-sm text-emerald-300 ring-1 ring-emerald-500/25"
+                    className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-success/10 px-3 text-sm text-success ring-1 ring-success/25"
                 >
                     <Check className="h-4 w-4" /> Ajouté — recherche lancée
                 </motion.span>
@@ -458,16 +486,35 @@ function AddAction({
     );
 }
 
-/** Note TMDB /10 en jauge circulaire + nombre de votes. */
-function RatingBlock({ rating, votes }: { rating: number; votes?: number }) {
+/**
+ * Note la plus fiable (IMDb, sinon TMDB) en jauge circulaire + nombre de
+ * votes ; pour un film, Metacritic (critiques de presse) et Rotten Tomatoes
+ * (% de critiques positives) en dessous quand ils existent.
+ */
+function RatingBlock({
+    rating,
+    source,
+    votes,
+    metacritic,
+    rottenTomatoes,
+}: {
+    rating: number;
+    source: "imdb" | "tmdb" | null | undefined;
+    votes?: number | null;
+    metacritic?: number | null;
+    rottenTomatoes?: number | null;
+}) {
+    const label = source === "imdb" ? "IMDb" : "TMDB";
+    const critics = [metacritic ? `Metacritic ${metacritic}` : null, rottenTomatoes ? `Rotten Tomatoes ${rottenTomatoes} %` : null].filter(Boolean);
     return (
-        <div className="ml-auto flex items-center gap-2.5" title="Note moyenne des spectateurs sur TMDB">
+        <div className="ml-auto flex items-center gap-2.5" title={`Note moyenne des spectateurs sur ${label}`}>
             <RingGauge value={rating * 10} size={44} stroke={4} tone="amber">
-                <span className="text-xs font-bold tabular-nums">{rating.toFixed(1)}</span>
+                <span className="text-xs font-bold tabular-nums">{formatRating(rating)}</span>
             </RingGauge>
             <div className="leading-tight">
-                <p className="text-xs font-medium">Note TMDB</p>
+                <p className="text-xs font-medium">Note {label}</p>
                 {votes ? <p className="text-[11px] text-muted-foreground">{plural(votes, "vote")}</p> : null}
+                {critics.length > 0 && <p className="text-[11px] text-muted-foreground">{critics.join(" · ")}</p>}
             </div>
         </div>
     );
@@ -544,10 +591,10 @@ function DetailError({ error, retrying, onRetry }: { error: unknown; retrying: b
     // Seule erreur « attendue » : la clé TMDB n'est pas configurée (HTTP 400).
     const noKey = /TMDB_API_KEY/i.test(message);
     return (
-        <div className="mt-5 flex items-start gap-3 rounded-xl bg-amber-500/10 p-3 text-xs ring-1 ring-amber-500/25">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+        <div className="mt-5 flex items-start gap-3 rounded-xl bg-warning/10 p-3 text-xs ring-1 ring-warning/25">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
             <div className="min-w-0 flex-1">
-                <p className="font-medium text-amber-200">Détails TMDB indisponibles</p>
+                <p className="font-medium text-warning">Détails TMDB indisponibles</p>
                 <p className="mt-0.5 break-words text-muted-foreground">
                     {noKey
                         ? "Ajoute TMDB_API_KEY au fichier .env du backend pour voir le casting et la bande-annonce."

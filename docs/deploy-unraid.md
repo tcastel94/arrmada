@@ -153,10 +153,15 @@ mv docker-compose.override.yml.next docker-compose.override.yml
 docker compose config --quiet && ./deploy.sh --build
 ```
 
-Au merge de la PR, le déploiement automatique s'arrête de lui-même si
-l'override n'est pas encore en place (message « docker-compose.override.yml
-absent ») : rien n'est touché. Fais alors la bascule à la main, comme
-ci-dessus.
+Au merge de la PR, rien ne bascule tout seul tant que l'override n'est pas
+en place : rien n'est touché, les conteneurs actuels continuent de tourner.
+- Le déploiement automatique s'arrête (« docker-compose.override.yml absent »).
+- `maj-arrmada.sh` (git pull + `deploy.sh`) s'arrête aussi : `deploy.sh`
+  détecte l'ancienne installation (conteneur `arrmada-backend`, volume
+  `arrmada_arrmada-pgdata` ou fichier `.next` en attente) et refuse de la
+  remplacer par une instance vide.
+
+Fais alors la bascule à la main, comme ci-dessus.
 
 ## 3. Après le démarrage
 

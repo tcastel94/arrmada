@@ -596,6 +596,8 @@ async def handle_addon_subtitles(db: AsyncSession, data: dict[str, Any]) -> dict
     season = data.get("season")
     episode = data.get("episode")
     language = (data.get("language") or "fr").lower()
+    # Qui demande : l'add-on Kodi, ou le menu pause de l'appli Android
+    origin = "appli ArrMada" if data.get("origin") == "android" else "Kodi Add-on"
 
     bazarr = await _get_bazarr_client(db)
     if not bazarr:
@@ -634,7 +636,7 @@ async def handle_addon_subtitles(db: AsyncSession, data: dict[str, Any]) -> dict
                 media_type="movie",
                 title=match.get("title", title),
                 tmdb_id=match.get("tmdbId"),
-                detail=f"Recherche auto sous-titre ({language.upper()}) via Kodi Add-on",
+                detail=f"Recherche auto sous-titre ({language.upper()}) via {origin}",
             )
             return {
                 "status": "ok",
@@ -691,7 +693,7 @@ async def handle_addon_subtitles(db: AsyncSession, data: dict[str, Any]) -> dict
                 source="kodi",
                 media_type="series",
                 title=f"{match_series.get('title')} S{season:02d}E{episode:02d}",
-                detail=f"Recherche auto sous-titre ({language.upper()}) via Kodi Add-on",
+                detail=f"Recherche auto sous-titre ({language.upper()}) via {origin}",
             )
             return {
                 "status": "ok",
@@ -718,6 +720,8 @@ async def handle_addon_sync_subtitles(db: AsyncSession, data: dict[str, Any]) ->
     season = data.get("season")
     episode = data.get("episode")
     language = (data.get("language") or "fr").lower()
+    # Qui demande : l'add-on Kodi, ou le menu pause de l'appli Android
+    origin = "appli ArrMada" if data.get("origin") == "android" else "Kodi Add-on"
 
     bazarr = await _get_bazarr_client(db)
     if not bazarr:
@@ -787,7 +791,7 @@ async def handle_addon_sync_subtitles(db: AsyncSession, data: dict[str, Any]) ->
                 media_type="movie",
                 title=match.get("title", title),
                 tmdb_id=match.get("tmdbId"),
-                detail="Re-synchronisation audio (FFsubsync) via Kodi Add-on",
+                detail=f"Re-synchronisation audio (FFsubsync) via {origin}",
             )
 
             return {
@@ -873,7 +877,7 @@ async def handle_addon_sync_subtitles(db: AsyncSession, data: dict[str, Any]) ->
                 source="kodi",
                 media_type="series",
                 title=f"{match_series.get('title')} S{season:02d}E{episode:02d}",
-                detail="Re-synchronisation audio (FFsubsync) via Kodi Add-on",
+                detail=f"Re-synchronisation audio (FFsubsync) via {origin}",
             )
 
             return {
@@ -1416,14 +1420,27 @@ def _int_or_none(value: Any) -> int | None:
         return None
 
 
+# Refus de Radarr / Sonarr qui viennent du NAS (dossier racine absent ou non
+# inscriptible : partage démonté, disque en erreur, droits) plutôt que du titre
+_FOLDER_HINTS = ("not writable", "does not exist", "root folder", "rootfolder", "permission denied")
+
+
 def _arr_error(service: str, exc: Exception, what: str = "l'ajout") -> str:
     """Message lisible d'un refus de Radarr / Sonarr, affiché tel quel sur la TV.
 
     Un refus de validation (HTTP 400) arrive sous forme de liste
     ``[{"propertyName": "TvdbId", "errorMessage": "…"}]`` : on renvoie les
-    messages, pas « Client error '400 Bad Request' for url … ».
+    messages, pas « Client error '400 Bad Request' for url … ». Deux cas
+    fréquents sont traduits en consigne : clé API refusée (401 / 403) et
+    dossier des films / séries inaccessible sur le NAS.
     """
     if isinstance(exc, httpx.HTTPStatusError):
+        code = exc.response.status_code
+        if code in (401, 403):
+            return (
+                f"{service} refuse la clé API d'ArrMada (HTTP {code}) : recopie-la depuis "
+                f"{service} › Paramètres › Général dans Réglages › Services"
+            )
         try:
             body = exc.response.json()
         except ValueError:
@@ -1438,8 +1455,14 @@ def _arr_error(service: str, exc: Exception, what: str = "l'ajout") -> str:
         elif isinstance(body, dict) and body.get("message"):
             messages = [str(body["message"])]
         if messages:
-            return f"{service} refuse {what} : {' ; '.join(messages)}"[:240]
-        return f"{service} a répondu HTTP {exc.response.status_code}"
+            text = " ; ".join(messages)
+            if any(hint in text.lower() for hint in _FOLDER_HINTS):
+                return (
+                    f"{service} ne peut pas écrire dans son dossier racine (partage ou disque "
+                    f"du NAS ?) : {text}"
+                )[:240]
+            return f"{service} refuse {what} : {text}"[:240]
+        return f"{service} a répondu HTTP {code}"
     if isinstance(exc, httpx.HTTPError):
         return f"{service} injoignable ({type(exc).__name__})"
     return f"Erreur {service} : {exc}"[:240]

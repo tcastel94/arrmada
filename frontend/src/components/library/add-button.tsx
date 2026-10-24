@@ -42,7 +42,7 @@ export function AddButton({
             className={cn(
                 "relative flex h-9 w-9 items-center justify-center rounded-full shadow-lg ring-1 backdrop-blur-md transition-colors duration-300",
                 state === "added"
-                    ? "bg-emerald-500 text-white ring-emerald-300/50 shadow-emerald-500/40"
+                    ? "bg-success text-white ring-success/50"
                     : "bg-gradient-to-br from-primary to-brand text-primary-foreground ring-white/25 shadow-primary/50",
                 className,
             )}
@@ -53,7 +53,7 @@ export function AddButton({
                     initial={{ scale: 1, opacity: 0.7 }}
                     animate={{ scale: 2.2, opacity: 0 }}
                     transition={{ duration: 0.8, ease: "easeOut" }}
-                    className="absolute inset-0 rounded-full bg-emerald-400"
+                    className="absolute inset-0 rounded-full bg-success"
                 />
             )}
             <AnimatePresence mode="popLayout" initial={false}>

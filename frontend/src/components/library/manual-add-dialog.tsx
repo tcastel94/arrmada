@@ -121,6 +121,7 @@ export function ManualAddDialog({
             overview: "",
             poster_url: poster,
             rating: null,
+            rating_source: null,
             tmdb_id: useTvdb ? null : id,
             tvdb_id: useTvdb ? id : null,
             in_library: false,
@@ -196,7 +197,7 @@ export function ManualAddDialog({
                                                         {s.year && <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{s.year}</span>}
                                                     </span>
                                                     {s.overview && <span className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">{s.overview}</span>}
-                                                    {s.in_library && <span className="mt-1 inline-block text-[10px] text-emerald-400">Déjà dans ta bibliothèque</span>}
+                                                    {s.in_library && <span className="mt-1 inline-block text-[10px] text-success">Déjà dans ta bibliothèque</span>}
                                                 </span>
                                             </button>
                                         </li>
@@ -205,7 +206,7 @@ export function ManualAddDialog({
                             )}
                         </AnimatePresence>
                         {picked && (
-                            <p className="flex items-center gap-1.5 text-xs text-emerald-400">
+                            <p className="flex items-center gap-1.5 text-xs text-success">
                                 <Check className="h-3.5 w-3.5" /> Formulaire pré-rempli depuis {type === "movie" ? "Radarr" : "Sonarr"}.
                             </p>
                         )}
@@ -269,14 +270,14 @@ export function ManualAddDialog({
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0 }}
                                 role="alert"
-                                className="animate-shake rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-300 ring-1 ring-red-500/25"
+                                className="animate-shake rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive ring-1 ring-destructive/25"
                             >
                                 {error}
                             </motion.p>
                         )}
                     </AnimatePresence>
 
-                    <DialogFooter className="gap-2 sm:gap-0">
+                    <DialogFooter>
                         <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={submitting}>
                             Annuler
                         </Button>

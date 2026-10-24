@@ -32,8 +32,8 @@ export function AnimatedNumber({
     const ref = useRef<HTMLSpanElement>(null);
     const inView = useInView(ref, { once: true, margin: "-20px" });
     const motionValue = useMotionValue(0);
-    // Ressort amorti : rapide au début, ralentit en arrivant (effet « premium »).
-    const spring = useSpring(motionValue, { stiffness: 70, damping: 20, mass: 0.9 });
+    // Ressort amorti court : le chiffre arrive vite, sans traîner.
+    const spring = useSpring(motionValue, { stiffness: 140, damping: 26, mass: 0.8 });
 
     const formatter = useRef(
         new Intl.NumberFormat("fr-FR", {

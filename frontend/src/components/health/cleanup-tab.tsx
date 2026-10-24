@@ -68,7 +68,7 @@ const CATEGORIES: {
         key: "unmonitored",
         label: "Non surveillés",
         icon: EyeOff,
-        iconClassName: "text-amber-300",
+        iconClassName: "text-warning",
         explain: "Médias encore sur le disque mais que Radarr/Sonarr ne suivent plus : souvent oubliés, c'est la place la plus facile à récupérer.",
         empty: "Tout ce qui est sur ton disque est encore surveillé.",
     },
@@ -84,7 +84,7 @@ const CATEGORIES: {
         key: "oversized",
         label: "Surdimensionnés",
         icon: Maximize2,
-        iconClassName: "text-violet-300",
+        iconClassName: "text-primary",
         explain: "Films de plus de 50 Go (souvent des Remux) et séries de plus de 100 Go : vérifie que cette qualité est vraiment utile.",
         empty: "Aucun fichier anormalement volumineux.",
     },
@@ -92,7 +92,7 @@ const CATEGORIES: {
         key: "incomplete_ended",
         label: "Séries terminées < 50 %",
         icon: DiscAlbum,
-        iconClassName: "text-sky-300",
+        iconClassName: "text-primary",
         explain: "Séries terminées dont tu as moins de la moitié des épisodes : à compléter ou à libérer.",
         empty: "Aucune série terminée à moitié vide.",
     },
@@ -217,7 +217,7 @@ export function CleanupTab() {
                             action={
                                 <div className="flex items-center gap-2">
                                     {current.key === "unmonitored" && (data.unmonitored.reclaimable_bytes ?? 0) > 0 && (
-                                        <span className="hidden items-center gap-1 rounded-lg bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-300 sm:inline-flex">
+                                        <span className="hidden items-center gap-1 rounded-lg bg-success/15 px-2 py-0.5 text-xs font-medium text-success sm:inline-flex">
                                             <HardDrive className="h-3 w-3" />
                                             {formatBytes(data.unmonitored.reclaimable_bytes)} récupérables
                                         </span>
@@ -265,7 +265,7 @@ export function CleanupTab() {
                                                         ) : undefined
                                                     }
                                                     size={formatBytes(item.size_bytes)}
-                                                    sizeClassName="text-amber-300"
+                                                    sizeClassName="text-warning"
                                                     actions={
                                                         <RowActions
                                                             item={item}
@@ -330,7 +330,7 @@ function CleanupBadges({ item }: { item: CleanupItem }) {
                 </span>
             )}
             {!item.monitored && (
-                <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
+                <span className="inline-flex items-center gap-1 rounded-md bg-warning/15 px-1.5 py-0.5 text-[10px] font-semibold text-warning">
                     <EyeOff className="h-3 w-3" /> Non surveillé
                 </span>
             )}
@@ -393,7 +393,7 @@ function RowActions({
                 disabled={!!pending}
                 onClick={onDelete}
                 aria-label={`Supprimer ${item.title}`}
-                className="text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
             >
                 {pending === "delete" ? <Loader2 className="animate-spin" /> : <Trash2 />}
             </Button>

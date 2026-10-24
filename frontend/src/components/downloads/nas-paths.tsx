@@ -53,8 +53,8 @@ export function NasPaths() {
 
     const tiles: Array<{ label: string; path: string; icon: LucideIcon; tone: string }> = [
         { label: "Téléchargements", path: data?.downloads_host_path ?? "", icon: Download, tone: "text-primary" },
-        { label: "Films", path: data?.movies_host_path ?? "", icon: Film, tone: "text-violet-300" },
-        { label: "Séries", path: data?.series_host_path ?? "", icon: Tv, tone: "text-sky-300" },
+        { label: "Films", path: data?.movies_host_path ?? "", icon: Film, tone: "text-primary" },
+        { label: "Séries", path: data?.series_host_path ?? "", icon: Tv, tone: "text-primary" },
     ].filter((t) => t.path);
 
     const mounts = Object.entries(data?.service_mounts ?? {}).filter(([, list]) => list && list.length > 0);
@@ -66,7 +66,7 @@ export function NasPaths() {
         <Panel
             title="Chemins NAS"
             icon={HardDrive}
-            iconClassName="text-sky-300"
+            iconClassName="text-primary"
             action={
                 mounts.length > 0 ? (
                     <Button
@@ -138,7 +138,7 @@ export function NasPaths() {
                                                 <span
                                                     className={cn(
                                                         "shrink-0 rounded px-1 text-[9px] font-semibold uppercase",
-                                                        m.rw ? "bg-emerald-500/15 text-emerald-300" : "bg-white/[0.06] text-muted-foreground",
+                                                        m.rw ? "bg-success/15 text-success" : "bg-white/[0.06] text-muted-foreground",
                                                     )}
                                                     title={m.rw ? "Lecture / écriture" : "Lecture seule"}
                                                 >

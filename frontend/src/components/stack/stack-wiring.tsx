@@ -288,7 +288,7 @@ export function StackWiring({
                     {Object.values(results)
                         .filter((r) => !plan.actions.some((a) => a.id === r.id))
                         .map((r) => (
-                            <li key={r.id} className={cn("flex items-start gap-1.5", r.ok ? "text-emerald-300" : "text-red-300")}>
+                            <li key={r.id} className={cn("flex items-start gap-1.5", r.ok ? "text-success" : "text-destructive")}>
                                 {r.ok ? <CheckCircle2 className="mt-px h-3 w-3 shrink-0" /> : <XCircle className="mt-px h-3 w-3 shrink-0" />}
                                 <span className="break-words">{r.message}</span>
                             </li>
@@ -308,11 +308,11 @@ export function StackWiring({
                             <CircleDashed className="h-3 w-3 text-primary" /> {plural(counts.todo, "à faire", "à faire")}
                         </span>
                         <span className="chip">
-                            <CheckCircle2 className="h-3 w-3 text-emerald-400" /> {plural(counts.done, "déjà en place", "déjà en place")}
+                            <CheckCircle2 className="h-3 w-3 text-success" /> {plural(counts.done, "déjà en place", "déjà en place")}
                         </span>
                         {counts.blocked > 0 && (
                             <span className="chip">
-                                <Ban className="h-3 w-3 text-amber-400" /> {plural(counts.blocked, "bloquée", "bloquées")}
+                                <Ban className="h-3 w-3 text-warning" /> {plural(counts.blocked, "bloquée", "bloquées")}
                             </span>
                         )}
                     </div>
@@ -353,7 +353,7 @@ export function StackWiring({
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0 }}
                         role="alert"
-                        className="flex items-start gap-2 rounded-xl border border-red-500/25 bg-red-500/10 px-3.5 py-2.5 text-sm text-red-300"
+                        className="flex items-start gap-2 rounded-xl border border-destructive/25 bg-destructive/10 px-3.5 py-2.5 text-sm text-destructive"
                     >
                         <XCircle className="mt-0.5 h-4 w-4 shrink-0" /> {error}
                     </motion.p>
@@ -414,7 +414,7 @@ function AppCard({
                         <span
                             className={cn(
                                 "rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                                app.has_api_key ? "bg-emerald-500/15 text-emerald-300" : "bg-red-500/15 text-red-300",
+                                app.has_api_key ? "bg-success/15 text-success" : "bg-destructive/15 text-destructive",
                             )}
                         >
                             <KeyRound className="mr-1 inline h-3 w-3" />
@@ -424,9 +424,9 @@ function AppCard({
                 </span>
             </div>
 
-            {app.error && <p className="text-xs text-red-300">{app.error}</p>}
+            {app.error && <p className="text-xs text-destructive">{app.error}</p>}
             {app.notes.map((n) => (
-                <p key={n} className="flex items-start gap-1.5 text-[11px] text-amber-200/90">
+                <p key={n} className="flex items-start gap-1.5 text-[11px] text-warning/90">
                     <AlertTriangle className="mt-px h-3 w-3 shrink-0" /> {n}
                 </p>
             ))}
@@ -492,9 +492,9 @@ function ActionRow({
             >
                 <span className="mt-0.5 shrink-0">
                     {action.status === "done" ? (
-                        <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                        <CheckCircle2 className="h-4 w-4 text-success" />
                     ) : action.status === "blocked" ? (
-                        <Ban className="h-4 w-4 text-amber-400" />
+                        <Ban className="h-4 w-4 text-warning" />
                     ) : (
                         <span
                             className={cn(
@@ -509,10 +509,10 @@ function ActionRow({
                 <span className="min-w-0 flex-1">
                     <span className={cn("block", action.status !== "todo" && "text-muted-foreground")}>{action.title}</span>
                     {action.status === "blocked" && action.reason && (
-                        <span className="block text-[11px] text-amber-200/80">Bloqué : {action.reason}</span>
+                        <span className="block text-[11px] text-warning/80">Bloqué : {action.reason}</span>
                     )}
                     {result && (
-                        <span className={cn("mt-0.5 block break-words text-[11px]", result.ok ? "text-emerald-300" : "text-red-300")}>
+                        <span className={cn("mt-0.5 block break-words text-[11px]", result.ok ? "text-success" : "text-destructive")}>
                             {result.ok ? "✓ " : "✗ "}
                             {result.message}
                         </span>

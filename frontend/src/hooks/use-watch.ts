@@ -88,12 +88,18 @@ export function useWatchSummary(enabled = true) {
 
 /** Titre à lancer, désigné comme dans le vu partagé (la TV le cherche dans SA médiathèque). */
 export interface PlayTarget {
-    media_type: "movie" | "episode";
-    /** TMDB d'un film, TVDB d'une série. */
+    /** « file » : vidéo d'une série maison (Naruto Kai…), lue par son jeton. */
+    media_type: "movie" | "episode" | "file";
+    /** TMDB d'un film, TVDB d'une série ; empreinte (sha1) d'une vidéo. */
     id: string | number;
+    id_type?: "tmdb" | "tvdb" | "sha1";
     season?: number | null;
     episode?: number | null;
     title?: string;
+    /** Vidéo : jeton du fichier (écran Vidéos), série maison, reprise (s). */
+    file?: string;
+    local_series?: number;
+    start?: number;
 }
 
 export interface PlayOnDeviceResult {

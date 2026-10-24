@@ -194,13 +194,6 @@ function IdleState({ np, onRetry, retrying }: { np?: KodiNowPlaying; onRetry: ()
     const unreachable = !!(np as { error?: string } | undefined)?.error;
     return (
         <HeroShell>
-            {/* Décor : halo violet qui respire + grille */}
-            <div aria-hidden className="pointer-events-none absolute inset-0 bg-grid opacity-30 [mask-image:radial-gradient(ellipse_at_center,#000,transparent_70%)]" />
-            <div
-                aria-hidden
-                className="pointer-events-none absolute left-1/2 top-1/2 h-72 w-72 -translate-x-1/2 -translate-y-1/2 rounded-full opacity-40 animate-pulse-glow"
-                style={{ background: "radial-gradient(closest-side, hsl(262 83% 60% / 0.5), transparent)" }}
-            />
             <div className="relative px-5 pb-8 md:px-8">
                 {unreachable ? (
                     <EmptyState
@@ -331,8 +324,8 @@ function Player({ np, fetchedAt }: { np: KodiNowPlaying; fetchedAt: number }) {
                                 className="aspect-[2/3] w-full rounded-2xl object-cover shadow-2xl ring-1 ring-white/15"
                             />
                         ) : (
-                            <div className="flex aspect-[2/3] w-full items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500/25 to-fuchsia-500/10 ring-1 ring-white/10">
-                                <Film className="h-10 w-10 text-violet-300" />
+                            <div className="flex aspect-[2/3] w-full items-center justify-center rounded-2xl bg-white/[0.06] ring-1 ring-white/10">
+                                <Film className="h-10 w-10 text-primary" />
                             </div>
                         )}
                     </TiltCard>
@@ -340,7 +333,7 @@ function Player({ np, fetchedAt }: { np: KodiNowPlaying; fetchedAt: number }) {
 
                 <div className="flex min-w-0 flex-col gap-4">
                     {/* Ligne d'état */}
-                    <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-300">
+                    <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
                         <Equalizer paused={!!np.paused} />
                         {np.paused ? "En pause" : "En lecture"}
                         {np.kodi && <span className="truncate font-medium normal-case tracking-normal text-muted-foreground">· {np.kodi}</span>}
@@ -357,7 +350,7 @@ function Player({ np, fetchedAt }: { np: KodiNowPlaying; fetchedAt: number }) {
                                 </span>
                             )}
                             {np.rating ? (
-                                <span className="flex items-center gap-1 text-amber-300">
+                                <span className="flex items-center gap-1 text-warning">
                                     <Star className="h-3 w-3 fill-current" /> {np.rating.toLocaleString("fr-FR")}
                                 </span>
                             ) : null}
@@ -430,7 +423,7 @@ function Player({ np, fetchedAt }: { np: KodiNowPlaying; fetchedAt: number }) {
                                 transition={SPRING}
                                 onClick={() => send({ action: "playpause" }, { paused: !np.paused })}
                                 aria-label={np.paused ? "Reprendre la lecture" : "Mettre en pause"}
-                                className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white shadow-[0_0_32px_-4px_rgb(168_85_247/0.85)] transition-[filter] hover:brightness-110"
+                                className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary text-white transition-[filter] hover:brightness-110"
                             >
                                 <AnimatePresence mode="wait" initial={false}>
                                     <motion.span
@@ -457,7 +450,7 @@ function Player({ np, fetchedAt }: { np: KodiNowPlaying; fetchedAt: number }) {
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                className="rounded-full text-muted-foreground hover:text-red-300"
+                                className="rounded-full text-muted-foreground hover:text-destructive"
                                 onClick={() => send({ action: "stop" })}
                                 aria-label="Arrêter la lecture"
                             >
@@ -470,7 +463,7 @@ function Player({ np, fetchedAt }: { np: KodiNowPlaying; fetchedAt: number }) {
                             <Button
                                 variant="ghost"
                                 size="icon-sm"
-                                className={cn("rounded-full", np.muted && "bg-red-500/10 text-red-400")}
+                                className={cn("rounded-full", np.muted && "bg-destructive/10 text-destructive")}
                                 onClick={() => send({ action: "mute" }, { muted: !np.muted })}
                                 aria-label={np.muted ? "Réactiver le son" : "Couper le son"}
                                 aria-pressed={!!np.muted}
@@ -515,7 +508,7 @@ function Player({ np, fetchedAt }: { np: KodiNowPlaying; fetchedAt: number }) {
             {/* Barre de progression lumineuse en bas de carte */}
             <div className="relative h-[3px] bg-white/[0.06]">
                 <motion.div
-                    className="h-full bg-gradient-to-r from-violet-500 via-fuchsia-500 to-pink-400 shadow-[0_0_14px_rgb(217_70_239/0.8)]"
+                    className="h-full bg-white"
                     animate={{ width: `${Math.min(100, pct)}%` }}
                     transition={{ duration: 0.9, ease: "linear" }}
                 />
@@ -531,7 +524,7 @@ function Equalizer({ paused }: { paused: boolean }) {
             {[0, 1, 2, 3].map((i) => (
                 <motion.span
                     key={i}
-                    className="w-[3px] rounded-full bg-violet-400"
+                    className="w-[3px] rounded-full bg-primary"
                     animate={paused ? { height: 3 } : { height: [3, 12, 5, 10, 3] }}
                     transition={paused ? { duration: 0.3 } : { duration: 1.1, repeat: Infinity, delay: i * 0.13, ease: "easeInOut" }}
                 />

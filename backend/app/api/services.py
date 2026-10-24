@@ -68,7 +68,9 @@ async def list_services(
 class ServiceDraftTest(BaseModel):
     """Connection parameters to validate before creating/updating a service."""
 
-    type: str = Field(pattern=r"^(sonarr|radarr|lidarr|readarr|prowlarr|bazarr|jellyfin|sabnzbd)$")
+    type: str = Field(
+        pattern=r"^(sonarr|radarr|lidarr|readarr|prowlarr|bazarr|jellyfin|sabnzbd|deluge)$"
+    )
     url: str = Field(min_length=1, max_length=500)
     api_key: str | None = Field(None, max_length=200)
     # When editing, an empty api_key means "reuse the stored key of this service".

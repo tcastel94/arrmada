@@ -152,11 +152,13 @@ async def _sab(db: AsyncSession) -> dict[str, Any] | None:
         await sab.close()
 
 
-async def build_board(db: AsyncSession, viewer_device_id: int | None = None) -> dict[str, Any]:
+async def build_board(
+    db: AsyncSession, viewer_device_id: int | None = None, viewer_profile_id: int | None = None
+) -> dict[str, Any]:
     """Tout ce que l'écran Téléchargements de la TV affiche."""
     items = await media_aggregator.get_queue_items(db)
     await tv_priority.annotate_queue(db, items)
-    requests = await tv_priority.list_requests(db, viewer_device_id)
+    requests = await tv_priority.list_requests(db, viewer_device_id, viewer_profile_id)
     art = await _art(db)
 
     by_request: dict[int, list[dict[str, Any]]] = {}

@@ -84,7 +84,7 @@ interface PlayOnTvButtonProps {
     className?: string;
 }
 
-export function PlayOnTvButton({ target, resumeAt = 0, label = "Sur la TV", size = "lg", variant = "outline", className }: PlayOnTvButtonProps) {
+export function PlayOnTvButton({ target, resumeAt = 0, label = "Sur la TV", size = "lg", variant = "secondary", className }: PlayOnTvButtonProps) {
     const tvs = useTvDevices();
     const play = usePlayOnDevice();
     if (tvs.length === 0) return null; // aucune TV appairée : rien à proposer
@@ -155,7 +155,7 @@ function TvItem({ device, onSelect }: { device: PairedDevice; onSelect: () => vo
                 </span>
             </span>
             <span
-                className={cn("mt-1.5 size-2 shrink-0 rounded-full", online ? "bg-emerald-400" : "bg-muted-foreground/40")}
+                className={cn("mt-1.5 size-2 shrink-0 rounded-full", online ? "bg-success" : "bg-muted-foreground/40")}
                 aria-label={online ? "En ligne" : "Absente"}
             />
         </DropdownMenuItem>

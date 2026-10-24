@@ -90,7 +90,7 @@ export function MovieSubtitlePanel({ media, block }: { media: MediaDetail; block
                 variants={fadeUp}
                 className={cn(
                     "glass flex flex-col gap-4 rounded-2xl p-4 sm:flex-row sm:items-center",
-                    hasFr ? "border-emerald-500/25" : "border-amber-500/25",
+                    hasFr ? "border-success/25" : "border-warning/25",
                 )}
             >
                 <div className="flex flex-1 items-center gap-3">
@@ -98,8 +98,8 @@ export function MovieSubtitlePanel({ media, block }: { media: MediaDetail; block
                         className={cn(
                             "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ring-1",
                             hasFr
-                                ? "bg-emerald-500/15 text-emerald-300 ring-emerald-400/30 shadow-[0_0_24px_-6px_rgb(16_185_129/0.6)]"
-                                : "bg-amber-500/15 text-amber-300 ring-amber-400/30 shadow-[0_0_24px_-6px_rgb(245_158_11/0.6)]",
+                                ? "bg-success/15 text-success ring-success/30"
+                                : "bg-warning/15 text-warning ring-warning/30",
                         )}
                     >
                         {hasFr ? <CircleCheck className="h-5 w-5" /> : <CircleAlert className="h-5 w-5" />}
@@ -119,7 +119,7 @@ export function MovieSubtitlePanel({ media, block }: { media: MediaDetail; block
 
             {/* Pistes */}
             <motion.div variants={fadeUp} className="grid gap-5 lg:grid-cols-2">
-                <Panel title="Présents" icon={CircleCheck} iconClassName="text-emerald-400">
+                <Panel title="Présents" icon={CircleCheck} iconClassName="text-success">
                     {present.length ? (
                         <div className="flex flex-wrap gap-2">
                             {present.map((t, i) => (
@@ -138,7 +138,7 @@ export function MovieSubtitlePanel({ media, block }: { media: MediaDetail; block
                         <p className="text-sm text-muted-foreground">Aucun sous-titre téléchargé.</p>
                     )}
                 </Panel>
-                <Panel title="Manquants (suivis par Bazarr)" icon={CircleAlert} iconClassName="text-amber-400">
+                <Panel title="Manquants (suivis par Bazarr)" icon={CircleAlert} iconClassName="text-warning">
                     {missing.length ? (
                         <div className="flex flex-wrap gap-2">
                             {missing.map((t, i) => (

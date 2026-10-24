@@ -57,7 +57,7 @@ export function UpcomingPanel({ todayKey, typeFilter, monitoredOnly, className }
     );
 
     return (
-        <Panel title="Prochaines sorties" icon={Clock} iconClassName="text-sky-300" className={className} bodyClassName="p-2">
+        <Panel title="Prochaines sorties" icon={Clock} iconClassName="text-primary" className={className} bodyClassName="p-2">
             {isLoading ? (
                 <UpcomingSkeleton />
             ) : isError ? (
@@ -86,7 +86,7 @@ export function UpcomingPanel({ todayKey, typeFilter, monitoredOnly, className }
                                     entry={e}
                                     aside={
                                         <div className="flex flex-col items-end leading-tight">
-                                            <span className={cn("text-[11px] font-semibold capitalize", soon ? "text-sky-300" : "text-foreground/80")}>
+                                            <span className={cn("text-[11px] font-semibold capitalize", soon ? "text-primary" : "text-foreground/80")}>
                                                 {when.day}
                                             </span>
                                             {when.time && <span className="text-[11px] text-muted-foreground">{when.time}</span>}

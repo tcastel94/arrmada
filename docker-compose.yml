@@ -62,6 +62,15 @@ services:
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
       # TV Kodi : adresse de la web app pour le QR code d'appairage
       - PUBLIC_WEB_URL=${PUBLIC_WEB_URL:-}
+      # TV et téléphones appairés hors de la maison (VPN hors 10.x/192.168.x,
+      # ex. Tailscale : 100.64.0.0/10)
+      - DEVICE_TRUSTED_NETWORKS=${DEVICE_TRUSTED_NETWORKS:-}
+      # Appli Android : release GitHub d'où viennent les mises à jour
+      # (vide = seulement les APK déposées dans data/apk)
+      - ANDROID_UPDATE_REPO=${ANDROID_UPDATE_REPO:-tcastel94/arrmada}
+      - ANDROID_UPDATE_TAG=${ANDROID_UPDATE_TAG:-android-latest}
+      # Écran « Vidéos » : les dossiers déclarés doivent être sous ce chemin
+      - VIDEO_ALLOWED_BASE=${VIDEO_ALLOWED_BASE:-/mnt/user}
       # IA : Ollama local (prioritaire) ou OpenRouter
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - AI_MODEL=${AI_MODEL:-google/gemini-2.0-flash-001}

@@ -31,7 +31,7 @@ export default function AutoconfigPage() {
                 />
             </Panel>
             <p className="flex items-start gap-2 px-1 text-xs text-muted-foreground">
-                <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" />
                 Les clés et mots de passe restent sur le serveur ArrMada : ton navigateur ne voit que « clé trouvée ».
                 Le dossier appdata est lu, jamais modifié. Chaque ajout est testé par l&apos;appli concernée avant
                 d&apos;être enregistré, et relancer ne crée jamais de doublon.

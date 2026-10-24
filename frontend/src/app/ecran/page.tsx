@@ -6,15 +6,21 @@
  * Affiche, sans gêner le film, en grand (lu depuis le canapé, à 3-4 m) :
  *  - pendant une lecture : l'affiche sur toute la hauteur, l'heure de FIN
  *    prévue en très grand, l'heure de DÉBUT, le temps restant, la barre de
- *    progression, le titre, l'heure et le volume de l'ampli ;
- *  - au repos : une grande horloge, les sorties de ce soir / demain, les
- *    téléchargements en cours et l'ampli de la pièce.
+ *    progression, le titre, l'heure et le volume de l'ampli ; avec l'appli
+ *    Android en plus : formats (4K, Dolby Vision, Atmos), pistes, chapitre,
+ *    générique et épisode suivant, fiche (résumé, distribution) et une
+ *    TÉLÉCOMMANDE TACTILE (pause, −10 s / +30 s, passer l'intro, pistes) ;
+ *  - au repos : une grande horloge, « Ce soir » (reprendre, Ma liste,
+ *    nouveaux films : un toucher → confirmation → lancé sur la TV de la
+ *    pièce), les sorties de ce soir / demain, les téléchargements en cours
+ *    et l'ampli de la pièce.
  *
  * Trois états, comme une petite machine à états :
  *  1. « appairage » : pas encore de jeton → code + QR code à valider depuis
  *     le téléphone (Réglages → Kodi → Appareils), comme pour une TV ;
- *  2. « affichage » : jeton « écran » (lecture seule, une seule route
- *     serveur : GET /api/ambient), relevé toutes les 10 s ;
+ *  2. « affichage » : jeton « écran » (GET /api/ambient, relevé toutes les
+ *     10 s, 5 s pendant une lecture ; et POST /api/ambient/command pour la
+ *     télécommande de la lecture en cours de sa pièce) ;
  *  3. « aperçu » : depuis un PC où l'on est connecté en admin, pour régler
  *     l'affichage sans appairer (bouton sur l'écran d'appairage).
  *
@@ -26,34 +32,79 @@
  * que l'add-on envoie déjà au serveur (aucun serveur web Kodi à ouvrir).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { createPortal } from "react-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
-import { CalendarClock, Download, Loader2, Pause, Speaker, Volume2, VolumeX, WifiOff } from "lucide-react";
+import {
+    AudioLines,
+    CalendarClock,
+    ChevronLeft,
+    ChevronsRight,
+    Download,
+    Info,
+    Loader2,
+    Minus,
+    Pause,
+    Play,
+    Plus,
+    Popcorn,
+    RefreshCw,
+    RotateCcw,
+    RotateCw,
+    SkipForward,
+    Speaker,
+    Subtitles,
+    Volume2,
+    VolumeX,
+    WifiOff,
+    X,
+} from "lucide-react";
 import { BrandIcon } from "@/components/brand/brand-mark";
 import { API_URL } from "@/lib/constants";
 import { getToken } from "@/lib/api-client";
 import {
+    activeSkip,
     getScreenToken,
+    shiftLabel,
     hasFully,
     hhmm,
     longDay,
     platformName,
     prettyName,
     readOptions,
+    downloadStateLabel,
+    formatEta,
+    formatSize,
+    formatSpeed,
+    prettyTimeLeft,
     releaseTypeLabel,
     releaseWhen,
     remainingLabel,
     sessionAt,
     setBrightness,
     setScreenToken,
+    untilCredits,
     type Ambient,
+    type AmbientPlay,
     type AmbientPlaying,
+    type AmbientTile,
+    type AmbientCast,
+    type AmbientDownloadDetail,
+    type AmbientUpcoming,
+    type AmbientTrack,
+    type PersonFilmography,
+    type RemoteAction,
     type ScreenOptions,
 } from "@/lib/ambient";
 import { cn } from "@/lib/utils";
+import { RatingBadge } from "@/components/shared/rating-badge";
 
 /** Relevé du serveur (s). La position avance toute seule entre deux relevés. */
 const POLL_MS = 10_000;
+/** Pendant une lecture : relevé plus serré (pistes, « Passer l'intro »). */
+const POLL_PLAYING_MS = 5_000;
+/** Après une commande : le temps que la TV l'applique et renvoie son état. */
+const AFTER_COMMAND_MS = 1_200;
 /** Toucher l'écran pendant un film : luminosité de repos pendant ce temps. */
 const WAKE_MS = 20_000;
 /** Décalage de quelques pixels toutes les 5 min (écran allumé en permanence). */
@@ -71,10 +122,45 @@ function authHeaders(auth: Auth): HeadersInit {
     return auth.kind === "screen" ? { "X-Device-Token": auth.token } : { Authorization: `Bearer ${auth.token}` };
 }
 
+/** GET d'une route de l'écran (filmographie d'un acteur…) avec le jeton de la tablette. */
+async function fetchJson<T>(auth: Auth, path: string): Promise<T> {
+    const response = await fetch(`${API_URL}${path}`, { headers: authHeaders(auth), cache: "no-store" });
+    if (!response.ok) throw new HttpError(response.status, `HTTP ${response.status}`);
+    return response.json();
+}
+
 async function fetchAmbient(auth: Auth, room: string): Promise<Ambient> {
     const query = auth.kind === "admin" ? `?room=${room}` : "";
     const response = await fetch(`${API_URL}/api/ambient${query}`, { headers: authHeaders(auth), cache: "no-store" });
     if (!response.ok) throw new HttpError(response.status, `HTTP ${response.status}`);
+    return response.json();
+}
+
+/** Télécommande tactile : la TV de la pièce reçoit la commande en moins d'une seconde. */
+async function sendCommand(auth: Auth, room: string, command: RemoteAction): Promise<void> {
+    const response = await fetch(`${API_URL}/api/ambient/command`, {
+        method: "POST",
+        headers: { ...authHeaders(auth), "Content-Type": "application/json" },
+        body: JSON.stringify(auth.kind === "admin" ? { ...command, room } : command),
+    });
+    if (!response.ok) throw new HttpError(response.status, `HTTP ${response.status}`);
+}
+
+/** « Ce soir » : lance un titre proposé sur la TV de la pièce (le serveur vérifie qu'il est proposé). */
+async function sendPlay(auth: Auth, room: string, play: AmbientPlay): Promise<{ device: string; online: boolean }> {
+    const response = await fetch(`${API_URL}/api/ambient/play`, {
+        method: "POST",
+        headers: { ...authHeaders(auth), "Content-Type": "application/json" },
+        body: JSON.stringify(auth.kind === "admin" ? { ...play, room } : play),
+    });
+    if (!response.ok) {
+        // Le serveur explique le refus (« Aucune TV appairée dans cette pièce »…)
+        const detail = await response
+            .json()
+            .then((body: { detail?: unknown }) => (typeof body.detail === "string" ? body.detail : ""))
+            .catch(() => "");
+        throw new HttpError(response.status, detail || `HTTP ${response.status}`);
+    }
     return response.json();
 }
 
@@ -315,7 +401,7 @@ function AmbientView({
     const { data, error, dataUpdatedAt } = useQuery({
         queryKey: ["ambient", auth.kind, room],
         queryFn: () => fetchAmbient(auth, room),
-        refetchInterval: POLL_MS,
+        refetchInterval: (query) => (query.state.data?.playing ? POLL_PLAYING_MS : POLL_MS),
         refetchIntervalInBackground: true,
         retry: false,
         // Une panne réseau garde le dernier affichage (avec un petit avertissement)
@@ -327,6 +413,31 @@ function AmbientView({
     useEffect(() => {
         if (error instanceof HttpError && error.status === 401 && auth.kind === "screen") onRevoked();
     }, [error, auth.kind, onRevoked]);
+
+    // Télécommande : envoi, puis relecture rapide de l'état renvoyé par la TV
+    const queryClient = useQueryClient();
+    const loadPerson = useCallback((id: number) => fetchJson<PersonFilmography>(auth, `/api/ambient/person/${id}`), [auth]);
+    const loadDownload = useCallback(
+        (key: string) => fetchJson<AmbientDownloadDetail>(auth, `/api/ambient/download/${encodeURIComponent(key)}`),
+        [auth],
+    );
+    const onCommand = useCallback(
+        async (command: RemoteAction) => {
+            await sendCommand(auth, room, command);
+            setTimeout(() => queryClient.invalidateQueries({ queryKey: ["ambient", auth.kind, room] }), AFTER_COMMAND_MS);
+        },
+        [auth, room, queryClient],
+    );
+
+    // « Ce soir » : lancé sur la TV, puis relecture (l'écran passera en mode séance)
+    const onPlay = useCallback(
+        async (play: AmbientPlay) => {
+            const sent = await sendPlay(auth, room, play);
+            setTimeout(() => queryClient.invalidateQueries({ queryKey: ["ambient", auth.kind, room] }), 4_000);
+            return sent;
+        },
+        [auth, room, queryClient],
+    );
 
     // Écart d'horloge tablette ↔ serveur, mesuré à chaque réponse
     const offset = useMemo(() => (data ? data.server_time - dataUpdatedAt / 1000 : 0), [data, dataUpdatedAt]);
@@ -381,9 +492,16 @@ function AmbientView({
                 )}
             >
                 {playing ? (
-                    <SessionView playing={playing} now={now} offset={offset} amp={data?.amp ?? null} />
+                    <SessionView
+                        playing={playing}
+                        now={now}
+                        offset={offset}
+                        amp={data?.amp ?? null}
+                        onCommand={onCommand}
+                        loadPerson={loadPerson}
+                    />
                 ) : (
-                    <RestView now={now} data={data} />
+                    <RestView now={now} data={data} onPlay={onPlay} loadDownload={loadDownload} />
                 )}
             </div>
 
@@ -425,14 +543,31 @@ function SessionView({
     now,
     offset,
     amp,
+    onCommand,
+    loadPerson,
 }: {
     playing: AmbientPlaying;
     now: Date;
     offset: number;
     amp: Ambient["amp"];
+    onCommand: (command: RemoteAction) => Promise<void>;
+    loadPerson: (id: number) => Promise<PersonFilmography>;
 }) {
     const session = sessionAt(playing, now.getTime(), offset);
+    // Feuille ouverte (sous-titres, son, fiche, volume) : ici, car le volume
+    // s'ouvre depuis le bandeau du haut et le reste depuis la télécommande
+    const [sheet, setSheet] = useState<Sheet>(null);
     const status = session.paused ? "En pause" : playing.kind === "episode" ? "Épisode en cours" : "Film en cours";
+    const badges = [playing.video, playing.audio, playing.subtitle_track ? `Sous-titres ${playing.subtitle_track}` : ""].filter(Boolean);
+    const credits = untilCredits(playing, session.position);
+    // Appli Android : badges, détails et télécommande en plus → tout resserré
+    // pour tenir sur un écran de tablette en paysage
+    const compact = playing.remote;
+    const details = [
+        playing.chapter ? `Chapitre : ${playing.chapter}` : "",
+        credits !== null ? `Générique dans ${remainingLabel(credits)}` : "",
+        playing.next_up ? `Ensuite : ${playing.next_up}` : "",
+    ].filter(Boolean);
     return (
         <motion.section
             key={`${playing.title}-${playing.subtitle}`}
@@ -456,7 +591,7 @@ function SessionView({
                 />
             )}
 
-            <div className="flex min-w-0 flex-1 flex-col justify-between" style={{ gap: u(2.5) }}>
+            <div className="flex min-w-0 flex-1 flex-col justify-between" style={{ gap: u(compact ? 1.6 : 2.5) }}>
                 {/* Bandeau : état de la lecture, volume de l'ampli, heure */}
                 <div className="flex items-center justify-between" style={{ gap: u(3) }}>
                     <p
@@ -472,14 +607,21 @@ function SessionView({
                     </p>
                     <div className="flex items-center tabular-nums" style={{ gap: u(3.5) }}>
                         {amp?.power === "on" && (
-                            <span className="flex items-center text-slate-400" style={{ fontSize: u(3.8), gap: u(1) }}>
+                            // Toucher le volume : réglage de l'ampli de la pièce
+                            <button
+                                type="button"
+                                onClick={() => setSheet("volume")}
+                                className="flex items-center rounded-full text-slate-300 transition-colors hover:bg-white/[0.08] active:scale-95"
+                                style={{ fontSize: u(3.8), gap: u(1), padding: `${u(0.8)} ${u(2)}`, background: "rgba(255,255,255,0.05)" }}
+                                aria-label="Régler le volume"
+                            >
                                 {amp.mute ? (
                                     <VolumeX className="text-amber-300" style={{ width: u(4), height: u(4) }} />
                                 ) : (
                                     <Volume2 style={{ width: u(4), height: u(4) }} />
                                 )}
                                 {amp.volume_pct ?? "—"} %
-                            </span>
+                            </button>
                         )}
                         <span className="leading-none text-slate-200" style={{ fontSize: u(6.5) }}>
                             {hhmm(now)}
@@ -489,13 +631,30 @@ function SessionView({
 
                 {/* Titre (2 lignes au plus) et épisode ou année */}
                 <div>
-                    <h1 className="line-clamp-2 font-semibold leading-[1.05] text-white" style={{ fontSize: u(8) }}>
+                    <h1
+                        className={cn("font-semibold leading-[1.05] text-white", compact ? "line-clamp-1" : "line-clamp-2")}
+                        style={{ fontSize: u(compact ? 7 : 8) }}
+                    >
                         {playing.title}
                     </h1>
                     {playing.subtitle && (
-                        <p className="truncate text-slate-400" style={{ fontSize: u(4.6), marginTop: u(1) }}>
+                        <p className="truncate text-slate-400" style={{ fontSize: u(compact ? 4 : 4.6), marginTop: u(1) }}>
                             {playing.subtitle}
                         </p>
+                    )}
+                    {/* Formats de la séance (appli Android) : image, son, sous-titres, sur une ligne */}
+                    {badges.length > 0 && (
+                        <div className="flex flex-nowrap overflow-hidden" style={{ gap: u(1.2), marginTop: u(1.4) }}>
+                            {badges.map((badge) => (
+                                <span
+                                    key={badge}
+                                    className="shrink-0 truncate rounded-full border border-white/10 bg-white/[0.06] text-slate-300"
+                                    style={{ fontSize: u(2.7), padding: `${u(0.5)} ${u(1.8)}` }}
+                                >
+                                    {badge}
+                                </span>
+                            ))}
+                        </div>
                     )}
                 </div>
 
@@ -506,7 +665,7 @@ function SessionView({
                     </p>
                     <p
                         className={cn("font-medium leading-[0.9] tracking-tight tabular-nums", session.paused ? "text-amber-200" : "text-[#8CC4FF]")}
-                        style={{ fontSize: u(26) }}
+                        style={{ fontSize: u(compact ? 20 : 26) }}
                     >
                         {hhmm(session.endsAt)}
                     </p>
@@ -514,8 +673,8 @@ function SessionView({
 
                 {/* Début et temps restant */}
                 <div className="flex flex-wrap" style={{ columnGap: u(9), rowGap: u(2) }}>
-                    <BigFigure label="Début" value={hhmm(session.startedAt)} />
-                    <BigFigure label="Reste" value={session.endsAt ? remainingLabel(session.remaining) : "—"} />
+                    <BigFigure label="Début" value={hhmm(session.startedAt)} size={compact ? 8 : 11} />
+                    <BigFigure label="Reste" value={session.endsAt ? remainingLabel(session.remaining) : "—"} size={compact ? 8 : 11} />
                 </div>
 
                 {session.endsAt && (
@@ -529,18 +688,576 @@ function SessionView({
                         />
                     </div>
                 )}
+
+                {/* Chapitre, générique, épisode suivant */}
+                {details.length > 0 && (
+                    <p className="truncate text-slate-400" style={{ fontSize: u(3.2) }}>
+                        {details.join("   ·   ")}
+                    </p>
+                )}
+
+                {playing.remote && (
+                    <RemoteBar
+                        playing={playing}
+                        position={session.position}
+                        paused={session.paused}
+                        onCommand={onCommand}
+                        amp={amp}
+                        loadPerson={loadPerson}
+                        sheet={sheet}
+                        setSheet={setSheet}
+                    />
+                )}
+                {/* TV sous Kodi (pas de télécommande) : le volume reste réglable */}
+                {!playing.remote && sheet === "volume" && amp && (
+                    <SheetFrame title="Volume" onClose={() => setSheet(null)}>
+                        <VolumeSheet amp={amp} run={onCommand} />
+                    </SheetFrame>
+                )}
             </div>
         </motion.section>
     );
 }
 
-function BigFigure({ label, value }: { label: string; value: string }) {
+/* ── Télécommande tactile (appli Android) ─────────────────────── */
+
+type Sheet = "subtitles" | "audio" | "info" | "volume" | null;
+
+function RemoteBar({
+    playing,
+    position,
+    paused,
+    onCommand,
+    amp,
+    loadPerson,
+    sheet,
+    setSheet,
+}: {
+    playing: AmbientPlaying;
+    position: number;
+    paused: boolean;
+    onCommand: (command: RemoteAction) => Promise<void>;
+    amp: Ambient["amp"];
+    loadPerson: (id: number) => Promise<PersonFilmography>;
+    sheet: Sheet;
+    setSheet: (sheet: Sheet) => void;
+}) {
+    // Acteur ouvert depuis la fiche : sa filmographie remplace la fiche
+    const [person, setPerson] = useState<AmbientCast | null>(null);
+    const [busy, setBusy] = useState(false);
+    const [failed, setFailed] = useState(false);
+    const skip = activeSkip(playing, position);
+    // Générique commencé et épisode suivant connu : « Épisode suivant »
+    const nextReady = !!playing.next_up && playing.credits_at > 0 && position >= playing.credits_at;
+
+    const run = async (command: RemoteAction) => {
+        setBusy(true);
+        setFailed(false);
+        try {
+            await onCommand(command);
+        } catch {
+            setFailed(true);
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <>
+            {/* Une seule ligne : boutons ronds, seul l'action du moment (intro, suivant) garde son texte */}
+            <div className="flex items-center" style={{ gap: u(1.2) }}>
+                <RemoteButton label="Reculer de 10 s" caption="10" round onClick={() => run({ action: "seek", value: -10 })}>
+                    <RotateCcw style={{ width: u(3.4), height: u(3.4) }} />
+                </RemoteButton>
+                <RemoteButton label={paused ? "Lecture" : "Pause"} round primary onClick={() => run({ action: "toggle" })}>
+                    {busy ? (
+                        <Loader2 className="animate-spin" style={{ width: u(4.4), height: u(4.4) }} />
+                    ) : paused ? (
+                        <Play style={{ width: u(4.4), height: u(4.4) }} />
+                    ) : (
+                        <Pause style={{ width: u(4.4), height: u(4.4) }} />
+                    )}
+                </RemoteButton>
+                <RemoteButton label="Avancer de 30 s" caption="30" round onClick={() => run({ action: "seek", value: 30 })}>
+                    <RotateCw style={{ width: u(3.4), height: u(3.4) }} />
+                </RemoteButton>
+                {skip && (
+                    <RemoteButton label={skip.label} accent onClick={() => run({ action: "skip" })}>
+                        <ChevronsRight style={{ width: u(3.8), height: u(3.8) }} />
+                    </RemoteButton>
+                )}
+                {nextReady && (
+                    <RemoteButton label="Épisode suivant" accent onClick={() => run({ action: "next" })}>
+                        <SkipForward style={{ width: u(3.8), height: u(3.8) }} />
+                    </RemoteButton>
+                )}
+                <span className="flex-1" />
+                {(playing.subtitle_tracks.length > 0 || playing.subtitle_tools) && (
+                    <RemoteButton label="Sous-titres" round onClick={() => setSheet("subtitles")}>
+                        <Subtitles style={{ width: u(3.8), height: u(3.8) }} />
+                    </RemoteButton>
+                )}
+                {playing.audio_tracks.length > 1 && (
+                    <RemoteButton label="Son" round onClick={() => setSheet("audio")}>
+                        <AudioLines style={{ width: u(3.8), height: u(3.8) }} />
+                    </RemoteButton>
+                )}
+                {(playing.overview || playing.cast.length > 0) && (
+                    <RemoteButton label="Fiche" round onClick={() => setSheet("info")}>
+                        <Info style={{ width: u(3.8), height: u(3.8) }} />
+                    </RemoteButton>
+                )}
+            </div>
+            {failed && (
+                <p className="text-amber-300/80" style={{ fontSize: u(2.8) }}>
+                    La TV n&apos;a pas répondu : réessaie dans un instant.
+                </p>
+            )}
+
+            {sheet && (
+                <SheetFrame
+                    title={
+                        sheet === "subtitles"
+                            ? "Sous-titres"
+                            : sheet === "audio"
+                              ? "Son"
+                              : sheet === "volume"
+                                ? "Volume"
+                                : person
+                                  ? person.name
+                                  : playing.title
+                    }
+                    onBack={sheet === "info" && person ? () => setPerson(null) : undefined}
+                    onClose={() => {
+                        setSheet(null);
+                        setPerson(null);
+                    }}
+                >
+                    {sheet === "subtitles" && <SubtitleTools playing={playing} run={run} />}
+                    {(sheet === "subtitles" || sheet === "audio") && (
+                        <TrackSheet
+                            tracks={sheet === "subtitles" ? playing.subtitle_tracks : playing.audio_tracks}
+                            allowOff={sheet === "subtitles"}
+                            onPick={(index) => {
+                                void run({ action: "track", value: { type: sheet === "subtitles" ? "text" : "audio", index } });
+                                setSheet(null);
+                            }}
+                        />
+                    )}
+                    {sheet === "volume" && amp && <VolumeSheet amp={amp} run={run} />}
+                    {sheet === "info" &&
+                        (person?.tmdb_id ? (
+                            <PersonSheet id={person.tmdb_id} loadPerson={loadPerson} />
+                        ) : (
+                            <InfoSheet playing={playing} onPerson={setPerson} />
+                        ))}
+                </SheetFrame>
+            )}
+        </>
+    );
+}
+
+/** Feuille qui monte du bas de l'écran ; toucher à côté la ferme. */
+function SheetFrame({
+    title,
+    onClose,
+    onBack,
+    children,
+}: {
+    title: string;
+    onClose: () => void;
+    onBack?: () => void;
+    children: React.ReactNode;
+}) {
+    return (
+        <AnimatePresence>
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-20 flex items-end justify-center bg-black/80 backdrop-blur-sm"
+                onClick={onClose}
+            >
+                <motion.div
+                    initial={{ y: 40 }}
+                    animate={{ y: 0 }}
+                    exit={{ y: 40 }}
+                    className="w-full max-w-[min(100%,calc(var(--u)*150))] overflow-y-auto border border-white/10 bg-[#0d1117]"
+                    style={{ maxHeight: "85dvh", padding: u(4), borderRadius: `${u(3)} ${u(3)} 0 0` }}
+                    onClick={(event) => event.stopPropagation()}
+                >
+                    <div className="flex items-center justify-between" style={{ marginBottom: u(2.5), gap: u(2) }}>
+                        <div className="flex min-w-0 items-center" style={{ gap: u(1.5) }}>
+                            {onBack && (
+                                <button type="button" onClick={onBack} className="rounded-full p-2 text-slate-400 hover:bg-white/10" aria-label="Retour à la fiche">
+                                    <ChevronLeft style={{ width: u(4.4), height: u(4.4) }} />
+                                </button>
+                            )}
+                            <p className="truncate font-semibold text-white" style={{ fontSize: u(4.4) }}>
+                                {title}
+                            </p>
+                        </div>
+                        <button type="button" onClick={onClose} className="rounded-full p-2 text-slate-400 hover:bg-white/10" aria-label="Fermer">
+                            <X style={{ width: u(4.4), height: u(4.4) }} />
+                        </button>
+                    </div>
+                    {children}
+                </motion.div>
+            </motion.div>
+        </AnimatePresence>
+    );
+}
+
+/** Volume de l'ampli de la pièce : gros boutons, sourdine. Le serveur pilote l'ampli. */
+function VolumeSheet({ amp, run }: { amp: NonNullable<Ambient["amp"]>; run: (command: RemoteAction) => Promise<void> }) {
+    const big = { width: u(16), height: u(16) };
+    return (
+        <div className="flex flex-col items-center" style={{ gap: u(3), paddingBottom: u(2) }}>
+            <div className="flex items-center" style={{ gap: u(5) }}>
+                <button
+                    type="button"
+                    onClick={() => run({ action: "volume_step", value: -3 })}
+                    className="flex items-center justify-center rounded-full bg-white/[0.07] text-slate-100 active:scale-95"
+                    style={big}
+                    aria-label="Baisser le volume"
+                >
+                    <Minus style={{ width: u(6), height: u(6) }} />
+                </button>
+                <p className="tabular-nums text-white" style={{ fontSize: u(14), minWidth: u(30), textAlign: "center" }}>
+                    {amp.volume_pct ?? "—"}
+                    <span className="text-slate-500" style={{ fontSize: u(5) }}>
+                        {" "}
+                        %
+                    </span>
+                </p>
+                <button
+                    type="button"
+                    onClick={() => run({ action: "volume_step", value: 3 })}
+                    className="flex items-center justify-center rounded-full bg-[#4A9EFF] text-[#0b1220] active:scale-95"
+                    style={big}
+                    aria-label="Monter le volume"
+                >
+                    <Plus style={{ width: u(6), height: u(6) }} />
+                </button>
+            </div>
+            <RemoteButton label={amp.mute ? "Remettre le son" : "Couper le son"} accent={amp.mute} onClick={() => run({ action: "mute", value: !amp.mute })}>
+                {amp.mute ? <Volume2 style={{ width: u(3.8), height: u(3.8) }} /> : <VolumeX style={{ width: u(3.8), height: u(3.8) }} />}
+            </RemoteButton>
+            <p className="text-slate-500" style={{ fontSize: u(2.6) }}>
+                {amp.name}
+                {amp.sound_program ? ` · ${prettyName(amp.sound_program)}` : ""}
+            </p>
+        </div>
+    );
+}
+
+/**
+ * Filmographie d'un acteur : ses films de la médiathèque en premier, mis en
+ * avant (liseré bleu, « Disponible » s'il est téléchargé), puis ses autres
+ * films, plus discrets.
+ */
+function PersonSheet({ id, loadPerson }: { id: number; loadPerson: (id: number) => Promise<PersonFilmography> }) {
+    const { data, isLoading, isError } = useQuery({
+        queryKey: ["person", id],
+        queryFn: () => loadPerson(id),
+        staleTime: 3_600_000,
+    });
+    if (isLoading) {
+        return <Loader2 className="mx-auto animate-spin text-slate-400" style={{ width: u(6), height: u(6), margin: `${u(6)} auto` }} />;
+    }
+    if (isError || !data?.person) {
+        return (
+            <p className="text-slate-400" style={{ fontSize: u(3) }}>
+                {data?.error ?? "Filmographie indisponible pour le moment."}
+            </p>
+        );
+    }
+    const p = data.person;
+    const facts = [p.birthday ? `Né(e) le ${new Date(p.birthday).toLocaleDateString("fr-FR")}` : "", p.place_of_birth ?? ""].filter(Boolean);
+    return (
+        <div className="flex flex-col" style={{ gap: u(3) }}>
+            <div className="flex" style={{ gap: u(3) }}>
+                {p.photo && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={p.photo} alt="" className="shrink-0 rounded-xl object-cover" style={{ width: u(18), height: u(24) }} />
+                )}
+                <div className="min-w-0">
+                    {facts.length > 0 && (
+                        <p className="text-slate-400" style={{ fontSize: u(2.8) }}>
+                            {facts.join(" · ")}
+                        </p>
+                    )}
+                    {p.biography && (
+                        <p className="line-clamp-5 leading-relaxed text-slate-300" style={{ fontSize: u(2.9), marginTop: u(1) }}>
+                            {p.biography}
+                        </p>
+                    )}
+                </div>
+            </div>
+
+            {data.in_library.length > 0 && (
+                <section>
+                    <p className="font-medium uppercase text-[#8CC4FF]" style={{ fontSize: u(2.6), letterSpacing: "0.14em", marginBottom: u(1.6) }}>
+                        Dans ta médiathèque · {data.in_library.length}
+                    </p>
+                    <ul className="grid grid-cols-6 portrait:grid-cols-4" style={{ gap: u(2) }}>
+                        {data.in_library.map((movie) => (
+                            <MoviePoster key={movie.tmdb_id} movie={movie} owned />
+                        ))}
+                    </ul>
+                </section>
+            )}
+
+            {data.discover.length > 0 && (
+                <section>
+                    <p className="font-medium uppercase text-slate-500" style={{ fontSize: u(2.6), letterSpacing: "0.14em", marginBottom: u(1.6) }}>
+                        Autres films
+                    </p>
+                    <ul className="grid grid-cols-8 portrait:grid-cols-5" style={{ gap: u(1.6) }}>
+                        {data.discover.slice(0, 24).map((movie) => (
+                            <MoviePoster key={movie.tmdb_id} movie={movie} />
+                        ))}
+                    </ul>
+                </section>
+            )}
+        </div>
+    );
+}
+
+function MoviePoster({ movie, owned = false }: { movie: PersonFilmography["discover"][number]; owned?: boolean }) {
+    const ready = owned && movie.has_file;
+    return (
+        <li className={cn("flex flex-col", !owned && "opacity-55")} style={{ gap: u(0.6) }}>
+            <div
+                className={cn(
+                    "relative aspect-[2/3] overflow-hidden bg-white/[0.06]",
+                    owned && (ready ? "ring-2 ring-[#4A9EFF]" : "ring-1 ring-white/25"),
+                )}
+                style={{ borderRadius: u(1.2) }}
+            >
+                {movie.poster ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={movie.poster} alt="" loading="lazy" className="h-full w-full object-cover" />
+                ) : (
+                    <span className="flex h-full items-center justify-center p-1 text-center text-slate-500" style={{ fontSize: u(2.2) }}>
+                        {movie.title}
+                    </span>
+                )}
+                {owned && (
+                    <span
+                        className={cn("absolute inset-x-0 bottom-0 text-center font-semibold", ready ? "bg-[#4A9EFF] text-[#0b1220]" : "bg-black/70 text-slate-300")}
+                        style={{ fontSize: u(2), padding: `${u(0.4)} 0` }}
+                    >
+                        {ready ? "Disponible" : "Pas encore téléchargé"}
+                    </span>
+                )}
+            </div>
+            <span className="truncate text-slate-200" style={{ fontSize: u(2.4) }}>
+                {movie.title}
+            </span>
+            <span className="truncate text-slate-500" style={{ fontSize: u(2.1) }}>
+                {[movie.year, movie.character].filter(Boolean).join(" · ")}
+            </span>
+        </li>
+    );
+}
+
+/**
+ * Bouton de la télécommande. [round] : icône seule dans un rond (le texte
+ * devient l'étiquette d'accessibilité), avec une petite [caption] dessous
+ * (« 10 », « 30 ») pour les sauts.
+ */
+function RemoteButton({
+    label,
+    caption,
+    round,
+    primary,
+    accent,
+    onClick,
+    children,
+}: {
+    label: string;
+    caption?: string;
+    round?: boolean;
+    primary?: boolean;
+    accent?: boolean;
+    onClick: () => void;
+    children: React.ReactNode;
+}) {
+    if (round) {
+        return (
+            <button
+                type="button"
+                onClick={onClick}
+                aria-label={label}
+                title={label}
+                className={cn(
+                    "flex shrink-0 flex-col items-center justify-center rounded-full transition-colors active:scale-95",
+                    primary ? "bg-[#4A9EFF] text-[#0b1220] hover:bg-[#6cb1ff]" : "bg-white/[0.07] text-slate-200 hover:bg-white/[0.12]",
+                )}
+                style={{ width: u(primary ? 9.5 : 8), height: u(primary ? 9.5 : 8) }}
+            >
+                {children}
+                {caption && (
+                    <span className="font-semibold leading-none tabular-nums" style={{ fontSize: u(1.9), marginTop: u(0.3) }}>
+                        {caption}
+                    </span>
+                )}
+            </button>
+        );
+    }
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            className={cn(
+                "flex shrink-0 items-center rounded-full font-medium transition-colors active:scale-95",
+                primary
+                    ? "bg-[#4A9EFF] text-[#0b1220] hover:bg-[#6cb1ff]"
+                    : accent
+                      ? "bg-[#4A9EFF]/15 text-[#8CC4FF] ring-1 ring-[#4A9EFF]/40 hover:bg-[#4A9EFF]/25"
+                      : "bg-white/[0.07] text-slate-200 hover:bg-white/[0.12]",
+            )}
+            style={{ height: u(8.5), padding: `0 ${u(2.6)}`, gap: u(1.1), fontSize: u(3) }}
+        >
+            {children}
+            <span>{label}</span>
+        </button>
+    );
+}
+
+/**
+ * Outils de la feuille Sous-titres : Bazarr (télécharger les sous-titres FR,
+ * les recaler sur le son) et décalage manuel −/+ 0,5 s de la piste affichée.
+ * La TV fait le travail et renvoie l'état (en cours, résultat, décalage).
+ */
+function SubtitleTools({ playing, run }: { playing: AmbientPlaying; run: (command: RemoteAction) => Promise<void> }) {
+    const busy = playing.subtitle_busy;
+    const shift = playing.subtitle_shift_ms;
+    return (
+        <div className="flex flex-col" style={{ gap: u(1.6), marginBottom: u(3) }}>
+            <div className="flex flex-wrap items-center" style={{ gap: u(1.2) }}>
+                {playing.subtitle_tools && (
+                    <>
+                        <RemoteButton label={busy ? "Bazarr…" : "Sous-titres FR"} onClick={() => !busy && run({ action: "subtitle_download" })}>
+                            {busy ? <Loader2 className="animate-spin" style={{ width: u(3.6), height: u(3.6) }} /> : <Download style={{ width: u(3.6), height: u(3.6) }} />}
+                        </RemoteButton>
+                        <RemoteButton label="Resynchro auto" onClick={() => !busy && run({ action: "subtitle_sync" })}>
+                            <RefreshCw style={{ width: u(3.6), height: u(3.6) }} />
+                        </RemoteButton>
+                    </>
+                )}
+                <span className="flex-1" />
+                <RemoteButton label="0,5 s plus tôt" onClick={() => run({ action: "subtitle_shift", value: -500 })}>
+                    <Minus style={{ width: u(3.6), height: u(3.6) }} />
+                </RemoteButton>
+                <span className="tabular-nums text-slate-300" style={{ fontSize: u(3), minWidth: u(12), textAlign: "center" }}>
+                    {shift === 0 ? "0 s" : shiftLabel(shift)}
+                </span>
+                <RemoteButton label="0,5 s plus tard" onClick={() => run({ action: "subtitle_shift", value: 500 })}>
+                    <Plus style={{ width: u(3.6), height: u(3.6) }} />
+                </RemoteButton>
+            </div>
+            <p className="text-slate-500" style={{ fontSize: u(2.6) }}>
+                {playing.subtitle_note ||
+                    "Resynchro auto : Bazarr recale le fichier sur le son. Décalage apparu en plein film : − / + 0,5 s (− = plus tôt)."}
+            </p>
+        </div>
+    );
+}
+
+function TrackSheet({ tracks, allowOff, onPick }: { tracks: AmbientTrack[]; allowOff: boolean; onPick: (index: number) => void }) {
+    const none = !tracks.some((t) => t.selected);
+    const rows: { index: number; label: string; detail: string; selected: boolean }[] = [
+        ...(allowOff ? [{ index: -1, label: "Aucun", detail: "Sous-titres désactivés", selected: none }] : []),
+        ...tracks,
+    ];
+    return (
+        <ul className="flex flex-col" style={{ gap: u(1.2) }}>
+            {rows.map((track) => (
+                <li key={track.index}>
+                    <button
+                        type="button"
+                        onClick={() => onPick(track.index)}
+                        className={cn(
+                            "flex w-full items-center justify-between text-left transition-colors",
+                            track.selected ? "bg-[#4A9EFF]/15 ring-1 ring-[#4A9EFF]/50" : "bg-white/[0.04] hover:bg-white/[0.08]",
+                        )}
+                        style={{ padding: `${u(2)} ${u(2.8)}`, borderRadius: u(1.6), gap: u(2) }}
+                    >
+                        <span className="min-w-0">
+                            <span className="block truncate text-slate-100" style={{ fontSize: u(3.4) }}>
+                                {track.label}
+                            </span>
+                            {track.detail && (
+                                <span className="block truncate text-slate-500" style={{ fontSize: u(2.7) }}>
+                                    {track.detail}
+                                </span>
+                            )}
+                        </span>
+                        {track.selected && <span className="shrink-0 rounded-full bg-[#4A9EFF]" style={{ width: u(1.6), height: u(1.6) }} />}
+                    </button>
+                </li>
+            ))}
+        </ul>
+    );
+}
+
+function InfoSheet({ playing, onPerson }: { playing: AmbientPlaying; onPerson: (person: AmbientCast) => void }) {
+    return (
+        <div className="flex flex-col" style={{ gap: u(3) }}>
+            {playing.meta_line && (
+                <p className="text-slate-400" style={{ fontSize: u(3) }}>
+                    {playing.meta_line}
+                </p>
+            )}
+            {playing.overview && (
+                <p className="leading-relaxed text-slate-200" style={{ fontSize: u(3.4) }}>
+                    {playing.overview}
+                </p>
+            )}
+            {playing.cast.length > 0 && (
+                <ul className="grid grid-cols-4 portrait:grid-cols-3" style={{ gap: u(2.5) }}>
+                    {playing.cast.map((person) => (
+                        <li
+                            key={`${person.name}-${person.character}`}
+                            // Toucher un acteur (film) : sa filmographie, médiathèque en tête
+                            onClick={person.tmdb_id ? () => onPerson(person) : undefined}
+                            className={cn(
+                                "flex flex-col items-center rounded-xl text-center",
+                                person.tmdb_id && "cursor-pointer transition-colors hover:bg-white/[0.05] active:scale-95",
+                            )}
+                            style={{ gap: u(0.8), padding: u(1) }}
+                        >
+                            {person.photo ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={person.photo} alt="" className="rounded-full object-cover" style={{ width: u(14), height: u(14) }} />
+                            ) : (
+                                <span className="rounded-full bg-white/10" style={{ width: u(14), height: u(14) }} />
+                            )}
+                            <span className="w-full truncate text-slate-100" style={{ fontSize: u(2.8) }}>
+                                {person.name}
+                            </span>
+                            {person.character && (
+                                <span className="w-full truncate text-slate-500" style={{ fontSize: u(2.5) }}>
+                                    {person.character}
+                                </span>
+                            )}
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </div>
+    );
+}
+
+function BigFigure({ label, value, size = 11 }: { label: string; value: string; size?: number }) {
     return (
         <div className="min-w-0">
             <p className="font-medium uppercase text-slate-400" style={{ fontSize: u(3.2), letterSpacing: "0.14em" }}>
                 {label}
             </p>
-            <p className="leading-none tabular-nums text-slate-100" style={{ fontSize: u(11), marginTop: u(0.8) }}>
+            <p className="leading-none tabular-nums text-slate-100" style={{ fontSize: u(size), marginTop: u(0.8) }}>
                 {value}
             </p>
         </div>
@@ -549,19 +1266,44 @@ function BigFigure({ label, value }: { label: string; value: string }) {
 
 /* ── Au repos ────────────────────────────────────────────────── */
 
-function RestView({ now, data }: { now: Date; data?: Ambient }) {
+/** Lancer un titre de « Ce soir » : renvoie la TV qui l'a reçu. */
+type PlayHandler = (play: AmbientPlay) => Promise<{ device: string; online: boolean }>;
+
+/** Fiche ouverte au toucher depuis les panneaux du repos. */
+type RestSheet = { kind: "upcoming"; item: AmbientUpcoming } | { kind: "download"; key: string; title: string } | null;
+
+function RestView({
+    now,
+    data,
+    onPlay,
+    loadDownload,
+}: {
+    now: Date;
+    data?: Ambient;
+    onPlay: PlayHandler;
+    loadDownload: (key: string) => Promise<AmbientDownloadDetail>;
+}) {
+    const [sheet, setSheet] = useState<RestSheet>(null);
     const room = data?.room_label;
     const amp = data?.amp ?? null;
     const hasPanels = !!data && (data.upcoming.length > 0 || data.downloads.length > 0 || !!amp);
+    const tonight = data?.tonight ?? null;
+    const hasTonight = !!tonight && (tonight.resume.length > 0 || tonight.watchlist.length > 0 || tonight.fresh.length > 0);
+    // « dans le salon » / « dans la salle de cinéma »
+    const inRoom = room ? ` dans ${room === "Salle de cinéma" ? "la salle de cinéma" : `le ${room.toLowerCase()}`}` : "";
     return (
-        <div className="flex min-h-[100dvh] flex-col justify-between" style={{ padding: u(5), gap: u(4) }}>
+        <div className="flex min-h-[100dvh] flex-col justify-between" style={{ padding: u(hasTonight ? 4 : 5), gap: u(hasTonight ? 2.5 : 4) }}>
             <header className="flex items-start justify-between" style={{ gap: u(3) }}>
                 <div>
-                    <p className="font-light leading-[0.85] tracking-tight tabular-nums text-slate-100" style={{ fontSize: u(30) }}>
+                    {/* Horloge plus petite quand « Ce soir » prend la place */}
+                    <p
+                        className="font-light leading-[0.85] tracking-tight tabular-nums text-slate-100"
+                        style={{ fontSize: u(hasTonight ? 15 : 30) }}
+                    >
                         {hhmm(now)}
                     </p>
                     {/* « Samedi 10 octobre » : majuscule au premier mot seulement */}
-                    <p className="text-slate-400 first-letter:uppercase" style={{ fontSize: u(5), marginTop: u(2.5) }}>
+                    <p className="text-slate-400 first-letter:uppercase" style={{ fontSize: u(hasTonight ? 3.4 : 5), marginTop: u(hasTonight ? 1.4 : 2.5) }}>
                         {longDay(now)}
                     </p>
                 </div>
@@ -572,20 +1314,247 @@ function RestView({ now, data }: { now: Date; data?: Ambient }) {
                 )}
             </header>
 
-            <div className="flex flex-col" style={{ gap: u(3) }}>
+            {hasTonight ? (
+                <TonightShelf tonight={tonight} inRoom={inRoom} onPlay={onPlay} />
+            ) : (
                 <p className="text-slate-500" style={{ fontSize: u(3) }}>
-                    Rien en lecture{room ? ` dans ${room === "Salle de cinéma" ? "la salle de cinéma" : `le ${room.toLowerCase()}`}` : ""}. Lance un film sur
-                    Kodi : l&apos;heure de fin s&apos;affichera ici en grand.
+                    Rien en lecture{inRoom}. Lance un film sur la TV : l&apos;heure de fin s&apos;affichera ici en grand.
                 </p>
-                {hasPanels && (
-                    <div className="flex portrait:flex-col" style={{ gap: u(3) }}>
-                        {data.upcoming.length > 0 && <UpcomingPanel upcoming={data.upcoming} now={now} />}
-                        {data.downloads.length > 0 && <DownloadsPanel downloads={data.downloads} />}
-                        {amp && <AmpPanel amp={amp} />}
+            )}
+
+            {hasPanels && (
+                <div className="flex portrait:flex-col" style={{ gap: u(3) }}>
+                    {data.upcoming.length > 0 && (
+                        <UpcomingPanel upcoming={data.upcoming} now={now} onOpen={(item) => setSheet({ kind: "upcoming", item })} />
+                    )}
+                    {data.downloads.length > 0 && (
+                        <DownloadsPanel
+                            downloads={data.downloads}
+                            onOpen={(key, title) => setSheet({ kind: "download", key, title })}
+                        />
+                    )}
+                    {amp && <AmpPanel amp={amp} />}
+                </div>
+            )}
+
+            {/* Fiches au toucher : portail vers <body> (la page est décalée par l'anti-marquage) */}
+            {createPortal(
+                <AnimatePresence>
+                    {sheet?.kind === "upcoming" && <UpcomingSheet key="up" item={sheet.item} now={now} onClose={() => setSheet(null)} />}
+                    {sheet?.kind === "download" && (
+                        <DownloadSheet key={`dl-${sheet.key}`} downloadKey={sheet.key} title={sheet.title} load={loadDownload} onClose={() => setSheet(null)} />
+                    )}
+                </AnimatePresence>,
+                document.body,
+            )}
+        </div>
+    );
+}
+
+/* ── « Ce soir » : choisir quoi regarder, le lancer sur la TV ─── */
+
+const TONIGHT_TABS = [
+    { key: "resume", label: "Reprendre" },
+    { key: "watchlist", label: "Ma liste" },
+    { key: "fresh", label: "Nouveaux films" },
+] as const;
+type TonightKey = (typeof TONIGHT_TABS)[number]["key"];
+
+function TonightShelf({ tonight, inRoom, onPlay }: { tonight: NonNullable<Ambient["tonight"]>; inRoom: string; onPlay: PlayHandler }) {
+    // Une seule rangée à la fois (lisible depuis le canapé) : onglets, et
+    // seulement ceux qui ont quelque chose à proposer
+    const tabs = TONIGHT_TABS.filter((tab) => tonight[tab.key].length > 0);
+    const [picked, setPicked] = useState<TonightKey | null>(null);
+    const active = tabs.find((tab) => tab.key === picked)?.key ?? tabs[0]?.key;
+    const [chosen, setChosen] = useState<AmbientTile | null>(null);
+    if (!active) return null;
+    return (
+        <section className="flex min-h-0 flex-col" style={{ gap: u(1.8) }}>
+            <div className="flex items-center" style={{ gap: u(1.2) }}>
+                <p className="flex items-center text-slate-300" style={{ fontSize: u(3.4), gap: u(1.2), marginRight: u(1.5) }}>
+                    <Popcorn style={{ width: u(3.6), height: u(3.6) }} className="text-[#4A9EFF]" />
+                    Ce soir
+                </p>
+                {tabs.map((tab) => (
+                    <button
+                        key={tab.key}
+                        type="button"
+                        onClick={() => setPicked(tab.key)}
+                        className={cn(
+                            "rounded-full transition-colors duration-200",
+                            tab.key === active ? "bg-white text-black" : "bg-white/[0.08] text-slate-300 active:bg-white/[0.15]",
+                        )}
+                        style={{ fontSize: u(2.6), padding: `${u(0.9)} ${u(2.4)}` }}
+                    >
+                        {tab.label}
+                    </button>
+                ))}
+            </div>
+            {/* Défilement horizontal au doigt ; « snap » : les affiches s'alignent au bord */}
+            <div
+                key={active}
+                className="flex snap-x snap-mandatory overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                style={{ gap: u(2.4), scrollPaddingLeft: 0 }}
+            >
+                {tonight[active].map((tile, i) => (
+                    <TonightTile key={`${tile.title}-${tile.subtitle}-${i}`} tile={tile} index={i} onPick={() => setChosen(tile)} />
+                ))}
+            </div>
+            {/* Portail vers <body> : la page entière est décalée de quelques pixels
+                (anti-marquage, `transform`), ce qui casserait le « plein écran » fixe */}
+            {createPortal(
+                <AnimatePresence>
+                    {chosen && <LaunchSheet tile={chosen} inRoom={inRoom} onPlay={onPlay} onClose={() => setChosen(null)} />}
+                </AnimatePresence>,
+                document.body,
+            )}
+        </section>
+    );
+}
+
+function TonightTile({ tile, index, onPick }: { tile: AmbientTile; index: number; onPick: () => void }) {
+    return (
+        <motion.button
+            type="button"
+            onClick={onPick}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay: Math.min(index, 6) * 0.04, ease: [0.22, 1, 0.36, 1] }}
+            whileTap={{ scale: 0.96 }}
+            className="shrink-0 snap-start text-left"
+            style={{ width: u(15) }}
+        >
+            <div className="relative overflow-hidden bg-white/[0.06]" style={{ aspectRatio: "2 / 3", borderRadius: u(1.6) }}>
+                {tile.poster ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- affiches distantes (Radarr / TMDB), pas d'optimisation Next ici
+                    <img src={tile.poster} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover" />
+                ) : (
+                    <div className="absolute inset-0 flex items-center justify-center p-3 text-center text-slate-300" style={{ fontSize: u(2.6) }}>
+                        {tile.title}
+                    </div>
+                )}
+                {tile.progress !== null && (
+                    <div className="absolute inset-x-0 bottom-0 bg-black/50" style={{ height: u(0.7) }}>
+                        <div className="h-full bg-[#4A9EFF]" style={{ width: `${tile.progress}%` }} />
                     </div>
                 )}
             </div>
-        </div>
+            <p className="truncate text-slate-200" style={{ fontSize: u(2.4), marginTop: u(1) }}>
+                {tile.title}
+            </p>
+            <p className="truncate text-slate-500" style={{ fontSize: u(2.1) }}>
+                {tile.subtitle}
+            </p>
+        </motion.button>
+    );
+}
+
+/**
+ * Confirmation avant de lancer : un enfant qui tapote la tablette ne doit
+ * pas déclencher un film. Un toucher en dehors annule.
+ */
+function LaunchSheet({ tile, inRoom, onPlay, onClose }: { tile: AmbientTile; inRoom: string; onPlay: PlayHandler; onClose: () => void }) {
+    const [state, setState] = useState<{ kind: "idle" | "sending" | "sent" | "error"; text?: string }>({ kind: "idle" });
+
+    // Envoyé : la fenêtre se ferme seule après un court message
+    useEffect(() => {
+        if (state.kind !== "sent") return;
+        const timer = setTimeout(onClose, 2_500);
+        return () => clearTimeout(timer);
+    }, [state.kind, onClose]);
+
+    const launch = async () => {
+        if (!tile.play || state.kind === "sending") return;
+        setState({ kind: "sending" });
+        try {
+            const sent = await onPlay(tile.play);
+            setState({
+                kind: "sent",
+                text: sent.online ? `Lancement sur ${sent.device}…` : `${sent.device} semble éteinte : allume-la, la demande attend 2 min.`,
+            });
+        } catch (err) {
+            setState({ kind: "error", text: err instanceof Error ? err.message : "Envoi impossible" });
+        }
+    };
+
+    const what = tile.kind === "episode" ? `${tile.title} · ${tile.subtitle}` : tile.title;
+    return (
+        <motion.div
+            // Rendue hors de la page (portail) : l'unité --u y est redéclarée
+            className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm landscape:[--u:min(1vh,0.625vw)] portrait:[--u:min(0.625vh,1vw)]"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={onClose}
+        >
+            <motion.div
+                className="relative w-full overflow-hidden bg-[#1C1C1E]"
+                style={{ maxWidth: u(110), margin: u(4), borderRadius: u(3) }}
+                initial={{ y: 40, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: 40, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 380, damping: 34 }}
+                onClick={(event) => event.stopPropagation()}
+            >
+                {tile.fanart && (
+                    <div className="absolute inset-0 bg-cover bg-center opacity-25" style={{ backgroundImage: `url(${tile.fanart})` }} />
+                )}
+                <div className="relative flex items-center" style={{ padding: u(4), gap: u(4) }}>
+                    {tile.poster && (
+                        // eslint-disable-next-line @next/next/no-img-element -- affiche distante
+                        <img src={tile.poster} alt="" className="shrink-0 object-cover" style={{ width: u(16), aspectRatio: "2 / 3", borderRadius: u(1.4) }} />
+                    )}
+                    <div className="min-w-0 flex-1">
+                        <p className="text-slate-400" style={{ fontSize: u(2.6) }}>
+                            {tile.play ? (tile.play.resume && tile.progress ? `Reprendre sur la TV${inRoom}` : `Lancer sur la TV${inRoom}`) : "Ma liste"}
+                        </p>
+                        <p className="font-semibold text-white" style={{ fontSize: u(4.4), lineHeight: 1.15, marginTop: u(0.8) }}>
+                            {what}
+                        </p>
+                        {!tile.play && (
+                            <p className="text-slate-400" style={{ fontSize: u(2.8), marginTop: u(1.4) }}>
+                                Série pas encore commencée : choisis l&apos;épisode depuis la TV.
+                            </p>
+                        )}
+                        {state.text && (
+                            <p
+                                className={state.kind === "error" ? "text-[#FF6961]" : "text-[#8CC4FF]"}
+                                style={{ fontSize: u(2.8), marginTop: u(1.4) }}
+                            >
+                                {state.text}
+                            </p>
+                        )}
+                        <div className="flex" style={{ gap: u(2), marginTop: u(3) }}>
+                            {tile.play && state.kind !== "sent" && (
+                                <button
+                                    type="button"
+                                    onClick={launch}
+                                    disabled={state.kind === "sending"}
+                                    className="flex items-center rounded-full bg-[#4A9EFF] font-semibold text-white transition-opacity active:opacity-80 disabled:opacity-60"
+                                    style={{ fontSize: u(3), padding: `${u(1.6)} ${u(4)}`, gap: u(1.2) }}
+                                >
+                                    {state.kind === "sending" ? (
+                                        <Loader2 className="animate-spin" style={{ width: u(3.2), height: u(3.2) }} />
+                                    ) : (
+                                        <Play className="fill-current" style={{ width: u(3.2), height: u(3.2) }} />
+                                    )}
+                                    {tile.play.resume && tile.progress ? "Reprendre" : "Lancer"}
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="rounded-full bg-white/[0.1] text-slate-200 active:bg-white/[0.18]"
+                                style={{ fontSize: u(3), padding: `${u(1.6)} ${u(4)}` }}
+                            >
+                                {state.kind === "sent" || !tile.play ? "Fermer" : "Annuler"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </motion.div>
+        </motion.div>
     );
 }
 
@@ -616,20 +1585,36 @@ function Panel({
     );
 }
 
-function UpcomingPanel({ upcoming, now }: { upcoming: Ambient["upcoming"]; now: Date }) {
+function UpcomingPanel({
+    upcoming,
+    now,
+    onOpen,
+}: {
+    upcoming: Ambient["upcoming"];
+    now: Date;
+    onOpen: (item: AmbientUpcoming) => void;
+}) {
     return (
         <Panel icon={CalendarClock} title="À venir" className="flex-[1.7]">
-            <ul className="flex flex-col" style={{ gap: u(1.8), fontSize: u(3.4) }}>
+            <ul className="flex flex-col" style={{ gap: u(0.6), fontSize: u(3.4) }}>
                 {upcoming.map((item, i) => (
-                    <li key={`${item.title}-${item.label}-${i}`} className="flex items-baseline justify-between" style={{ gap: u(2) }}>
-                        <span className="min-w-0 truncate">
-                            <span className="text-slate-100">{item.title}</span>
-                            <span className="text-slate-500">
-                                {" "}
-                                {item.kind === "episode" ? item.label : releaseTypeLabel(item.release_type) || item.label}
+                    <li key={`${item.title}-${item.label}-${i}`}>
+                        {/* Toute la ligne se touche : fiche de la sortie */}
+                        <button
+                            type="button"
+                            onClick={() => onOpen(item)}
+                            className="flex w-full items-baseline justify-between rounded-lg text-left transition-colors active:bg-white/[0.08]"
+                            style={{ gap: u(2), padding: `${u(0.6)} ${u(0.8)}`, margin: `0 calc(${u(0.8)} * -1)` }}
+                        >
+                            <span className="min-w-0 truncate">
+                                <span className="text-slate-100">{item.title}</span>
+                                <span className="text-slate-500">
+                                    {" "}
+                                    {item.kind === "episode" ? item.label : releaseTypeLabel(item.release_type) || item.label}
+                                </span>
                             </span>
-                        </span>
-                        <span className="shrink-0 text-[#8CC4FF]">{releaseWhen(item.air_date, now, item.kind)}</span>
+                            <span className="shrink-0 text-[#8CC4FF]">{releaseWhen(item.air_date, now, item.kind)}</span>
+                        </button>
                     </li>
                 ))}
             </ul>
@@ -637,23 +1622,270 @@ function UpcomingPanel({ upcoming, now }: { upcoming: Ambient["upcoming"]; now: 
     );
 }
 
-function DownloadsPanel({ downloads }: { downloads: Ambient["downloads"] }) {
+function DownloadsPanel({ downloads, onOpen }: { downloads: Ambient["downloads"]; onOpen: (key: string, title: string) => void }) {
     return (
         <Panel icon={Download} title="Téléchargements" className="flex-[1.3]">
-            <ul className="flex flex-col" style={{ gap: u(2), fontSize: u(3.2) }}>
+            <ul className="flex flex-col" style={{ gap: u(1), fontSize: u(3.2) }}>
                 {downloads.map((d, i) => (
-                    <li key={`${d.title}-${i}`} className="flex flex-col" style={{ gap: u(0.9) }}>
-                        <div className="flex items-baseline justify-between" style={{ gap: u(2) }}>
-                            <span className="truncate text-slate-100">{d.title}</span>
-                            <span className="shrink-0 tabular-nums text-slate-400">{d.paused ? "en pause" : d.time_left || `${d.progress} %`}</span>
-                        </div>
-                        <div className="overflow-hidden rounded-full bg-white/10" style={{ height: u(0.9) }}>
-                            <div className={cn("h-full rounded-full", d.paused ? "bg-slate-500" : "bg-[#4A9EFF]")} style={{ width: `${d.progress}%` }} />
-                        </div>
+                    <li key={`${d.key ?? d.title}-${i}`}>
+                        <button
+                            type="button"
+                            // Serveur ancien (sans clé) : pas de fiche
+                            disabled={!d.key}
+                            onClick={() => d.key && onOpen(d.key, d.title)}
+                            className="flex w-full flex-col rounded-lg text-left transition-colors active:bg-white/[0.08] disabled:active:bg-transparent"
+                            style={{ gap: u(0.9), padding: `${u(0.6)} ${u(0.8)}`, margin: `0 calc(${u(0.8)} * -1)` }}
+                        >
+                            <div className="flex w-full items-baseline justify-between" style={{ gap: u(2) }}>
+                                <span className="truncate text-slate-100">{d.title}</span>
+                                <span className="shrink-0 tabular-nums text-slate-400">
+                                    {d.paused ? "en pause" : d.time_left ? prettyTimeLeft(d.time_left) : `${d.progress} %`}
+                                </span>
+                            </div>
+                            <div className="w-full overflow-hidden rounded-full bg-white/10" style={{ height: u(0.9) }}>
+                                <div className={cn("h-full rounded-full", d.paused ? "bg-slate-500" : "bg-[#4A9EFF]")} style={{ width: `${d.progress}%` }} />
+                            </div>
+                        </button>
                     </li>
                 ))}
             </ul>
         </Panel>
+    );
+}
+
+/* ── Fiches au toucher (À venir, Téléchargement) ───────────── */
+
+/** Cadre commun : voile, carte en bas de l'écran, fond flouté de l'image du titre. */
+function DetailSheet({ fanart, onClose, children }: { fanart?: string; onClose: () => void; children: React.ReactNode }) {
+    return (
+        <motion.div
+            // Rendue hors de la page (portail) : l'unité --u y est redéclarée
+            className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm landscape:[--u:min(1vh,0.625vw)] portrait:[--u:min(0.625vh,1vw)]"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={onClose}
+        >
+            <motion.div
+                className="relative w-full overflow-hidden bg-[#1C1C1E]"
+                style={{ maxWidth: u(120), margin: u(4), borderRadius: u(3), maxHeight: "86dvh" }}
+                initial={{ y: 40, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: 40, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 380, damping: 34 }}
+                onClick={(event) => event.stopPropagation()}
+            >
+                {fanart && <div className="absolute inset-0 bg-cover bg-center opacity-20" style={{ backgroundImage: `url(${fanart})` }} />}
+                <button
+                    type="button"
+                    onClick={onClose}
+                    aria-label="Fermer"
+                    className="absolute z-10 flex items-center justify-center rounded-full bg-black/50 text-white active:bg-black/70"
+                    style={{ top: u(2), right: u(2), width: u(6), height: u(6) }}
+                >
+                    <X style={{ width: u(3.2), height: u(3.2) }} />
+                </button>
+                <div className="relative overflow-y-auto" style={{ padding: u(4), maxHeight: "86dvh" }}>
+                    {children}
+                </div>
+            </motion.div>
+        </motion.div>
+    );
+}
+
+/** Une info de la fiche : petit libellé gris, valeur en dessous. */
+function Fact({ label, value, accent }: { label: string; value: React.ReactNode; accent?: boolean }) {
+    if (value === null || value === undefined || value === "") return null;
+    return (
+        <div className="min-w-0">
+            <p className="uppercase text-slate-500" style={{ fontSize: u(2.1), letterSpacing: "0.12em" }}>
+                {label}
+            </p>
+            <p className={cn("truncate tabular-nums", accent ? "text-[#8CC4FF]" : "text-slate-100")} style={{ fontSize: u(3.3), marginTop: u(0.4) }}>
+                {value}
+            </p>
+        </div>
+    );
+}
+
+function UpcomingSheet({ item, now, onClose }: { item: AmbientUpcoming; now: Date; onClose: () => void }) {
+    const when = releaseWhen(item.air_date, now, item.kind);
+    const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(item.air_date) ? `${item.air_date}T12:00:00` : item.air_date);
+    const fullDate = Number.isNaN(date.getTime())
+        ? ""
+        : new Intl.DateTimeFormat("fr-FR", { weekday: "long", day: "numeric", month: "long" }).format(date);
+    const finale = item.finale_type === "series" ? "Dernier épisode de la série" : item.finale_type === "season" ? "Fin de saison" : "";
+    return (
+        <DetailSheet fanart={item.fanart} onClose={onClose}>
+            <div className="flex" style={{ gap: u(4) }}>
+                {item.poster && (
+                    // eslint-disable-next-line @next/next/no-img-element -- affiche distante (Sonarr / Radarr)
+                    <img src={item.poster} alt="" className="shrink-0 object-cover" style={{ width: u(20), aspectRatio: "2 / 3", borderRadius: u(1.4) }} />
+                )}
+                <div className="min-w-0 flex-1" style={{ paddingRight: u(6) }}>
+                    <p className="text-[#8CC4FF] first-letter:uppercase" style={{ fontSize: u(2.8) }}>
+                        {when}
+                        {fullDate && when !== fullDate ? ` · ${fullDate}` : ""}
+                    </p>
+                    <p className="font-semibold text-white" style={{ fontSize: u(4.6), lineHeight: 1.15, marginTop: u(0.8) }}>
+                        {item.title}
+                    </p>
+                    <p className="text-slate-300" style={{ fontSize: u(3.2), marginTop: u(0.8) }}>
+                        {item.kind === "episode"
+                            ? [item.label, item.subtitle].filter(Boolean).join(" · ")
+                            : releaseTypeLabel(item.release_type) || item.label}
+                    </p>
+                    <div className="flex flex-wrap items-center" style={{ gap: u(1.2), marginTop: u(1.6) }}>
+                        <RatingBadge value={item.rating} source={item.rating_source} className="text-[13px]" />
+                        {finale && (
+                            <span className="rounded-full bg-[#FF9F0A]/20 text-[#FFB340]" style={{ fontSize: u(2.4), padding: `${u(0.4)} ${u(1.4)}` }}>
+                                {finale}
+                            </span>
+                        )}
+                    </div>
+                    {item.overview ? (
+                        <p className="text-slate-300" style={{ fontSize: u(3), lineHeight: 1.45, marginTop: u(2) }}>
+                            {item.overview}
+                        </p>
+                    ) : (
+                        <p className="text-slate-500" style={{ fontSize: u(2.8), marginTop: u(2) }}>
+                            Pas encore de résumé.
+                        </p>
+                    )}
+                    <div className="grid grid-cols-3" style={{ gap: u(2.4), marginTop: u(2.6) }}>
+                        <Fact label={item.kind === "episode" ? "Chaîne" : "Studio"} value={item.network} />
+                        <Fact label="Durée" value={item.runtime ? `${item.runtime} min` : ""} />
+                        <Fact label="Genre" value={(item.genres ?? []).join(", ")} />
+                    </div>
+                    <p className="text-slate-500" style={{ fontSize: u(2.5), marginTop: u(2.4) }}>
+                        {item.monitored === false
+                            ? "Non suivi : il ne sera pas téléchargé automatiquement."
+                            : `Téléchargé automatiquement dès sa sortie par ${item.kind === "episode" ? "Sonarr" : "Radarr"}.`}
+                    </p>
+                </div>
+            </div>
+        </DetailSheet>
+    );
+}
+
+function DownloadSheet({
+    downloadKey,
+    title,
+    load,
+    onClose,
+}: {
+    downloadKey: string;
+    title: string;
+    load: (key: string) => Promise<AmbientDownloadDetail>;
+    onClose: () => void;
+}) {
+    // Relue toutes les 3 s tant que la fiche est ouverte (vitesse, sources en direct)
+    const { data: d, error } = useQuery({
+        queryKey: ["ambient-download", downloadKey],
+        queryFn: () => load(downloadKey),
+        refetchInterval: 3_000,
+        retry: false,
+    });
+    const live = d?.live ?? null;
+    const torrent = d?.protocol === "torrent";
+    const gone = error instanceof HttpError && error.status === 404;
+    const eta = formatEta(live?.eta_seconds) || (d?.time_left ? prettyTimeLeft(d.time_left) : "");
+    const state = downloadStateLabel(live?.state || d?.status);
+    const what =
+        d?.kind === "series"
+            ? [d.season != null ? `Saison ${d.season}` : "", d.episodes > 1 ? `${d.episodes} épisodes` : ""].filter(Boolean).join(" · ")
+            : "";
+
+    return (
+        <DetailSheet fanart={d?.fanart} onClose={onClose}>
+            <div className="flex" style={{ gap: u(4) }}>
+                {d?.poster && (
+                    // eslint-disable-next-line @next/next/no-img-element -- affiche distante (Sonarr / Radarr)
+                    <img src={d.poster} alt="" className="shrink-0 object-cover" style={{ width: u(18), aspectRatio: "2 / 3", borderRadius: u(1.4) }} />
+                )}
+                <div className="min-w-0 flex-1" style={{ paddingRight: u(6) }}>
+                    <p className="text-slate-400" style={{ fontSize: u(2.6) }}>
+                        {state || "Téléchargement"}
+                        {d?.client ? ` · ${d.client}` : ""}
+                    </p>
+                    <p className="font-semibold text-white" style={{ fontSize: u(4.6), lineHeight: 1.15, marginTop: u(0.8) }}>
+                        {d?.title ?? title}
+                    </p>
+                    {what && (
+                        <p className="text-slate-300" style={{ fontSize: u(3), marginTop: u(0.6) }}>
+                            {what}
+                        </p>
+                    )}
+
+                    {gone ? (
+                        <p className="text-[#8CC4FF]" style={{ fontSize: u(3.2), marginTop: u(3) }}>
+                            Terminé ou retiré de la file.
+                        </p>
+                    ) : !d ? (
+                        <p className="flex items-center text-slate-400" style={{ fontSize: u(3), marginTop: u(3), gap: u(1.2) }}>
+                            <Loader2 className="animate-spin" style={{ width: u(3.2), height: u(3.2) }} /> Chargement…
+                        </p>
+                    ) : (
+                        <>
+                            {/* Progression */}
+                            <div style={{ marginTop: u(2.4) }}>
+                                <div className="flex items-baseline justify-between tabular-nums" style={{ fontSize: u(3) }}>
+                                    <span className="text-slate-100">{d.progress.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} %</span>
+                                    <span className="text-slate-400">
+                                        {formatSize(d.size_bytes - d.size_left_bytes)} / {formatSize(d.size_bytes)}
+                                    </span>
+                                </div>
+                                <div className="overflow-hidden rounded-full bg-white/10" style={{ height: u(1.1), marginTop: u(1) }}>
+                                    <motion.div
+                                        className="h-full rounded-full bg-[#4A9EFF]"
+                                        initial={false}
+                                        animate={{ width: `${d.progress}%` }}
+                                        transition={{ duration: 0.6, ease: "easeOut" }}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Chiffres clés */}
+                            <div className="grid grid-cols-3" style={{ gap: u(2.4), marginTop: u(2.8) }}>
+                                <Fact label="Vitesse" value={live ? formatSpeed(live.download_speed) : "—"} accent />
+                                <Fact label="Reste" value={eta || "—"} />
+                                {torrent ? (
+                                    <Fact
+                                        label="Sources"
+                                        value={live ? `${live.seeds ?? 0}${live.seeds_total ? ` (${live.seeds_total})` : ""}` : "—"}
+                                    />
+                                ) : (
+                                    <Fact label="Dans la file" value={live?.position ? `${live.position} / ${live.queue_size}` : "—"} />
+                                )}
+                                {torrent && <Fact label="Pairs" value={live ? `${live.peers ?? 0}${live.peers_total ? ` (${live.peers_total})` : ""}` : ""} />}
+                                {torrent && <Fact label="Envoi" value={live?.upload_speed ? formatSpeed(live.upload_speed) : ""} />}
+                                {torrent && <Fact label="Ratio" value={live?.ratio != null ? live.ratio.toLocaleString("fr-FR") : ""} />}
+                                {!torrent && <Fact label="Ancienneté" value={live?.age} />}
+                                {!torrent && <Fact label="Priorité" value={live?.priority} />}
+                                <Fact label="Qualité" value={d.quality} />
+                                <Fact label="Indexeur" value={d.indexer.replace(/\s*\(Prowlarr\)$/i, "")} />
+                                <Fact label={torrent ? "Tracker" : "Protocole"} value={torrent ? live?.tracker : "Usenet"} />
+                            </div>
+
+                            {(d.error || d.detail || d.live_hint) && (
+                                <p
+                                    className={d.error ? "text-[#FF6961]" : "text-slate-400"}
+                                    style={{ fontSize: u(2.7), marginTop: u(2.4) }}
+                                >
+                                    {d.error || d.detail || d.live_hint}
+                                </p>
+                            )}
+                            {d.release && (
+                                <p className="truncate font-mono text-slate-600" style={{ fontSize: u(2.2), marginTop: u(2) }}>
+                                    {d.release}
+                                </p>
+                            )}
+                        </>
+                    )}
+                </div>
+            </div>
+        </DetailSheet>
     );
 }
 

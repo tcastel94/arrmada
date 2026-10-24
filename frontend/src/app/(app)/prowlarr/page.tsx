@@ -104,7 +104,6 @@ export default function ProwlarrPage() {
                 <PageHeader
                     icon={Radar}
                     accent="rose"
-                    eyebrow="Maintenance"
                     title="Indexers"
                     description="Santé et performances de tes indexers Prowlarr, avec tests et activation en un clic."
                     actions={
@@ -173,7 +172,7 @@ export default function ProwlarrPage() {
                     <motion.div variants={stagger(0, 0.08)} initial="hidden" animate="show" className="space-y-5">
                         {watchlist.length > 0 && (
                             <motion.div variants={fadeUp}>
-                                <Panel title="À surveiller" icon={ShieldAlert} iconClassName="text-amber-300">
+                                <Panel title="À surveiller" icon={ShieldAlert} iconClassName="text-warning">
                                     <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                                         {watchlist.map((r) => {
                                             const msg = r.messages.map((m) => m.message || m.title).filter(Boolean).join(" · ");
@@ -182,13 +181,13 @@ export default function ProwlarrPage() {
                                                     key={r.key}
                                                     className={cn(
                                                         "flex items-start gap-2.5 rounded-xl p-3 ring-1",
-                                                        r.health === "error" ? "bg-red-500/[0.07] ring-red-400/20" : "bg-amber-500/[0.07] ring-amber-400/20",
+                                                        r.health === "error" ? "bg-destructive/[0.07] ring-destructive/20" : "bg-warning/[0.07] ring-warning/20",
                                                     )}
                                                 >
                                                     <StatusDot tone={r.health === "error" ? "error" : "warning"} className="mt-1.5" />
                                                     <div className="min-w-0">
                                                         <p className="truncate text-sm font-semibold">{r.name}</p>
-                                                        <p className={cn("line-clamp-2 text-xs", r.health === "error" ? "text-red-300" : "text-amber-300")} title={msg}>
+                                                        <p className={cn("line-clamp-2 text-xs", r.health === "error" ? "text-destructive" : "text-warning")} title={msg}>
                                                             {r.health === "error"
                                                                 ? msg || "Prowlarr signale une erreur"
                                                                 : `${(r.stat?.success_rate ?? 0).toLocaleString("fr-FR")} % de requêtes réussies (${plural(r.stat?.failed_queries ?? 0, "échec")})`}

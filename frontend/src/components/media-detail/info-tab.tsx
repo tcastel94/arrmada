@@ -141,7 +141,7 @@ export function InfoTab({ media, onMove }: { media: MediaDetail; onMove: () => v
                 <Panel
                     title="Emplacement"
                     icon={FolderOpen}
-                    iconClassName="text-sky-300"
+                    iconClassName="text-primary"
                     action={
                         <Button size="sm" variant="outline" onClick={onMove}>
                             <FolderInput /> Déplacer…

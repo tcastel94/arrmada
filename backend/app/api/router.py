@@ -9,6 +9,7 @@ from app.api.activity_timeline import router as activity_timeline_router
 from app.api.ai_search import router as ai_search_router
 from app.api.ambient import router as ambient_router
 from app.api.analytics import router as analytics_router
+from app.api.android import router as android_router
 from app.api.artwork import files_router as artwork_files_router
 from app.api.artwork import router as artwork_router
 from app.api.auth import router as auth_router
@@ -28,9 +29,11 @@ from app.api.files import router as files_router
 from app.api.kodi import router as kodi_router
 from app.api.kodi_repo import router as kodi_repo_router
 from app.api.links import router as links_router
+from app.api.local_series import router as local_series_router
 from app.api.media import router as media_router
 from app.api.notifications import router as notifications_router
 from app.api.profile_overrides import router as profile_overrides_router
+from app.api.profiles import router as profiles_router
 from app.api.prowlarr_stats import router as prowlarr_stats_router
 from app.api.quality import router as quality_router
 from app.api.recommendations import router as recommendations_router
@@ -44,6 +47,9 @@ from app.api.stack import router as stack_router
 from app.api.subtitles import router as subtitles_router
 from app.api.system import router as system_router
 from app.api.trash_guides import router as trash_guides_router
+from app.api.tv import router as tv_router
+from app.api.videos import router as videos_router
+from app.api.watchlist import router as watchlist_router
 from app.api.webhooks import router as webhooks_router
 from app.api.yamaha import router as yamaha_router
 
@@ -84,6 +90,9 @@ api_router.include_router(cast_router)
 api_router.include_router(devices_router)
 api_router.include_router(links_router)  # QR codes TV → web app (ADR-003 § 7)
 api_router.include_router(ambient_router)  # Écran d'appoint du salon (tablette)
+api_router.include_router(tv_router)  # Lecture dans l'appli Android native (ADR-007)
+api_router.include_router(profiles_router)  # Profils famille (ADR-008)
+api_router.include_router(watchlist_router)  # Liste « À voir » par profil
 
 # New feature routes
 api_router.include_router(events_router)
@@ -95,3 +104,7 @@ api_router.include_router(cleanup_router)
 api_router.include_router(ai_search_router)
 api_router.include_router(subtitles_router)
 api_router.include_router(cameras_router)  # Caméras Eufy : pop-up sur la TV
+api_router.include_router(android_router)  # Mises à jour de l'appli Android (ADR-009)
+# Séries maison avant l'écran Vidéos : /api/videos/series/… ne doit pas tomber sur une autre route
+api_router.include_router(local_series_router)  # Séries maison (Naruto Kai, One Pace…)
+api_router.include_router(videos_router)  # Écran « Vidéos » : dossiers hors médiathèque

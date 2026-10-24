@@ -153,7 +153,6 @@ export default function CalendarPage() {
                 <PageHeader
                     icon={CalendarDays}
                     accent="sky"
-                    eyebrow="Bibliothèque"
                     title="Calendrier"
                     description="Les épisodes et films attendus par Sonarr et Radarr, jour par jour. Clique une sortie pour ouvrir sa fiche."
                     actions={
@@ -235,7 +234,7 @@ export default function CalendarPage() {
                                         Aujourd&apos;hui
                                     </Button>
                                 )}
-                                {changing && <Loader2 className="ml-1 h-4 w-4 animate-spin text-sky-300" aria-label="Chargement du mois" />}
+                                {changing && <Loader2 className="ml-1 h-4 w-4 animate-spin text-primary" aria-label="Chargement du mois" />}
                             </div>
 
                             <div className="flex flex-wrap items-center gap-3">
@@ -246,8 +245,8 @@ export default function CalendarPage() {
                                     onChange={setTypeFilter}
                                     options={[
                                         { value: "all", label: "Tout" },
-                                        { value: "episode", label: "Séries", icon: Tv, tone: "text-sky-300" },
-                                        { value: "movie", label: "Films", icon: Film, tone: "text-violet-300" },
+                                        { value: "episode", label: "Séries", icon: Tv, tone: "text-primary" },
+                                        { value: "movie", label: "Films", icon: Film, tone: "text-primary" },
                                     ]}
                                 />
                                 <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
@@ -260,13 +259,13 @@ export default function CalendarPage() {
                         {/* ── Légende ── */}
                         <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-[11px] text-muted-foreground" aria-label="Légende">
                             <span className="inline-flex items-center gap-1.5">
-                                <span className="h-2 w-2 rounded-full bg-sky-400 shadow-[0_0_8px_hsl(199_89%_60%)]" /> Séries
+                                <span className="h-2 w-2 rounded-full bg-sky-400" /> Séries
                             </span>
                             <span className="inline-flex items-center gap-1.5">
-                                <span className="h-2 w-2 rounded-full bg-violet-400 shadow-[0_0_8px_hsl(262_83%_65%)]" /> Films
+                                <span className="h-2 w-2 rounded-full bg-primary" /> Films
                             </span>
                             <span className="inline-flex items-center gap-1.5">
-                                <Check className="h-3 w-3 text-emerald-300" strokeWidth={3} /> Déjà téléchargé
+                                <Check className="h-3 w-3 text-success" strokeWidth={3} /> Déjà téléchargé
                             </span>
                             {!monitoredOnly && (
                                 <span className="inline-flex items-center gap-1.5">
@@ -274,7 +273,7 @@ export default function CalendarPage() {
                                 </span>
                             )}
                             <span className="inline-flex items-center gap-1.5">
-                                <span className="h-2.5 w-2.5 rounded-full bg-sky-400 shadow-[0_0_8px_hsl(199_89%_60%)]" /> Aujourd&apos;hui
+                                <span className="h-2.5 w-2.5 rounded-full bg-sky-400" /> Aujourd&apos;hui
                             </span>
                         </div>
 
@@ -320,7 +319,7 @@ export default function CalendarPage() {
                             todayKey={todayKey}
                             typeFilter={typeFilter}
                             monitoredOnly={monitoredOnly}
-                            className="min-[1800px]:sticky min-[1800px]:top-20 min-[1800px]:self-start"
+                            className="min-[1800px]:sticky min-[1800px]:top-16 min-[1800px]:self-start"
                         />
                     )}
                 </div>

@@ -16,6 +16,7 @@ import { motion } from "framer-motion";
 import { Check, Eye, EyeOff, Film, HardDrive, Tv } from "lucide-react";
 import type { MediaItem } from "@/hooks/use-media";
 import { PosterBadge, PosterCard } from "@/components/shared/poster-card";
+import { RatingBadge } from "@/components/shared/rating-badge";
 import { formatBytes } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { fadeIn } from "@/lib/motion";
@@ -23,7 +24,6 @@ import { MediaThumb } from "./media-thumb";
 import type { SubState, WatchState } from "./enrichment";
 import { translateGenre } from "@/lib/genres";
 import { MediaTechBadges, cardTechBadges } from "@/components/media/media-tech-badges";
-import { StudioNetworkLogo } from "@/components/media/studio-network-logo";
 
 /** Lien vers la fiche d'un média. */
 export const mediaHref = (item: Pick<MediaItem, "type" | "external_id">) => `/media/${item.type}/${item.external_id}`;
@@ -93,51 +93,42 @@ function techBadgesOf(item: MediaItem) {
 }
 
 export function MediaPosterCard({ item, sub, watch, selectable, selected, onToggleSelect }: MediaViewProps) {
-    const progress = episodeProgress(item);
     const quality = qualityLabel(item);
     const isMovie = item.type === "movie";
     const hasTech = techBadgesOf(item).length > 0;
+    // Affiche épurée (style app TV d'Apple) : seulement l'essentiel sur l'image
+    //  - manquant → pastille rouge ; déjà vu → coche ronde ;
+    //  - barre de progression : film commencé, ou épisodes présents d'une série.
+    // Le détail (4K · DV · Atmos, ST FR, genres, taille) apparaît au survol.
+    const progress = isMovie ? (watch && !watch.watched && watch.progress ? watch.progress : undefined) : episodeProgress(item);
     return (
         <PosterCard
             title={item.title}
-            subtitle={
-                // Studio / chaîne en pastille discrète à droite, tronquée si le nom est long.
-                <span className="flex min-w-0 items-center justify-between gap-1.5">
-                    <span className="shrink-0">
-                        {item.year ?? "—"} · {isMovie ? "Film" : "Série"}
-                    </span>
-                    <StudioNetworkLogo
-                        name={isMovie ? item.studio : item.network}
-                        kind={isMovie ? "studio" : "network"}
-                        variant="mini"
-                        className="max-w-[60%]"
-                    />
-                </span>
-            }
+            subtitle={[item.year, isMovie ? "Film" : "Série"].filter(Boolean).join(" · ")}
             posterUrl={item.poster_url}
             type={item.type}
             href={mediaHref(item)}
             dimmed={!item.has_file}
             progress={progress}
-            badges={
-                <>
-                    {hasTech ? <MediaTechBadges specs={item} variant="card" /> : quality && <PosterBadge>{quality}</PosterBadge>}
-                    <MediaStateBadges sub={sub} watch={watch} />
-                </>
+            rating={isMovie ? <RatingBadge value={item.rating} source={item.rating_source} votes={item.rating_votes} /> : undefined}
+            corner={
+                !item.has_file ? (
+                    <PosterBadge tone="danger">Manquant</PosterBadge>
+                ) : watch?.watched ? (
+                    <span title="Vu sur une TV" className="flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur">
+                        <Check className="h-3 w-3" strokeWidth={3} />
+                    </span>
+                ) : undefined
             }
-            corner={!item.has_file ? <PosterBadge tone="danger">Manquant</PosterBadge> : undefined}
             meta={
                 <div className="flex flex-wrap items-center gap-1">
+                    {hasTech ? <MediaTechBadges specs={item} variant="card" /> : quality && <PosterBadge>{quality}</PosterBadge>}
+                    <MediaStateBadges sub={sub} watch={watch} />
                     {item.type === "series" && item.episodes_total ? (
-                        <span className="rounded bg-primary/25 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-white">
+                        <span className="text-[10px] font-medium tabular-nums text-white/85">
                             {item.episodes_have ?? 0}/{item.episodes_total} ép.
                         </span>
                     ) : null}
-                    {item.genres.slice(0, 3).map((g) => (
-                        <span key={g} className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-white/80 backdrop-blur">
-                            {translateGenre(g)}
-                        </span>
-                    ))}
                     {item.size_bytes > 0 && (
                         <span className="inline-flex items-center gap-1 text-[10px] tabular-nums text-white/70">
                             <HardDrive className="h-2.5 w-2.5" />
@@ -156,7 +147,7 @@ export function MediaPosterCard({ item, sub, watch, selectable, selected, onTogg
 /** En-tête de colonnes de la vue liste (desktop uniquement). */
 export function MediaListHeader({ selectable }: { selectable?: boolean }) {
     return (
-        <div className="hidden items-center gap-3 px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/60 md:flex">
+        <div className="hidden items-center gap-3 px-4 pb-1.5 pt-2.5 text-[12px] font-medium text-muted-foreground md:flex">
             {selectable && <span className="w-5" />}
             <span className="w-10" />
             <span className="min-w-0 flex-1">Titre</span>
@@ -183,8 +174,8 @@ export function MediaListRow({ item, sub, watch, selectable, selected, onToggleS
                 <span
                     aria-hidden
                     className={cn(
-                        "flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 transition-colors",
-                        selected ? "border-primary bg-primary text-primary-foreground" : "border-white/30",
+                        "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
+                        selected ? "border-primary bg-primary text-white" : "border-white/30",
                     )}
                 >
                     {selected && <Check className="h-3 w-3" strokeWidth={3} />}
@@ -194,8 +185,8 @@ export function MediaListRow({ item, sub, watch, selectable, selected, onToggleS
 
             {/* Titre + infos (empilées sur mobile) */}
             <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold transition-colors group-hover:text-primary">{item.title}</p>
-                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                <p className="truncate text-[15px] font-medium">{item.title}</p>
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px] text-muted-foreground">
                     <span className="inline-flex items-center gap-1">
                         <TypeIcon className="h-3 w-3" />
                         {item.year ?? "—"}
@@ -204,12 +195,12 @@ export function MediaListRow({ item, sub, watch, selectable, selected, onToggleS
                     {/* Infos des colonnes, repliées sous le titre sur mobile */}
                     {qualityText && <span className="md:hidden">{qualityText}</span>}
                     <span className="tabular-nums md:hidden">{item.size_bytes > 0 ? formatBytes(item.size_bytes) : ""}</span>
-                    {sub && <span className={cn("md:hidden", sub === "present" ? "text-emerald-400" : "text-amber-400")}>ST FR {sub === "present" ? "✓" : "✗"}</span>}
-                    {watch?.watched && <span className="text-violet-300 md:hidden">Vu</span>}
+                    {sub && <span className={cn("md:hidden", sub === "present" ? "text-success" : "text-warning")}>ST FR {sub === "present" ? "✓" : "✗"}</span>}
+                    {watch?.watched && <span className="text-foreground/80 md:hidden">Vu</span>}
                 </div>
                 {typeof progress === "number" && (
-                    <div className="mt-1.5 h-1 w-full max-w-[220px] overflow-hidden rounded-full bg-white/[0.06]">
-                        <div className="h-full rounded-full bg-gradient-to-r from-primary to-brand" style={{ width: `${progress}%` }} />
+                    <div className="mt-1.5 h-1 w-full max-w-[220px] overflow-hidden rounded-full bg-white/[0.12]">
+                        <div className="h-full rounded-full bg-primary" style={{ width: `${progress}%` }} />
                     </div>
                 )}
             </div>
@@ -218,7 +209,7 @@ export function MediaListRow({ item, sub, watch, selectable, selected, onToggleS
                 {tech.length > 0 ? (
                     <MediaTechBadges specs={item} variant="card" max={2} className="flex-nowrap" />
                 ) : quality ? (
-                    <span className="rounded-md bg-white/[0.05] px-1.5 py-0.5 ring-1 ring-white/[0.08]">{quality}</span>
+                    <span className="rounded-[5px] bg-white/[0.08] px-1.5 py-0.5">{quality}</span>
                 ) : (
                     <span className="text-muted-foreground/50">—</span>
                 )}
@@ -226,30 +217,30 @@ export function MediaListRow({ item, sub, watch, selectable, selected, onToggleS
             <span className="hidden w-20 text-right text-xs tabular-nums text-muted-foreground md:block">{formatBytes(item.size_bytes)}</span>
             <span className="hidden w-16 text-center text-xs md:block">
                 {sub === "present" ? (
-                    <span className="text-emerald-400">✓</span>
+                    <span className="text-success">✓</span>
                 ) : sub === "missing" ? (
-                    <span className="text-amber-400">✗</span>
+                    <span className="text-warning">✗</span>
                 ) : (
                     <span className="text-muted-foreground/40">—</span>
                 )}
             </span>
             <span className="hidden w-16 text-center text-xs md:block">
                 {watch?.watched ? (
-                    <span className="text-violet-300">Vu</span>
+                    <span className="text-foreground/85">Vu</span>
                 ) : watch?.progress ? (
-                    <span className="tabular-nums text-violet-300">{watch.progress} %</span>
+                    <span className="tabular-nums text-foreground/85">{watch.progress} %</span>
                 ) : (
                     <span className="text-muted-foreground/40">—</span>
                 )}
             </span>
             <span className="flex w-auto shrink-0 justify-end md:w-24">
                 {item.has_file ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-400 ring-1 ring-emerald-500/25">
+                    <span className="inline-flex items-center gap-1 text-[12px] font-medium text-success">
                         {item.monitored ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
                         Présent
                     </span>
                 ) : (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-[11px] font-medium text-red-400 ring-1 ring-red-500/25">
+                    <span className="inline-flex items-center gap-1 text-[12px] font-medium text-destructive">
                         {item.monitored ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
                         Manquant
                     </span>
@@ -259,10 +250,8 @@ export function MediaListRow({ item, sub, watch, selectable, selected, onToggleS
     );
 
     const rowClass = cn(
-        "group flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-all duration-300 ease-smooth",
-        selected
-            ? "bg-primary/10 ring-1 ring-primary/40"
-            : "ring-1 ring-transparent hover:bg-white/[0.04] hover:ring-white/[0.08]",
+        "group flex w-full items-center gap-3 px-4 py-2 text-left transition-colors duration-150",
+        selected ? "bg-primary/[0.14]" : "hover:bg-white/[0.03] active:bg-white/[0.06]",
     );
 
     return (

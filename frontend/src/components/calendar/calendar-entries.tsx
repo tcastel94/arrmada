@@ -23,15 +23,15 @@ const RELEASE_ICONS = { digital: MonitorDown, physical: Disc3, cinema: Clapperbo
 
 export const TYPE_TONES = {
     episode: {
-        pill: "bg-sky-500/10 text-sky-100 ring-sky-400/20 hover:bg-sky-500/20 hover:ring-sky-400/40",
+        pill: "bg-primary/10 text-sky-100 ring-primary/20 hover:bg-primary/20 hover:ring-primary/40",
         dot: "bg-sky-400",
-        text: "text-sky-300",
+        text: "text-primary",
         label: "Série",
     },
     movie: {
-        pill: "bg-violet-500/10 text-violet-100 ring-violet-400/20 hover:bg-violet-500/20 hover:ring-violet-400/40",
-        dot: "bg-violet-400",
-        text: "text-violet-300",
+        pill: "bg-primary/10 text-violet-100 ring-primary/20 hover:bg-primary/20 hover:ring-primary/40",
+        dot: "bg-primary",
+        text: "text-primary",
         label: "Film",
     },
 } as const;
@@ -70,15 +70,15 @@ export function EntryPill({ entry, past }: { entry: CalendarEntry; past?: boolea
             className={cn(
                 "flex w-full min-w-0 items-center gap-1 rounded-md px-1.5 py-[3px] text-[11px] leading-tight ring-1 ring-inset transition-all duration-200",
                 tone.pill,
-                entry.has_file && "ring-emerald-400/40",
+                entry.has_file && "ring-success/40",
                 !entry.monitored && "border border-dashed border-white/20 opacity-60 ring-0",
                 past && "opacity-60 hover:opacity-100",
             )}
         >
-            <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", entry.has_file ? "bg-emerald-400" : tone.dot)} />
+            <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", entry.has_file ? "bg-success" : tone.dot)} />
             <span className="min-w-0 flex-1 truncate font-medium">{entry.title}</span>
             {isEpisode && <span className="shrink-0 text-[10px] tabular-nums opacity-70">{entryCode(entry)}</span>}
-            {entry.has_file && <Check className="h-3 w-3 shrink-0 text-emerald-300" strokeWidth={3} />}
+            {entry.has_file && <Check className="h-3 w-3 shrink-0 text-success" strokeWidth={3} />}
         </MaybeLink>
     );
 }
@@ -153,7 +153,7 @@ export function EntryRow({
                         {tone.label}
                     </span>
                     {entry.has_file ? (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 px-1.5 py-px text-[10px] font-semibold text-emerald-300">
+                        <span className="inline-flex items-center gap-1 rounded-md bg-success/15 px-1.5 py-px text-[10px] font-semibold text-success">
                             <Check className="h-2.5 w-2.5" strokeWidth={3} /> Téléchargé
                         </span>
                     ) : entry.monitored ? (

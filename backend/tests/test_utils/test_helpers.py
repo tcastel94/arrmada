@@ -48,7 +48,8 @@ class TestNormalisation:
         assert m["type"] == "movie"
         assert m["quality"] == "Bluray-2160p"
         assert m["size_bytes"] == fake_arr.MOVIES[0]["movieFile"]["size"]
-        assert m["rating"] == 7.8
+        # Note la plus fiable : IMDb (Radarr), plus TMDB
+        assert m["rating"] == 8.0 and m["rating_source"] == "imdb"
 
     def test_movie_without_file(self) -> None:
         m = _normalise_movie(fake_arr.MOVIES[1], "Radarr")

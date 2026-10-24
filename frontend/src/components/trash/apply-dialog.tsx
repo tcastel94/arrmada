@@ -130,8 +130,8 @@ export function ApplyDialog({
                                             className={cn(
                                                 "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ring-1",
                                                 type === "sonarr"
-                                                    ? "bg-sky-500/15 text-sky-300 ring-sky-400/25"
-                                                    : "bg-violet-500/15 text-violet-300 ring-violet-400/25",
+                                                    ? "bg-primary/15 text-primary ring-primary/25"
+                                                    : "bg-primary/15 text-primary ring-primary/25",
                                             )}
                                         >
                                             <Icon className="h-4 w-4" />
@@ -219,8 +219,8 @@ function ResultLine({ result, dryRun }: { result: ApplyResult; dryRun?: boolean 
                 dryRun
                     ? "bg-primary/10 text-primary ring-primary/20"
                     : ok
-                      ? "bg-emerald-500/10 text-emerald-300 ring-emerald-400/20"
-                      : "bg-amber-500/10 text-amber-300 ring-amber-400/20",
+                      ? "bg-success/10 text-success ring-success/20"
+                      : "bg-warning/10 text-warning ring-warning/20",
             )}
         >
             <p className="flex items-center gap-1.5 font-medium">
@@ -235,7 +235,7 @@ function ResultLine({ result, dryRun }: { result: ApplyResult; dryRun?: boolean 
                 {parts.join(" · ")}
             </p>
             {result.errors.length > 0 && (
-                <ul className="mt-1.5 max-h-28 space-y-1 overflow-y-auto pr-1 text-[11px] text-red-300">
+                <ul className="mt-1.5 max-h-28 space-y-1 overflow-y-auto pr-1 text-[11px] text-destructive">
                     {result.errors.map((err, i) => (
                         <li key={`${i}:${err}`} className="flex gap-1.5">
                             <XCircle className="mt-0.5 h-3 w-3 shrink-0" />

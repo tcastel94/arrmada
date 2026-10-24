@@ -129,7 +129,7 @@ export function CastDialog({
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
-                        <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-sky-500/15 text-sky-300 ring-1 ring-sky-400/30">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/15 text-primary ring-1 ring-primary/30">
                             <Cast className="h-4 w-4" />
                         </span>
                         Caster sur un appareil
@@ -203,7 +203,7 @@ export function CastDialog({
                                             active && "border-sky-400/40",
                                         )}
                                     >
-                                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sky-500/10 text-sky-300">
+                                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
                                             <Tv className="h-4 w-4" />
                                         </span>
                                         <span className="min-w-0 flex-1">
@@ -211,9 +211,9 @@ export function CastDialog({
                                             <span className="block truncate text-[11px] text-muted-foreground">{d.model ?? "Google Cast"}</span>
                                         </span>
                                         {pending ? (
-                                            <Loader2 className="h-4 w-4 animate-spin text-sky-300" aria-label="Lancement en cours" />
+                                            <Loader2 className="h-4 w-4 animate-spin text-primary" aria-label="Lancement en cours" />
                                         ) : active ? (
-                                            <Check className="h-4 w-4 text-emerald-400" aria-label="Cast en cours" />
+                                            <Check className="h-4 w-4 text-success" aria-label="Cast en cours" />
                                         ) : (
                                             <Cast className="h-4 w-4 text-muted-foreground" aria-hidden />
                                         )}

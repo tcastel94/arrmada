@@ -11,8 +11,18 @@
  *  - Profils par média + SABnzbd      → onglets de /trash-guides
  *  - Télécommandes Kodi + Yamaha      → nouvelle page « Salon » (/remote)
  * Les anciennes URLs redirigent (voir next.config.mjs).
+ *
+ * Refonte « Épuré » (2026) :
+ *  - Mobile : barre d'onglets iOS à 4 destinations (MOBILE_TABS) + « Plus »
+ *    (/more), qui liste tout le reste en listes groupées façon Réglages.
+ *  - Chaque entrée a une teinte (`tint`) : couleur de sa vignette d'icône
+ *    dans « Plus » (carré arrondi coloré, icône blanche, comme les Réglages
+ *    de l'iPhone).
  */
 import {
+    House,
+    Clapperboard,
+    ArrowDownToLine,
     LayoutDashboard,
     Film,
     History,
@@ -21,6 +31,7 @@ import {
     BarChart3,
     Settings,
     BookMarked,
+    Bookmark,
     Bell,
     CalendarDays,
     HardDrive,
@@ -44,6 +55,8 @@ export interface NavItem {
     keywords?: string[];
     /** Clé de badge dynamique (compteur affiché dans la sidebar). */
     badge?: "downloads" | "notifications" | "missing";
+    /** Couleur de la vignette d'icône (écran « Plus »), classe Tailwind de fond. */
+    tint?: string;
 }
 
 export interface NavGroup {
@@ -55,8 +68,9 @@ export interface NavGroup {
 export const TOP_ITEMS: NavItem[] = [
     {
         href: "/dashboard",
-        label: "Dashboard",
+        label: "Accueil",
         icon: LayoutDashboard,
+        tint: "bg-[#0A84FF]",
         description: "Vue d'ensemble de la flotte",
         shortcut: "d",
         keywords: ["accueil", "home", "tableau de bord"],
@@ -65,6 +79,7 @@ export const TOP_ITEMS: NavItem[] = [
         href: "/remote",
         label: "Salon",
         icon: Sofa,
+        tint: "bg-[#FF9F0A]",
         description: "Télécommandes Kodi & ampli, lecture en cours",
         shortcut: "r",
         keywords: ["kodi", "yamaha", "ampli", "télécommande", "remote", "lecture", "cast"],
@@ -79,6 +94,7 @@ export const NAV_GROUPS: NavGroup[] = [
                 href: "/media",
                 label: "Médiathèque",
                 icon: Film,
+        tint: "bg-[#0A84FF]",
                 description: "Films et séries de ta collection",
                 shortcut: "m",
                 keywords: ["films", "séries", "library", "bibliothèque"],
@@ -87,14 +103,25 @@ export const NAV_GROUPS: NavGroup[] = [
                 href: "/media/continue",
                 label: "Reprendre",
                 icon: History,
+        tint: "bg-[#5E5CE6]",
                 description: "Films et épisodes commencés sur tes TV",
                 shortcut: "e",
                 keywords: ["en cours", "reprise", "continuer", "vu", "kodi", "tv"],
             },
             {
+                href: "/watchlist",
+                label: "Ma liste",
+                icon: Bookmark,
+                tint: "bg-[#FF375F]",
+                description: "Films et séries à voir, par profil",
+                shortcut: "l",
+                keywords: ["à voir", "watchlist", "liste", "envies", "favoris"],
+            },
+            {
                 href: "/media/missing",
                 label: "Manquants",
                 icon: PackageX,
+        tint: "bg-[#FF9F0A]",
                 description: "Médias surveillés sans fichier",
                 shortcut: "x",
                 keywords: ["missing", "wanted", "absents"],
@@ -104,14 +131,16 @@ export const NAV_GROUPS: NavGroup[] = [
                 href: "/calendar",
                 label: "Calendrier",
                 icon: CalendarDays,
+        tint: "bg-[#FF453A]",
                 description: "Sorties à venir",
                 shortcut: "c",
                 keywords: ["agenda", "sorties", "épisodes"],
             },
             {
                 href: "/search",
-                label: "Rechercher & Ajouter",
+                label: "Rechercher",
                 icon: Search,
+        tint: "bg-[#8E8E93]",
                 description: "Trouver un titre, l'ajouter, suivre les demandes",
                 shortcut: "s",
                 keywords: ["ajouter", "requests", "demandes", "suggestions", "tendances", "ia"],
@@ -123,17 +152,19 @@ export const NAV_GROUPS: NavGroup[] = [
         items: [
             {
                 href: "/downloads",
-                label: "Téléchargements",
+                label: "Transferts",
                 icon: Download,
-                description: "File d'attente et imports",
+        tint: "bg-[#30D158]",
+                description: "Téléchargements en cours et imports",
                 shortcut: "t",
-                keywords: ["downloads", "queue", "sabnzbd", "deluge", "imports", "fichiers"],
+                keywords: ["téléchargements", "downloads", "queue", "sabnzbd", "deluge", "imports", "fichiers"],
                 badge: "downloads",
             },
             {
                 href: "/activity",
                 label: "Journal",
                 icon: Activity,
+        tint: "bg-[#8E8E93]",
                 description: "Historique de toutes les actions",
                 shortcut: "j",
                 keywords: ["activité", "historique", "timeline", "log"],
@@ -142,6 +173,7 @@ export const NAV_GROUPS: NavGroup[] = [
                 href: "/notifications",
                 label: "Notifications",
                 icon: Bell,
+        tint: "bg-[#FF453A]",
                 description: "Alertes et événements",
                 shortcut: "n",
                 keywords: ["alertes"],
@@ -156,6 +188,7 @@ export const NAV_GROUPS: NavGroup[] = [
                 href: "/health",
                 label: "Santé médiathèque",
                 icon: HeartPulse,
+        tint: "bg-[#FF375F]",
                 description: "Qualité, doublons et nettoyage",
                 shortcut: "h",
                 keywords: ["qualité", "doublons", "nettoyage", "cleanup", "duplicates", "upgrade"],
@@ -164,6 +197,7 @@ export const NAV_GROUPS: NavGroup[] = [
                 href: "/trash-guides",
                 label: "TRaSH Guides",
                 icon: BookMarked,
+        tint: "bg-[#BF5AF2]",
                 description: "Profils qualité, overrides par média, config SABnzbd",
                 keywords: ["profils", "custom formats", "sabnzbd", "overrides"],
             },
@@ -171,6 +205,7 @@ export const NAV_GROUPS: NavGroup[] = [
                 href: "/prowlarr",
                 label: "Indexers",
                 icon: Radar,
+        tint: "bg-[#64D2FF]",
                 description: "Indexers Prowlarr et statistiques",
                 shortcut: "i",
                 keywords: ["prowlarr", "trackers"],
@@ -184,6 +219,7 @@ export const NAV_GROUPS: NavGroup[] = [
                 href: "/system",
                 label: "Serveur & Docker",
                 icon: HardDrive,
+        tint: "bg-[#8E8E93]",
                 description: "Ressources, disques et conteneurs",
                 shortcut: "y",
                 keywords: ["docker", "disques", "ram", "cpu", "conteneurs", "unraid"],
@@ -192,6 +228,7 @@ export const NAV_GROUPS: NavGroup[] = [
                 href: "/analytics",
                 label: "Statistiques",
                 icon: BarChart3,
+        tint: "bg-[#5E5CE6]",
                 description: "Analyse de la médiathèque",
                 keywords: ["analytics", "graphes", "stats"],
             },
@@ -204,6 +241,7 @@ export const BOTTOM_ITEMS: NavItem[] = [
         href: "/settings",
         label: "Paramètres",
         icon: Settings,
+        tint: "bg-[#8E8E93]",
         description: "Services, appareils et configuration",
         shortcut: "p",
         keywords: ["services", "config", "kodi", "cast", "jellyfin", "yamaha", "telegram"],
@@ -236,4 +274,30 @@ export function findActiveItem(pathname: string): NavItem | undefined {
 export function findGroupTitle(item: NavItem | undefined): string | undefined {
     if (!item) return undefined;
     return NAV_GROUPS.find((g) => g.items.includes(item))?.title;
+}
+
+/**
+ * Onglets de la barre du bas (mobile). Le 5e onglet, « Plus », mène à
+ * /more et s'allume pour toute page qui n'est pas l'un de ces quatre.
+ * `match` : préfixes d'URL qui allument l'onglet (ex : la fiche d'un film
+ * reste sous l'onglet Médiathèque).
+ */
+export interface MobileTab {
+    href: string;
+    label: string;
+    icon: LucideIcon;
+    match: string[];
+    badge?: NavItem["badge"];
+}
+
+export const MOBILE_TABS: MobileTab[] = [
+    { href: "/dashboard", label: "Accueil", icon: House, match: ["/dashboard"] },
+    { href: "/media", label: "Médiathèque", icon: Clapperboard, match: ["/media"] },
+    { href: "/search", label: "Rechercher", icon: Search, match: ["/search"] },
+    { href: "/downloads", label: "Transferts", icon: ArrowDownToLine, match: ["/downloads"], badge: "downloads" },
+];
+
+/** Onglet mobile allumé pour une URL (null : « Plus »). */
+export function findMobileTab(pathname: string): MobileTab | null {
+    return MOBILE_TABS.find((t) => t.match.some((m) => pathname === m || pathname.startsWith(m + "/"))) ?? null;
 }

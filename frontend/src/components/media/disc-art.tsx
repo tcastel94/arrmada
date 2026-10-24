@@ -228,7 +228,7 @@ export function BluRayCase({
 
             {/* Film transparent : bandeau + jaquette, puis charnière et reflets par-dessus */}
             <div
-                className="absolute overflow-hidden rounded-[3px] shadow-[0_0_0_1px_rgb(0_0_0/0.35)]"
+                className="absolute overflow-hidden rounded-[3px]"
                 style={{ left: frameX, right: frameX, top: frameY, bottom: frameY }}
             >
                 {/* 2. Bandeau du format */}
@@ -277,7 +277,7 @@ export function BluRayCase({
                     style={{ width: `${hingePct}%`, background: HINGE_BG }}
                 />
                 {/* Ombre intérieure du film qui plaque la jaquette */}
-                <div aria-hidden className="pointer-events-none absolute inset-0 z-20 shadow-[inset_0_0_10px_rgb(0_0_0/0.5)]" />
+                <div aria-hidden className="pointer-events-none absolute inset-0 z-20" />
                 {/* Reflet du film en diagonale + arêtes claires (haut, droite) */}
                 <div
                     aria-hidden

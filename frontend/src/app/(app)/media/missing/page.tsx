@@ -16,12 +16,10 @@
  *    (avant : « Rien ne manque 🎉 » s'affichait quand l'API était en panne).
  */
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
     ArrowDownWideNarrow,
-    ArrowLeft,
     ArrowUpNarrowWide,
     CheckCircle2,
     CheckSquare,
@@ -63,7 +61,7 @@ import { MissingRow, RowSearchButton, releaseStatus } from "@/components/library
 import { useBulkSearch } from "@/components/library/use-bulk-search";
 
 const PER_PAGE = 50;
-const GRID = "grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8";
+const GRID = "grid grid-cols-3 gap-x-3 gap-y-5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8";
 const TYPES = ["all", "movie", "series"] as const;
 const SORTS = ["title", "year", "added"] as const;
 const ORDERS = ["asc", "desc"] as const;
@@ -204,25 +202,21 @@ function MissingMedia() {
                 <PageHeader
                     icon={PackageX}
                     accent="amber"
-                    eyebrow="Bibliothèque"
                     title="Manquants"
                     description="Films et séries suivis sans fichier : relance leur recherche automatique sur tes indexers, un par un ou par lots."
                     actions={
-                        <>
-                            <Button variant="ghost" asChild>
-                                <Link href="/media">
-                                    <ArrowLeft /> Médiathèque
-                                </Link>
-                            </Button>
-                            <Button onClick={() => runBulk(pagePending)} disabled={running || pagePending.length === 0}>
-                                {running ? <Loader2 className="animate-spin" /> : <Rocket />}
-                                {pagePending.length === 0 && items.length > 0
-                                    ? "Tout est lancé"
-                                    : pagePending.length === 1
-                                      ? "Rechercher le seul de la page"
-                                      : `Rechercher les ${pagePending.length} de la page`}
-                            </Button>
-                        </>
+                        // « Tout rechercher » : lance la recherche des manquants de la page
+                        <Button size="sm" variant="tinted" onClick={() => runBulk(pagePending)} disabled={running || pagePending.length === 0}>
+                            {running ? <Loader2 className="animate-spin" /> : <Rocket />}
+                            {pagePending.length === 0 && items.length > 0 ? (
+                                "Tout est lancé"
+                            ) : (
+                                <>
+                                    <span className="hidden sm:inline">Tout rechercher</span>
+                                    <span className="sm:hidden">Rechercher</span> ({pagePending.length})
+                                </>
+                            )}
+                        </Button>
                     }
                 >
                     <StatPill label="manquants" value={<LiveCount value={facets?.missing_count} />} icon={PackageX} tone="warning" />
@@ -262,7 +256,7 @@ function MissingMedia() {
                             />
                             <div className="flex shrink-0 items-center gap-1">
                                 <Select value={sort} onValueChange={(v) => setFilter("sort", v, "title")}>
-                                    <SelectTrigger className="w-[140px]" aria-label="Trier par">
+                                    <SelectTrigger className="h-[30px] w-auto shrink-0 gap-1.5 rounded-[9px] px-3 text-[13px]" aria-label="Trier par">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>

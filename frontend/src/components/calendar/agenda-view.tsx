@@ -80,7 +80,7 @@ export function AgendaView({ days, todayKey, isCurrentMonth, onNextMonth }: Agen
                             className={cn(
                                 "flex h-14 w-12 shrink-0 flex-col items-center justify-center rounded-xl ring-1 sm:h-16 sm:w-14",
                                 isToday
-                                    ? "bg-gradient-to-b from-sky-400/30 to-sky-500/10 text-sky-100 ring-sky-400/50 shadow-[0_0_24px_-6px_hsl(199_89%_60%/0.8)]"
+                                    ? "bg-gradient-to-b from-primary/30 to-sky-500/10 text-sky-100 ring-primary/50"
                                     : "bg-white/[0.03] ring-white/[0.07]",
                             )}
                         >

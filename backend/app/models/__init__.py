@@ -16,14 +16,19 @@ from app.models.artwork import MediaArtwork  # noqa: E402, F401
 from app.models.cast import CastDevice  # noqa: E402, F401
 from app.models.device import Device  # noqa: E402, F401
 from app.models.duplicate import DuplicateGroup  # noqa: E402, F401
+from app.models.family_profile import FamilyProfile  # noqa: E402, F401
+from app.models.local_series import LocalSeries  # noqa: E402, F401
 from app.models.media import MediaItem  # noqa: E402, F401
+from app.models.movie_rating import MovieRating  # noqa: E402, F401
 from app.models.notification import Notification  # noqa: E402, F401
 from app.models.profile_override import ProfileOverride  # noqa: E402, F401
 from app.models.recommendation import Recommendation  # noqa: E402, F401
 from app.models.request import MediaRequest  # noqa: E402, F401
 from app.models.service import HealthEvent, Service  # noqa: E402, F401
 from app.models.tv_request import TvRequest  # noqa: E402, F401
+from app.models.video_root import VideoRoot  # noqa: E402, F401
 from app.models.watch_state import WatchState  # noqa: E402, F401
+from app.models.watchlist import WatchlistItem  # noqa: E402, F401
 
 __all__ = [
     "Base",
@@ -42,4 +47,7 @@ __all__ = [
     "WatchState",
     "MediaArtwork",
     "TvRequest",
+    "FamilyProfile",
+    "VideoRoot",
+    "LocalSeries",
 ]

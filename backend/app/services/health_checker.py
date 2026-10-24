@@ -32,6 +32,7 @@ def _init_client_map() -> None:
     if _CLIENT_MAP:
         return
     from app.services.bazarr import BazarrClient
+    from app.services.deluge import DelugeClient
     from app.services.jellyfin import JellyfinClient
     from app.services.lidarr import LidarrClient
     from app.services.prowlarr import ProwlarrClient
@@ -48,6 +49,7 @@ def _init_client_map() -> None:
     _register_client("bazarr", BazarrClient)
     _register_client("jellyfin", JellyfinClient)
     _register_client("sabnzbd", SabnzbdClient)
+    _register_client("deluge", DelugeClient)  # mot de passe de l'interface web en « clé API »
 
 
 def _build_client(service: Service) -> ArrBaseClient:

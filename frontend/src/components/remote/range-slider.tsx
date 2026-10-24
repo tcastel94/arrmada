@@ -17,9 +17,9 @@ import { useState, type KeyboardEvent } from "react";
 import { cn } from "@/lib/utils";
 
 const TONES = {
-    violet: { fill: "from-violet-500 via-fuchsia-500 to-pink-400", glow: "hsl(280 85% 65% / 0.65)" },
-    orange: { fill: "from-orange-500 via-amber-400 to-yellow-300", glow: "hsl(32 95% 58% / 0.6)" },
-    primary: { fill: "from-primary via-sky-400 to-brand", glow: "hsl(var(--primary) / 0.6)" },
+    violet: { fill: "from-white to-white", glow: "transparent" },
+    orange: { fill: "from-warning to-warning", glow: "transparent" },
+    primary: { fill: "from-primary to-primary", glow: "transparent" },
 } as const;
 
 interface RangeSliderProps {
@@ -86,7 +86,7 @@ export function RangeSlider({
             <div className={cn("relative w-full overflow-hidden rounded-full bg-white/10", size === "sm" ? "h-1" : "h-1.5", "transition-[height] group-hover:h-2")}>
                 <div
                     className={cn("absolute inset-y-0 left-0 rounded-full bg-gradient-to-r", t.fill)}
-                    style={{ width: `${pct}%`, boxShadow: `0 0 12px ${t.glow}` }}
+                    style={{ width: `${pct}%` }}
                 />
             </div>
 
@@ -122,7 +122,6 @@ export function RangeSlider({
                         size === "sm" ? "h-3 w-3" : "h-4 w-4",
                         active ? "scale-125" : "scale-100 group-hover:scale-110",
                     )}
-                    style={{ boxShadow: `0 0 0 4px ${t.glow.replace(/0\.\d+\)/, "0.18)")}, 0 0 16px ${t.glow}` }}
                 />
                 {bubble && active && (
                     <div className="glass-strong absolute bottom-full left-1/2 mb-2.5 -translate-x-1/2 whitespace-nowrap rounded-lg px-2 py-1 text-[11px] font-semibold tabular-nums">

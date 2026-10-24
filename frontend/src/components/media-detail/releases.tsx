@@ -219,7 +219,7 @@ export function ReleasesTab({ media }: { media: MediaDetail }) {
                                                 <motion.span
                                                     layoutId="release-mode-pill"
                                                     transition={SPRING}
-                                                    className="absolute inset-0 rounded-lg bg-primary/15 shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.3)]"
+                                                    className="absolute inset-0 rounded-lg bg-primary/15"
                                                 />
                                             )}
                                             <span className="relative">{m === "season" ? "Pack saison" : "Épisode"}</span>
@@ -412,8 +412,8 @@ function ScoreBadge({ score }: { score: number }) {
         <span
             className={cn(
                 "inline-flex items-center rounded-md border px-1.5 py-px text-[10px] font-bold tabular-nums",
-                score > 0 && "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
-                score < 0 && "border-red-500/30 bg-red-500/10 text-red-300",
+                score > 0 && "border-success/30 bg-success/10 text-success",
+                score < 0 && "border-destructive/30 bg-destructive/10 text-destructive",
                 score === 0 && "border-white/10 text-muted-foreground",
             )}
             title="Score des formats personnalisés"
@@ -449,7 +449,7 @@ function ReleaseRow({
             variants={animate ? fadeUp : undefined}
             className={cn(
                 "glass glass-hover rounded-2xl p-3 sm:p-4",
-                grabbed && "border-emerald-500/40 shadow-[0_0_30px_-12px_rgb(16_185_129/0.7)]",
+                grabbed && "border-success/40",
                 r.rejected && !grabbed && "opacity-80",
             )}
         >
@@ -469,7 +469,7 @@ function ReleaseRow({
                             <HardDrive className="h-3 w-3" aria-hidden /> {formatBytes(r.size_bytes)}
                         </span>
                         {isTorrent && (
-                            <span className={cn("flex items-center gap-1", (r.seeders ?? 0) === 0 && "text-amber-400")}>
+                            <span className={cn("flex items-center gap-1", (r.seeders ?? 0) === 0 && "text-warning")}>
                                 <ArrowUp className="h-3 w-3" aria-hidden /> {r.seeders ?? 0} seeder{(r.seeders ?? 0) > 1 ? "s" : ""}
                             </span>
                         )}
@@ -498,7 +498,7 @@ function ReleaseRow({
                                 onClick={() => setShowReasons((v) => !v)}
                                 aria-expanded={showReasons}
                                 aria-controls={reasonsId}
-                                className="inline-flex items-center gap-1.5 rounded-md text-xs font-medium text-amber-400 hover:text-amber-300"
+                                className="inline-flex items-center gap-1.5 rounded-md text-xs font-medium text-warning hover:text-warning"
                             >
                                 <TriangleAlert className="h-3.5 w-3.5" aria-hidden />
                                 Rejetée par {arr} ({r.rejections.length} raison{r.rejections.length > 1 ? "s" : ""})
@@ -512,7 +512,7 @@ function ReleaseRow({
                                         animate={{ height: "auto", opacity: 1 }}
                                         exit={{ height: 0, opacity: 0 }}
                                         transition={{ duration: 0.25, ease: EASE_OUT }}
-                                        className="mt-1.5 list-disc space-y-0.5 overflow-hidden pl-5 text-xs text-amber-200/80"
+                                        className="mt-1.5 list-disc space-y-0.5 overflow-hidden pl-5 text-xs text-warning/80"
                                     >
                                         {r.rejections.length > 0 ? r.rejections.map((reason) => <li key={reason}>{reason}</li>) : <li>Raison non précisée</li>}
                                     </motion.ul>
@@ -528,7 +528,7 @@ function ReleaseRow({
                     onClick={onGrab}
                     title={r.rejected ? `${arr} l'a rejetée : la récupérer force le téléchargement` : undefined}
                 >
-                    {grabbing ? <Loader2 className="animate-spin" /> : grabbed ? <Check className="text-emerald-400" /> : <Send />}
+                    {grabbing ? <Loader2 className="animate-spin" /> : grabbed ? <Check className="text-success" /> : <Send />}
                     {grabbed ? "Envoyée" : "Récupérer"}
                 </Button>
             </div>

@@ -7,17 +7,17 @@ import { parseApiDate } from "@/lib/format";
 
 /** Couleurs par niveau : rouge = erreur, ambre = attention (cf. guide de design). */
 export const LEVEL_META: Record<DockerLogLevel, { label: string; short: string; text: string; dot: string; row: string }> = {
-    error: { label: "Erreur", short: "ERR", text: "text-red-300", dot: "bg-red-500", row: "bg-red-500/[0.06]" },
-    warning: { label: "Avertissement", short: "WARN", text: "text-amber-200", dot: "bg-amber-400", row: "bg-amber-500/[0.04]" },
+    error: { label: "Erreur", short: "ERR", text: "text-destructive", dot: "bg-destructive", row: "bg-destructive/[0.06]" },
+    warning: { label: "Avertissement", short: "WARN", text: "text-warning", dot: "bg-warning", row: "bg-warning/[0.04]" },
     info: { label: "Info", short: "INFO", text: "text-sky-100/90", dot: "bg-sky-400", row: "" },
     other: { label: "Autre", short: "", text: "text-muted-foreground", dot: "bg-white/20", row: "" },
 };
 
 /** Sévérité d'un problème détecté par l'IA. */
 export const SEVERITY_META: Record<LogSeverity, { label: string; chip: string; bar: string; icon: string; rank: number }> = {
-    error: { label: "Erreur", chip: "bg-red-500/15 text-red-300 ring-red-400/25", bar: "from-red-500 to-rose-400", icon: "text-red-400", rank: 0 },
-    warning: { label: "Avertissement", chip: "bg-amber-500/15 text-amber-300 ring-amber-400/25", bar: "from-amber-500 to-orange-400", icon: "text-amber-400", rank: 1 },
-    info: { label: "Info", chip: "bg-sky-500/15 text-sky-300 ring-sky-400/25", bar: "from-sky-500 to-cyan-400", icon: "text-sky-400", rank: 2 },
+    error: { label: "Erreur", chip: "bg-destructive/15 text-destructive ring-destructive/25", bar: "from-red-500 to-rose-400", icon: "text-destructive", rank: 0 },
+    warning: { label: "Avertissement", chip: "bg-warning/15 text-warning ring-warning/25", bar: "from-amber-500 to-orange-400", icon: "text-warning", rank: 1 },
+    info: { label: "Info", chip: "bg-primary/15 text-primary ring-primary/25", bar: "from-sky-500 to-cyan-400", icon: "text-primary", rank: 2 },
 };
 
 /**
@@ -26,11 +26,11 @@ export const SEVERITY_META: Record<LogSeverity, { label: string; chip: string; b
  * volontairement sans rouge ni ambre (réservés aux niveaux).
  */
 const SERVICE_TONES = [
-    "text-sky-300",
-    "text-violet-300",
+    "text-primary",
+    "text-primary",
     "text-teal-300",
-    "text-fuchsia-300",
-    "text-cyan-300",
+    "text-primary",
+    "text-primary",
     "text-indigo-300",
     "text-lime-300",
     "text-blue-300",

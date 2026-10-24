@@ -93,12 +93,20 @@ def _normalise_movie(raw: dict[str, Any], service_name: str) -> dict[str, Any]:
         "monitored": raw.get("monitored", False),
         "status": raw.get("status", "unknown"),
         "added": raw.get("added"),
-        "rating": raw.get("ratings", {}).get("tmdb", {}).get("value"),
+        # Note la plus fiable (IMDb, sinon TMDB), voir services/ratings.py
+        **_movie_rating(raw.get("ratings")),
         "runtime": raw.get("runtime"),
         "overview": raw.get("overview", ""),
         # Dossier du film côté Radarr (artworks rangés à côté : disc.png…)
         "path": raw.get("path"),
     }
+
+
+def _movie_rating(raw_ratings: Any) -> dict[str, Any]:
+    """{rating, rating_source, rating_votes} d'un film Radarr."""
+    from app.services.ratings import best, from_radarr
+
+    return best(from_radarr(raw_ratings))
 
 
 def _normalise_series(

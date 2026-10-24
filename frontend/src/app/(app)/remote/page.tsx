@@ -33,7 +33,6 @@ export default function RemotePage() {
                 <PageHeader
                     icon={Sofa}
                     accent="violet"
-                    eyebrow="Home cinéma"
                     title="Salon"
                     description="Pilote la lecture Kodi, l'ampli et tes appareils Cast depuis un seul écran."
                     actions={

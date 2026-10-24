@@ -168,7 +168,7 @@ export function ResourcesPanel() {
                 <Panel
                     title="Espace disque"
                     icon={HardDrive}
-                    iconClassName="text-sky-300"
+                    iconClassName="text-primary"
                     action={
                         groups.length > 0 ? (
                             <span className="text-xs text-muted-foreground tabular-nums">
@@ -195,10 +195,10 @@ export function ResourcesPanel() {
                     ) : (
                         <div className="space-y-4">
                             {critical.length > 0 && (
-                                <div className="flex items-start gap-3 rounded-xl bg-red-500/10 p-3 text-sm ring-1 ring-red-400/25">
-                                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-400" />
+                                <div className="flex items-start gap-3 rounded-xl bg-destructive/10 p-3 text-sm ring-1 ring-destructive/25">
+                                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
                                     <p>
-                                        <span className="font-semibold text-red-300">
+                                        <span className="font-semibold text-destructive">
                                             {critical.length === 1 ? "Un disque est presque plein" : `${critical.length} disques sont presque pleins`}
                                         </span>{" "}
                                         <span className="text-muted-foreground">
@@ -228,7 +228,7 @@ export function ResourcesPanel() {
                     href="/remote"
                     className="glass glass-hover group flex items-center gap-4 rounded-2xl p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
                 >
-                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500/30 to-fuchsia-500/10 text-violet-300 ring-1 ring-violet-400/30">
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500/30 to-fuchsia-500/10 text-primary ring-1 ring-primary/30">
                         <Sofa className="h-5 w-5" />
                     </span>
                     <span className="min-w-0 flex-1">
@@ -256,7 +256,7 @@ function CardShell({ icon: Icon, label, children }: { icon: LucideIcon; label: s
     return (
         <div className="glass spotlight flex h-full flex-col rounded-2xl p-4">
             <div className="mb-3 flex items-center gap-2">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-sky-500/15 text-sky-300 ring-1 ring-sky-400/25">
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/15 text-primary ring-1 ring-primary/25">
                     <Icon className="h-3.5 w-3.5" />
                 </span>
                 <span className="text-xs font-medium text-muted-foreground">{label}</span>
@@ -343,7 +343,7 @@ function DiskCard({ disk }: { disk: DiskGroup }) {
         <li
             className={cn(
                 "flex items-center gap-4 rounded-2xl bg-white/[0.025] p-4 ring-1 transition-colors",
-                alert ? "ring-red-400/30" : "ring-white/[0.06] hover:ring-white/[0.12]",
+                alert ? "ring-destructive/30" : "ring-white/[0.06] hover:ring-white/[0.12]",
             )}
         >
             <RingGauge value={disk.usage_percent} size={72} stroke={7} tone={tone}>
@@ -351,7 +351,7 @@ function DiskCard({ disk }: { disk: DiskGroup }) {
             </RingGauge>
             <div className="min-w-0 flex-1">
                 <p className="flex items-center gap-1.5 truncate text-sm font-semibold">
-                    {alert && <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-red-400" />}
+                    {alert && <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-destructive" />}
                     <span className="truncate" title={disk.label}>
                         {disk.label}
                     </span>

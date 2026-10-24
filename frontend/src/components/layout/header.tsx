@@ -1,30 +1,38 @@
 "use client";
 
 /**
- * Barre supérieure (collante, en verre).
+ * Barre du haut, copie de la « navigation bar » iOS.
  * ----------------------------------------------------------------
- * - Fil d'Ariane « Groupe › Page » calculé depuis lib/nav.ts
- *   (la prop `title` sert de repli, ex: titre d'une fiche média).
- * - Bouton de recherche ⌘K, voyant « Live » (connexion temps réel),
- *   cloche avec aperçu des notifications dans un popover.
+ * - En haut de page : transparente, sans titre (le grand titre de la page
+ *   fait office d'en-tête, voir PageHeader).
+ * - Dès qu'on défile : fond flouté + filet fin, et le petit titre de la
+ *   page apparaît au centre (mobile) ou à gauche (ordinateur).
+ * - Sous-page (fiche d'un film, réglage précis…) : bouton « ‹ Parent »
+ *   à gauche. Sur mobile, une page rangée dans l'onglet « Plus »
+ *   (Calendrier, Santé…) affiche « ‹ Plus ».
+ * - À droite : recherche (⌘K), notifications ; menu (raccourcis,
+ *   déconnexion) sur ordinateur seulement — sur mobile tout est dans « Plus ».
+ * La prop `title` sert de titre quand l'URL ne correspond à aucun menu
+ * (ex : titre d'une fiche média).
  */
 import Link from "next/link";
-import { BrandIcon } from "@/components/brand/brand-mark";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
+    AlertCircle,
+    AlertTriangle,
     Bell,
     CheckCheck,
-    ChevronRight,
-    Search,
-    AlertTriangle,
-    AlertCircle,
     CheckCircle2,
+    ChevronLeft,
+    ChevronRight,
+    Ellipsis,
     Info,
     Keyboard,
     LogOut,
+    Search,
     Settings,
-    MoreVertical,
+    WifiOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -35,157 +43,150 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useMarkAllRead, useMarkRead, useNotifications } from "@/hooks/use-notifications";
 import { useNavBadges } from "@/hooks/use-nav-badges";
+import { useScrolled } from "@/hooks/use-scrolled";
 import { useLiveState } from "@/lib/live-status";
-import { findActiveItem, findGroupTitle } from "@/lib/nav";
+import { findActiveItem, findMobileTab } from "@/lib/nav";
+import { canGoBack } from "@/lib/nav-history";
 import { logout } from "@/lib/api-client";
 import { timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { SPRING } from "@/lib/motion";
 
 interface HeaderProps {
-    /** Titre de repli quand l'URL ne correspond à aucun menu. */
+    /** Titre de repli quand l'URL ne correspond à aucun menu (ex : fiche média). */
     title?: string;
 }
 
 const SEVERITY = {
-    error: { icon: AlertCircle, cls: "text-red-400 bg-red-500/10 ring-red-500/25" },
-    warning: { icon: AlertTriangle, cls: "text-amber-400 bg-amber-500/10 ring-amber-500/25" },
-    success: { icon: CheckCircle2, cls: "text-emerald-400 bg-emerald-500/10 ring-emerald-500/25" },
-    info: { icon: Info, cls: "text-primary bg-primary/10 ring-primary/25" },
+    error: { icon: AlertCircle, cls: "text-destructive" },
+    warning: { icon: AlertTriangle, cls: "text-warning" },
+    success: { icon: CheckCircle2, cls: "text-success" },
+    info: { icon: Info, cls: "text-primary" },
 } as const;
 
 export function Header({ title }: HeaderProps) {
     const pathname = usePathname();
+    const router = useRouter();
     const item = findActiveItem(pathname);
-    const group = findGroupTitle(item);
     const live = useLiveState();
     const { notifications: unread } = useNavBadges();
+    // Le grand titre de page mesure ~52 px : le petit titre apparaît quand il est sorti.
+    const scrolled = useScrolled(44);
 
-    // Sur une sous-page (ex: fiche média), on affiche « Médiathèque › Titre ».
-    const isSubPage = item && pathname !== item.href;
+    // Sous-page (ex : /media/movie/12 sous « Médiathèque ») : retour vers le parent.
+    const isSubPage = !!item && pathname !== item.href;
     const pageLabel = isSubPage && title ? title : item?.label ?? title ?? "";
-    const parent = isSubPage && title ? item : undefined;
+    const back = isSubPage
+        ? { href: item!.href, label: item!.label }
+        : // Mobile : les pages de l'onglet « Plus » remontent vers « Plus »
+          !findMobileTab(pathname) && pathname !== "/more"
+          ? { href: "/more", label: "Plus", mobileOnly: true }
+          : null;
+
+    const goBack = (event: React.MouseEvent) => {
+        // Comme le bouton retour d'iOS : on revient là d'où l'on vient
+        // (filtres et défilement conservés) si on arrive de l'app.
+        if (canGoBack()) {
+            event.preventDefault();
+            router.back();
+        }
+    };
 
     const openPalette = () => window.dispatchEvent(new Event("open-command-palette"));
     const openShortcuts = () => window.dispatchEvent(new Event("open-shortcuts"));
 
     return (
-        <header className="sticky top-0 z-30 px-3 pt-3 md:px-5 lg:pl-0 lg:pr-5">
-            <div className="glass mx-auto flex h-14 max-w-[1680px] items-center gap-2 rounded-2xl px-3 md:px-4">
-                {/* Logo (mobile uniquement — la sidebar l'affiche sur desktop) */}
-                <Link href="/dashboard" className="mr-1 shrink-0 lg:hidden" aria-label="Accueil">
-                    <div className="h-8 w-8 overflow-hidden rounded-lg ring-1 ring-primary/30 shadow-[0_0_16px_-4px_hsl(var(--primary)/0.7)]">
-                        <BrandIcon />
-                    </div>
-                </Link>
-
-                {/* Fil d'Ariane */}
-                <nav aria-label="Fil d'Ariane" className="flex min-w-0 items-center gap-1.5 text-sm">
-                    {(parent || group) && (
-                        <>
-                            {parent ? (
-                                <Link href={parent.href} className="hidden shrink-0 text-muted-foreground transition-colors hover:text-foreground sm:inline">
-                                    {parent.label}
-                                </Link>
-                            ) : (
-                                <span className="hidden shrink-0 text-muted-foreground/70 sm:inline">{group}</span>
+        <header
+            className={cn(
+                "sticky top-0 z-30 pt-[env(safe-area-inset-top)] transition-[background-color,box-shadow,backdrop-filter] duration-200",
+                scrolled ? "material hairline-b" : "bg-transparent",
+            )}
+        >
+            <div className="relative mx-auto flex h-[var(--navbar-h)] max-w-[1680px] items-center gap-1 px-2 md:px-4 lg:px-6">
+                {/* Gauche : retour */}
+                <div className="flex min-w-0 flex-1 basis-0 items-center">
+                    {back && (
+                        <Link
+                            href={back.href}
+                            onClick={goBack}
+                            className={cn(
+                                "-ml-1 flex min-w-0 items-center rounded-lg py-1 pr-2 text-[17px] text-primary transition-opacity active:opacity-50",
+                                "mobileOnly" in back && "lg:hidden",
                             )}
-                            <ChevronRight className="hidden h-3.5 w-3.5 shrink-0 text-muted-foreground/40 sm:block" />
-                        </>
+                        >
+                            <ChevronLeft className="h-[26px] w-[26px] shrink-0" strokeWidth={2.4} />
+                            <span className="-ml-0.5 truncate">{back.label}</span>
+                        </Link>
                     )}
-                    <AnimatePresence mode="wait" initial={false}>
+                </div>
+
+                {/* Centre : petit titre, visible une fois le grand titre défilé */}
+                <AnimatePresence initial={false}>
+                    {scrolled && pageLabel && (
                         <motion.p
                             key={pageLabel}
-                            initial={{ opacity: 0, y: 6 }}
+                            initial={{ opacity: 0, y: 4 }}
                             animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -6 }}
-                            transition={{ duration: 0.2 }}
-                            aria-current="page"
-                            className="truncate font-semibold tracking-tight"
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.18 }}
+                            aria-hidden
+                            className="pointer-events-none absolute left-1/2 max-w-[52%] -translate-x-1/2 truncate text-[17px] font-semibold tracking-tight"
                         >
                             {pageLabel}
                         </motion.p>
-                    </AnimatePresence>
-                </nav>
+                    )}
+                </AnimatePresence>
 
-                <div className="flex-1" />
+                {/* Droite : actions */}
+                <div className="flex flex-1 basis-0 items-center justify-end gap-0.5">
+                    {live === "offline" && (
+                        <span className="mr-1 flex items-center gap-1 rounded-full bg-destructive/15 px-2 py-1 text-[11px] font-semibold text-destructive">
+                            <WifiOff className="h-3 w-3" />
+                            <span className="hidden sm:inline">Hors ligne</span>
+                        </span>
+                    )}
 
-                {/* Recherche (pilule desktop, icône mobile) */}
-                <button
-                    onClick={openPalette}
-                    className="group hidden h-9 w-64 items-center gap-2 rounded-xl border border-white/[0.07] bg-background/40 px-3 text-xs text-muted-foreground transition-all hover:border-primary/30 hover:text-foreground hover:shadow-[0_0_24px_-8px_hsl(var(--primary)/0.7)] md:flex xl:w-80"
-                    id="global-search-btn"
-                >
-                    <Search className="h-3.5 w-3.5 transition-transform group-hover:scale-110" />
-                    <span>Média, page, action…</span>
-                    <span className="kbd ml-auto">⌘K</span>
-                </button>
-                <Button variant="ghost" size="icon" className="md:hidden" onClick={openPalette} aria-label="Recherche rapide">
-                    <Search className="h-4 w-4" />
-                </Button>
+                    {/* Recherche : champ sur ordinateur, loupe sur mobile */}
+                    <button
+                        onClick={openPalette}
+                        className="hidden h-8 w-56 items-center gap-2 rounded-lg bg-white/[0.07] px-2.5 text-[13px] text-muted-foreground transition-colors hover:bg-white/[0.1] hover:text-foreground md:flex xl:w-72"
+                        id="global-search-btn"
+                    >
+                        <Search className="h-3.5 w-3.5" />
+                        <span>Rechercher</span>
+                        <span className="kbd ml-auto">⌘K</span>
+                    </button>
+                    <Button variant="ghost" size="icon" className="text-primary md:hidden" onClick={openPalette} aria-label="Recherche rapide">
+                        <Search className="!size-[21px]" strokeWidth={2.2} />
+                    </Button>
 
-                {/* Voyant temps réel */}
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <div
-                            className={cn(
-                                "hidden h-7 items-center gap-1.5 rounded-full border px-2.5 text-[10px] font-semibold uppercase tracking-wider sm:flex",
-                                live === "online"
-                                    ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-300"
-                                    : live === "offline"
-                                      ? "border-red-500/25 bg-red-500/10 text-red-300"
-                                      : "border-amber-500/25 bg-amber-500/10 text-amber-300",
-                            )}
-                        >
-                            <span className="relative flex h-1.5 w-1.5">
-                                {live === "online" && <span className="absolute inset-0 animate-pulse-ring rounded-full bg-emerald-400" />}
-                                <span
-                                    className={cn(
-                                        "relative h-1.5 w-1.5 rounded-full",
-                                        live === "online" ? "bg-emerald-400" : live === "offline" ? "bg-red-400" : "bg-amber-400",
-                                    )}
-                                />
-                            </span>
-                            Live
-                        </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                        {live === "online"
-                            ? "Mises à jour en temps réel actives"
-                            : live === "offline"
-                              ? "Flux temps réel coupé — reconnexion automatique"
-                              : "Connexion au flux temps réel…"}
-                    </TooltipContent>
-                </Tooltip>
+                    <NotificationsPopover unread={unread} />
 
-                <NotificationsPopover unread={unread} />
-
-                {/* Menu utilisateur */}
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" aria-label="Menu" id="user-menu-btn">
-                            <MoreVertical className="h-4 w-4" />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-52">
-                        <DropdownMenuItem asChild>
-                            <Link href="/settings" className="gap-2">
-                                <Settings className="h-4 w-4" /> Paramètres
-                            </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onSelect={openShortcuts} className="gap-2">
-                            <Keyboard className="h-4 w-4" /> Raccourcis clavier
-                            <span className="kbd ml-auto">?</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onSelect={() => logout()} className="gap-2 text-red-400 focus:bg-red-500/10 focus:text-red-400">
-                            <LogOut className="h-4 w-4" /> Déconnexion
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                    {/* Menu (ordinateur) */}
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="hidden lg:inline-flex" aria-label="Menu" id="user-menu-btn">
+                                <Ellipsis className="h-4 w-4" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-52">
+                            <DropdownMenuItem asChild>
+                                <Link href="/settings" className="gap-2">
+                                    <Settings className="h-4 w-4" /> Paramètres
+                                </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onSelect={openShortcuts} className="gap-2">
+                                <Keyboard className="h-4 w-4" /> Raccourcis clavier
+                                <span className="kbd ml-auto">?</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onSelect={() => logout()} className="gap-2 text-destructive focus:text-destructive">
+                                <LogOut className="h-4 w-4" /> Déconnexion
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
             </div>
         </header>
     );
@@ -201,45 +202,30 @@ function NotificationsPopover({ unread }: { unread: number }) {
     return (
         <Popover>
             <PopoverTrigger asChild>
-                <Button variant="ghost" size="icon" className="relative" aria-label="Notifications" id="notifications-btn">
-                    <motion.span
-                        key={unread}
-                        animate={unread > 0 ? { rotate: [0, -14, 12, -8, 6, 0] } : {}}
-                        transition={{ duration: 0.7 }}
-                        className="inline-flex"
-                    >
-                        <Bell className="h-4 w-4" />
-                    </motion.span>
-                    <AnimatePresence>
-                        {unread > 0 && (
-                            <motion.span
-                                initial={{ scale: 0 }}
-                                animate={{ scale: 1 }}
-                                exit={{ scale: 0 }}
-                                transition={SPRING}
-                                className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white shadow-[0_0_10px_rgb(239_68_68/0.7)]"
-                            >
-                                {unread > 99 ? "99+" : unread}
-                            </motion.span>
-                        )}
-                    </AnimatePresence>
+                <Button variant="ghost" size="icon" className="relative text-primary lg:text-foreground/80" aria-label="Notifications" id="notifications-btn">
+                    <Bell className="!size-[20px] lg:!size-4" strokeWidth={2.1} />
+                    {unread > 0 && (
+                        <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-white">
+                            {unread > 99 ? "99+" : unread}
+                        </span>
+                    )}
                 </Button>
             </PopoverTrigger>
-            <PopoverContent align="end" sideOffset={10} className="w-[min(92vw,380px)] p-0">
-                <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3">
+            <PopoverContent align="end" sideOffset={8} className="w-[min(92vw,380px)] p-0">
+                <div className="flex items-center justify-between px-4 pb-2 pt-3.5">
                     <div>
-                        <p className="text-sm font-semibold">Notifications</p>
-                        <p className="text-[11px] text-muted-foreground">
+                        <p className="text-[15px] font-semibold">Notifications</p>
+                        <p className="text-[12px] text-muted-foreground">
                             {unread > 0 ? `${unread} non lue${unread > 1 ? "s" : ""}` : "Tout est à jour"}
                         </p>
                     </div>
                     {unread > 0 && (
-                        <Button size="sm" variant="ghost" onClick={() => markAll.mutate()} disabled={markAll.isPending} className="h-7 text-xs">
-                            <CheckCheck className="h-3.5 w-3.5" /> Tout lire
+                        <Button size="sm" variant="ghost" onClick={() => markAll.mutate()} disabled={markAll.isPending} className="text-primary">
+                            <CheckCheck /> Tout lire
                         </Button>
                     )}
                 </div>
-                <div className="max-h-[360px] overflow-y-auto p-1.5">
+                <div className="max-h-[360px] overflow-y-auto px-1.5 pb-1.5">
                     {isLoading ? (
                         <div className="space-y-1.5 p-1">
                             {[0, 1, 2].map((i) => (
@@ -249,7 +235,7 @@ function NotificationsPopover({ unread }: { unread: number }) {
                     ) : items.length === 0 ? (
                         <div className="flex flex-col items-center gap-2 py-10 text-center text-muted-foreground">
                             <Bell className="h-7 w-7 opacity-30" />
-                            <p className="text-xs">Aucune notification pour l&apos;instant</p>
+                            <p className="text-[13px]">Aucune notification pour l&apos;instant</p>
                         </div>
                     ) : (
                         items.map((n) => {
@@ -259,21 +245,16 @@ function NotificationsPopover({ unread }: { unread: number }) {
                                 <button
                                     key={n.id}
                                     onClick={() => !n.is_read && markOne.mutate(n.id)}
-                                    className={cn(
-                                        "flex w-full items-start gap-3 rounded-xl p-2.5 text-left transition-colors hover:bg-white/[0.04]",
-                                        !n.is_read && "bg-primary/[0.04]",
-                                    )}
+                                    className="flex w-full items-start gap-3 rounded-xl p-2.5 text-left transition-colors hover:bg-white/[0.05]"
                                 >
-                                    <span className={cn("mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ring-1", sev.cls)}>
-                                        <Icon className="h-3.5 w-3.5" />
-                                    </span>
+                                    <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", sev.cls)} />
                                     <span className="min-w-0 flex-1">
                                         <span className="flex items-center gap-2">
-                                            <span className="truncate text-xs font-semibold">{n.title}</span>
-                                            {!n.is_read && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary shadow-[0_0_6px_hsl(var(--primary))]" />}
+                                            <span className="truncate text-[13px] font-semibold">{n.title}</span>
+                                            {!n.is_read && <span className="h-2 w-2 shrink-0 rounded-full bg-primary" />}
                                         </span>
-                                        <span className="line-clamp-2 text-[11px] text-muted-foreground">{n.message}</span>
-                                        <span className="mt-0.5 block text-[10px] text-muted-foreground/60">{timeAgo(n.created_at)}</span>
+                                        <span className="line-clamp-2 text-[12px] text-muted-foreground">{n.message}</span>
+                                        <span className="mt-0.5 block text-[11px] text-muted-foreground/70">{timeAgo(n.created_at)}</span>
                                     </span>
                                 </button>
                             );
@@ -282,7 +263,7 @@ function NotificationsPopover({ unread }: { unread: number }) {
                 </div>
                 <Link
                     href="/notifications"
-                    className="flex items-center justify-center gap-1 border-t border-white/[0.06] py-2.5 text-xs font-medium text-primary transition-colors hover:bg-primary/5"
+                    className="hairline-t flex items-center justify-center gap-1 py-3 text-[13px] font-medium text-primary transition-colors hover:bg-white/[0.04]"
                 >
                     Tout voir <ChevronRight className="h-3.5 w-3.5" />
                 </Link>

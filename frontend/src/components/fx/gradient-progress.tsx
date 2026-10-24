@@ -1,69 +1,51 @@
 "use client";
 
 /**
- * Barre de progression en dégradé, avec rayures animées tant que
- * l'élément est « actif » (téléchargement en cours, etc.).
+ * Barre de progression fine, couleur pleine (style iOS).
+ * ----------------------------------------------------------------
+ * Le nom « Gradient » est historique (ancien thème en dégradé lumineux) ;
+ * il est gardé pour ne pas toucher les 16 écrans qui l'utilisent.
+ * `active` (téléchargement en cours) ajoute une légère pulsation au lieu
+ * des anciennes rayures animées.
  */
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { EASE_OUT } from "@/lib/motion";
 
 const TONES = {
-    primary: "from-primary via-sky-400 to-brand",
-    emerald: "from-emerald-500 to-teal-400",
-    amber: "from-amber-500 to-orange-400",
-    rose: "from-rose-500 to-pink-400",
-    violet: "from-violet-500 to-fuchsia-400",
-    slate: "from-slate-500 to-slate-400",
+    primary: "bg-primary",
+    emerald: "bg-success",
+    amber: "bg-warning",
+    rose: "bg-destructive",
+    violet: "bg-[hsl(var(--chart-4))]",
+    slate: "bg-muted-foreground",
 } as const;
 
 export type ProgressTone = keyof typeof TONES;
-
-/** Couleur du halo assortie à la teinte. */
-const GLOWS: Record<ProgressTone, string> = {
-    primary: "hsl(var(--primary) / 0.55)",
-    emerald: "hsl(152 69% 47% / 0.5)",
-    amber: "hsl(38 95% 58% / 0.5)",
-    rose: "hsl(350 89% 64% / 0.5)",
-    violet: "hsl(262 83% 70% / 0.5)",
-    slate: "transparent",
-};
 
 export function GradientProgress({
     value,
     tone = "primary",
     active = false,
     className,
-    glow = true,
 }: {
     value: number;
     tone?: ProgressTone;
-    /** Rayures animées (élément en cours). */
+    /** Élément en cours (pulsation douce). */
     active?: boolean;
     className?: string;
+    /** Ancienne option « halo » : ignorée (plus de lueurs). */
     glow?: boolean;
 }) {
     const v = Math.max(0, Math.min(100, value || 0));
     return (
-        <div className={cn("relative h-1.5 w-full overflow-hidden rounded-full bg-muted/60", className)}>
+        <div className={cn("relative h-1 w-full overflow-hidden rounded-full bg-white/[0.12]", className)}>
             <motion.div
-                className={cn("absolute inset-y-0 left-0 rounded-full bg-gradient-to-r", TONES[tone])}
+                className={cn("absolute inset-y-0 left-0 rounded-full", TONES[tone], active && "animate-shimmer")}
                 initial={{ width: 0 }}
                 animate={{ width: `${v}%` }}
-                transition={{ duration: 0.9, ease: EASE_OUT }}
-                style={glow ? { boxShadow: `0 0 12px 0 ${GLOWS[tone]}` } : undefined}
-            >
-                {active && (
-                    <span
-                        className="absolute inset-0 animate-progress-stripes opacity-40"
-                        style={{
-                            backgroundImage:
-                                "repeating-linear-gradient(-45deg, rgba(255,255,255,.35) 0 7px, transparent 7px 14px)",
-                            backgroundSize: "28px 100%",
-                        }}
-                    />
-                )}
-            </motion.div>
+                transition={{ duration: 0.6, ease: EASE_OUT }}
+            />
         </div>
     );
 }

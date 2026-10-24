@@ -31,10 +31,9 @@ import { toast } from "sonner";
 import {
     ArrowDownWideNarrow,
     ArrowUpNarrowWide,
+    Check,
     CheckSquare,
     CloudDownload,
-    Film,
-    Info,
     LayoutGrid,
     Library,
     List,
@@ -47,21 +46,28 @@ import {
     Settings,
     SlidersHorizontal,
     Trash2,
-    Tv,
     X,
 } from "lucide-react";
 import { Header } from "@/components/layout/header";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
 import { PageContainer } from "@/components/shared/page-container";
 import { ArtworkRefreshButton } from "@/components/library/artwork-refresh-button";
 import { LibrarySourcesBanner } from "@/components/library/library-sources-banner";
-import { PageHeader, StatPill } from "@/components/shared/page-header";
+import { LocalSeriesRow } from "@/components/library/local-series-row";
+import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState, ErrorState } from "@/components/shared/empty-state";
 import { PosterGridSkeleton, Shimmer } from "@/components/shared/loading-skeleton";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -79,7 +85,6 @@ import { EASE_OUT, stagger } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { useParamState, usePageParam, writeParams } from "@/components/library/use-param-state";
 import { SegmentedControl } from "@/components/library/segmented-control";
-import { LiveCount } from "@/components/library/live-count";
 import { SmartPagination } from "@/components/library/smart-pagination";
 import { FloatingBar, SelectionCount } from "@/components/library/floating-bar";
 import { FilterPresetsMenu, RemovableChip, SearchField, StickyToolbar } from "@/components/library/toolbar";
@@ -115,7 +120,8 @@ import {
 /* ── Constantes ─────────────────────────────────────────────── */
 
 const PER_PAGE = 48;
-const GRID = "grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8";
+// 3 colonnes sur iPhone (comme l'app TV d'Apple), jusqu'à 8 sur grand écran.
+const GRID = "grid grid-cols-3 gap-x-3 gap-y-5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8";
 
 // Valeurs autorisées et libellés des filtres : partagés avec les « filtres
 // enregistrés » (lib/media-filters), pour qu'un préréglage parle le même langage.
@@ -458,80 +464,105 @@ function MediaLibrary() {
         <>
             <PageContainer>
                 <PageHeader
-                    icon={Library}
-                    accent="violet"
-                    eyebrow="Bibliothèque"
                     title="Médiathèque"
-                    description="Tous tes films et séries, avec leur qualité, leurs sous-titres et ce que tu as déjà vu sur Kodi."
                     actions={
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1">
+                            {/* Mode sélection, comme « Sélectionner » de l'app Photos */}
+                            <Button variant="ghost" className="text-primary" onClick={() => (selectMode ? exitSelection() : setSelectMode(true))} aria-pressed={selectMode}>
+                                {selectMode ? "Terminé" : "Sélectionner"}
+                            </Button>
                             {/* Logos, disques, clearart (fanart.tv / TMDB, côté serveur) */}
                             <ArtworkRefreshButton />
-                            <Button asChild>
+                            <Button asChild size="icon" variant="tinted" aria-label="Ajouter un titre">
                                 <Link href="/search">
-                                    <Plus /> Ajouter un titre
+                                    <Plus className="!size-5" />
                                 </Link>
                             </Button>
                         </div>
                     }
-                >
-                    <StatPill label="médias" value={<LiveCount value={facets?.total} />} icon={Library} tone="primary" />
-                    <StatPill label="films" value={<LiveCount value={movieCount} />} icon={Film} />
-                    <StatPill label="séries" value={<LiveCount value={seriesCount} />} icon={Tv} />
-                    <Link
-                        href="/media/missing"
-                        className="rounded-xl transition-transform duration-300 ease-smooth hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60"
-                        aria-label="Voir les médias manquants"
-                    >
-                        <StatPill label="manquants →" value={<LiveCount value={facets?.missing_count} />} icon={PackageX} tone="warning" />
-                    </Link>
-                </PageHeader>
+                />
 
                 {/* Radarr / Sonarr injoignable : dernière liste connue affichée */}
                 <LibrarySourcesBanner />
 
-                {/* ── Barre d'outils collante ── */}
+                {/* Séries maison (Naruto Kai…) : hors Sonarr, leur propre rangée */}
+                {type !== "movie" && <LocalSeriesRow />}
+
+                {/* ── Barre d'outils : recherche, type, filtres, tri, vue ── */}
                 <StickyToolbar>
-                    <div className="flex flex-wrap items-center gap-2">
-                        <SearchField
-                            className="order-1 min-w-[160px] flex-1"
-                            value={searchInput}
-                            onChange={setSearchInput}
-                            // Spinner pendant la frappe (debounce) puis pendant la requête.
-                            loading={searchInput.trim() !== urlQuery || (!!urlQuery && isFetching && isPlaceholderData)}
-                            placeholder="Rechercher dans ta médiathèque…"
-                            ariaLabel="Rechercher un titre dans la médiathèque"
-                            id="media-search"
+                    <SearchField
+                        value={searchInput}
+                        onChange={setSearchInput}
+                        // Spinner pendant la frappe (debounce) puis pendant la requête.
+                        loading={searchInput.trim() !== urlQuery || (!!urlQuery && isFetching && isPlaceholderData)}
+                        placeholder="Rechercher dans ta médiathèque"
+                        ariaLabel="Rechercher un titre dans la médiathèque"
+                        id="media-search"
+                    />
+                    <div className="mt-2.5 flex items-center gap-2">
+                        <SegmentedControl
+                            className="min-w-0"
+                            layoutId="media-type-pill"
+                            ariaLabel="Type de média"
+                            value={type}
+                            onChange={(v) => setFilter("type", v)}
+                            options={[
+                                { value: "all", label: "Tout" },
+                                { value: "movie", label: "Films", count: movieCount ?? null },
+                                { value: "series", label: "Séries", count: seriesCount ?? null },
+                            ]}
                         />
+                        <div className="flex-1" />
                         <Button
-                            variant={showFilters || filterCount > 0 ? "glow" : "outline"}
-                            onClick={() => setShowFilters((s) => !s)}
-                            aria-expanded={showFilters}
-                            aria-controls="media-filters"
-                            className="order-2 xl:order-3"
+                            variant={filterCount > 0 ? "tinted" : "secondary"}
+                            size="sm"
+                            onClick={() => setShowFilters(true)}
+                            aria-label="Filtres"
+                            className="shrink-0"
                         >
                             <SlidersHorizontal />
                             <span className="hidden sm:inline">Filtres</span>
-                            {filterCount > 0 && (
-                                <motion.span
-                                    key={filterCount}
-                                    initial={{ scale: 0.4 }}
-                                    animate={{ scale: 1 }}
-                                    className="rounded-full bg-primary px-1.5 text-[10px] font-bold tabular-nums text-primary-foreground"
-                                >
-                                    {filterCount}
-                                </motion.span>
-                            )}
+                            {filterCount > 0 && <span className="tabular-nums">{filterCount}</span>}
                         </Button>
-                        <FilterPresetsMenu current={currentParams} onApply={applyPreset} className="order-2 xl:order-3" />
+                        <FilterPresetsMenu current={currentParams} onApply={applyPreset} className="hidden h-8 rounded-lg px-3 text-[13px] md:inline-flex" />
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button variant="outline" size="icon" aria-label="Plus d'actions" className="order-3 xl:order-5">
+                                <Button variant="secondary" size="icon-sm" aria-label="Tri, affichage et actions" className="shrink-0">
                                     <MoreHorizontal />
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-64">
-                                <DropdownMenuLabel className="eyebrow">Actions</DropdownMenuLabel>
+                                <DropdownMenuLabel className="text-[12px] font-medium text-muted-foreground">Trier par</DropdownMenuLabel>
+                                {MEDIA_SORTS.map((s) => (
+                                    <DropdownMenuItem key={s} onSelect={() => changeSort(s)}>
+                                        <Check className={cn(sort !== s && "opacity-0")} />
+                                        {SORT_LABELS[s]}
+                                    </DropdownMenuItem>
+                                ))}
+                                <DropdownMenuItem onSelect={() => setFilter("order", order === "asc" ? "desc" : "asc", "asc")}>
+                                    {order === "asc" ? <ArrowUpNarrowWide /> : <ArrowDownWideNarrow />}
+                                    {order === "asc" ? "Ordre croissant" : "Ordre décroissant"}
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuLabel className="text-[12px] font-medium text-muted-foreground">Affichage</DropdownMenuLabel>
+                                <DropdownMenuItem onSelect={() => setView("grid")}>
+                                    <LayoutGrid className={cn(view !== "grid" && "opacity-40")} />
+                                    Grille
+                                    {view === "grid" && <Check className="ml-auto" />}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => setView("list")}>
+                                    <List className={cn(view !== "list" && "opacity-40")} />
+                                    Liste
+                                    {view === "list" && <Check className="ml-auto" />}
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem asChild>
+                                    <Link href="/media/missing">
+                                        <PackageX />
+                                        Manquants
+                                        {facets?.missing_count ? <span className="ml-auto text-xs tabular-nums text-muted-foreground">{facets.missing_count}</span> : null}
+                                    </Link>
+                                </DropdownMenuItem>
                                 <DropdownMenuItem onSelect={syncKodi} disabled={kodiSync.isPending}>
                                     <RefreshCw className={cn(kodiSync.isPending && "animate-spin")} />
                                     Synchroniser Kodi
@@ -541,99 +572,28 @@ function MediaLibrary() {
                                     Scraper la page
                                     <span className="ml-auto text-xs tabular-nums text-muted-foreground">{plural(pageMovies.length, "film")}</span>
                                 </DropdownMenuItem>
-                                <DropdownMenuSeparator />
                                 <DropdownMenuItem asChild>
                                     <Link href="/settings/kodi">
                                         <Settings />
                                         Réglages Kodi
                                     </Link>
                                 </DropdownMenuItem>
-                                <DropdownMenuItem asChild>
-                                    <Link href="/media/missing">
-                                        <PackageX />
-                                        Voir les manquants
-                                    </Link>
-                                </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
-
-                        {/* Mobile : rangée défilante ; ≥ xl : les éléments rejoignent la ligne (display: contents). */}
-                        <div className="order-4 -mx-1 flex w-full items-center gap-2 overflow-x-auto px-1 py-0.5 scrollbar-none xl:contents">
-                            <SegmentedControl
-                                className="xl:order-2"
-                                layoutId="media-type-pill"
-                                ariaLabel="Type de média"
-                                value={type}
-                                onChange={(v) => setFilter("type", v)}
-                                options={[
-                                    { value: "all", label: "Tout" },
-                                    { value: "movie", label: "Films", icon: Film },
-                                    { value: "series", label: "Séries", icon: Tv },
-                                ]}
-                            />
-                            <div className="flex shrink-0 items-center gap-1 xl:order-2">
-                                <Select value={sort} onValueChange={(v) => changeSort(v as Sort)}>
-                                    <SelectTrigger className="w-[150px]" aria-label="Trier par">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {MEDIA_SORTS.map((s) => (
-                                            <SelectItem key={s} value={s}>
-                                                {SORT_LABELS[s]}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                                <Button
-                                    variant="outline"
-                                    size="icon"
-                                    onClick={() => setFilter("order", order === "asc" ? "desc" : "asc", "asc")}
-                                    aria-label={order === "asc" ? "Ordre croissant (cliquer pour inverser)" : "Ordre décroissant (cliquer pour inverser)"}
-                                    title={order === "asc" ? "Croissant" : "Décroissant"}
-                                >
-                                    <motion.span key={order} initial={{ rotate: -90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} transition={{ duration: 0.25 }}>
-                                        {order === "asc" ? <ArrowUpNarrowWide className="h-4 w-4" /> : <ArrowDownWideNarrow className="h-4 w-4" />}
-                                    </motion.span>
-                                </Button>
-                            </div>
-                            <SegmentedControl
-                                className="xl:order-4"
-                                layoutId="media-view-pill"
-                                ariaLabel="Affichage"
-                                value={view}
-                                onChange={setView}
-                                options={[
-                                    { value: "grid", label: "Grille", icon: LayoutGrid, title: "Vue grille" },
-                                    { value: "list", label: "Liste", icon: List, title: "Vue liste" },
-                                ]}
-                            />
-                            <Button
-                                variant={selectMode ? "glow" : "outline"}
-                                onClick={() => (selectMode ? exitSelection() : setSelectMode(true))}
-                                aria-pressed={selectMode}
-                                className="shrink-0 xl:order-4"
-                            >
-                                <CheckSquare />
-                                Sélectionner
-                            </Button>
-                        </div>
                     </div>
                 </StickyToolbar>
 
-                {/* ── Panneau de filtres (hauteur animée) ── */}
-                <AnimatePresence initial={false}>
-                    {showFilters && (
-                        <motion.div
-                            id="media-filters"
-                            key="filters"
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: "auto", opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            transition={{ duration: 0.35, ease: EASE_OUT }}
-                            className="overflow-hidden"
-                        >
-                            <div className="glass rounded-2xl p-4">
-                                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                {/* ── Filtres : feuille iOS (bas de l'écran sur mobile, fenêtre sur ordinateur) ── */}
+                <Dialog open={showFilters} onOpenChange={setShowFilters}>
+                    <DialogContent className="sm:max-w-xl">
+                        <DialogHeader>
+                            <DialogTitle>Filtres</DialogTitle>
+                            <DialogDescription>
+                                Disponibilité, genre, qualité et surveillance filtrent toute la bibliothèque ; ST&nbsp;FR et Lecture Kodi
+                                s&apos;appliquent à la page affichée.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="grid gap-3 sm:grid-cols-2">
                                     <FilterSelect
                                         id="f-avail"
                                         label="Disponibilité"
@@ -681,15 +641,14 @@ function MediaLibrary() {
                                         hint={kodiAvailable ? undefined : "Aucune TV n'a encore partagé son vu"}
                                     />
                                 </div>
-                                <p className="mt-3 flex items-start gap-1.5 text-[11px] text-muted-foreground/80">
-                                    <Info className="mt-px h-3.5 w-3.5 shrink-0" />
-                                    Disponibilité, genre, qualité et surveillance filtrent toute la bibliothèque ; ST&nbsp;FR et Lecture
-                                    Kodi s&apos;appliquent seulement à la page affichée.
-                                </p>
-                            </div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
+                        <DialogFooter>
+                            <Button variant="secondary" onClick={resetFilters} disabled={filterCount === 0}>
+                                Réinitialiser
+                            </Button>
+                            <Button onClick={() => setShowFilters(false)}>Terminé</Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
 
                 {/* ── Chips des filtres actifs ── */}
                 <AnimatePresence initial={false}>
@@ -703,14 +662,13 @@ function MediaLibrary() {
                             className="-mt-2 overflow-hidden"
                         >
                             <div className="flex flex-wrap items-center gap-2 pt-1">
-                                <span className="eyebrow mr-1">Filtres actifs</span>
                                 <AnimatePresence>
                                     {activeChips.map((chip) => (
                                         <RemovableChip key={chip.key} label={chip.label} onRemove={chip.clear} />
                                     ))}
                                 </AnimatePresence>
-                                <Button variant="ghost" size="sm" onClick={resetFilters} className="text-muted-foreground">
-                                    <X /> Réinitialiser
+                                <Button variant="ghost" size="sm" onClick={resetFilters} className="text-primary">
+                                    Tout effacer
                                 </Button>
                             </div>
                         </motion.div>
@@ -719,7 +677,7 @@ function MediaLibrary() {
 
                 {/* ── Résumé ── */}
                 {data && !isError && (
-                    <div className="-mb-2 flex flex-wrap items-center justify-between gap-2 px-1 text-xs text-muted-foreground">
+                    <div className="-mb-3 flex flex-wrap items-center justify-between gap-2 text-[13px] text-muted-foreground">
                         <p>
                             <span className="font-semibold tabular-nums text-foreground">{formatNumber(total)}</span>{" "}
                             {total > 1 ? "résultats" : "résultat"}
@@ -748,7 +706,7 @@ function MediaLibrary() {
                                     initial={{ opacity: 0 }}
                                     animate={{ opacity: 1 }}
                                     exit={{ opacity: 0 }}
-                                    className="flex items-center gap-1.5 text-primary"
+                                    className="flex items-center gap-1.5"
                                 >
                                     <Loader2 className="h-3.5 w-3.5 animate-spin" /> Mise à jour…
                                 </motion.span>
@@ -759,21 +717,21 @@ function MediaLibrary() {
 
                 {/* ── Contenu ── */}
                 {isError ? (
-                    <div className="glass rounded-2xl">
+                    <div className="rounded-2xl bg-card">
                         <ErrorState error={error} onRetry={() => refetch()} title="Impossible de charger la médiathèque" />
                     </div>
                 ) : isLoading ? (
                     view === "list" ? (
-                        <div className="glass space-y-1.5 rounded-2xl p-2">
+                        <div className="space-y-px overflow-hidden rounded-xl">
                             {Array.from({ length: 10 }).map((_, i) => (
-                                <Shimmer key={i} className="h-[72px] w-full" />
+                                <Shimmer key={i} className="h-[72px] w-full rounded-none" />
                             ))}
                         </div>
                     ) : (
                         <PosterGridSkeleton count={16} />
                     )
                 ) : total === 0 ? (
-                    <div className="glass rounded-2xl">
+                    <div className="rounded-2xl bg-card">
                         {urlQuery ? (
                             <EmptyState
                                 icon={Search}
@@ -807,7 +765,7 @@ function MediaLibrary() {
                         )}
                     </div>
                 ) : visibleItems.length === 0 ? (
-                    <div className="glass rounded-2xl">
+                    <div className="rounded-2xl bg-card">
                         <EmptyState
                             compact
                             icon={SlidersHorizontal}
@@ -821,9 +779,9 @@ function MediaLibrary() {
                         />
                     </div>
                 ) : view === "list" ? (
-                    <div className={cn("glass rounded-2xl p-2 transition-opacity duration-300", isPlaceholderData && "opacity-60")}>
+                    <div className={cn("overflow-hidden rounded-xl bg-card transition-opacity duration-300", isPlaceholderData && "opacity-60")}>
                         <MediaListHeader selectable={selectMode} />
-                        <motion.div key={gridKey} variants={stagger(0, 0.012)} initial="hidden" animate="show" className="space-y-0.5">
+                        <motion.div key={gridKey} variants={stagger(0, 0.012)} initial="hidden" animate="show" className="[&>*+*]:shadow-[inset_0_0.5px_0_hsl(0_0%_100%/0.1)]">
                             {visibleItems.map((item) => (
                                 <MediaListRow
                                     key={mediaKey(item)}
@@ -901,7 +859,7 @@ function MediaLibrary() {
                 confirmLabel="Supprimer"
                 onConfirm={handleBulkDelete}
             >
-                <div className="space-y-2 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
+                <div className="space-y-3 rounded-xl bg-white/[0.05] p-3.5">
                     <div className="flex items-start justify-between gap-3">
                         <Label htmlFor="del-files" className="text-sm leading-snug">
                             Effacer aussi les fichiers du disque

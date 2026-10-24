@@ -47,7 +47,7 @@ export function SubTrackChip({
     return (
         <span
             className={cn(
-                "inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 py-0.5 pl-2 pr-1 text-xs text-emerald-300",
+                "inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/10 py-0.5 pl-2 pr-1 text-xs text-success",
                 !external && "pr-2",
                 className,
             )}
@@ -63,7 +63,7 @@ export function SubTrackChip({
                     disabled={syncing}
                     aria-label={`Synchroniser le sous-titre ${lang} sur l'audio de la vidéo`}
                     title="Caler sur la vidéo (synchronise le timing sur l'audio)"
-                    className="ml-0.5 flex h-5 w-5 items-center justify-center rounded-full text-emerald-300/70 transition-colors hover:bg-sky-500/15 hover:text-sky-300 disabled:opacity-50"
+                    className="ml-0.5 flex h-5 w-5 items-center justify-center rounded-full text-success/70 transition-colors hover:bg-primary/15 hover:text-primary disabled:opacity-50"
                 >
                     {syncing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wand2 className="h-3 w-3" />}
                 </button>
@@ -75,7 +75,7 @@ export function SubTrackChip({
                     disabled={deleting}
                     aria-label={`Supprimer le sous-titre ${lang}`}
                     title="Supprimer ce sous-titre"
-                    className="flex h-5 w-5 items-center justify-center rounded-full text-emerald-300/70 transition-colors hover:bg-red-500/15 hover:text-red-300 disabled:opacity-50"
+                    className="flex h-5 w-5 items-center justify-center rounded-full text-success/70 transition-colors hover:bg-destructive/15 hover:text-destructive disabled:opacity-50"
                 >
                     {deleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
                 </button>
@@ -86,7 +86,7 @@ export function SubTrackChip({
 
 export function MissingSubChip({ track }: { track: SubtitleTrack }) {
     return (
-        <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-300">
+        <span className="inline-flex items-center gap-1 rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-xs text-warning">
             <CircleAlert className="h-3.5 w-3.5" aria-hidden />
             {subLangLabel(track)}
             <Flags track={track} />

@@ -1,26 +1,26 @@
 "use client";
 
 /**
- * Page de connexion — fond aurora, emblème en orbite, carte en verre.
+ * Page de connexion — sobre, façon écran d'accueil d'une app Apple :
+ * icône de l'app, nom, un champ mot de passe, un bouton bleu.
  * ----------------------------------------------------------------
  * Messages d'erreur distincts (avant : tout affichait « Mot de passe
  * incorrect », y compris un backend éteint ou l'anti brute-force) :
- *   - 401 → mot de passe incorrect (+ secousse de la carte)
+ *   - 401 → mot de passe incorrect (+ secousse du champ, comme iOS)
  *   - 429 → trop de tentatives (limite 5/min côté API)
  *   - réseau → backend injoignable
  * Instance sans mot de passe (ancienne install restée sur la valeur
- * d'exemple du .env, ou `arrmada-cli reset-password`) : la carte propose
+ * d'exemple du .env, ou `arrmada-cli reset-password`) : la page propose
  * de le CRÉER au lieu de demander un mot de passe que personne ne connaît.
  */
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { BrandIcon } from "@/components/brand/brand-mark";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, Eye, EyeOff, Loader2, Lock, ShieldAlert } from "lucide-react";
+import { Eye, EyeOff, Loader2, ShieldAlert } from "lucide-react";
+import { BrandIcon } from "@/components/brand/brand-mark";
+import { CreatePasswordForm } from "@/components/auth/create-password-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { AuroraBackground } from "@/components/fx/aurora-background";
-import { CreatePasswordForm } from "@/components/auth/create-password-form";
 import { login, isAuthenticated } from "@/lib/api-client";
 import { useSetupStatus } from "@/hooks/use-setup";
 import { EASE_OUT } from "@/lib/motion";
@@ -31,7 +31,7 @@ function explain(err: unknown): string {
     const msg = err instanceof Error ? err.message : String(err);
     if (/not authenticated|401|incorrect|invalid/i.test(msg)) return "Mot de passe incorrect.";
     if (/rate|429|too many/i.test(msg)) return "Trop de tentatives. Patiente une minute avant de réessayer.";
-    if (/unavailable|502|failed to fetch|network|load failed/i.test(msg)) return "Backend injoignable. Vérifie que le conteneur arrmada tourne.";
+    if (/unavailable|502|failed to fetch|network|load failed/i.test(msg)) return "Serveur injoignable. Vérifie que le conteneur arrmada tourne.";
     if (/no admin password|409/i.test(msg)) return "Aucun mot de passe n'est encore défini : recharge la page pour le créer.";
     return msg || "Connexion impossible.";
 }
@@ -48,11 +48,12 @@ export default function LoginPage() {
     const mustCreatePassword = !!setupStatus && setupStatus.is_configured && !setupStatus.password_set;
 
     useEffect(() => {
-        // Installation non faite → assistant ; déjà connecté → dashboard.
+        // Installation non faite → assistant ; déjà connecté → accueil.
         if (!setupLoading && setupStatus && !setupStatus.is_configured) {
             router.replace("/setup");
             return;
         }
+        // Pas encore de mot de passe : rester ici pour le créer.
         if (setupStatus && !setupStatus.password_set) return;
         if (isAuthenticated()) router.replace("/dashboard");
     }, [router, setupStatus, setupLoading]);
@@ -60,7 +61,7 @@ export default function LoginPage() {
     /** Mot de passe créé : la session est déjà ouverte par l'API. */
     const handleCreated = () => {
         setSuccess(true);
-        setTimeout(() => router.push("/dashboard"), 550);
+        setTimeout(() => router.push("/dashboard"), 300);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -70,8 +71,8 @@ export default function LoginPage() {
         try {
             await login(password);
             setSuccess(true);
-            // Laisse jouer l'animation de sortie avant de changer de page.
-            setTimeout(() => router.push("/dashboard"), 550);
+            // Laisse jouer le fondu de sortie avant de changer de page.
+            setTimeout(() => router.push("/dashboard"), 300);
         } catch (err) {
             setError(explain(err));
             setShakeKey((k) => k + 1);
@@ -80,134 +81,87 @@ export default function LoginPage() {
     };
 
     return (
-        <div className="relative flex min-h-[100dvh] items-center justify-center overflow-hidden px-4 py-10">
-            <AuroraBackground intense />
+        <div className="flex min-h-[100dvh] items-center justify-center px-6 pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
+            <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={success ? { opacity: 0, scale: 0.98 } : { opacity: 1, y: 0 }}
+                transition={{ duration: success ? 0.25 : 0.45, ease: EASE_OUT }}
+                className="w-full max-w-[340px]"
+            >
+                {/* Icône et nom de l'app */}
+                <div className="flex flex-col items-center text-center">
+                    <div className="h-[76px] w-[76px] overflow-hidden rounded-[18px] shadow-[0_8px_24px_-8px_rgb(0_0_0/0.8)]">
+                        <BrandIcon title="ArrMada" />
+                    </div>
+                    <h1 className="mt-5 text-[28px] font-bold tracking-tight">ArrMada</h1>
+                    <p className="mt-1 text-[15px] text-muted-foreground">
+                        {mustCreatePassword
+                            ? "Aucun mot de passe n'est défini : crée celui qui protégera ArrMada."
+                            : "Connecte-toi pour accéder à ta médiathèque."}
+                    </p>
+                </div>
 
-            <AnimatePresence>
-                {!success && (
-                    <motion.div
-                        key="card"
-                        initial={{ opacity: 0, y: 24, scale: 0.97 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, scale: 1.06, filter: "blur(8px)" }}
-                        transition={{ duration: 0.6, ease: EASE_OUT }}
-                        className="w-full max-w-sm"
-                    >
-                        <div key={shakeKey} className={cn(shakeKey > 0 && "animate-shake")}>
-                            <div className="glass-strong border-gradient relative overflow-hidden rounded-[28px] px-7 pb-7 pt-9">
-                                {/* Halo interne */}
-                                <div aria-hidden className="pointer-events-none absolute -top-24 left-1/2 h-48 w-72 -translate-x-1/2 rounded-full bg-primary/25 blur-3xl" />
-
-                                {/* Emblème en orbite */}
-                                <div className="relative mx-auto mb-6 h-28 w-28">
-                                    <svg className="absolute inset-0 h-full w-full animate-spin-slow" viewBox="0 0 100 100" aria-hidden>
-                                        <circle cx="50" cy="50" r="48" fill="none" stroke="hsl(var(--brand) / 0.45)" strokeWidth="0.8" strokeDasharray="2 5" />
-                                    </svg>
-                                    <svg className="absolute inset-0 h-full w-full animate-spin-slow [animation-direction:reverse] [animation-duration:18s]" viewBox="0 0 100 100" aria-hidden>
-                                        <circle cx="50" cy="50" r="42" fill="none" stroke="hsl(var(--primary) / 0.5)" strokeWidth="0.8" strokeDasharray="20 12" />
-                                    </svg>
-                                    <motion.div
-                                        initial={{ scale: 0.5, rotate: -20, opacity: 0 }}
-                                        animate={{ scale: 1, rotate: 0, opacity: 1 }}
-                                        transition={{ type: "spring", stiffness: 180, damping: 14, delay: 0.15 }}
-                                        className="absolute inset-[14%]"
-                                    >
-                                        <div className="absolute -inset-3 rounded-full bg-brand/30 blur-xl animate-pulse-glow" aria-hidden />
-                                        <div className="relative h-full w-full overflow-hidden rounded-[26%] ring-1 ring-brand/40 shadow-[0_0_36px_-6px_hsl(var(--brand)/0.9)]">
-                                            <BrandIcon title="ArrMada" animated delay={0.35} />
-                                        </div>
-                                    </motion.div>
-                                </div>
-
-                                <div className="relative text-center">
-                                    <h1 className="text-gradient-animated text-3xl font-bold tracking-tight">ArrMada</h1>
-                                    <p className="mt-1.5 text-sm text-muted-foreground">
-                                        {mustCreatePassword
-                                            ? "Aucun mot de passe n'est défini : crée celui qui protégera ArrMada."
-                                            : "Le poste de commandement de ta flotte *arr"}
-                                    </p>
-                                </div>
-
-                                {mustCreatePassword ? (
-                                    <CreatePasswordForm onCreated={handleCreated} submitLabel="Créer et monter à bord" className="relative mt-7 text-left" />
-                                ) : (
-                                <form onSubmit={handleSubmit} className="relative mt-7 space-y-4">
-                                    <div className="relative">
-                                        <Lock className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                                        <Input
-                                            id="password"
-                                            type={show ? "text" : "password"}
-                                            placeholder="Mot de passe"
-                                            value={password}
-                                            onChange={(e) => {
-                                                setPassword(e.target.value);
-                                                if (error) setError("");
-                                            }}
-                                            className={cn("h-12 pl-10 pr-11 text-base", error && "border-red-500/50 focus-visible:border-red-500/60 focus-visible:ring-red-500/20")}
-                                            autoFocus
-                                            autoComplete="current-password"
-                                            required
-                                            aria-invalid={!!error}
-                                            aria-describedby={error ? "login-error" : undefined}
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={() => setShow((s) => !s)}
-                                            className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
-                                            aria-label={show ? "Masquer le mot de passe" : "Afficher le mot de passe"}
-                                        >
-                                            {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                                        </button>
-                                    </div>
-
-                                    <AnimatePresence mode="wait">
-                                        {error && (
-                                            <motion.p
-                                                id="login-error"
-                                                role="alert"
-                                                initial={{ opacity: 0, height: 0 }}
-                                                animate={{ opacity: 1, height: "auto" }}
-                                                exit={{ opacity: 0, height: 0 }}
-                                                className="flex items-start gap-2 overflow-hidden text-sm text-red-400"
-                                            >
-                                                <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
-                                                {error}
-                                            </motion.p>
-                                        )}
-                                    </AnimatePresence>
-
-                                    <Button type="submit" size="lg" className="shine group w-full" disabled={loading || !password}>
-                                        {loading ? <Loader2 className="animate-spin" /> : null}
-                                        {loading ? "Connexion…" : "Monter à bord"}
-                                        {!loading && <ArrowRight className="transition-transform group-hover:translate-x-1" />}
-                                    </Button>
-                                </form>
-                                )}
-
-                                {!mustCreatePassword && (
-                                    <p className="relative mt-6 text-center text-[11px] leading-relaxed text-muted-foreground/70">
-                                        Mot de passe oublié ? <span className="font-mono text-muted-foreground">docker exec -it arrmada arrmada-cli set-password</span>
-                                    </p>
-                                )}
-                            </div>
+                {mustCreatePassword ? (
+                    <CreatePasswordForm onCreated={handleCreated} submitLabel="Créer et se connecter" className="mt-8 text-left" />
+                ) : (
+                    <form onSubmit={handleSubmit} className="mt-8 space-y-3">
+                        <div key={shakeKey} className={cn("relative", shakeKey > 0 && "animate-shake")}>
+                            <Input
+                                id="password"
+                                type={show ? "text" : "password"}
+                                placeholder="Mot de passe"
+                                value={password}
+                                onChange={(e) => {
+                                    setPassword(e.target.value);
+                                    if (error) setError("");
+                                }}
+                                className={cn("h-12 rounded-[14px] pr-12 text-[17px]", error && "ring-2 ring-destructive/70 focus-visible:ring-destructive/70")}
+                                autoFocus
+                                autoComplete="current-password"
+                                required
+                                aria-invalid={!!error}
+                                aria-describedby={error ? "login-error" : undefined}
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShow((s) => !s)}
+                                className="absolute right-1.5 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground"
+                                aria-label={show ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                            >
+                                {show ? <EyeOff className="h-[18px] w-[18px]" /> : <Eye className="h-[18px] w-[18px]" />}
+                            </button>
                         </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
 
-            {/* Flash de succès */}
-            <AnimatePresence>
-                {success && (
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.6 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        className="absolute flex flex-col items-center gap-3"
-                    >
-                        <div className="h-16 w-16 rounded-full bg-primary/30 blur-xl animate-pulse-glow" />
-                        <p className="text-gradient text-lg font-semibold">Bienvenue à bord, capitaine</p>
-                    </motion.div>
+                        <AnimatePresence mode="wait">
+                            {error && (
+                                <motion.p
+                                    id="login-error"
+                                    role="alert"
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: "auto" }}
+                                    exit={{ opacity: 0, height: 0 }}
+                                    className="flex items-start gap-2 overflow-hidden px-1 text-[14px] text-destructive"
+                                >
+                                    <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                                    {error}
+                                </motion.p>
+                            )}
+                        </AnimatePresence>
+
+                        <Button type="submit" size="lg" className="w-full rounded-[14px]" disabled={loading || !password}>
+                            {loading && <Loader2 className="animate-spin" />}
+                            {loading ? "Connexion…" : "Se connecter"}
+                        </Button>
+                    </form>
                 )}
-            </AnimatePresence>
+
+                {!mustCreatePassword && (
+                    <p className="mt-8 text-center text-[12px] leading-relaxed text-muted-foreground/80">
+                        Mot de passe oublié ?{" "}
+                        <span className="font-mono text-muted-foreground">docker exec -it arrmada arrmada-cli set-password</span>
+                    </p>
+                )}
+            </motion.div>
         </div>
     );
 }

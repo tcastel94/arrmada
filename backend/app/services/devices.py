@@ -16,12 +16,18 @@ backend les efface, il suffit de relancer l'appairage sur la TV.
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import ipaddress
 import re
 import secrets
 import time
 from dataclasses import dataclass, field
+
+from app.config import settings
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 # Alphabet sans caractères ambigus à la lecture sur une TV (0/O, 1/I/L, 8/B…)
 _ALPHABET = "ACDEFGHJKMNPQRTUVWXY34679"
@@ -69,6 +75,19 @@ _LAN_NETWORKS = tuple(
 )
 
 
+@functools.lru_cache(maxsize=4)
+def _trusted_networks(spec: str) -> tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]:
+    """Réseaux VPN de DEVICE_TRUSTED_NETWORKS (« 100.64.0.0/10, fd7a:115c::/48 »)."""
+    networks = []
+    for part in spec.split(","):
+        try:
+            if part.strip():
+                networks.append(ipaddress.ip_network(part.strip(), strict=False))
+        except ValueError:
+            logger.warning("DEVICE_TRUSTED_NETWORKS : réseau ignoré (%s)", part.strip())
+    return tuple(networks)
+
+
 def _is_private(address: str) -> bool:
     try:
         ip = ipaddress.ip_address(address.strip())
@@ -76,7 +95,8 @@ def _is_private(address: str) -> bool:
         return False
     if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
         ip = ip.ipv4_mapped
-    return any(ip.version == net.version and ip in net for net in _LAN_NETWORKS)
+    networks = _LAN_NETWORKS + _trusted_networks(settings.DEVICE_TRUSTED_NETWORKS)
+    return any(ip.version == net.version and ip in net for net in networks)
 
 
 def is_lan_request(client_host: str | None, forwarded_for: str | None) -> bool:
@@ -144,16 +164,68 @@ _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         ("GET", r"/api/qr"),  # QR codes vers la web app (rien à modifier)
         ("GET", r"/api/cameras/snapshot/\d+"),  # photo d'une détection Eufy (pop-up)
         ("POST", r"/api/yamaha/(control|preset/apply)"),
+        # Appli Android native (ADR-007) : infos de lecture, flux vidéo relayé
+        # depuis Jellyfin (la clé Jellyfin reste sur le serveur), vignettes
+        # de chapitres. Lecture seule.
+        ("GET", r"/api/tv/play/(movie/\d+|episode/\d+/\d+/\d+)"),
+        ("GET", r"/api/tv/stream/[0-9a-f]{32}"),
+        ("GET", r"/api/tv/chapter-image/[0-9a-f]{32}/\d+"),
+        # Planches de vignettes trickplay (aperçu quand on avance)
+        ("GET", r"/api/tv/trickplay/[0-9a-f]{32}/\d+/\d+"),
+        ("GET", r"/api/tv/item-image/[0-9a-f]{32}"),
+        ("GET", r"/api/tv/trailer/movie/\d+"),
+        # Profils famille (ADR-008) : écran « Qui regarde ? » (lecture seule)
+        ("GET", r"/api/profiles"),
+        # Liste « À voir » du profil qui regarde : lire, ajouter, retirer un
+        # titre de SA liste (jamais de la médiathèque)
+        ("GET", r"/api/watchlist"),
+        ("POST", r"/api/watchlist"),
+        ("DELETE", r"/api/watchlist/(movie|series)/\d+"),
+        # Téléphone / tablette : envoyer un titre sur une TV de la maison
+        ("GET", r"/api/tv/targets"),
+        ("POST", r"/api/tv/targets/\d+/play"),
+        # Remux HLS (.m2ts, .iso…) : listes et morceaux seulement, puis arrêt
+        (
+            "GET",
+            r"/api/tv/hls/[0-9a-f]{32}/((master|main|sdr)\.m3u8|hls1/[A-Za-z0-9_]+/-?\d+\.(mp4|m4s|ts))",
+        ),
+        ("POST", r"/api/tv/hls/[0-9a-f]{32}/stop"),
+        ("GET", r"/api/tv/series/\d+/season/\d+"),  # épisodes Jellyfin (écran Série)
+        # Télécommande tactile : commandes de la tablette de la pièce (long polling)
+        ("GET", r"/api/tv/remote"),
+        # Sous-titres externes (Bazarr) : lecture, et recherche depuis le menu pause
+        ("GET", r"/api/tv/subtitle/[0-9a-f]{32}/\d+\.(srt|ass|vtt)"),
+        ("POST", r"/api/tv/subtitles/[0-9a-f]{32}(/sync)?"),
+        # Mises à jour de l'appli Android (ADR-009) : version proposée, APK
+        ("GET", r"/api/android/update"),
+        ("GET", r"/api/android/apk/arrmada-[A-Za-z0-9.+_-]+\.apk"),
+        # Écran « Vidéos » : parcourir les dossiers déclarés, lire (jetons
+        # opaques confinés au dossier racine, lecture seule)
+        ("GET", r"/api/videos/browse"),
+        ("GET", r"/api/videos/(play|stream|subtitle|image)/[A-Za-z0-9_-]{1,2000}"),
+        # Séries maison (Naruto Kai, One Pace…) : grille, écran Série, Reprendre
+        ("GET", r"/api/videos/series(/index|/\d+)?"),
     )
 )
 
 
-# Périmètre « écran d'appoint » : il affiche, il ne commande rien.
+# Périmètre « écran d'appoint » : il affiche ; seule commande permise, la
+# télécommande tactile de la lecture en cours de SA pièce (pause, ±30 s,
+# intro, pistes : actions et valeurs bornées par tv_remote.clean_command).
+# Rien d'autre : ni ampli, ni téléchargements, ni réglages.
 _SCREEN_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
     (method, re.compile(pattern))
     for method, pattern in (
         ("GET", r"/api/devices/me"),
         ("GET", r"/api/ambient"),
+        ("POST", r"/api/ambient/command"),
+        # « Ce soir » : lancer sur la TV de SA pièce un titre que l'écran propose
+        # (le serveur vérifie qu'il fait partie de « Ce soir »)
+        ("POST", r"/api/ambient/play"),
+        # Filmographie d'un acteur (fiche du film sur la tablette), lecture seule
+        ("GET", r"/api/ambient/person/\d+"),
+        # Fiche d'un téléchargement au toucher (vitesse, sources…), lecture seule
+        ("GET", r"/api/ambient/download/[A-Za-z0-9_.-]{1,120}"),
     )
 )
 

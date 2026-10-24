@@ -132,10 +132,10 @@ export function StuckImports() {
         <Panel
             title="Imports bloqués"
             icon={AlertTriangle}
-            iconClassName={count > 0 ? "text-amber-400" : "text-emerald-400"}
+            iconClassName={count > 0 ? "text-warning" : "text-success"}
             action={
                 count > 0 ? (
-                    <span className="rounded-md bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-300 ring-1 ring-inset ring-amber-400/25">
+                    <span className="rounded-md bg-warning/15 px-2 py-0.5 text-[11px] font-semibold text-warning ring-1 ring-inset ring-warning/25">
                         {plural(count, "élément")}
                     </span>
                 ) : null
@@ -186,7 +186,7 @@ export function StuckImports() {
                         </div>
                     </div>
                     {selected.size > readyCount && (
-                        <p className="flex items-center gap-1.5 border-b border-white/[0.05] bg-amber-500/[0.05] px-5 py-2 text-[11px] text-amber-300">
+                        <p className="flex items-center gap-1.5 border-b border-white/[0.05] bg-warning/[0.05] px-5 py-2 text-[11px] text-warning">
                             <AlertTriangle className="h-3.5 w-3.5" />
                             {plural(selected.size - readyCount, "ligne sélectionnée", "lignes sélectionnées")} sans type : choisis
                             Film ou Série pour les inclure.
@@ -250,8 +250,8 @@ function StuckRow({
             className={cn(
                 "flex flex-wrap items-center gap-3 px-4 py-3 transition-colors sm:flex-nowrap sm:px-5",
                 selected ? "bg-primary/[0.06]" : "hover:bg-white/[0.02]",
-                status === "launched" && "bg-emerald-500/[0.05]",
-                status === "error" && "bg-red-500/[0.05]",
+                status === "launched" && "bg-success/[0.05]",
+                status === "error" && "bg-destructive/[0.05]",
             )}
         >
             {/* Case à cocher */}
@@ -265,7 +265,7 @@ function StuckRow({
                 className={cn(
                     "flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 transition-all",
                     selected
-                        ? "border-primary bg-primary text-primary-foreground shadow-[0_0_12px_-2px_hsl(var(--primary))]"
+                        ? "border-primary bg-primary text-primary-foreground"
                         : "border-muted-foreground/40 hover:border-primary",
                 )}
             >
@@ -276,8 +276,8 @@ function StuckRow({
             <div className="flex shrink-0 overflow-hidden rounded-lg ring-1 ring-white/[0.08]" role="group" aria-label="Type de média">
                 {(
                     [
-                        { t: "movie" as const, label: "Film", icon: Film, on: "bg-violet-500/20 text-violet-300" },
-                        { t: "series" as const, label: "Série", icon: Tv, on: "bg-sky-500/20 text-sky-300" },
+                        { t: "movie" as const, label: "Film", icon: Film, on: "bg-primary/20 text-primary" },
+                        { t: "series" as const, label: "Série", icon: Tv, on: "bg-primary/20 text-primary" },
                     ]
                 ).map(({ t, label, icon: Icon, on }) => (
                     <button
@@ -307,12 +307,12 @@ function StuckRow({
                     {item.storage_path}
                 </code>
                 {status === "error" && state?.message && (
-                    <p className="mt-1 line-clamp-2 text-[11px] text-red-300" title={state.message}>
+                    <p className="mt-1 line-clamp-2 text-[11px] text-destructive" title={state.message}>
                         {state.message}
                     </p>
                 )}
                 {!ready && status === "idle" && (
-                    <p className="mt-1 text-[11px] text-amber-300/90">Type non détecté : choisis Film ou Série.</p>
+                    <p className="mt-1 text-[11px] text-warning/90">Type non détecté : choisis Film ou Série.</p>
                 )}
             </div>
 
@@ -323,7 +323,7 @@ function StuckRow({
                         className={cn(
                             "rounded-md px-1.5 py-0.5 text-[10px] font-medium ring-1 ring-inset",
                             item.category === "software"
-                                ? "bg-amber-500/10 text-amber-300 ring-amber-400/25"
+                                ? "bg-warning/10 text-warning ring-warning/25"
                                 : "bg-white/[0.04] text-muted-foreground ring-white/[0.08]",
                         )}
                     >
@@ -341,7 +341,7 @@ function StuckRow({
                     </span>
                 ) : status === "launched" ? (
                     <span
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-300 ring-1 ring-inset ring-emerald-400/25"
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-success/15 px-2.5 py-1 text-xs font-medium text-success ring-1 ring-inset ring-success/25"
                         title={state?.message}
                     >
                         <Rocket className="h-3.5 w-3.5" /> Import lancé
@@ -354,7 +354,7 @@ function StuckRow({
                         onClick={onImport}
                         className="w-full sm:w-auto"
                     >
-                        {status === "error" ? <XCircle className="text-red-400" /> : <ArrowRight />}
+                        {status === "error" ? <XCircle className="text-destructive" /> : <ArrowRight />}
                         {status === "error" ? "Réessayer" : "Importer"}
                     </Button>
                 )}

@@ -140,10 +140,9 @@ export function Scrubber({
         keyTimer.current = setTimeout(() => commit(v), 350);
     };
 
-    const fill =
-        tone === "violet"
-            ? "from-violet-500 via-fuchsia-400 to-violet-300 shadow-[0_0_12px_hsl(262_83%_65%/0.8)]"
-            : "from-primary via-sky-400 to-brand shadow-[0_0_12px_hsl(var(--primary)/0.8)]";
+    // Barre pleine : blanche pour la lecture vidéo (comme le lecteur iOS),
+    // bleue pour les autres réglages.
+    const fill = tone === "violet" ? "bg-white" : "bg-primary";
 
     return (
         <div
@@ -170,14 +169,14 @@ export function Scrubber({
             <div
                 ref={trackRef}
                 className={cn(
-                    "relative w-full overflow-visible rounded-full bg-white/10 transition-[height] duration-200",
+                    "relative w-full overflow-visible rounded-full bg-white/[0.18] transition-[height] duration-200",
                     size === "sm" ? "h-1" : "h-1.5 group-hover:h-2",
                     drag !== null && "h-2",
                 )}
             >
                 <div
                     className={cn(
-                        "absolute inset-y-0 left-0 rounded-full bg-gradient-to-r",
+                        "absolute inset-y-0 left-0 rounded-full",
                         fill,
                         // Pas de transition pendant le glisser (suivi direct du doigt).
                         drag === null && "transition-[width] duration-500 ease-smooth",
@@ -187,7 +186,7 @@ export function Scrubber({
                 {/* Poignée : visible au survol, au focus et pendant le glisser */}
                 <div
                     className={cn(
-                        "absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_0_0_4px_rgb(255_255_255/0.15),0_2px_8px_rgb(0_0_0/0.5)] transition-[opacity,transform] duration-200",
+                        "absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white transition-[opacity,transform] duration-200",
                         drag !== null ? "scale-110 opacity-100" : "scale-75 opacity-0 group-hover:scale-100 group-hover:opacity-100 group-focus-visible:scale-100 group-focus-visible:opacity-100",
                         drag === null && "transition-[left,opacity,transform]",
                     )}
