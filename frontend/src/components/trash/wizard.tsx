@@ -12,9 +12,19 @@
  *    (avant, on voyait les recos d'avant en croyant voir les nouvelles) ;
  *  - erreurs affichées avec un bouton « Réessayer », plus de console.log ;
  *  - la modale d'application est un vrai Dialog (cf. ApplyDialog).
+ *
+ * Correctif 2026-10 (installation réelle sur Synology) : les étapes 2 à 6
+ * s'affichaient VIDES chez un utilisateur. Leur contenu ne devenait visible
+ * qu'au bout d'animations framer-motion imbriquées (glissement de l'étape
+ * puis apparition en cascade des cartes, opacité 0 au départ) : si l'une ne
+ * se joue pas, tout reste invisible. Désormais l'entrée d'étape est une
+ * animation CSS (tailwindcss-animate) : elle ne touche le style que PENDANT
+ * qu'elle se joue, donc au pire on perd l'effet, jamais le contenu.
+ * Et « Appliquer » exige d'avoir vu chaque étape : impossible de pousser
+ * des valeurs par défaut qu'on n'a jamais vues.
  */
 import { useEffect, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import { ArrowLeft, ArrowRight, Check, ChevronDown, Film, Shield, Tv, Zap, type LucideIcon } from "lucide-react";
 import { Panel } from "@/components/shared/panel";
 import { ErrorState, EmptyState } from "@/components/shared/empty-state";
@@ -23,7 +33,7 @@ import { GradientProgress } from "@/components/fx/gradient-progress";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useTrashRecommend, type MediaPreferences, type RecommendedProfile } from "@/hooks/use-trash-guides";
-import { EASE_OUT, SPRING, fadeUp, stagger } from "@/lib/motion";
+import { SPRING } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import {
     AUDIO_OPTIONS,
@@ -41,17 +51,9 @@ import { ApplyDialog } from "./apply-dialog";
 
 const STORAGE_KEY = "arrmada:trash-wizard-prefs";
 
-/**
- * Glissement latéral selon le sens de navigation. `custom` est transmis
- * par AnimatePresence à l'élément SORTANT aussi : il part du bon côté
- * même si le sens a changé entre-temps.
- */
-const slide = {
-    enter: (d: number) => ({ opacity: 0, x: 28 * d }),
-    center: { opacity: 1, x: 0 },
-    exit: (d: number) => ({ opacity: 0, x: -28 * d }),
-};
 const REVIEW_STEP = STEPS.length - 1;
+/** Étapes de questions (toutes sauf le résumé) : à voir avant d'appliquer. */
+const QUESTION_STEPS = STEPS.slice(0, REVIEW_STEP).map((_, i) => i);
 
 /** Relit les préférences mémorisées en ignorant toute valeur invalide. */
 function loadPrefs(): MediaPreferences {
@@ -80,6 +82,8 @@ export function TrashWizard() {
     const [prefs, setPrefs] = useState<MediaPreferences>(DEFAULT_PREFS);
     const [loaded, setLoaded] = useState(false);
     const [applyOpen, setApplyOpen] = useState(false);
+    // Étapes affichées pendant cette visite (la 1re l'est d'office)
+    const [seen, setSeen] = useState<Set<number>>(() => new Set([0]));
     const recommend = useTrashRecommend();
 
     // Lecture des préférences au montage (côté navigateur uniquement).
@@ -111,11 +115,13 @@ export function TrashWizard() {
         if (target === step) return;
         setDirection(target > step ? 1 : -1);
         setStep(target);
+        setSeen((prev) => (prev.has(target) ? prev : new Set(prev).add(target)));
         if (target === REVIEW_STEP) fetchRecommendations();
     };
 
     const current = STEPS[step];
     const recs: RecommendedProfile[] = recommend.data ?? [];
+    const unseen = QUESTION_STEPS.filter((i) => !seen.has(i));
 
     return (
         <div className="space-y-5">
@@ -124,7 +130,8 @@ export function TrashWizard() {
                 <div className="scrollbar-none flex gap-1 overflow-x-auto">
                     {STEPS.map((s, i) => {
                         const active = i === step;
-                        const done = i < step;
+                        // Coché = réellement vu (un saut direct au résumé ne coche rien)
+                        const done = i !== step && seen.has(i);
                         const Icon = done ? Check : s.icon;
                         return (
                             <button
@@ -161,16 +168,15 @@ export function TrashWizard() {
                 action={<span className="text-xs text-muted-foreground tabular-nums">{step + 1}/{STEPS.length}</span>}
             >
                 <p className="-mt-1 mb-4 text-sm text-muted-foreground">{current.help}</p>
-                <AnimatePresence mode="wait" custom={direction} initial={false}>
-                    <motion.div
-                        key={step}
-                        custom={direction}
-                        variants={slide}
-                        initial="enter"
-                        animate="center"
-                        exit="exit"
-                        transition={{ duration: 0.28, ease: EASE_OUT }}
-                    >
+                {/* Entrée d'étape en CSS pur (voir en-tête) : `key` rejoue l'animation */}
+                <div
+                    key={step}
+                    data-testid="wizard-step"
+                    className={cn(
+                        "duration-300 animate-in fade-in motion-reduce:animate-none",
+                        direction > 0 ? "slide-in-from-right-6" : "slide-in-from-left-6",
+                    )}
+                >
                         {step === 0 && (
                             <OptionGrid
                                 id="display"
@@ -219,10 +225,10 @@ export function TrashWizard() {
                                 error={recommend.isError ? recommend.error : null}
                                 onRetry={fetchRecommendations}
                                 onEdit={goTo}
+                                unseen={unseen}
                             />
                         )}
-                    </motion.div>
-                </AnimatePresence>
+                </div>
             </Panel>
 
             {/* Navigation */}
@@ -237,7 +243,11 @@ export function TrashWizard() {
                         <ArrowRight />
                     </Button>
                 ) : (
-                    <Button disabled={recommend.isPending || recs.length === 0} onClick={() => setApplyOpen(true)}>
+                    <Button
+                        disabled={recommend.isPending || recs.length === 0 || unseen.length > 0}
+                        title={unseen.length > 0 ? "Vérifie d'abord chaque étape" : undefined}
+                        onClick={() => setApplyOpen(true)}
+                    >
                         <Zap />
                         Appliquer…
                     </Button>
@@ -284,7 +294,9 @@ function OptionGrid<V extends string>({
     cols?: string;
 }) {
     return (
-        <motion.div variants={stagger(0, 0.04)} initial="hidden" animate="show" role="radiogroup" className={cn("grid grid-cols-1 gap-3 min-[420px]:grid-cols-2", cols)}>
+        // Pas d'animation d'entrée ici : les cartes doivent être visibles
+        // d'emblée (l'ancienne cascade partait d'une opacité 0, cf. en-tête).
+        <div role="radiogroup" className={cn("grid grid-cols-1 gap-3 min-[420px]:grid-cols-2", cols)}>
             {options.map((opt) => {
                 const selected = opt.value === value;
                 return (
@@ -293,7 +305,6 @@ function OptionGrid<V extends string>({
                         type="button"
                         role="radio"
                         aria-checked={selected}
-                        variants={fadeUp}
                         whileTap={{ scale: 0.98 }}
                         onClick={() => onChange(opt.value)}
                         className={cn(
@@ -335,7 +346,7 @@ function OptionGrid<V extends string>({
                     </motion.button>
                 );
             })}
-        </motion.div>
+        </div>
     );
 }
 
@@ -346,6 +357,7 @@ function ReviewStep({
     error,
     onRetry,
     onEdit,
+    unseen,
 }: {
     prefs: MediaPreferences;
     recs: RecommendedProfile[];
@@ -353,26 +365,51 @@ function ReviewStep({
     error: Error | null;
     onRetry: () => void;
     onEdit: (step: number) => void;
+    /** Étapes pas encore affichées : « Appliquer » reste bloqué. */
+    unseen: number[];
 }) {
-    // Résumé des choix : chaque pastille ramène à l'étape correspondante.
-    const choices: { step: number; label: string; icon: LucideIcon }[] = [
-        { step: 0, ...pickOpt(DISPLAY_OPTIONS, prefs.display_type) },
-        { step: 1, ...pickOpt(AUDIO_OPTIONS, prefs.audio_type) },
-        { step: 2, ...pickOpt(LANGUAGE_OPTIONS, prefs.language) },
-        { step: 3, ...pickOpt(QUALITY_OPTIONS, prefs.quality) },
-        ...CONTENT_TOGGLES.filter((t) => prefs[t.key]).map((t) => ({ step: 4, label: t.label, icon: t.icon })),
+    // Résumé COMPLET des choix effectifs (contenus compris, même « non »),
+    // chaque ligne ramène à son étape : ce qui sera appliqué est sous les yeux.
+    const choices: { step: number; topic: string; label: string; icon: LucideIcon }[] = [
+        { step: 0, topic: STEPS[0].title, ...pickOpt(DISPLAY_OPTIONS, prefs.display_type) },
+        { step: 1, topic: STEPS[1].title, ...pickOpt(AUDIO_OPTIONS, prefs.audio_type) },
+        { step: 2, topic: STEPS[2].title, ...pickOpt(LANGUAGE_OPTIONS, prefs.language) },
+        { step: 3, topic: STEPS[3].title, ...pickOpt(QUALITY_OPTIONS, prefs.quality) },
+        ...CONTENT_TOGGLES.map((t) => ({ step: 4, topic: t.label, label: prefs[t.key] ? "Oui" : "Non", icon: t.icon })),
     ];
 
     return (
         <div className="space-y-4">
-            <div className="flex flex-wrap gap-2">
+            <ul data-testid="wizard-summary" className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {choices.map((c) => (
-                    <button key={`${c.step}:${c.label}`} type="button" className="chip" onClick={() => onEdit(c.step)} title="Modifier">
-                        <c.icon className="h-3.5 w-3.5 text-orange-300" />
-                        {c.label}
-                    </button>
+                    <li key={`${c.step}:${c.topic}`}>
+                        <button
+                            type="button"
+                            onClick={() => onEdit(c.step)}
+                            title="Modifier"
+                            className="flex w-full items-center gap-3 rounded-xl bg-white/[0.025] px-3 py-2 text-left ring-1 ring-white/[0.06] transition-colors hover:ring-white/[0.12]"
+                        >
+                            <c.icon className="h-4 w-4 shrink-0 text-orange-300" />
+                            <span className="min-w-0 flex-1">
+                                <span className="block text-[11px] text-muted-foreground">{c.topic}</span>
+                                <span className="block truncate text-sm font-medium">{c.label}</span>
+                            </span>
+                            {unseen.includes(c.step) && (
+                                <span className="shrink-0 rounded-md bg-warning/15 px-1.5 py-0.5 text-[10px] font-semibold text-warning">
+                                    Pas vu
+                                </span>
+                            )}
+                        </button>
+                    </li>
                 ))}
-            </div>
+            </ul>
+
+            {unseen.length > 0 && (
+                <p role="status" className="rounded-xl bg-warning/10 px-3 py-2 text-sm text-warning">
+                    Vérifie d&apos;abord {unseen.length > 1 ? "les étapes" : "l'étape"}{" "}
+                    {unseen.map((i) => STEPS[i].title).join(", ")} : « Appliquer » sera disponible ensuite.
+                </p>
+            )}
 
             {pending ? (
                 <div className="space-y-3" aria-busy>
@@ -405,11 +442,11 @@ function ReviewStep({
                     action={{ label: "Réessayer", onClick: onRetry }}
                 />
             ) : (
-                <motion.ul variants={stagger(0, 0.08)} initial="hidden" animate="show" className="space-y-3">
+                <ul className="space-y-3">
                     {recs.map((rec) => (
                         <RecommendationCard key={`${rec.service_type}-${rec.profile_id}`} rec={rec} />
                     ))}
-                </motion.ul>
+                </ul>
             )}
         </div>
     );
@@ -430,7 +467,7 @@ function RecommendationCard({ rec }: { rec: RecommendedProfile }) {
     const categories = Array.from(new Set(rec.custom_formats.map((cf) => cf.category)));
 
     return (
-        <motion.li variants={fadeUp} className="rounded-2xl bg-white/[0.025] p-4 ring-1 ring-white/[0.06]">
+        <li className="rounded-2xl bg-white/[0.025] p-4 ring-1 ring-white/[0.06]">
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="flex min-w-0 items-start gap-3">
                     <span
@@ -487,6 +524,6 @@ function RecommendationCard({ rec }: { rec: RecommendedProfile }) {
                     </button>
                 )}
             </div>
-        </motion.li>
+        </li>
     );
 }
