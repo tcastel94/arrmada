@@ -1,6 +1,12 @@
 package fr.arrmada.app
 
-import android.graphics.drawable.ColorDrawable
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.LinearGradient
+import android.graphics.Paint
+import android.graphics.RadialGradient
+import android.graphics.Shader
+import android.graphics.drawable.BitmapDrawable
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
@@ -149,13 +155,53 @@ class ScreenshotTest {
         )
     }
 
+    /**
+     * Fausses images (affiches, fonds, photos) : une « jaquette » abstraite
+     * dessinée à partir de l'URL (dégradé + halo + bas assombri), stable d'une
+     * capture à l'autre. Aucune vraie affiche (droits) et pas de réseau.
+     */
     private object FakeImages : Interceptor {
         private val palette = intArrayOf(0xFF2B4C7E.toInt(), 0xFF6B3A5B.toInt(), 0xFF2E6B5E.toInt(), 0xFF7A5C2E.toInt(), 0xFF3F3F7F.toInt(), 0xFF5E2E2E.toInt())
-        override suspend fun intercept(chain: Interceptor.Chain): ImageResult = SuccessResult(
-            drawable = ColorDrawable(palette[abs(chain.request.data.toString().hashCode()) % palette.size]),
-            request = chain.request,
-            dataSource = DataSource.MEMORY,
-        )
+        private val cache = HashMap<String, Bitmap>()
+
+        override suspend fun intercept(chain: Interceptor.Chain): ImageResult {
+            val key = chain.request.data.toString()
+            val bitmap = synchronized(cache) { cache.getOrPut(key) { artwork(abs(key.hashCode())) } }
+            return SuccessResult(
+                drawable = BitmapDrawable(RuntimeEnvironment.getApplication().resources, bitmap),
+                request = chain.request,
+                dataSource = DataSource.MEMORY,
+            )
+        }
+
+        /** Carré de 720 px : recadré en affiche (2:3) comme en fond (16:9). */
+        private fun artwork(seed: Int): Bitmap {
+            val size = 720f
+            val top = palette[seed % palette.size]
+            val bottom = palette[(seed / 7) % palette.size]
+            val bitmap = Bitmap.createBitmap(size.toInt(), size.toInt(), Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+            paint.shader = LinearGradient(0f, 0f, size, size, top, bottom, Shader.TileMode.CLAMP)
+            canvas.drawRect(0f, 0f, size, size, paint)
+            // Halo lumineux, placé différemment pour chaque image
+            val cx = size * (0.2f + (seed % 60) / 100f)
+            val cy = size * (0.15f + (seed / 60 % 40) / 100f)
+            paint.shader = RadialGradient(cx, cy, size * 0.6f, 0x88FFFFFF.toInt(), 0x00FFFFFF, Shader.TileMode.CLAMP)
+            canvas.drawCircle(cx, cy, size * 0.6f, paint)
+            // Bandes diagonales discrètes, comme un motif d'affiche
+            paint.shader = null
+            paint.color = 0x14FFFFFF
+            paint.strokeWidth = size * 0.05f
+            for (i in 0..4) {
+                val x = size * (i * 0.28f - 0.2f) + (seed % 40)
+                canvas.drawLine(x, size, x + size * 0.6f, 0f, paint)
+            }
+            // Bas assombri (lisibilité du titre posé dessus)
+            paint.shader = LinearGradient(0f, size * 0.55f, 0f, size, 0x00000000, 0xB0000000.toInt(), Shader.TileMode.CLAMP)
+            canvas.drawRect(0f, size * 0.55f, size, size, paint)
+            return bitmap
+        }
     }
 
     private fun shot(name: String) = "build/outputs/roborazzi/$name.png"

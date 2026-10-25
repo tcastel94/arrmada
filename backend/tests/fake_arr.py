@@ -289,6 +289,7 @@ RADARR_ROUTES: list[tuple[str, Handler]] = [
     (r"/api/v3/queue", _const(RADARR_QUEUE)),
     (r"/api/v3/diskspace", _const(DISKSPACE)),
     (r"/api/v3/rootfolder", _const([{"id": 1, "path": "/movies", "freeSpace": 1024 * GB}])),
+    (r"/api/v3/downloadclient", _const([{"id": 1, "name": "Deluge", "implementation": "Deluge"}])),
     (r"/api/v3/system/status", _const({"version": "5.2.0.0"})),
     (r"/api/v3/(calendar|tag|history|wanted/missing|blocklist|command|release)", _const([])),
 ]
@@ -320,6 +321,7 @@ SONARR_ROUTES: list[tuple[str, Handler]] = [
     (r"/api/v3/queue", _const({"totalRecords": 0, "records": []})),
     (r"/api/v3/diskspace", _const(DISKSPACE)),
     (r"/api/v3/rootfolder", _const([{"id": 1, "path": "/tv", "freeSpace": 1024 * GB}])),
+    (r"/api/v3/downloadclient", _const([])),
     (r"/api/v3/system/status", _const({"version": "4.0.0.0"})),
     (r"/api/v3/(calendar|tag|history|wanted/missing|blocklist|command|release)", _const([])),
 ]

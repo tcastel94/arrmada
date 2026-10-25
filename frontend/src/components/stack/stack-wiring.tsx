@@ -363,7 +363,7 @@ export function StackWiring({
             {plan && counts.todo > 0 && (
                 <Button onClick={apply} disabled={applying || selected.size === 0} size="lg" className="w-full sm:w-auto">
                     {applying ? <Loader2 className="animate-spin" /> : <Wand2 />}
-                    {applying ? "Configuration en cours…" : `Appliquer ${plural(selected.size, "action")}`}
+                    {applying ? "Configuration en cours…" : `Tout connecter · ${plural(selected.size, "action")}`}
                 </Button>
             )}
         </div>

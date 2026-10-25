@@ -4,16 +4,17 @@ These endpoints are partially accessible WITHOUT authentication
 to allow initial setup of the application.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db
+from app.api.deps import get_db, require_admin
 from app.config import settings
 from app.models.service import Service
 from app.services import auth_store, encryption
 from app.services.discovery import discover_services
+from app.services.setup_checklist import browser_url, build_checklist
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -171,3 +172,24 @@ async def complete_setup(
         services_added=added,
         message=f"Configuration terminée ! {added} service(s) ajouté(s).",
     )
+
+
+@router.get(
+    "/checklist",
+    summary="What is left to do after the installation",
+    description="Each step is checked against the real apps (indexers in Prowlarr, "
+    "Usenet provider, download client and root folder in Sonarr/Radarr, Jellyfin "
+    "libraries, first request). Also returns the passwords install.sh generated. "
+    "Admin only.",
+    dependencies=[Depends(require_admin)],
+)
+async def setup_checklist(request: Request, db: AsyncSession = Depends(get_db)) -> dict:
+    checklist = await build_checklist(db)
+    # Adresses internes à Docker (http://sonarr:8989) : même port, mais sur
+    # l'hôte qu'utilise le navigateur, sinon le lien ne s'ouvrirait pas.
+    host = request.url.hostname or "localhost"
+    for item in checklist["items"]:
+        link = item.get("link")
+        if link and link["url"].startswith("http"):
+            link["url"] = browser_url(link["url"], host)
+    return checklist

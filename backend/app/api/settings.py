@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import __version__
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, get_db, require_admin
 from app.config import settings
-from app.services import auth_store
+from app.services import auth_store, modules
 from app.services.telegram import send_message
 from app.utils.logger import get_logger
 
@@ -60,3 +61,24 @@ async def test_telegram(payload: TelegramTestPayload):
     """Send a test Telegram notification."""
     success = await send_message(payload.message)
     return {"success": success}
+
+
+# ── Équipement facultatif (TV, tablette, ampli, caméras) ──────
+class ModulesPayload(BaseModel):
+    tv: bool | None = None
+    tablet: bool | None = None
+    amplifier: bool | None = None
+    cameras: bool | None = None
+
+
+@router.get("/modules")
+async def get_modules(db: AsyncSession = Depends(get_db)):
+    """Which optional modules are enabled (explicit choice, else detected)."""
+    return {"modules": await modules.get_modules(db)}
+
+
+@router.put("/modules", dependencies=[Depends(require_admin)])
+async def put_modules(payload: ModulesPayload, db: AsyncSession = Depends(get_db)):
+    """Save the household's equipment choices (setup wizard or Settings)."""
+    modules.save_choices({k: v for k, v in payload.model_dump().items() if v is not None})
+    return {"modules": await modules.get_modules(db)}

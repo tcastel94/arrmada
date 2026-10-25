@@ -1,6 +1,19 @@
+/**
+ * Identifiant de CE build de l'interface (nouvelle valeur à chaque
+ * `next build`, donc à chaque image Docker). Il est inscrit dans le code
+ * envoyé au navigateur ET servi par /build-id : une page restée ouverte des
+ * jours (tablette en kiosque) compare les deux et se recharge toute seule
+ * après une mise à jour, comme un service qu'on redémarre après un
+ * changement de binaire. ARRMADA_BUILD_ID permet de le fixer (CI).
+ */
+const BUILD_ID = process.env.ARRMADA_BUILD_ID || Date.now().toString(36);
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
     output: "standalone",
+    env: {
+        NEXT_PUBLIC_ARRMADA_BUILD: BUILD_ID,
+    },
     eslint: {
         // Lint errors don't block production builds
         // (linting runs separately in CI via `npm run lint`)

@@ -12,6 +12,7 @@ import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { Pause, Play, Square, Sofa } from "lucide-react";
 import { toast } from "sonner";
+import { useModuleEnabled } from "@/hooks/use-modules";
 import { useKodiControl, useKodiNowPlaying } from "@/hooks/use-kodi";
 import { formatClock } from "@/lib/format";
 import { SPRING_SOFT } from "@/lib/motion";
@@ -20,7 +21,8 @@ const HIDDEN_ON = ["/dashboard", "/remote"];
 
 export function MiniPlayer() {
     const pathname = usePathname();
-    const { data: np } = useKodiNowPlaying(true);
+    // Sans TV (module désactivé), pas d'interrogation de Kodi toutes les secondes
+    const { data: np } = useKodiNowPlaying(useModuleEnabled()("tv"));
     const control = useKodiControl();
     // Masqué aussi sur la fiche du média en cours (elle a sa propre télécommande).
     const onPlayingSheet = !!np?.media_id && pathname === `/media/${np.media_type}/${np.media_id}`;

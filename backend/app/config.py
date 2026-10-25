@@ -105,8 +105,9 @@ class Settings(BaseSettings):
     # ── AI / OpenRouter ───────────────────────────────────────
     OPENROUTER_API_KEY: str = ""
     AI_MODEL: str = "google/gemini-2.0-flash-001"  # cost-effective, fast
-    # Local Ollama on the NAS — primary engine for log analysis (OpenRouter = fallback)
-    OLLAMA_URL: str = "http://192.168.2.3:11434"
+    # Local Ollama (e.g. http://192.168.1.10:11434) — primary engine for log
+    # analysis when set, OpenRouter as fallback. Empty = no local AI.
+    OLLAMA_URL: str = ""
     OLLAMA_MODEL: str = "qwen2.5:3b-instruct-q4_K_M"
 
     # ── Auto-import ───────────────────────────────────────────

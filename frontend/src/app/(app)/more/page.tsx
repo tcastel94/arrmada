@@ -15,21 +15,24 @@ import { PageContainer } from "@/components/shared/page-container";
 import { PageHeader } from "@/components/shared/page-header";
 import { BOTTOM_ITEMS, MOBILE_TABS, NAV_GROUPS, TOP_ITEMS, type NavItem } from "@/lib/nav";
 import { useNavBadges } from "@/hooks/use-nav-badges";
+import { useModuleEnabled } from "@/hooks/use-modules";
 import { logout } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 
 // Les destinations déjà présentes dans la barre d'onglets ne sont pas répétées.
 const IN_TABS = new Set(MOBILE_TABS.map((t) => t.href));
-const visible = (items: NavItem[]) => items.filter((i) => !IN_TABS.has(i.href));
 
 export default function MorePage() {
     const badges = useNavBadges();
+    // Équipement absent (pas de TV, pas d'ampli…) → entrées masquées
+    const moduleOn = useModuleEnabled();
+    const visible = (items: NavItem[]) => items.filter((i) => !IN_TABS.has(i.href) && moduleOn(i.module));
     const openPalette = () => window.dispatchEvent(new Event("open-command-palette"));
 
     const sections = [
         { title: "", items: visible(TOP_ITEMS) },
         ...NAV_GROUPS.map((g) => ({ title: g.title, items: visible(g.items) })),
-        { title: "", items: BOTTOM_ITEMS },
+        { title: "", items: visible(BOTTOM_ITEMS) },
     ].filter((s) => s.items.length > 0);
 
     return (

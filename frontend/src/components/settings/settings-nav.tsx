@@ -18,6 +18,7 @@ import {
     Cast,
     FolderOpen,
     MonitorPlay,
+    PackageCheck,
     Server,
     SlidersHorizontal,
     Sofa,
@@ -26,6 +27,7 @@ import {
     Wand2,
     type LucideIcon,
 } from "lucide-react";
+import { useModuleEnabled, type ModuleKey } from "@/hooks/use-modules";
 import { SPRING } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +38,11 @@ export interface SettingsSection {
     short: string;
     icon: LucideIcon;
     description: string;
+    /**
+     * Équipement facultatif dont dépend la section (TV, ampli…) : masquée si
+     * aucun de ces modules n'est actif (voir hooks/use-modules.ts).
+     */
+    module?: ModuleKey | ModuleKey[];
 }
 
 /** Sections du hub, dans l'ordre d'affichage. Source unique (nav + en-tête). */
@@ -62,11 +69,20 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
         description: "Lit les clés API de tes applis et les branche entre elles : Prowlarr, clients de téléchargement, Bazarr.",
     },
     {
+        href: "/settings/equipement",
+        label: "Mon équipement",
+        short: "Équipement",
+        icon: PackageCheck,
+        description: "TV, tablette, ampli, caméras : active seulement ce que tu as, le reste disparaît des menus.",
+    },
+    {
         href: "/settings/kodi",
         label: "Kodi",
         short: "Kodi",
         icon: MonitorPlay,
         description: "Tes TV appairées et tes lecteurs Kodi : pièce et ampli, scans de bibliothèque, cohérence avec Radarr.",
+        // Appairage des TV ET des tablettes, alertes caméras : même page
+        module: ["tv", "tablet", "cameras"],
     },
     {
         href: "/settings/cast",
@@ -81,6 +97,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
         short: "Yamaha",
         icon: Speaker,
         description: "Ton ampli home cinéma MusicCast et ses profils audio Salon / Cinéma, pilotés depuis le Salon.",
+        module: "amplifier",
     },
     {
         href: "/settings/profils",
@@ -88,6 +105,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
         short: "Profils",
         icon: Users,
         description: "Qui regarde sur les TV : chacun sa rangée Reprendre, ses vus, son « Pour toi » et ses demandes.",
+        module: "tv",
     },
     {
         href: "/settings/dossiers",
@@ -95,6 +113,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
         short: "Vidéos",
         icon: FolderOpen,
         description: "Dossiers du NAS parcourus dans l'écran Vidéos de l'appli : mangas Kai, vidéos perso, tout ce qui n'a pas de fiche.",
+        module: "tv",
     },
 ];
 
@@ -108,21 +127,25 @@ export function findSection(pathname: string): SettingsSection {
 }
 
 /** Liens « voir aussi » affichés sous la navigation desktop. */
-const RELATED = [
-    { href: "/remote", label: "Salon (télécommandes)", icon: Sofa },
+const RELATED: { href: string; label: string; icon: LucideIcon; module?: ModuleKey[] }[] = [
+    { href: "/remote", label: "Salon (télécommandes)", icon: Sofa, module: ["tv", "amplifier"] },
     { href: "/trash-guides", label: "TRaSH Guides", icon: BookMarked },
 ];
 
 export function SettingsNav({ badges = {} }: { badges?: Record<string, React.ReactNode> }) {
     const pathname = usePathname();
     const active = findSection(pathname);
+    // Équipement absent (pas de TV, pas d'ampli…) → sections masquées
+    const moduleOn = useModuleEnabled();
+    const sections = SETTINGS_SECTIONS.filter((s) => moduleOn(s.module));
+    const related = RELATED.filter((r) => moduleOn(r.module));
 
     return (
         <>
             {/* ── Mobile : onglets défilants ─────────────────────── */}
             <nav aria-label="Sections des paramètres" className="-mx-3 min-w-0 lg:hidden">
                 <div className="scrollbar-none mask-fade-x flex gap-1.5 overflow-x-auto px-3 pb-1">
-                    {SETTINGS_SECTIONS.map((s) => {
+                    {sections.map((s) => {
                         const isActive = s.href === active.href;
                         return (
                             <Link
@@ -153,7 +176,7 @@ export function SettingsNav({ badges = {} }: { badges?: Record<string, React.Rea
             <nav aria-label="Sections des paramètres" className="hidden lg:block">
                 <div className="glass sticky top-16 space-y-1 rounded-2xl p-2">
                     <p className="eyebrow px-3 pb-1 pt-2">Configuration</p>
-                    {SETTINGS_SECTIONS.map((s) => {
+                    {sections.map((s) => {
                         const isActive = s.href === active.href;
                         return (
                             <Link
@@ -191,7 +214,7 @@ export function SettingsNav({ badges = {} }: { badges?: Record<string, React.Rea
 
                     <div className="mx-3 my-2 h-px bg-white/[0.06]" />
                     <p className="eyebrow px-3 pb-1">Voir aussi</p>
-                    {RELATED.map((r) => (
+                    {related.map((r) => (
                         <Link
                             key={r.href}
                             href={r.href}

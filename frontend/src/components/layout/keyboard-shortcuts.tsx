@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation";
 import { Keyboard } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ALL_NAV_ITEMS } from "@/lib/nav";
+import { useModuleEnabled } from "@/hooks/use-modules";
 import { useSidebar } from "./sidebar-context";
 
 export function KeyboardShortcuts() {
@@ -19,6 +20,11 @@ export function KeyboardShortcuts() {
     const { toggle } = useSidebar();
     const [helpOpen, setHelpOpen] = useState(false);
     const pendingG = useRef<number | null>(null);
+    // Raccourcis des pages d'un équipement absent (pas de TV…) désactivés.
+    // Référence tenue à jour pour ne pas réinstaller l'écouteur à chaque rendu.
+    const moduleOn = useModuleEnabled();
+    const moduleOnRef = useRef(moduleOn);
+    moduleOnRef.current = moduleOn;
 
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
@@ -29,7 +35,9 @@ export function KeyboardShortcuts() {
             if (pendingG.current) {
                 window.clearTimeout(pendingG.current);
                 pendingG.current = null;
-                const target = ALL_NAV_ITEMS.find((i) => i.shortcut === e.key.toLowerCase());
+                const target = ALL_NAV_ITEMS.find(
+                    (i) => i.shortcut === e.key.toLowerCase() && moduleOnRef.current(i.module),
+                );
                 if (target) {
                     e.preventDefault();
                     router.push(target.href);
@@ -54,7 +62,7 @@ export function KeyboardShortcuts() {
         };
     }, [router, toggle]);
 
-    const navShortcuts = ALL_NAV_ITEMS.filter((i) => i.shortcut);
+    const navShortcuts = ALL_NAV_ITEMS.filter((i) => i.shortcut && moduleOn(i.module));
 
     return (
         <Dialog open={helpOpen} onOpenChange={setHelpOpen}>

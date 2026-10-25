@@ -1,0 +1,779 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Installer ArrMada</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Guide pas à pas pour installer ArrMada et toute la stack média (Sonarr, Radarr, Prowlarr, Jellyfin…) sur un Synology, un Unraid, un PC, un Mac ou un serveur Linux.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* Mise en page : une seule colonne d'assistant (≤ 760 px), barre de progression
+   collante en haut, choix en tuiles, étapes numérotées (c'est une vraie suite). */
+:root {
+  --bg: #000000;          /* fond OLED, comme l'appli */
+  --surface: #1c1c1e;     /* cartes */
+  --surface-2: #2c2c2e;   /* éléments posés sur une carte */
+  --line: #3a3a3c;
+  --fg: #ffffff;
+  --muted: #9a9aa1;
+  --accent: #4a9eff;      /* l'accent unique d'ArrMada */
+  --accent-soft: rgba(74, 158, 255, 0.14);
+  --ok: #30d158;
+  --ok-soft: rgba(48, 209, 88, 0.14);
+  --warn: #ff9f0a;
+  --warn-soft: rgba(255, 159, 10, 0.14);
+  --code-bg: #0d0d0f;
+  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --radius: 14px;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f2f2f7; --surface: #ffffff; --surface-2: #ebebf0; --line: #d1d1d6;
+    --fg: #000000; --muted: #6c6c72; --accent: #0a6fe0; --accent-soft: rgba(10, 111, 224, 0.10);
+    --ok: #1f8a3c; --ok-soft: rgba(31, 138, 60, 0.12); --warn: #a85300; --warn-soft: rgba(168, 83, 0, 0.12);
+    --code-bg: #f7f7fa; color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #f2f2f7; --surface: #ffffff; --surface-2: #ebebf0; --line: #d1d1d6;
+  --fg: #000000; --muted: #6c6c72; --accent: #0a6fe0; --accent-soft: rgba(10, 111, 224, 0.10);
+  --ok: #1f8a3c; --ok-soft: rgba(31, 138, 60, 0.12); --warn: #a85300; --warn-soft: rgba(168, 83, 0, 0.12);
+  --code-bg: #f7f7fa; color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+body::before {
+  content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px);
+  z-index: 10; background: var(--bg);
+}
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+
+.wrap {
+  max-width: 760px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 64px;
+}
+
+/* ── En-tête ─────────────────────────────────────────── */
+header.top { display: flex; align-items: center; gap: 12px; padding-block: 28px 8px; }
+header.top svg { width: 40px; height: 40px; border-radius: 10px; flex: none; }
+header.top .name { font-weight: 700; font-size: 18px; letter-spacing: -0.01em; }
+header.top .name span { color: var(--accent); }
+header.top a.repo { margin-left: auto; font-size: 14px; color: var(--muted); text-decoration: none; }
+header.top a.repo:hover { color: var(--fg); }
+
+.hero { padding-block: 24px 8px; }
+.hero h1 { font-size: clamp(30px, 6vw, 42px); line-height: 1.1; letter-spacing: -0.025em; margin: 0; text-wrap: balance; }
+.hero p.lead { color: var(--muted); font-size: 18px; margin: 12px 0 0; max-width: 60ch; text-wrap: pretty; }
+.facts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; padding: 0; list-style: none; }
+.facts li { background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; font-size: 14px; }
+.facts b { font-variant-numeric: tabular-nums; }
+
+/* ── Progression ─────────────────────────────────────── */
+nav.progress {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+  background: var(--bg); padding-block: 14px; margin-top: 24px;
+  border-bottom: 1px solid var(--line);
+}
+nav.progress ol { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 0; padding: 0; list-style: none; }
+nav.progress button {
+  width: 100%; border: 0; background: none; color: var(--muted); font: inherit; font-size: 13px;
+  text-align: left; padding: 0; cursor: pointer; display: grid; gap: 6px;
+}
+nav.progress button[disabled] { cursor: default; }
+nav.progress .bar { height: 4px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+nav.progress .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.35s ease; }
+nav.progress li.done .bar i, nav.progress li.current .bar i { width: 100%; }
+nav.progress li.current button { color: var(--fg); font-weight: 600; }
+nav.progress li.done button { color: var(--fg); }
+nav.progress .lbl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ── Écrans ──────────────────────────────────────────── */
+section.screen { padding-top: 28px; }
+section.screen > h2 { font-size: 26px; letter-spacing: -0.02em; margin: 0; text-wrap: balance; }
+section.screen > p.intro { color: var(--muted); margin: 8px 0 0; max-width: 62ch; }
+.q { margin-top: 28px; }
+.q > h3 { font-size: 17px; margin: 0 0 4px; }
+.q > p { color: var(--muted); margin: 0 0 12px; font-size: 15px; max-width: 62ch; }
+
+.choices { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.choice {
+  position: relative; display: grid; gap: 4px; align-content: start;
+  background: var(--surface); border: 1.5px solid var(--line); border-radius: var(--radius);
+  padding: 14px 14px 14px 46px; cursor: pointer; text-align: left; color: var(--fg); font: inherit;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.choice:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+.choice[aria-checked="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.choice::before {
+  content: ""; position: absolute; left: 14px; top: 16px; width: 18px; height: 18px; border-radius: 50%;
+  border: 2px solid var(--line); background: var(--bg);
+}
+.choice[aria-checked="true"]::before { border-color: var(--accent); background: var(--accent); box-shadow: inset 0 0 0 3px var(--bg); }
+.choice .t { font-weight: 600; }
+.choice .d { color: var(--muted); font-size: 14px; line-height: 1.4; }
+.choice .tag { justify-self: start; margin-top: 4px; font-size: 12px; font-weight: 600; color: var(--ok); background: var(--ok-soft); border-radius: 6px; padding: 2px 7px; }
+
+.note {
+  margin-top: 20px; border-radius: var(--radius); padding: 14px 16px; font-size: 15px;
+  background: var(--surface); border: 1px solid var(--line);
+}
+.note.info { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); background: var(--accent-soft); }
+.note.warn { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); background: var(--warn-soft); }
+.note b { font-weight: 600; }
+
+.field { display: grid; gap: 6px; margin-top: 12px; max-width: 360px; }
+.field label { font-size: 14px; font-weight: 500; }
+.field input, .field select {
+  font: inherit; font-size: 16px; color: var(--fg); background: var(--surface); border: 1.5px solid var(--line);
+  border-radius: 10px; padding: 10px 12px;
+}
+.field input:focus, .field select:focus { border-color: var(--accent); outline: none; }
+.field small { color: var(--muted); font-size: 13px; }
+
+.actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 32px; }
+.btn {
+  font: inherit; font-weight: 600; font-size: 16px; border-radius: 12px; padding: 12px 20px; cursor: pointer;
+  border: 1.5px solid var(--line); background: var(--surface); color: var(--fg);
+}
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+
+/* ── Étapes d'installation ───────────────────────────── */
+ol.steps { list-style: none; margin: 24px 0 0; padding: 0; display: grid; gap: 14px; counter-reset: step; }
+ol.steps > li {
+  counter-increment: step; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 18px 18px 18px 64px; position: relative; min-width: 0;
+}
+ol.steps > li::before {
+  content: counter(step); position: absolute; left: 18px; top: 18px; width: 30px; height: 30px; border-radius: 50%;
+  display: grid; place-items: center; font-weight: 700; font-size: 15px; background: var(--surface-2); color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+ol.steps > li.checked { border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); }
+ol.steps > li.checked::before { content: "✓"; background: var(--ok); color: #fff; }
+.step-head { display: flex; align-items: flex-start; gap: 12px; }
+.step-head h4 { margin: 3px 0 0; font-size: 17px; flex: 1; min-width: 0; text-wrap: balance; }
+.step-head label.done { flex: none; display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--muted); cursor: pointer; padding-top: 4px; }
+.step-head input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--ok); }
+.step-body { margin-top: 8px; color: var(--fg); font-size: 15px; }
+.step-body p { margin: 8px 0 0; }
+.step-body ul { margin: 8px 0 0; padding-left: 20px; }
+.step-body li + li { margin-top: 4px; }
+.path { font-weight: 600; }
+.path .sep { color: var(--muted); font-weight: 400; padding: 0 4px; }
+kbd, .ui {
+  font-family: var(--font-sans); font-size: 14px; font-weight: 600; background: var(--surface-2);
+  border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 6px; padding: 1px 6px; white-space: nowrap;
+}
+code { font-family: var(--font-mono); font-size: 0.92em; background: var(--surface-2); border-radius: 5px; padding: 1px 5px; overflow-wrap: anywhere; }
+
+.cmd { margin-top: 12px; background: var(--code-bg); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.cmd pre {
+  margin: 0; padding: 14px 16px; font-family: var(--font-mono); font-size: 13.5px; line-height: 1.6;
+  white-space: pre-wrap; word-break: break-all; color: var(--fg);
+}
+.cmd .bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px 6px 14px; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.copy { font: inherit; font-size: 13px; font-weight: 600; text-transform: none; letter-spacing: 0; border: 0; border-radius: 8px; padding: 6px 12px; background: var(--accent); color: #fff; cursor: pointer; }
+.copy.ok { background: var(--ok); }
+
+details { margin-top: 10px; border-radius: 10px; background: var(--surface-2); padding: 0 14px; }
+details > summary { cursor: pointer; padding: 10px 0; font-size: 14px; font-weight: 600; color: var(--muted); list-style: none; }
+details > summary::-webkit-details-marker { display: none; }
+details > summary::before { content: "+ "; color: var(--accent); }
+details[open] > summary::before { content: "− "; }
+details[open] { padding-bottom: 12px; }
+details > div { font-size: 14.5px; }
+details > div p:first-child { margin-top: 0; }
+
+.summary-line { margin-top: 18px; font-size: 15px; color: var(--muted); }
+.summary-line b { color: var(--fg); }
+
+.link-big { display: inline-flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 20px; font-weight: 700; font-family: var(--font-mono); word-break: break-all; }
+
+footer { margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+
+@media (max-width: 520px) {
+  ol.steps > li { padding: 16px 14px 16px 54px; }
+  ol.steps > li::before { left: 14px; }
+  .step-head { flex-direction: column; gap: 4px; }
+  nav.progress .lbl { font-size: 12px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <svg viewBox="0 0 512 512" aria-hidden="true">
+    <defs>
+      <radialGradient id="tb" cx="0.22" cy="0" r="1.25"><stop offset="0" stop-color="#17223A"/><stop offset="0.6" stop-color="#0B111D"/><stop offset="1" stop-color="#080B12"/></radialGradient>
+      <linearGradient id="tg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4A9EFF"/><stop offset="1" stop-color="#22E0EE"/></linearGradient>
+    </defs>
+    <rect width="512" height="512" rx="112" fill="url(#tb)"/>
+    <g transform="translate(96 96) scale(5)">
+      <path d="M11 54 L32 9 L53 54" fill="none" stroke="url(#tg)" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M27 34.8v14.4a1.6 1.6 0 0 0 2.4 1.4l11.4-7.2a1.6 1.6 0 0 0 0-2.8l-11.4-7.2a1.6 1.6 0 0 0-2.4 1.4z" fill="#EAF6FF"/>
+    </g>
+  </svg>
+  <span class="name">Arr<span>Mada</span></span>
+  <a class="repo" href="https://github.com/tcastel94/arrmada">Projet sur GitHub</a>
+</header>
+
+<div class="hero">
+  <h1>Installer ArrMada, étape par étape</h1>
+  <p class="lead">Réponds à trois questions : ce guide te donne ensuite exactement quoi faire, dans l'ordre, sans jargon. ArrMada installe et relie tout seul les applis qui trouvent, téléchargent et rangent tes films et séries.</p>
+  <ul class="facts">
+    <li>Environ <b>20 min</b>, dont 10 d'attente</li>
+    <li>Synology : <b>aucune ligne de commande</b></li>
+    <li>Tout est <b>gratuit</b> et reste chez toi</li>
+  </ul>
+</div>
+
+<nav class="progress" aria-label="Progression">
+  <ol id="progress"></ol>
+</nav>
+
+<!-- ── 1. Appareil ─────────────────────────────────────── -->
+<section class="screen" id="screen-device" aria-labelledby="h-device">
+  <h2 id="h-device">Sur quel appareil installer ArrMada ?</h2>
+  <p class="intro">Choisis la machine qui reste allumée chez toi et qui stockera les films et les séries. Un NAS est idéal.</p>
+  <div class="q">
+    <div class="choices" role="radiogroup" aria-label="Appareil" id="choices-device"></div>
+  </div>
+  <div class="note info" id="device-note" hidden></div>
+  <div class="actions">
+    <button class="btn primary" id="next-device" disabled>Continuer</button>
+  </div>
+</section>
+
+<!-- ── 2. Choix ────────────────────────────────────────── -->
+<section class="screen" id="screen-choices" aria-labelledby="h-choices" hidden>
+  <h2 id="h-choices">Ce que tu veux installer</h2>
+  <p class="intro">Les réglages recommandés conviennent à la plupart des gens. Tu pourras tout changer plus tard.</p>
+
+  <div class="q">
+    <h3>Comment récupérer les films et les séries ?</h3>
+    <p>Sonarr (séries) et Radarr (films) cherchent les épisodes et les films que tu demandes, puis les confient à un logiciel de téléchargement. Respecte la législation de ton pays sur le téléchargement.</p>
+    <div class="choices" role="radiogroup" aria-label="Source" id="choices-source"></div>
+  </div>
+
+  <div class="q" id="q-torrent">
+    <h3>Logiciel de téléchargement torrent</h3>
+    <p>Les deux fonctionnent. Deluge est entièrement réglé par l'installeur.</p>
+    <div class="choices" role="radiogroup" aria-label="Client torrent" id="choices-torrent"></div>
+  </div>
+
+  <div class="q">
+    <h3>Pour regarder sur la TV, le téléphone ou l'ordinateur</h3>
+    <p>Jellyfin est une sorte de « Netflix maison » : il présente ta médiathèque avec affiches et résumés, sur tous tes écrans.</p>
+    <div class="choices" role="radiogroup" aria-label="Lecteur" id="choices-player"></div>
+  </div>
+
+  <div class="q" id="q-volume">
+    <h3>Volume du NAS</h3>
+    <p>Presque tous les Synology n'ont qu'un volume : laisse « volume1 » si tu ne sais pas.</p>
+    <div class="field">
+      <label for="volume">Volume de stockage</label>
+      <select id="volume">
+        <option value="volume1">volume1 (recommandé)</option>
+        <option value="volume2">volume2</option>
+        <option value="volume3">volume3</option>
+        <option value="volume4">volume4</option>
+      </select>
+      <small>Visible dans DSM : Gestionnaire de stockage.</small>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>Caméras, tablette murale, ampli home cinéma, application TV :</b> rien à prévoir maintenant. Ce sont des options. ArrMada te demandera à la fin ce que tu possèdes, et n'affichera que ce qui te sert.
+  </div>
+
+  <div class="actions">
+    <button class="btn" id="back-choices">Retour</button>
+    <button class="btn primary" id="next-choices">Voir les étapes</button>
+  </div>
+</section>
+
+<!-- ── 3. Installation ─────────────────────────────────── -->
+<section class="screen" id="screen-install" aria-labelledby="h-install" hidden>
+  <h2 id="h-install">Installation</h2>
+  <p class="intro" id="install-intro"></p>
+  <p class="summary-line" id="install-summary"></p>
+  <ol class="steps" id="steps"></ol>
+  <div class="actions">
+    <button class="btn" id="back-install">Retour</button>
+    <button class="btn primary" id="next-install">Étape suivante : premier lancement</button>
+  </div>
+</section>
+
+<!-- ── 4. Premier lancement ────────────────────────────── -->
+<section class="screen" id="screen-first" aria-labelledby="h-first" hidden>
+  <h2 id="h-first">Premier lancement</h2>
+  <p class="intro">L'installation est faite : ArrMada va maintenant te guider lui-même jusqu'au bout.</p>
+
+  <div class="field">
+    <label for="host">Adresse de ton appareil (facultatif)</label>
+    <input id="host" inputmode="url" autocomplete="off" spellcheck="false" placeholder="ex. 192.168.1.20">
+    <small id="host-help"></small>
+  </div>
+  <a class="link-big" id="open-link" href="#" target="_blank" rel="noopener"></a>
+
+  <ol class="steps" id="first-steps"></ol>
+
+  <div class="note info">
+    <b>Bon à savoir :</b> ArrMada ne télécharge rien tout seul. Tu lui demandes un film ou une série (bouton <span class="ui">Rechercher</span>), et il s'occupe du reste : recherche, téléchargement, sous-titres, rangement dans la bonne bibliothèque.
+  </div>
+
+  <div class="actions">
+    <button class="btn" id="back-first">Retour</button>
+    <button class="btn" id="restart">Recommencer le guide</button>
+  </div>
+</section>
+
+<footer>
+  ArrMada est un projet libre (licence MIT). Une question, un problème ?
+  <a href="https://github.com/tcastel94/arrmada/issues">Ouvre une discussion sur GitHub</a>, en indiquant ton appareil et l'étape où tu bloques.
+</footer>
+
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var RAW = "https://raw.githubusercontent.com/tcastel94/arrmada/main/install.sh";
+
+  /* ── Données ─────────────────────────────────────────── */
+  var DEVICES = [
+    { id: "synology", t: "NAS Synology", d: "DSM 7.2 ou plus récent. Tout se fait depuis l'interface web.", tag: "Sans ligne de commande" },
+    { id: "unraid", t: "Unraid", d: "Serveur Unraid 6.12 ou plus récent." },
+    { id: "windows", t: "PC Windows", d: "Windows 10 ou 11, allumé en permanence." },
+    { id: "mac", t: "Mac", d: "macOS avec Docker Desktop." },
+    { id: "linux", t: "Serveur Linux", d: "Ubuntu, Debian, Raspberry Pi 4/5, autre NAS…" }
+  ];
+  var DEVICE_NOTES = {
+    windows: "Sur un PC, ArrMada ne fonctionne que lorsque le PC est allumé et que Docker Desktop est lancé. Un NAS reste la solution la plus confortable.",
+    mac: "Sur un Mac, ArrMada ne fonctionne que lorsque le Mac est allumé et que Docker Desktop est lancé.",
+    linux: "Un Raspberry Pi 4 ou 5 convient, avec un disque USB pour les films."
+  };
+  var SOURCES = [
+    { id: "torrent", t: "Torrent", d: "Gratuit. Le plus simple pour commencer.", tag: "Recommandé" },
+    { id: "usenet", t: "Usenet", d: "Plus rapide et fiable, mais demande un abonnement payant (environ 5 à 10 € par mois)." },
+    { id: "both", t: "Les deux", d: "Usenet en priorité, torrent en secours." }
+  ];
+  var TORRENTS = [
+    { id: "deluge", t: "Deluge", d: "Réglé automatiquement, mot de passe généré.", tag: "Recommandé" },
+    { id: "qbittorrent", t: "qBittorrent", d: "Très répandu, interface plus riche." }
+  ];
+  var PLAYERS = [
+    { id: "jellyfin", t: "Installer Jellyfin", d: "Compte et bibliothèques créés automatiquement.", tag: "Recommandé" },
+    { id: "none", t: "Pas besoin", d: "J'ai déjà Plex ou Jellyfin, ou je regarde autrement (Kodi…)." }
+  ];
+
+  var STEP_NAMES = ["Appareil", "Choix", "Installation", "Premier lancement"];
+  var SCREENS = ["screen-device", "screen-choices", "screen-install", "screen-first"];
+
+  /* ── État (mémorisé dans ce navigateur si possible) ─── */
+  var state = { device: "", source: "torrent", torrent: "deluge", player: "jellyfin", volume: "volume1", host: "", checks: {}, screen: 0, maxScreen: 0 };
+  var STORE = "arrmada-install-guide";
+  try {
+    var saved = JSON.parse(localStorage.getItem(STORE) || "null");
+    if (saved && typeof saved === "object") { for (var k in saved) { if (k in state) state[k] = saved[k]; } }
+  } catch (e) { /* stockage indisponible : on repart de zéro */ }
+  function save() { try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) { /* sans effet */ } }
+
+  var $ = function (id) { return document.getElementById(id); };
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+
+  /* ── Tuiles de choix ─────────────────────────────────── */
+  function renderChoices(containerId, items, key, onPick) {
+    var box = $(containerId);
+    box.innerHTML = "";
+    items.forEach(function (it) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "choice";
+      b.setAttribute("role", "radio");
+      b.setAttribute("aria-checked", state[key] === it.id ? "true" : "false");
+      b.innerHTML = '<span class="t">' + esc(it.t) + '</span><span class="d">' + esc(it.d) + "</span>" + (it.tag ? '<span class="tag">' + esc(it.tag) + "</span>" : "");
+      b.addEventListener("click", function () {
+        state[key] = it.id;
+        save();
+        renderChoices(containerId, items, key, onPick);
+        if (onPick) onPick();
+      });
+      box.appendChild(b);
+    });
+  }
+
+  /* ── Progression ─────────────────────────────────────── */
+  function renderProgress() {
+    var ol = $("progress");
+    ol.innerHTML = "";
+    STEP_NAMES.forEach(function (name, i) {
+      var li = document.createElement("li");
+      if (i < state.screen) li.className = "done";
+      if (i === state.screen) li.className = "current";
+      var b = document.createElement("button");
+      b.type = "button";
+      b.disabled = i > state.maxScreen;
+      b.innerHTML = '<span class="bar"><i></i></span><span class="lbl">' + (i + 1) + ". " + esc(name) + "</span>";
+      if (i === state.screen) b.setAttribute("aria-current", "step");
+      b.addEventListener("click", function () { go(i); });
+      li.appendChild(b);
+      ol.appendChild(li);
+    });
+  }
+
+  function go(i) {
+    state.screen = i;
+    state.maxScreen = Math.max(state.maxScreen, i);
+    save();
+    SCREENS.forEach(function (id, j) { $(id).hidden = j !== i; });
+    if (i === 2) renderInstall();
+    if (i === 3) renderFirst();
+    renderProgress();
+    var top = $(SCREENS[i]).getBoundingClientRect().top + window.scrollY - 80;
+    if (window.scrollY > top) window.scrollTo({ top: Math.max(0, top) });
+  }
+
+  /* ── Commande d'installation ─────────────────────────── */
+  function installerArgs() {
+    var a = ["--yes"];
+    var torrent = state.source === "usenet" ? "none" : state.torrent;
+    a.push("--torrent " + torrent);
+    if (state.source === "torrent") a.push("--no-usenet");
+    if (state.player === "none") a.push("--no-jellyfin");
+    return a;
+  }
+  function paths() {
+    switch (state.device) {
+      case "synology": return { config: "/" + state.volume + "/docker", data: "/" + state.volume + "/data" };
+      case "unraid": return { config: "/mnt/user/appdata", data: "/mnt/user/data" };
+      case "mac": return { config: "~/arrmada/config", data: "~/arrmada/data" };
+      default: return { config: "/opt/arrmada/config", data: "/srv/data" };
+    }
+  }
+  function command() {
+    var args = installerArgs();
+    var p = paths();
+    switch (state.device) {
+      case "synology":
+        args.push("--config-root " + p.config, "--data-root " + p.data);
+        return "curl -fsSL " + RAW + " | bash -s -- " + args.join(" ") + " > " + p.config + "/arrmada-install.log 2>&1";
+      case "unraid":
+      case "mac":
+        return "curl -fsSL " + RAW + " | bash -s -- " + args.join(" ");
+      default:
+        return "curl -fsSL " + RAW + " | sudo bash -s -- " + args.join(" ");
+    }
+  }
+  function appsList() {
+    var apps = ["ArrMada", "Sonarr (séries)", "Radarr (films)", "Prowlarr (sources)", "Bazarr (sous-titres)"];
+    if (state.source !== "torrent") apps.push("SABnzbd (Usenet)");
+    if (state.source !== "usenet") apps.push(state.torrent === "qbittorrent" ? "qBittorrent" : "Deluge");
+    if (state.player === "jellyfin") apps.push("Jellyfin");
+    return apps;
+  }
+
+  function cmdBlock(text, label) {
+    return '<div class="cmd"><div class="bar"><span>' + esc(label || "À copier") + '</span><button type="button" class="copy" data-copy="' + esc(text) + '">Copier</button></div><pre>' + esc(text) + "</pre></div>";
+  }
+  function path(parts) {
+    return '<span class="path">' + parts.map(esc).join('<span class="sep">›</span>') + "</span>";
+  }
+  function more(title, html) { return "<details><summary>" + esc(title) + "</summary><div>" + html + "</div></details>"; }
+
+  /* ── Étapes par appareil ─────────────────────────────── */
+  function stepsFor() {
+    var cmd = command();
+    var p = paths();
+    var S = [];
+    if (state.device === "synology") {
+      var vol = state.volume;
+      S.push({
+        id: "syn-dsm",
+        h: "Vérifie la version de DSM",
+        b: "<p>Ouvre DSM dans ton navigateur (l'adresse habituelle de ton NAS), puis " + path(["Panneau de configuration", "Infos système"]) + ". La ligne <b>Version de DSM</b> doit indiquer <b>7.2</b> ou plus.</p>" +
+          more("Ça ne marche pas ?", "<p>Si la version est plus ancienne : " + path(["Panneau de configuration", "Mise à jour et restauration"]) + ", puis installe la mise à jour proposée. Le NAS redémarre, compte 10 minutes.</p>")
+      });
+      S.push({
+        id: "syn-cm",
+        h: "Installe Container Manager",
+        b: "<p>Ouvre le <b>Centre de paquets</b>, cherche <b>Container Manager</b> et clique sur <span class=\"ui\">Installer</span>.</p>" +
+          more("Pourquoi ?", "<p>Container Manager (l'ancien « Docker » de Synology) fait tourner chaque application dans sa boîte isolée. C'est lui qu'utilise l'installeur.</p>") +
+          more("Ça ne marche pas ?", "<p>Si Container Manager n'apparaît pas, ton modèle de NAS ne le prend pas en charge (souvent les modèles d'entrée de gamme à processeur ARM 32 bits). ArrMada ne pourra pas y être installé.</p>")
+      });
+      S.push({
+        id: "syn-shares",
+        h: "Crée deux dossiers partagés : « docker » et « data »",
+        b: "<p>" + path(["Panneau de configuration", "Dossier partagé", "Créer"]) + ". Nom : <code>docker</code>, emplacement : <b>" + esc(vol.replace("volume", "Volume ")) + "</b>, puis <span class=\"ui\">Suivant</span> jusqu'à la fin en gardant les réglages proposés. Recommence avec le nom <code>data</code>.</p>" +
+          "<ul><li><code>docker</code> contiendra les réglages des applications.</li><li><code>data</code> contiendra les films, les séries et les téléchargements.</li></ul>" +
+          more("Pourquoi passer par DSM et pas par l'installeur ?", "<p>Un dossier créé par un script n'est pas un vrai « dossier partagé » Synology : il serait invisible dans File Station et sur le réseau. Si un dossier <code>docker</code> existe déjà, garde-le, c'est parfait.</p>") +
+          more("J'ai déjà des films ailleurs", "<p>Pas de problème. Une fois l'installation finie, déplace-les avec File Station dans <code>data/media/movies</code> (films) et <code>data/media/tv</code> (séries), ou laisse-les où ils sont et ajoute leur dossier plus tard dans Radarr et Sonarr.</p>")
+      });
+      S.push({
+        id: "syn-task",
+        h: "Prépare l'installeur dans le Planificateur de tâches",
+        b: "<p>" + path(["Panneau de configuration", "Planificateur de tâches", "Créer", "Tâche planifiée", "Script défini par l'utilisateur"]) + ".</p>" +
+          "<ul><li>Onglet <b>Général</b> : nom <code>Installer ArrMada</code>, utilisateur <b>root</b>, et <b>décoche « Activé »</b> (la tâche ne doit pas se relancer toute seule).</li>" +
+          "<li>Onglet <b>Paramètres de tâche</b> : colle la commande ci-dessous dans la grande zone « Script défini par l'utilisateur ».</li>" +
+          "<li>Clique sur <span class=\"ui\">OK</span>. DSM affiche un avertissement sur l'utilisateur root : confirme.</li></ul>" +
+          cmdBlock(cmd, "Commande à coller") +
+          more("Pourquoi root et pourquoi cette méthode ?", "<p>L'installeur doit créer des dossiers et régler leurs droits. Le Planificateur de tâches permet de l'exécuter une seule fois en administrateur, sans activer SSH ni ouvrir de terminal. Le script est public et lisible sur <a href=\"" + RAW + "\" target=\"_blank\" rel=\"noopener\">GitHub</a>.</p>")
+      });
+      S.push({
+        id: "syn-run",
+        h: "Lance l'installation",
+        b: "<p>Dans la liste des tâches, sélectionne <b>Installer ArrMada</b> puis clique sur <span class=\"ui\">Exécuter</span>. Il ne se passe rien de visible : c'est normal, l'installation travaille en arrière-plan.</p>" +
+          "<p>Compte <b>5 à 15 minutes</b> : le NAS télécharge les applications (environ 3 Go).</p>" +
+          more("Comment savoir où ça en est ?", "<p>Ouvre <b>Container Manager</b> : les applications apparaissent dans <span class=\"ui\">Conteneur</span> au fur et à mesure (arrmada, sonarr, radarr…). Le journal complet est écrit dans le dossier partagé <code>docker</code>, fichier <code>arrmada-install.log</code>.</p>") +
+          more("Ça ne marche pas ?", "<ul><li>Aucun conteneur après 15 minutes : télécharge <code>docker/arrmada-install.log</code> avec File Station et ouvre-le. La dernière ligne explique le problème.</li><li>« Crée d'abord le dossier partagé » : l'étape 3 n'est pas faite, ou le volume choisi n'est pas le bon.</li><li>« Port déjà utilisé » : une autre application utilise déjà un des ports (8989, 7878, 9696, 6767, 8080, 8112, 8096, 3420). Le message indique laquelle.</li><li>Tu peux relancer la tâche sans risque : rien n'est écrasé.</li></ul>")
+      });
+      S.push({
+        id: "syn-check",
+        h: "Vérifie que tout tourne",
+        b: "<p>Dans <b>Container Manager</b> › <span class=\"ui\">Conteneur</span>, chaque application doit être en vert (« En cours d'exécution ») : " + esc(appsList().map(function (a) { return a.split(" (")[0].toLowerCase(); }).join(", ")) + ".</p>" +
+          more("Ça ne marche pas ?", "<p>Si un conteneur redémarre en boucle, clique dessus › <span class=\"ui\">Journal</span> pour voir son message, puis relance la tâche de l'étape 5.</p>")
+      });
+    } else if (state.device === "unraid") {
+      S.push({
+        id: "unr-term",
+        h: "Ouvre le terminal d'Unraid",
+        b: "<p>Dans l'interface web d'Unraid, clique sur l'icône <span class=\"ui\">&gt;_</span> (Terminal) en haut à droite.</p>"
+      });
+      S.push({
+        id: "unr-run",
+        h: "Colle la commande et appuie sur Entrée",
+        b: cmdBlock(cmd, "Commande") +
+          "<p>Compte <b>5 à 15 minutes</b>. Le texte défile, puis un résumé final liste chaque application avec son adresse.</p>" +
+          more("Ça ne marche pas ?", "<ul><li>« Port déjà utilisé » : une autre application utilise déjà ce port. Le message indique laquelle.</li><li>Une appli du même nom existe déjà (ex. <code>sonarr</code>) : elle est gardée telle quelle et ArrMada la reliera.</li><li>Tu peux relancer la commande sans risque : rien n'est écrasé.</li></ul>")
+      });
+    } else if (state.device === "windows") {
+      S.push({
+        id: "win-wsl",
+        h: "Installe WSL (Linux pour Windows)",
+        b: "<p>Clic droit sur le menu Démarrer › <b>Terminal (administrateur)</b>, puis tape la commande ci-dessous. Redémarre le PC quand c'est demandé, puis ouvre l'application <b>Ubuntu</b> depuis le menu Démarrer et choisis un nom d'utilisateur et un mot de passe.</p>" + cmdBlock("wsl --install", "Commande Windows")
+      });
+      S.push({
+        id: "win-docker",
+        h: "Installe Docker Desktop",
+        b: "<p>Télécharge-le sur <a href=\"https://www.docker.com/products/docker-desktop/\" target=\"_blank\" rel=\"noopener\">docker.com</a>, installe-le en gardant les options proposées, puis lance-le. Dans ses réglages : " + path(["Settings", "Resources", "WSL integration"]) + ", active <b>Ubuntu</b>.</p>"
+      });
+      S.push({
+        id: "win-run",
+        h: "Dans Ubuntu, colle la commande",
+        b: cmdBlock(cmd, "Commande Ubuntu") + "<p>Le mot de passe demandé est celui choisi pour Ubuntu à l'étape 1 (rien ne s'affiche pendant la saisie, c'est normal). Compte 5 à 15 minutes.</p>"
+      });
+    } else if (state.device === "mac") {
+      S.push({
+        id: "mac-docker",
+        h: "Installe Docker Desktop",
+        b: "<p>Télécharge-le sur <a href=\"https://www.docker.com/products/docker-desktop/\" target=\"_blank\" rel=\"noopener\">docker.com</a> (version « Apple Silicon » pour les Mac M1 et plus récents), installe-le et lance-le une fois.</p>"
+      });
+      S.push({
+        id: "mac-run",
+        h: "Ouvre Terminal et colle la commande",
+        b: "<p>Ouvre l'application <b>Terminal</b> (Applications › Utilitaires), colle la commande et appuie sur Entrée.</p>" + cmdBlock(cmd, "Commande") + "<p>Compte 5 à 15 minutes.</p>"
+      });
+    } else {
+      S.push({
+        id: "lin-ssh",
+        h: "Connecte-toi au serveur",
+        b: "<p>Ouvre un terminal sur le serveur, ou connecte-toi en SSH depuis un autre ordinateur.</p>" + cmdBlock("ssh ton-utilisateur@adresse-du-serveur", "Exemple")
+      });
+      S.push({
+        id: "lin-run",
+        h: "Colle la commande et appuie sur Entrée",
+        b: cmdBlock(cmd, "Commande") + "<p>Si Docker n'est pas encore installé, l'installeur te le signale et t'indique quoi faire. Compte 5 à 15 minutes.</p>" +
+          more("Lire le script avant de le lancer", "<p>C'est une bonne habitude : <code>curl -fsSLO " + esc(RAW) + "</code>, puis <code>less install.sh</code>, puis <code>sudo bash install.sh</code>.</p>")
+      });
+    }
+    return S;
+  }
+
+  function renderSteps(listId, steps) {
+    var ol = $(listId);
+    ol.innerHTML = "";
+    steps.forEach(function (s) {
+      var li = document.createElement("li");
+      var checked = !!state.checks[s.id];
+      if (checked) li.className = "checked";
+      var cid = "chk-" + s.id;
+      li.innerHTML = '<div class="step-head"><h4>' + esc(s.h) + '</h4><label class="done" for="' + cid + '"><input type="checkbox" id="' + cid + '"' + (checked ? " checked" : "") + "> Fait</label></div>" +
+        '<div class="step-body">' + s.b + "</div>";
+      li.querySelector("input").addEventListener("change", function (e) {
+        state.checks[s.id] = e.target.checked;
+        li.className = e.target.checked ? "checked" : "";
+        save();
+      });
+      ol.appendChild(li);
+    });
+  }
+
+  function deviceLabel() {
+    var d = DEVICES.filter(function (x) { return x.id === state.device; })[0];
+    return d ? d.t : "";
+  }
+
+  function renderInstall() {
+    var intro = {
+      synology: "Tout se passe dans l'interface web de ton NAS (DSM). Coche chaque étape une fois faite : ce guide s'en souvient si tu fermes la page.",
+      unraid: "Deux étapes dans l'interface web d'Unraid.",
+      windows: "Trois étapes, à faire une seule fois.",
+      mac: "Deux étapes, à faire une seule fois.",
+      linux: "Deux étapes, à faire une seule fois."
+    };
+    $("install-intro").textContent = intro[state.device] || "";
+    $("install-summary").innerHTML = "Sur <b>" + esc(deviceLabel()) + "</b>, l'installeur va mettre en place : <b>" + esc(appsList().join(", ")) + "</b>.";
+    renderSteps("steps", stepsFor());
+  }
+
+  /* ── Premier lancement ───────────────────────────────── */
+  function hostHelp() {
+    switch (state.device) {
+      case "synology": return "C'est l'adresse que tu tapes pour ouvrir DSM, sans « :5000 ».";
+      case "unraid": return "C'est l'adresse que tu tapes pour ouvrir Unraid.";
+      case "windows": case "mac": return "Sur cet ordinateur : localhost. Depuis un autre appareil : l'adresse IP de l'ordinateur.";
+      default: return "L'adresse IP du serveur sur ton réseau.";
+    }
+  }
+  function cleanHost(h) {
+    return String(h || "").trim().replace(/^https?:\/\//, "").replace(/[:/].*$/, "");
+  }
+  function renderFirst() {
+    $("host").value = state.host;
+    $("host-help").textContent = hostHelp();
+    var host = cleanHost(state.host) || (state.device === "windows" || state.device === "mac" ? "localhost" : "adresse-de-ton-appareil");
+    var url = "http://" + host + ":3420";
+    var link = $("open-link");
+    link.textContent = url;
+    link.href = url;
+
+    var creds = state.player === "jellyfin" || state.source !== "usenet"
+      ? "<p>Les mots de passe que l'installeur a créés (Jellyfin, logiciel de téléchargement) s'affichent dans ArrMada, à l'étape « Ce qu'il te reste à faire ».</p>"
+      : "";
+    var usenet = state.source !== "torrent"
+      ? "<li><b>SABnzbd</b> : renseigne ton fournisseur Usenet (adresse du serveur, identifiant et mot de passe reçus à l'abonnement).</li>"
+      : "";
+    renderSteps("first-steps", [
+      {
+        id: "first-open",
+        h: "Ouvre ArrMada",
+        b: "<p>Clique sur l'adresse ci-dessus (ou tape-la dans ton navigateur). Ajoute-la à tes favoris.</p>" +
+          more("La page ne s'ouvre pas", "<p>Attends quelques minutes : ArrMada démarre en dernier. Vérifie que l'adresse est bien celle de ton appareil, avec <code>:3420</code> à la fin et <code>http://</code> (pas https) au début.</p>")
+      },
+      {
+        id: "first-password",
+        h: "Choisis ton mot de passe ArrMada",
+        b: "<p>Il protège l'accès à ArrMada. Choisis-en un que tu retiendras, au moins 8 caractères. Fais-le tout de suite : tant qu'il n'est pas défini, n'importe qui sur ton réseau pourrait le choisir à ta place.</p>"
+      },
+      {
+        id: "first-connect",
+        h: "Clique sur « Tout connecter »",
+        b: "<p>ArrMada retrouve tout seul les applications installées et les relie entre elles : sources, téléchargement, sous-titres, dossiers de rangement. Rien à copier-coller.</p>" + creds
+      },
+      {
+        id: "first-todo",
+        h: "Suis la liste « Ce qu'il te reste à faire »",
+        b: "<p>ArrMada vérifie lui-même ce qui manque et t'emmène au bon endroit, par exemple :</p><ul>" +
+          "<li><b>Prowlarr</b> : ajouter des sources (des « indexeurs »), là où les films et séries sont cherchés. C'est la seule étape qu'aucun installeur ne peut faire à ta place.</li>" + usenet +
+          (state.player === "jellyfin" ? "<li><b>Jellyfin</b> : te connecter avec le compte créé pour toi, puis installer l'appli Jellyfin sur ta TV ou ton téléphone.</li>" : "") +
+          "</ul>"
+      },
+      {
+        id: "first-equipment",
+        h: "Indique ton équipement, ou passe",
+        b: "<p>Application TV, tablette murale, ampli home cinéma, caméras : coche seulement ce que tu possèdes. Tout le reste reste masqué. Aucun de ces éléments n'est nécessaire.</p>"
+      }
+    ]);
+  }
+
+  /* ── Copier ──────────────────────────────────────────── */
+  document.addEventListener("click", function (e) {
+    var btn = e.target.closest ? e.target.closest(".copy") : null;
+    if (!btn) return;
+    var text = btn.getAttribute("data-copy");
+    var done = function () { btn.textContent = "Copié"; btn.classList.add("ok"); setTimeout(function () { btn.textContent = "Copier"; btn.classList.remove("ok"); }, 1800); };
+    var fallback = function () {
+      var pre = btn.closest(".cmd").querySelector("pre");
+      var range = document.createRange();
+      range.selectNodeContents(pre);
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      btn.textContent = "Sélectionné : Ctrl+C";
+    };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback);
+      else fallback();
+    } catch (err) { fallback(); }
+  });
+
+  /* ── Branchements ────────────────────────────────────── */
+  function renderDevice() {
+    renderChoices("choices-device", DEVICES, "device", function () {
+      $("next-device").disabled = !state.device;
+      var note = DEVICE_NOTES[state.device];
+      $("device-note").hidden = !note;
+      $("device-note").textContent = note || "";
+    });
+    $("next-device").disabled = !state.device;
+    var note = DEVICE_NOTES[state.device];
+    $("device-note").hidden = !note;
+    $("device-note").textContent = note || "";
+  }
+  function renderChoiceScreen() {
+    renderChoices("choices-source", SOURCES, "source", function () { $("q-torrent").hidden = state.source === "usenet"; });
+    renderChoices("choices-torrent", TORRENTS, "torrent");
+    renderChoices("choices-player", PLAYERS, "player");
+    $("q-torrent").hidden = state.source === "usenet";
+    $("q-volume").hidden = state.device !== "synology";
+    $("volume").value = state.volume;
+  }
+
+  $("next-device").addEventListener("click", function () { renderChoiceScreen(); go(1); });
+  $("back-choices").addEventListener("click", function () { go(0); });
+  $("next-choices").addEventListener("click", function () { go(2); });
+  $("back-install").addEventListener("click", function () { renderChoiceScreen(); go(1); });
+  $("next-install").addEventListener("click", function () { go(3); });
+  $("back-first").addEventListener("click", function () { go(2); });
+  $("restart").addEventListener("click", function () {
+    state = { device: "", source: "torrent", torrent: "deluge", player: "jellyfin", volume: "volume1", host: "", checks: {}, screen: 0, maxScreen: 0 };
+    save(); renderDevice(); renderChoiceScreen(); go(0);
+  });
+  $("volume").addEventListener("change", function (e) { state.volume = e.target.value; save(); });
+  $("host").addEventListener("input", function (e) { state.host = e.target.value; save(); renderFirstLinkOnly(); });
+  function renderFirstLinkOnly() {
+    var host = cleanHost(state.host) || (state.device === "windows" || state.device === "mac" ? "localhost" : "adresse-de-ton-appareil");
+    $("open-link").textContent = "http://" + host + ":3420";
+    $("open-link").href = "http://" + host + ":3420";
+  }
+
+  renderDevice();
+  renderChoiceScreen();
+  if (!state.device && state.screen > 0) state.screen = 0;
+  go(state.screen);
+})();
+</script>
+</body>
+</html>

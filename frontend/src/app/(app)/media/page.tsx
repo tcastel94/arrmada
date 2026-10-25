@@ -78,6 +78,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useLibrarySources, useMedia, useMediaFacets, type MediaItem } from "@/hooks/use-media";
 import { useKodiSync } from "@/hooks/use-kodi";
+import { useModuleEnabled } from "@/hooks/use-modules";
 import { useDebounce } from "@/hooks/use-debounce";
 import { apiFetch } from "@/lib/api-client";
 import { formatNumber, plural } from "@/lib/format";
@@ -366,6 +367,8 @@ function MediaLibrary() {
 
     /* ── Actions ── */
     const kodiSync = useKodiSync();
+    // Sans TV (module désactivé), les entrées Kodi du menu disparaissent
+    const hasTv = useModuleEnabled()("tv");
     const syncKodi = () => {
         toast.promise(kodiSync.mutateAsync(), {
             loading: "Synchronisation de Kodi…",
@@ -563,21 +566,25 @@ function MediaLibrary() {
                                         {facets?.missing_count ? <span className="ml-auto text-xs tabular-nums text-muted-foreground">{facets.missing_count}</span> : null}
                                     </Link>
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onSelect={syncKodi} disabled={kodiSync.isPending}>
-                                    <RefreshCw className={cn(kodiSync.isPending && "animate-spin")} />
-                                    Synchroniser Kodi
-                                </DropdownMenuItem>
+                                {hasTv && (
+                                    <DropdownMenuItem onSelect={syncKodi} disabled={kodiSync.isPending}>
+                                        <RefreshCw className={cn(kodiSync.isPending && "animate-spin")} />
+                                        Synchroniser Kodi
+                                    </DropdownMenuItem>
+                                )}
                                 <DropdownMenuItem onSelect={() => scrape(pageMovies)} disabled={pageMovies.length === 0}>
                                     <CloudDownload />
                                     Scraper la page
                                     <span className="ml-auto text-xs tabular-nums text-muted-foreground">{plural(pageMovies.length, "film")}</span>
                                 </DropdownMenuItem>
-                                <DropdownMenuItem asChild>
-                                    <Link href="/settings/kodi">
-                                        <Settings />
-                                        Réglages Kodi
-                                    </Link>
-                                </DropdownMenuItem>
+                                {hasTv && (
+                                    <DropdownMenuItem asChild>
+                                        <Link href="/settings/kodi">
+                                            <Settings />
+                                            Réglages Kodi
+                                        </Link>
+                                    </DropdownMenuItem>
+                                )}
                             </DropdownMenuContent>
                         </DropdownMenu>
                     </div>

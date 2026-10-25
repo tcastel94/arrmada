@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TOP_ITEMS, NAV_GROUPS, BOTTOM_ITEMS, findActiveItem, type NavItem } from "@/lib/nav";
 import { useNavBadges } from "@/hooks/use-nav-badges";
+import { useModuleEnabled } from "@/hooks/use-modules";
 import { useSidebar, SIDEBAR_WIDTH, SIDEBAR_COLLAPSED_WIDTH } from "./sidebar-context";
 import { useLiveState } from "@/lib/live-status";
 import { StatusDot } from "@/components/fx/status-dot";
@@ -32,6 +33,9 @@ export function Sidebar() {
     const badges = useNavBadges();
     const live = useLiveState();
     const active = findActiveItem(pathname);
+    // Équipement absent (pas de TV, pas d'ampli…) → entrées masquées
+    const moduleOn = useModuleEnabled();
+    const shown = (items: NavItem[]) => items.filter((i) => moduleOn(i.module));
 
     const openPalette = () => window.dispatchEvent(new Event("open-command-palette"));
 
@@ -138,7 +142,7 @@ export function Sidebar() {
 
             {/* ── Navigation ───────────────────────────────────── */}
             <nav className="scrollbar-none flex-1 overflow-y-auto px-2.5 pb-3" aria-label="Navigation principale">
-                <div className="flex flex-col gap-px">{TOP_ITEMS.map(renderItem)}</div>
+                <div className="flex flex-col gap-px">{shown(TOP_ITEMS).map(renderItem)}</div>
                 {NAV_GROUPS.map((group) => (
                     <div key={group.title} className="mt-5">
                         {collapsed ? (
@@ -146,7 +150,7 @@ export function Sidebar() {
                         ) : (
                             <p className="mb-1 px-2.5 text-[11px] font-semibold text-muted-foreground/80">{group.title}</p>
                         )}
-                        <div className="flex flex-col gap-px">{group.items.map(renderItem)}</div>
+                        <div className="flex flex-col gap-px">{shown(group.items).map(renderItem)}</div>
                     </div>
                 ))}
             </nav>

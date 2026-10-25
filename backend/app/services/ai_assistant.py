@@ -11,7 +11,7 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 # Config Ollama
-OLLAMA_URL = os.environ.get("OLLAMA_URL") or "http://192.168.2.3:11434"
+OLLAMA_URL = os.environ.get("OLLAMA_URL") or ""
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL") or "gemma4:e4b"
 
 
