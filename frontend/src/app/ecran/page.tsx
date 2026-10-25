@@ -62,6 +62,7 @@ import {
 import { BrandIcon } from "@/components/brand/brand-mark";
 import { API_URL } from "@/lib/constants";
 import { getToken } from "@/lib/api-client";
+import { useSelfUpdate } from "@/lib/self-update";
 import {
     activeSkip,
     getScreenToken,
@@ -413,6 +414,11 @@ function AmbientView({
     useEffect(() => {
         if (error instanceof HttpError && error.status === 401 && auth.kind === "screen") onRevoked();
     }, [error, auth.kind, onRevoked]);
+
+    // Page ouverte en permanence : se recharge après une mise à jour
+    // d'ArrMada, ou si l'API reste injoignable (ancienne version en mémoire,
+    // adresse changée…). Un 401/403 n'est pas une panne : rien à recharger.
+    useSelfUpdate(dataUpdatedAt, !(error instanceof HttpError && (error.status === 401 || error.status === 403)));
 
     // Télécommande : envoi, puis relecture rapide de l'état renvoyé par la TV
     const queryClient = useQueryClient();
@@ -1769,6 +1775,15 @@ function UpcomingSheet({ item, now, onClose }: { item: AmbientUpcoming; now: Dat
     );
 }
 
+/** Message d'une fiche de téléchargement qui n'a pas pu être lue (hors 404). */
+function downloadErrorLabel(error: unknown): string {
+    if (!(error instanceof HttpError)) return "Serveur injoignable, nouvel essai dans quelques secondes…";
+    if (error.status === 401) return "Cet écran n'est plus appairé.";
+    if (error.status === 403) return "Accès refusé à cet écran : mets ArrMada à jour ou appaire-le de nouveau.";
+    if (error.status >= 500) return `Le serveur ne répond pas correctement (HTTP ${error.status}), nouvel essai…`;
+    return `Fiche indisponible (HTTP ${error.status}).`;
+}
+
 function DownloadSheet({
     downloadKey,
     title,
@@ -1790,6 +1805,9 @@ function DownloadSheet({
     const live = d?.live ?? null;
     const torrent = d?.protocol === "torrent";
     const gone = error instanceof HttpError && error.status === 404;
+    // Toute autre erreur est affichée (avant : « Chargement… » sans fin).
+    // La fiche continue de réessayer toutes les 3 s.
+    const failure = !d && error && !gone ? downloadErrorLabel(error) : "";
     const eta = formatEta(live?.eta_seconds) || (d?.time_left ? prettyTimeLeft(d.time_left) : "");
     const state = downloadStateLabel(live?.state || d?.status);
     const what =
@@ -1821,6 +1839,10 @@ function DownloadSheet({
                     {gone ? (
                         <p className="text-[#8CC4FF]" style={{ fontSize: u(3.2), marginTop: u(3) }}>
                             Terminé ou retiré de la file.
+                        </p>
+                    ) : failure ? (
+                        <p className="flex items-center text-amber-300" style={{ fontSize: u(3), marginTop: u(3), gap: u(1.2) }}>
+                            <WifiOff style={{ width: u(3.2), height: u(3.2) }} /> {failure}
                         </p>
                     ) : !d ? (
                         <p className="flex items-center text-slate-400" style={{ fontSize: u(3), marginTop: u(3), gap: u(1.2) }}>
