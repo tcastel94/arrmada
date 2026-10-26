@@ -121,6 +121,20 @@ jobs:
             done
           done
 
+      - name: Synology shared-folder check (fake synoshare)
+        # Pas de DSM en CI : un faux synoshare dans le PATH. Sans l'outil, on ne
+        # conclut rien ; avec, un dossier inconnu de DSM est signalé.
+        run: |
+          eval "$(sed -n '/^is_dsm_share() {/,/^}/p' install.sh)"
+          fake=$(mktemp -d)
+          PATH="$fake:$PATH"
+          is_dsm_share data
+          printf '#!/bin/sh\n[ "$2" = data ] && exit 0\nexit 1\n' > "$fake/synoshare"
+          chmod +x "$fake/synoshare"
+          is_dsm_share data
+          # « ! cmd » ne fait pas échouer un bash -e : test explicite
+          if is_dsm_share created-by-mkdir; then echo "dossier non partagé non détecté"; exit 1; fi
+
       - name: Dry-run under bash 3.2 (macOS)
         run: |
           docker run --rm -v "$PWD/install.sh:/install.sh:ro" -e ARRMADA_PLATFORM=macos -e HOME=/Users/ci \
