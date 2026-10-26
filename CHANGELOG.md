@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Assistant TRaSH Guides fiable (retour d'installation Synology, lot 1)
+
+#### Fixed
+- **Étapes 2 à 6 vides** de l'assistant TRaSH (constaté sur Chrome Windows) : le contenu de chaque étape n'apparaissait qu'au bout d'animations framer-motion imbriquées partant d'une opacité 0 (glissement de l'étape, puis cascade des cartes) ; si l'une ne se jouait pas, tout restait invisible. L'entrée d'étape est désormais une animation CSS (`tailwindcss-animate`) qui ne modifie le style que pendant qu'elle se joue : au pire l'effet est perdu, jamais le contenu. Les cartes d'options n'ont plus d'animation d'entrée propre
+- **« Appliquer » ne peut plus pousser des choix jamais vus** : le bouton reste désactivé tant que chaque étape n'a pas été affichée (« Pas vu » dans le résumé, rappel des étapes manquantes)
+- Le résumé liste les **6 choix effectifs** (écran, audio, langue, qualité, animés, séries françaises, y compris « Non »), chacun cliquable pour revenir à son étape
+
+#### Added
+- **Tests de bout en bout** (Playwright, `frontend/e2e/`, `npm run test:e2e`) : parcours des 6 étapes avec vérification de l'opacité réellement perçue des options, avec et sans « réduire les animations » ; blocage d'« Appliquer » tant qu'une étape n'a pas été vue. API simulée dans le navigateur, exécutés en CI après le build
+
 ### Guided installation for non-technical users, optional equipment
 
 #### Added
