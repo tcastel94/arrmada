@@ -29,9 +29,14 @@ FETCH_DIRS = {
     "sonarr_qp": "docs/json/sonarr/quality-profiles",
     "sonarr_qs": "docs/json/sonarr/quality-size",
     "sonarr_naming": "docs/json/sonarr/naming",
+    # Groupes de formats (« Golden Rule », « Unwanted Formats French »…) : ce
+    # sont eux qui disent quels formats ajouter à un profil, avec quel choix
+    # par défaut (comme Recyclarr v8).
+    "sonarr_cfg": "docs/json/sonarr/cf-groups",
     "radarr_cf": "docs/json/radarr/cf",
     "radarr_qp": "docs/json/radarr/quality-profiles",
     "radarr_qs": "docs/json/radarr/quality-size",
+    "radarr_cfg": "docs/json/radarr/cf-groups",
 }
 
 
@@ -100,6 +105,11 @@ class TrashGuidesCache:
         key = f"{service}_qs"
         return self._data.get(key, [])
 
+    def get_cf_groups(self, service: str = "sonarr") -> list[dict[str, Any]]:
+        """Get Custom Format groups (TRaSH ``cf-groups``) for a service."""
+        key = f"{service}_cfg"
+        return self._data.get(key, [])
+
     def get_cf_by_id(self, trash_id: str, service: str = "sonarr") -> dict[str, Any] | None:
         """Find a Custom Format by its trash_id."""
         for cf in self.get_custom_formats(service):
@@ -128,6 +138,10 @@ class TrashGuidesCache:
     def is_stale(self) -> bool:
         """Whether the cache needs refreshing."""
         if self._last_sync is None:
+            return True
+        # Cache d'une version précédente sans une catégorie (ex. groupes de
+        # formats ajoutés en 2026-10) : resynchroniser sans attendre 24 h.
+        if any(key not in self._data for key in FETCH_DIRS):
             return True
         return (time.time() - self._last_sync) > self.ttl_seconds
 

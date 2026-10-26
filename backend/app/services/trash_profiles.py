@@ -18,175 +18,10 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-# ── Custom Format categories ─────────────────────────────────
-# Maps user-friendly categories to CF name patterns
-
-# HDR Custom Formats by display type
-HDR_CF_MAP: dict[str, list[str]] = {
-    "sdr": [],
-    "hdr10": [
-        "hdr",
-        "hdr10plus-boost",
-    ],
-    "hdr10plus": [
-        "hdr",
-        "hdr10plus-boost",
-    ],
-    "dolby_vision": [
-        "hdr",
-        "hdr10plus-boost",
-        "dv-boost",
-    ],
-    "dv_hdr10_fallback": [
-        "hdr",
-        "hdr10plus-boost",
-        "dv-boost",
-    ],
-}
-
-# CFs to EXCLUDE (negative score) by display type
-HDR_EXCLUDE_MAP: dict[str, list[str]] = {
-    "sdr": ["dv-disk", "dv-wo-hdr-fallback"],
-    "hdr10": ["dv-disk", "dv-wo-hdr-fallback"],
-    "hdr10plus": ["dv-disk", "dv-wo-hdr-fallback"],
-    "dolby_vision": ["dv-disk"],
-    "dv_hdr10_fallback": ["dv-disk", "dv-wo-hdr-fallback"],
-}
-
-# Audio Custom Formats by audio capability
-AUDIO_CF_MAP: dict[str, list[str]] = {
-    "stereo": [],
-    "surround_51": [
-        "51-surround",
-        "dd",
-        "ddplus",
-        "dts",
-    ],
-    "surround_71": [
-        "51-surround",
-        "61-surround",
-        "71-surround",
-        "dd",
-        "ddplus",
-        "dts",
-        "dts-hd-ma",
-        "dts-hd-hra",
-    ],
-    "atmos": [
-        "51-surround",
-        "61-surround",
-        "71-surround",
-        "dd",
-        "ddplus",
-        "ddplus-atmos",
-        "truehd",
-        "truehd-atmos",
-        "dts",
-        "dts-hd-ma",
-        "dts-hd-hra",
-        "dts-x",
-        "dts-es",
-        "atmos-undefined",
-    ],
-}
-
-# Language Custom Formats
-LANGUAGE_CF_MAP: dict[str, list[str]] = {
-    "vo": [],  # No language CFs needed for VO
-    "vf": [
-        "french-vff",
-        "french-vfq",
-        "french-vfi",
-        "french-vf2",
-        "french-vfb",
-        "multi",
-    ],
-    "multi": [
-        "french-vff",
-        "french-vfq",
-        "french-vfi",
-        "french-vf2",
-        "french-vfb",
-        "french-vof",
-        "french-voq",
-        "multi",
-    ],
-    "vostfr": [
-        "french-vostfr",
-    ],
-}
-
-# Anime-specific CFs
-ANIME_CFS = [
-    "anime-dual-audio",
-    "anime-raws",
-    "fansub",
-    "anime-web-tier-01",
-    "anime-web-tier-02",
-    "anime-web-tier-03",
-    "anime-web-tier-04",
-    "anime-web-tier-05",
-    "anime-web-tier-06",
-    "anime-bd-tier-01",
-    "anime-bd-tier-02",
-    "anime-bd-tier-03",
-    "anime-bd-tier-04",
-    "anime-bd-tier-05",
-    "anime-bd-tier-06",
-    "anime-bd-tier-07",
-    "anime-bd-tier-08",
-    "anime-lq-groups",
-]
-
-# French anime-specific CFs
-FRENCH_ANIME_CFS = [
-    "french-anime-fansub",
-    "french-anime-tier-01",
-    "french-anime-tier-02",
-    "french-anime-tier-03",
-    "french-adn",
-]
-
-# Universal "unwanted" CFs (always include with negative score)
-UNWANTED_CFS = [
-    "br-disk",
-    "br-disk-btn",
-    "lq",
-    "lq-release-title",
-    "extras",
-    "no-rlsgroup",
-    "obfuscated",
-    "retags",
-    "bad-dual-groups",
-]
-
-# Quality/source tier CFs (always useful)
-QUALITY_CFS = [
-    "repack-proper",
-    "repack2",
-    "repack3",
-    "hd-bluray-tier-01",
-    "hd-bluray-tier-02",
-    "remux-tier-01",
-    "remux-tier-02",
-]
-
-# Streaming service CFs (always useful)
-STREAMING_CFS = [
-    "nf",
-    "amzn",
-    "atvp",
-    "dsnp",
-    "hmax",
-    "max",
-    "hbo",
-    "hulu",
-    "pcok",
-    "pmtp",
-    "cr",
-    "funi",
-    "hidive",
-]
+# Les formats et leurs scores ne sont plus choisis ici à la main : ils viennent
+# des données TRaSH elles-mêmes (formats du profil + groupes de formats), via
+# app.services.trash_apply.build_profile_plan, comme Recyclarr v8. Ce module ne
+# garde que le choix du PROFIL TRaSH selon les réponses de l'assistant.
 
 # ── Quality Profile mapping ──────────────────────────────────
 # Maps (quality, language, anime, service) → TRaSH quality profile filename
@@ -255,18 +90,6 @@ QP_MAP: dict[tuple[str, str, bool, str], str] = {
     ("720p", "multi", False, "radarr"): "french-multi-vo-hd-bluray-web",
 }
 
-# Score profile names for different use-cases
-SCORE_PROFILE_MAP: dict[tuple[str, bool], str] = {
-    ("vo", False): "default",
-    ("vf", False): "french-multi-vf",
-    ("multi", False): "french-multi-vo",
-    ("vostfr", False): "french-vostfr",
-    ("vo", True): "anime-sonarr",
-    ("vf", True): "french-anime-multi",
-    ("multi", True): "french-anime-multi",
-    ("vostfr", True): "french-anime-vostfr",
-}
-
 
 def _categorize_cf(cf_name: str) -> str:
     """Categorize a CF by its filename/name."""
@@ -305,39 +128,6 @@ def _categorize_cf(cf_name: str) -> str:
     ):
         return "streaming"
     return "other"
-
-
-def _resolve_cf_names(
-    cf_name_patterns: list[str],
-    cache: TrashGuidesCache,
-    service: str = "sonarr",
-) -> list[dict[str, Any]]:
-    """Resolve CF name patterns to actual CF objects from cache."""
-    resolved = []
-    all_cfs = cache.get_custom_formats(service)
-
-    for pattern in cf_name_patterns:
-        # Try exact match on source filename (without .json)
-        found = False
-        for cf in all_cfs:
-            source = cf.get("_source_file", "").replace(".json", "")
-            if source == pattern:
-                resolved.append(cf)
-                found = True
-                break
-
-        if not found:
-            # Try name match
-            for cf in all_cfs:
-                if cf.get("name", "").lower() == pattern.replace("-", " ").lower():
-                    resolved.append(cf)
-                    found = True
-                    break
-
-        if not found:
-            logger.debug("CF pattern '%s' not found in %s cache", pattern, service)
-
-    return resolved
 
 
 def generate_recommendations(
@@ -387,77 +177,34 @@ def _build_recommendation(
     service: str,
     cache: TrashGuidesCache,
 ) -> RecommendedProfile | None:
-    """Build a single profile recommendation."""
+    """Recommandation d'un profil : exactement ce qu'« Appliquer » écrira."""
+    from app.services.trash_apply import build_profile_plan
 
-    # 1. Determine quality profile
+    # 1. Profil TRaSH selon qualité / langue / anime
     qp_key = (prefs.quality, language, is_anime, service)
     qp_name = QP_MAP.get(qp_key)
     if not qp_name:
         logger.warning("No QP mapping for %s", qp_key)
         return None
 
-    # 2. Determine score profile
-    score_key = (language, is_anime)
-    score_profile = SCORE_PROFILE_MAP.get(score_key, "default")
+    plan = build_profile_plan(cache, service, qp_name, prefs)
+    if plan is None:
+        logger.warning("TRaSH profile %s/%s not in cache", service, qp_name)
+        return None
 
-    # 3. Collect all needed CF names
-    cf_names: list[str] = []
-
-    # HDR CFs
-    cf_names.extend(HDR_CF_MAP.get(prefs.display_type, []))
-    cf_names.extend(HDR_EXCLUDE_MAP.get(prefs.display_type, []))
-
-    # Audio CFs
-    cf_names.extend(AUDIO_CF_MAP.get(prefs.audio_type, []))
-
-    # Language CFs
-    cf_names.extend(LANGUAGE_CF_MAP.get(language, []))
-
-    # Unwanted + quality + streaming (always)
-    cf_names.extend(UNWANTED_CFS)
-    cf_names.extend(QUALITY_CFS)
-    cf_names.extend(STREAMING_CFS)
-
-    # Anime CFs
-    if is_anime:
-        cf_names.extend(ANIME_CFS)
-        if language in ("vf", "multi", "vostfr"):
-            cf_names.extend(FRENCH_ANIME_CFS)
-
-    # French-specific CFs for non-anime
-    if not is_anime and language in ("vf", "multi", "vostfr"):
-        cf_names.extend(
-            [
-                "french-scene",
-                "french-lq",
-                "french-hd-bluray-tier-01",
-                "french-remux-tier-01",
-                "french-web-tier-01",
-                "french-web-tier-02",
-                "french-web-tier-03",
-            ]
+    # 2. Formats retenus, avec le score réellement appliqué
+    cf_summaries = [
+        TrashCFSummary(
+            trash_id=fmt.trash_id,
+            name=fmt.name,
+            scores=fmt.trash.get("trash_scores"),
+            category=_categorize_cf(fmt.trash.get("_source_file", fmt.name)),
+            score=fmt.score,
+            source=fmt.source,
         )
+        for fmt in sorted(plan.formats, key=lambda f: (-f.score, f.name.lower()))
+    ]
 
-    # Deduplicate
-    cf_names = list(dict.fromkeys(cf_names))
-
-    # 4. Resolve to actual CF objects
-    resolved_cfs = _resolve_cf_names(cf_names, cache, service)
-
-    # 5. Build CF summaries with scores
-    cf_summaries: list[TrashCFSummary] = []
-    for cf in resolved_cfs:
-        scores = cf.get("trash_scores", {})
-        cf_summaries.append(
-            TrashCFSummary(
-                trash_id=cf["trash_id"],
-                name=cf["name"],
-                scores=scores,
-                category=_categorize_cf(cf.get("_source_file", cf["name"])),
-            )
-        )
-
-    # 6. Build description
     content_type = "Anime" if is_anime else "Séries/Films"
     desc_parts = [
         f"Profil {content_type}",
@@ -473,7 +220,11 @@ def _build_recommendation(
         service_type=service,
         description=" | ".join(desc_parts),
         custom_formats=cf_summaries,
-        score_profile=score_profile,
+        score_profile=plan.score_set,
+        trash_name=plan.name,
+        cutoff=plan.cutoff,
+        qualities=[q["name"] for q in plan.qualities if q.get("allowed", True)],
+        groups=plan.groups,
     )
 
 

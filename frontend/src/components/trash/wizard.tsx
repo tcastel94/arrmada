@@ -254,7 +254,7 @@ export function TrashWizard() {
                 )}
             </div>
 
-            <ApplyDialog open={applyOpen} onOpenChange={setApplyOpen} recommendations={recs} />
+            <ApplyDialog open={applyOpen} onOpenChange={setApplyOpen} recommendations={recs} prefs={prefs} />
         </div>
     );
 }
@@ -480,9 +480,15 @@ function RecommendationCard({ rec }: { rec: RecommendedProfile }) {
                     </span>
                     <div className="min-w-0">
                         <p className="text-sm font-semibold">
-                            {isSonarr ? "Sonarr" : "Radarr"} · <span className="font-mono text-xs">{rec.profile_name}</span>
+                            {isSonarr ? "Sonarr" : "Radarr"} · <span className="font-mono text-xs">{rec.trash_name || rec.profile_name}</span>
                         </p>
                         {rec.description && <p className="mt-0.5 text-xs text-muted-foreground">{rec.description}</p>}
+                        {rec.cutoff && (
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                                Qualités : <span className="text-foreground">{(rec.qualities ?? []).join(", ")}</span> · arrêt à{" "}
+                                <span className="text-foreground">{rec.cutoff}</span>
+                            </p>
+                        )}
                     </div>
                 </div>
                 <span className="rounded-lg bg-orange-500/15 px-2 py-0.5 text-xs font-semibold text-orange-300 tabular-nums">
@@ -511,6 +517,8 @@ function RecommendationCard({ rec }: { rec: RecommendedProfile }) {
                         className={cn("rounded-md border px-1.5 py-0.5 font-mono text-[10px]", (CF_CATEGORY[cf.category] ?? CF_FALLBACK).cls)}
                     >
                         {cf.name}
+                        {/* Score réellement appliqué dans le profil */}
+                        {cf.score ? <span className="ml-1 opacity-70">{cf.score > 0 ? `+${cf.score}` : cf.score}</span> : null}
                     </span>
                 ))}
                 {rec.custom_formats.length > CF_PREVIEW && (

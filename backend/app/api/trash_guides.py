@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 from app.schemas.trash_guides import (
     ApplyResult,
+    AssignResult,
     AuditResult,
     MediaPreferences,
     RecommendedProfile,
@@ -54,6 +55,17 @@ class ApplyRequest(BaseModel):
     dry_run: bool = Field(
         default=False, description="If true, only simulate — don't actually modify"
     )
+    # Réponses de l'assistant : choisissent les groupes de formats liés à
+    # l'écran / l'audio (DV sans repli HDR, DV Boost…). Absentes = seulement
+    # le profil TRaSH et ses groupes par défaut.
+    prefs: MediaPreferences | None = None
+    apply_sizes: bool = Field(default=True, description="Also apply TRaSH quality sizes")
+
+
+class AssignRequest(BaseModel):
+    service_id: int
+    profile_name: str = Field(min_length=1, max_length=200)
+    dry_run: bool = True
 
 
 class AuditRequest(BaseModel):
@@ -273,6 +285,33 @@ async def audit_config(
     )
 
 
+async def _arr_client(service_id: int) -> tuple[Any, str, str]:
+    """Client /api/v3 d'un Sonarr/Radarr enregistré : (client, type, nom)."""
+    from sqlalchemy import select
+
+    from app.database import async_session_factory
+    from app.models.service import Service
+    from app.services.arr_client import ArrBaseClient
+    from app.services.encryption import decrypt_api_key
+
+    async with async_session_factory() as session:
+        result = await session.execute(select(Service).where(Service.id == service_id))
+        service = result.scalar_one_or_none()
+    if not service:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Service {service_id} not found"
+        )
+    service_type = service.type.lower()
+    if service_type not in ("sonarr", "radarr"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only available for Sonarr and Radarr services",
+        )
+    client = ArrBaseClient(url=service.url, api_key=decrypt_api_key(service.api_key), timeout=30)
+    client.API_PREFIX = "/api/v3"
+    return client, service_type, service.name
+
+
 @router.post(
     "/apply",
     response_model=ApplyResult,
@@ -282,127 +321,84 @@ async def apply_recommendations(
     body: ApplyRequest,
     _auth: str = Depends(_get_user),
 ):
-    """Push recommended Custom Formats and Quality Profiles to a service.
+    """Écrit les formats, le profil qualité (scores compris) et les tailles TRaSH.
 
-    Use dry_run=true to preview changes without modifying anything.
+    ``dry_run=true`` : aperçu détaillé de ce qui serait écrit, sans rien modifier.
+    Même logique que Recyclarr v8 (voir app/services/trash_apply.py).
     """
-    from sqlalchemy import select
-
-    from app.database import async_session_factory
-    from app.models.service import Service
+    from app.services.trash_apply import apply_plans, build_profile_plan, build_size_plan
 
     cache = get_trash_cache()
     if cache.is_stale:
         await cache.sync()
 
-    # Get service from DB
-    async with async_session_factory() as session:
-        result = await session.execute(select(Service).where(Service.id == body.service_id))
-        service = result.scalar_one_or_none()
-
-    if not service:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Service {body.service_id} not found",
-        )
-
-    service_type = service.type.lower()
-    if service_type not in ("sonarr", "radarr"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Apply is only available for Sonarr and Radarr services",
-        )
-
-    from app.services.arr_client import ArrBaseClient
-    from app.services.encryption import decrypt_api_key
-
-    client = ArrBaseClient(
-        url=service.url,
-        api_key=decrypt_api_key(service.api_key),
-    )
-    client.API_PREFIX = "/api/v3"
-
-    errors: list[str] = []
-    cfs_created = 0
-    cfs_updated = 0
+    client, service_type, _name = await _arr_client(body.service_id)
+    plans = []
+    missing: list[str] = []
+    for rec_id in body.recommendations:
+        plan = build_profile_plan(cache, service_type, rec_id, body.prefs)
+        if plan is None:
+            missing.append(f"Profil TRaSH « {rec_id} » introuvable pour {service_type}")
+        else:
+            plans.append(plan)
+    sizes = build_size_plan(cache, service_type) if body.apply_sizes and plans else []
 
     try:
-        # Get current CFs to avoid duplicates
-        current_cfs = await client.get("/customformat")
-        current_by_name: dict[str, dict] = {cf["name"].lower(): cf for cf in current_cfs}
-
-        # Get ALL TRaSH CFs for this service
-        all_trash_cfs = cache.get_custom_formats(service_type)
-        trash_by_id: dict[str, dict] = {cf["trash_id"]: cf for cf in all_trash_cfs}
-
-        for rec_id in body.recommendations:
-            # Find QP by source filename (profile_id IS the filename)
-            qp = None
-            for qp_data in cache.get_quality_profiles(service_type):
-                source = qp_data.get("_source_file", "").replace(".json", "")
-                if source == rec_id:
-                    qp = qp_data
-                    break
-
-            if not qp:
-                logger.warning("QP '%s' not found in %s cache", rec_id, service_type)
-                continue
-
-            # formatItems can be dict {CF_name: trash_id} or list [{trash_id, ...}]
-            format_items = qp.get("formatItems", {})
-            qp_cf_ids: set[str] = set()
-
-            if isinstance(format_items, dict):
-                # Dict format: {"CF Name": "trash_id", ...}
-                qp_cf_ids = set(format_items.values())
-            elif isinstance(format_items, list):
-                # List format: [{"trash_id": "...", ...}, ...]
-                for fmt_item in format_items:
-                    if isinstance(fmt_item, dict) and "trash_id" in fmt_item:
-                        qp_cf_ids.add(fmt_item["trash_id"])
-
-            logger.info("QP '%s': %d CFs to apply", rec_id, len(qp_cf_ids))
-
-            # Create/update each referenced CF
-            for cf_trash_id in qp_cf_ids:
-                cf = trash_by_id.get(cf_trash_id)
-                if not cf:
-                    continue
-
-                payload = _build_cf_payload(cf)
-                existing = current_by_name.get(cf["name"].lower())
-
-                if body.dry_run:
-                    if existing:
-                        cfs_updated += 1
-                    else:
-                        cfs_created += 1
-                    continue
-
-                try:
-                    if existing:
-                        payload["id"] = existing["id"]
-                        await client.put(f"/customformat/{existing['id']}", payload)
-                        cfs_updated += 1
-                    else:
-                        result = await client.post("/customformat", payload)
-                        cfs_created += 1
-                        current_by_name[cf["name"].lower()] = result
-                except Exception as e:
-                    errors.append(f"CF '{cf['name']}': {e}")
-
+        report = await apply_plans(client, service_type, plans, sizes, dry_run=body.dry_run)
     except Exception as e:
-        errors.append(f"Connection error: {e}")
         logger.error("Apply failed: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Sonarr/Radarr injoignable ou a refusé la configuration : {e}",
+        ) from e
     finally:
         await client.close()
 
+    errors = missing + report.errors
     return ApplyResult(
-        success=len(errors) == 0,
-        cfs_created=cfs_created,
-        cfs_updated=cfs_updated,
+        success=not errors,
+        dry_run=body.dry_run,
+        cfs_created=len(report.cfs_created),
+        cfs_updated=len(report.cfs_updated),
+        cfs_unchanged=report.cfs_unchanged,
+        profiles_created=sum(1 for p in report.profiles if p["action"] == "created"),
+        profiles_updated=sum(1 for p in report.profiles if p["action"] == "updated"),
+        created_formats=report.cfs_created,
+        updated_formats=report.cfs_updated,
+        profiles=report.profiles,
+        sizes=report.sizes,
+        warnings=report.warnings,
         errors=errors,
     )
+
+
+@router.post(
+    "/assign-profile",
+    response_model=AssignResult,
+    summary="Switch every movie / series to a quality profile",
+)
+async def assign_profile_endpoint(
+    body: AssignRequest,
+    _auth: str = Depends(_get_user),
+):
+    """Bascule la bibliothèque existante vers le profil appliqué.
+
+    ``dry_run=true`` (par défaut) : compte seulement les titres concernés.
+    """
+    from app.services.trash_apply import assign_profile
+
+    client, service_type, _name = await _arr_client(body.service_id)
+    try:
+        result = await assign_profile(client, service_type, body.profile_name, dry_run=body.dry_run)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Bascule impossible : {e}"
+        ) from e
+    finally:
+        await client.close()
+    return AssignResult(**result, dry_run=body.dry_run)
 
 
 @router.get(
@@ -534,34 +530,3 @@ def _categorize_cf_name(name: str) -> str:
     if any(kw in n for kw in ("lq", "br-disk", "obfuscated", "retag")):
         return "unwanted"
     return "other"
-
-
-def _build_cf_payload(trash_cf: dict[str, Any]) -> dict[str, Any]:
-    """Convert a TRaSH CF JSON into a Sonarr/Radarr API payload."""
-    specs = []
-    for spec in trash_cf.get("specifications", []):
-        sonarr_spec: dict[str, Any] = {
-            "name": spec["name"],
-            "implementation": spec["implementation"],
-            "negate": spec.get("negate", False),
-            "required": spec.get("required", False),
-            "fields": [],
-        }
-
-        # Convert fields
-        fields = spec.get("fields", {})
-        if isinstance(fields, dict):
-            for field_name, field_value in fields.items():
-                sonarr_spec["fields"].append(
-                    {
-                        "name": field_name,
-                        "value": field_value,
-                    }
-                )
-        specs.append(sonarr_spec)
-
-    return {
-        "name": trash_cf["name"],
-        "includeCustomFormatWhenRenaming": trash_cf.get("includeCustomFormatWhenRenaming", False),
-        "specifications": specs,
-    }

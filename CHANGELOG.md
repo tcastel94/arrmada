@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### « Appliquer TRaSH » complet (retour d'installation Synology, lot 2)
+
+#### Fixed
+- **« Appliquer » n'écrivait que des formats à score 0** (aucun effet sur le choix des releases) : il crée ou met à jour désormais le **profil qualité** complet — qualités et groupes, palier d'arrêt, scores minimum / d'arrêt / de mise à niveau, langue (Radarr), **score de chaque format** (formats hors profil remis à 0) — et les **tailles de qualité** TRaSH, plafonnées à la limite de la version du service (ADR-010)
+- Formats existants **repris par nom**, sans doublon ; un format déjà conforme n'est plus réécrit (Radarr/Sonarr ajoutent des champs par défaut comme `exceptLanguage` : seuls les champs écrits par TRaSH sont comparés) — un second « Appliquer » ne change rien
+- Les recommandations de l'assistant ne viennent plus de listes faites main : elles sont tirées des données TRaSH (formats du profil + groupes), avec le score réellement appliqué affiché à côté de chaque format
+
+#### Added
+- **Groupes de formats TRaSH** (`cf-groups`) synchronisés et appliqués comme Recyclarr v8 : groupes « par défaut » associés au profil (formats indésirables FR, Golden Rule UHD, HDR, services de streaming, audio côté Radarr) + groupes liés aux réponses (« DV (w/o HDR fallback) » à −10000 pour un écran sans Dolby Vision, « DV Boost », « HDR10+ Boost », audio côté Sonarr). Un ancien cache sans groupes se resynchronise aussitôt
+- **Aperçu détaillé obligatoire** avant « Appliquer » : formats à créer / modifier (liste), profil créé / modifié / à jour avec palier d'arrêt, scores, qualités et groupes, score de chaque format, tailles à ajuster (tableau), avertissements
+- **Bascule de la bibliothèque** après application : nombre de films / séries sur un autre profil, puis bascule confirmée (`POST /api/trash-guides/assign-profile`, outils d'édition en masse de Radarr / Sonarr ; rien n'est re-téléchargé)
+- Tests : 21 tests backend sur un extrait figé des données TRaSH et un faux Radarr / Sonarr à état construit sur les réponses réelles de Radarr 6.4 et Sonarr 4.0.20 (`tests/fake_servarr.py`) ; test Playwright du parcours aperçu → application → bascule
+
 ### Assistant TRaSH Guides fiable (retour d'installation Synology, lot 1)
 
 #### Fixed
