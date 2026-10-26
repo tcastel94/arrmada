@@ -295,6 +295,10 @@ data class PlayInfo(
     @SerialName("video_range") val videoRange: String = "",
     @SerialName("dovi_only") val doviOnly: Boolean = false,
     @SerialName("sdr_stream") val sdrStream: String = "",
+    // Qualité réduite (ADR-012) : 1080p HDR10 si le serveur le propose (vide
+    // sinon, ou serveur plus ancien), et débit moyen du fichier en bit/s (null : inconnu)
+    @SerialName("lite_stream") val liteStream: String = "",
+    val bitrate: Long? = null,
     val chapters: List<Chapter> = emptyList(),
     // Vignettes de la barre de lecture (Jellyfin 10.9+), null si non générées
     val trickplay: Trickplay? = null,

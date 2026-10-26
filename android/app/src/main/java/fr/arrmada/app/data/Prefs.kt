@@ -85,6 +85,20 @@ class Prefs(context: Context) {
         get() = prefs.getBoolean(KEY_HOME_ROWS, true)
         set(value) = prefs.edit().putBoolean(KEY_HOME_ROWS, value).apply()
 
+    /**
+     * Qualité de lecture par défaut de cette TV (ADR-012) : l'original, ou
+     * d'emblée le 1080p converti par Jellyfin (TV en Wi-Fi, câble lent).
+     */
+    var defaultQuality: DefaultQuality
+        get() = prefs.getString(KEY_DEFAULT_QUALITY, null)
+            ?.let { saved -> DefaultQuality.entries.firstOrNull { it.name == saved } } ?: DefaultQuality.ORIGINAL
+        set(value) = prefs.edit().putString(KEY_DEFAULT_QUALITY, value.name).apply()
+
+    /** « Toujours lire en 1080p sur cette TV ? » déjà posée (une seule fois). */
+    var qualityAsked: Boolean
+        get() = prefs.getBoolean(KEY_QUALITY_ASKED, false)
+        set(value) = prefs.edit().putBoolean(KEY_QUALITY_ASKED, value).apply()
+
     fun forgetPairing() {
         setProfile(null) // autre maison, autres profils
         prefs.edit().remove(KEY_TOKEN).remove(KEY_DEVICE).apply()
@@ -97,6 +111,8 @@ class Prefs(context: Context) {
         const val KEY_DEVICE = "device_name"
         const val KEY_AUTO_SOUND = "auto_sound"
         const val KEY_HOME_ROWS = "home_rows"
+        const val KEY_DEFAULT_QUALITY = "default_quality"
+        const val KEY_QUALITY_ASKED = "quality_asked"
         const val KEY_PROFILE_ID = "profile_id"
         const val KEY_PROFILE_NAME = "profile_name"
         const val KEY_PROFILE_COLOR = "profile_color"

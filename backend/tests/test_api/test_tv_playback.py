@@ -52,7 +52,9 @@ def _items(params: dict, _m: Any) -> Any:
     if params.get("ids") == MOVIE_ID:
         return {"Items": [{
             "Id": MOVIE_ID, "Name": "Dune", "Overview": "Arrakis.", "RunTimeTicks": 9300 * T,
-            "MediaSources": [{"Path": "/movies/Dune.mkv", "MediaStreams": _dune_streams()}],
+            # Débit moyen d'un remux 4K (Upgrade 2018 : 89,7 Mb/s)
+            "MediaSources": [{"Path": "/movies/Dune.mkv", "Bitrate": 89_700_000,
+                              "MediaStreams": _dune_streams()}],
             "Chapters": [
                 {"Name": "Ouverture", "StartPositionTicks": 0, "ImageTag": "a1"},
                 {"Name": "Arrakis", "StartPositionTicks": int(612.5 * T), "ImageTag": "b2"},
@@ -255,6 +257,8 @@ async def _tv(client: AsyncClient, admin: dict[str, str]) -> dict[str, str]:
         ("GET", f"/api/tv/hls/{MOVIE_ID}/stream", False),
         ("GET", f"/api/tv/hls/{MOVIE_ID}/sdr.m3u8", True),
         ("GET", f"/api/tv/hls/{MOVIE_ID}/hdr.m3u8", False),
+        # Pas de 1080p HDR (ADR-012) : Jellyfin ne garde pas le HDR en réencodant
+        ("GET", f"/api/tv/hls/{MOVIE_ID}/lite.m3u8", False),
         ("GET", f"/api/tv/subtitle/{MOVIE_ID}/5.srt", True),
         ("GET", f"/api/tv/subtitle/{MOVIE_ID}/5.sup", False),
         ("POST", f"/api/tv/subtitles/{MOVIE_ID}", True),
@@ -561,6 +565,63 @@ async def test_hls_sdr_conversion(client: AsyncClient, jellyfin: dict[str, str])
     assert params["AllowAudioStreamCopy"] == "true"  # son intact
     # Même session que le remux : « stop » arrête aussi cette conversion
     assert params["PlaySessionId"] == f"arrmada-{DOVI_ID}"
+
+
+# ── Qualité réduite (ADR-012) : débit du fichier, 1080p SDR ───
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ({"Bitrate": 89_700_000}, 89_700_000),
+        ({"Bitrate": 0}, None),
+        ({"Bitrate": -1}, None),
+        ({"Bitrate": "90000000"}, None),
+        ({"Bitrate": True}, None),
+        ({}, None),
+    ],
+)
+def test_source_bitrate(source: dict, expected: int | None) -> None:
+    assert tv_playback.source_bitrate({"MediaSources": [source]}) == expected
+    assert tv_playback.source_bitrate({}) is None
+    assert tv_playback.source_bitrate({"MediaSources": ["pas un dict"]}) is None
+
+
+async def test_play_gives_bitrate_for_reduced_quality(
+    client: AsyncClient, jellyfin: dict[str, str]
+) -> None:
+    tv = await _tv(client, jellyfin)
+    dune = (await client.get("/api/tv/play/movie/438631", headers=tv)).json()
+    assert dune["bitrate"] == 89_700_000
+    # Qualité réduite = la conversion 1080p SDR, proposée pour tout élément
+    assert dune["sdr_stream"] == f"/api/tv/hls/{MOVIE_ID}/sdr.m3u8"
+    # Pas de flux 1080p HDR : la TV ne propose alors que Original et 1080p SDR
+    assert "lite_stream" not in dune
+    # Jellyfin ne donne pas le débit : null, la TV se fie aux coupures seules
+    tulsa = (await client.get("/api/tv/play/movie/777", headers=tv)).json()
+    assert tulsa["bitrate"] is None
+
+
+async def test_reduced_quality_is_capped_for_slow_links(
+    client: AsyncClient, jellyfin: dict[str, str]
+) -> None:
+    tv = await _tv(client, jellyfin)
+    assert (await client.get(f"/api/tv/hls/{MOVIE_ID}/sdr.m3u8", headers=tv)).status_code == 200
+    params = SEEN["hls"][0]["params"]
+    # Image réencodée (jamais copiée), 1080p, débit plafonné sous 100 Mb/s
+    assert params["AllowVideoStreamCopy"] == "false"
+    assert (params["MaxWidth"], params["MaxHeight"]) == ("1920", "1080")
+    assert int(params["VideoBitrate"]) == 20_000_000
+    assert int(params["MaxStreamingBitrate"]) <= 30_000_000
+    # Le lien lent à 100 Mb/s : marge pour le son copié (TrueHD ~ 5 Mb/s)
+    assert int(params["MaxStreamingBitrate"]) < 100_000_000
+
+
+async def test_hls_lite_path_is_refused(client: AsyncClient, jellyfin: dict[str, str]) -> None:
+    tv = await _tv(client, jellyfin)
+    resp = await client.get(f"/api/tv/hls/{MOVIE_ID}/lite.m3u8", headers=tv)
+    assert resp.status_code in (403, 404)
+    assert "hls" not in SEEN
 
 
 async def test_hls_rejects_other_paths(client: AsyncClient, jellyfin: dict[str, str]) -> None:

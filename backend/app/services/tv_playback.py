@@ -27,6 +27,14 @@ Deux façons de lire :
     le convertit alors en H.264 SDR 1080p avec « mappage tonal » (les
     couleurs Dolby Vision ramenées dans l'espace d'une TV ordinaire).
     C'est la TV qui décide (elle seule sait si son écran gère le DV).
+    Le même flux sert de « qualité réduite » (1080p, 20 Mb/s) quand le
+    réseau de la TV ne suit pas le fichier d'origine (ADR-012) : la TV
+    compare le débit moyen du fichier (`bitrate`) aux coupures constatées.
+
+Pas de flux 1080p qui garderait le HDR (ADR-012) : vérifié sur Jellyfin
+12.3, tout réencodage d'une image HDR passe par le mappage tonal (sortie
+BT.709) et le HEVC réencodé est forcé en Main 8 bits ; « hevc-rangetype=HDR10 »
+ne sert qu'à décider de la copie de l'image, pas de l'encodage.
 """
 
 from __future__ import annotations
@@ -230,6 +238,22 @@ def embedded_subtitles(item_id: str, details: dict[str, Any]) -> list[dict[str, 
     return found
 
 
+def source_bitrate(details: dict[str, Any]) -> int | None:
+    """Débit moyen du fichier en bit/s (MediaSources[0].Bitrate de Jellyfin),
+    image et son compris ; None s'il est inconnu.
+
+    Un remux 4K tourne autour de 60 à 100 Mb/s : la TV s'en sert pour
+    proposer la qualité réduite quand sa connexion ne suit pas (ADR-012).
+    """
+    sources = details.get("MediaSources") or [{}]
+    source = sources[0] if isinstance(sources[0], dict) else {}
+    bitrate = source.get("Bitrate")
+    # bool est un int en Python : écarté, comme un débit nul ou négatif
+    if isinstance(bitrate, bool) or not isinstance(bitrate, int) or bitrate <= 0:
+        return None
+    return bitrate
+
+
 def source_info(details: dict[str, Any]) -> dict[str, Any]:
     """Extension du fichier et mode de lecture conseillé (direct ou remux).
 
@@ -373,6 +397,9 @@ def _found(item_id: str, details: dict[str, Any] | None, resume: dict[str, Any])
         "video_range": image["video_range"],
         "dovi_only": image["dovi_only"],
         "sdr_stream": sdr_path(item_id),
+        # Débit moyen du fichier (bit/s, None : inconnu) : la TV propose le
+        # 1080p (sdr_stream) quand il coupe sur un réseau trop lent
+        "bitrate": source_bitrate(details),
         "chapters": parse_chapters(item_id, details.get("Chapters")),
         # Aperçu en image quand on avance / recule (None : pas généré par Jellyfin)
         "trickplay": parse_trickplay(item_id, details.get("Trickplay")),
@@ -627,6 +654,9 @@ def hls_sdr_params(item_id: str) -> dict[str, str]:
     matérielle (Intel QSV / VAAPI, NVIDIA…) : sans elle, l'image resterait
     violette. 1080p : quatre fois moins de calcul que la 4K, conversion
     tenable en temps réel. Le son est copié tel quel quand c'est possible.
+
+    Sert aussi de qualité réduite choisie à la TV (menu pause › Qualité,
+    ADR-012) : 20 Mb/s passent sur un lien à 100 Mb/s ou en Wi-Fi.
     """
     return {
         **hls_master_params(item_id),

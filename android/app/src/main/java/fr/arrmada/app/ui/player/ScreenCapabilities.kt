@@ -24,6 +24,12 @@ object ScreenCapabilities {
     fun dolbyVision(context: Context): Boolean =
         Display.HdrCapabilities.HDR_TYPE_DOLBY_VISION in hdrTypes(context) && hasDolbyVisionDecoder()
 
+    /**
+     * Écran HDR10 : condition pour proposer le 1080p HDR (ADR-012) ; sinon
+     * la qualité réduite est le 1080p SDR.
+     */
+    fun hdr10(context: Context): Boolean = Display.HdrCapabilities.HDR_TYPE_HDR10 in hdrTypes(context)
+
     /** Libellé des Réglages : « HDR10 · HLG · Dolby Vision », ou « SDR… ». */
     fun label(context: Context): String =
         DolbyVisionLogic.screenLabel(hdrTypes(context).mapNotNull(NAMES::get), hasDolbyVisionDecoder())

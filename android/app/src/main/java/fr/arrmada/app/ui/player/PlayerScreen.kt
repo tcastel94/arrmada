@@ -85,6 +85,9 @@ import fr.arrmada.app.data.AmpDevice
 import fr.arrmada.app.data.SoundAdvisor
 import fr.arrmada.app.data.DolbyVisionLogic
 import fr.arrmada.app.data.PlayInfo
+import fr.arrmada.app.data.DefaultQuality
+import fr.arrmada.app.data.Quality
+import fr.arrmada.app.data.QualityLogic
 import fr.arrmada.app.data.RemoteCommand
 import fr.arrmada.app.data.ScrobbleCast
 import fr.arrmada.app.data.ScrobbleLogic
@@ -102,6 +105,7 @@ import fr.arrmada.app.data.Repository
 import fr.arrmada.app.data.SeriesDetail
 import fr.arrmada.app.data.SeriesLogic
 import fr.arrmada.app.data.WatchStateUpdate
+import fr.arrmada.app.ui.components.ArrButton
 import fr.arrmada.app.ui.components.ArtImage
 import fr.arrmada.app.ui.components.MessageScreen
 import fr.arrmada.app.ui.components.ProgressBar
@@ -336,8 +340,13 @@ private fun PlayerSurface(
     // lecture directe. On part alors d'emblée sur la conversion SDR de Jellyfin.
     val screenDolbyVision = remember { ScreenCapabilities.dolbyVision(context) }
     val sdrAtStart = remember { DolbyVisionLogic.startWithSdr(info, screenDolbyVision) }
-    // Flux lu (adresse, HLS ?) : change si l'on bascule en remux ou en SDR
-    val initialSource = if (sdrAtStart) info.sdrStream to true else info.stream to (info.mode == "remux")
+    // Qualité de départ (ADR-012) : le Dolby Vision profil 5 d'abord, puis le
+    // réglage de la TV (« 1080p » : Wi-Fi, câble lent…)
+    val screenHdr10 = remember { ScreenCapabilities.hdr10(context) }
+    val startQuality = remember { QualityLogic.initial(info, screenHdr10, screenDolbyVision, app.prefs.defaultQuality) }
+    val reducedQuality = remember { QualityLogic.reduced(info, screenHdr10) } // le « 1080p » proposé ici
+    // Flux lu (adresse, HLS ?) : change si l'on bascule en remux, en SDR ou en 1080p
+    val initialSource = QualityLogic.source(info, startQuality)
 
     // ── Création du lecteur (une fois) ──
     val player = remember {
@@ -425,8 +434,19 @@ private fun PlayerSurface(
     var duration by remember { mutableLongStateOf(info.duration * 1000L) }
     var tracks by remember { mutableStateOf(Tracks.EMPTY) }
     var playbackError by remember { mutableStateOf<String?>(null) }
-    var remuxed by remember { mutableStateOf(info.mode == "remux" || sdrAtStart) } // flux converti par Jellyfin
-    var toneMapped by remember { mutableStateOf(sdrAtStart) } // image convertie en SDR (Dolby Vision profil 5)
+    var remuxed by remember { mutableStateOf(info.mode == "remux" || startQuality != Quality.ORIGINAL) } // flux converti par Jellyfin
+    var toneMapped by remember { mutableStateOf(startQuality == Quality.HD_SDR) } // image convertie en SDR (DV profil 5, 1080p SDR)
+    // Qualité lue (menu pause › Qualité) ; « Original » : le direct, ou le remux
+    // si le direct a échoué ; le DV profil 5 a-t-il imposé le SDR sur cet écran ?
+    var quality by remember { mutableStateOf(startQuality) }
+    var originalSource by remember { mutableStateOf(QualityLogic.source(info, Quality.ORIGINAL)) }
+    var doviForcedSdr by remember { mutableStateOf(sdrAtStart) }
+    // Coupures en pleine lecture (ADR-012) : 3 en 5 min → proposer le 1080p
+    var readyOnce by remember { mutableStateOf(false) } // première image du flux en cours affichée
+    var lastSeekAt by remember { mutableLongStateOf(0L) } // dernier saut ou changement de flux
+    var rebuffers by remember { mutableStateOf(emptyList<Long>()) }
+    var qualityDeclined by remember { mutableStateOf(false) } // « Non merci » : plus de proposition
+    var qualityCard by remember { mutableStateOf<QualityCardKind?>(null) }
     var dolbyVisionWarned by remember { mutableStateOf(false) }
     var source by remember { mutableStateOf(initialSource) }
     // Sous-titres posés à côté du fichier (Bazarr…), complétés depuis le menu pause
@@ -535,8 +555,71 @@ private fun PlayerSurface(
     /** Recharge le flux [url] (remux, SDR, nouveaux sous-titres) à la position [at]. */
     fun load(url: String, hls: Boolean, at: Long) {
         source = url to hls
+        // Le nouveau flux remplit sa mémoire tampon : ce n'est pas une coupure
+        readyOnce = false
+        lastSeekAt = System.currentTimeMillis()
         player.setMediaItem(mediaItem(app.api.baseUrl + url, hls, sideSubtitles(sideSubs, app.api.baseUrl)), at)
         player.prepare()
+    }
+
+    /**
+     * Menu pause › Qualité, ou carte « Passer en 1080p ? » : même position,
+     * même état lecture / pause. Une conversion Jellyfin en cours est arrêtée
+     * AVANT de lancer le nouveau flux : remux, SDR et 1080p partagent la même
+     * session chez Jellyfin, l'arrêt après coup couperait aussi le nouveau.
+     */
+    fun setQuality(target: Quality) {
+        if (target == quality) return
+        val (url, hls) = if (target == Quality.ORIGINAL) originalSource else QualityLogic.source(info, target)
+        if (url.isBlank()) return
+        val at = player.currentPosition.takeIf { it > 0 } ?: (request.startSeconds * 1000L)
+        val wasPlaying = player.playWhenReady
+        val stopFirst = remuxed && info.itemId.isNotBlank()
+        quality = target
+        toneMapped = target == Quality.HD_SDR
+        remuxed = target != Quality.ORIGINAL || hls
+        rebuffers = emptyList()
+        Toast.makeText(context, QualityLogic.switchMessage(target), Toast.LENGTH_SHORT).show()
+        if (!stopFirst) {
+            load(url, hls, at)
+            player.playWhenReady = wasPlaying
+            return
+        }
+        player.stop() // plus aucune requête vers la conversion qu'on arrête
+        uiScope.launch {
+            runCatching { repository.stopRemux(info.itemId) }
+            load(url, hls, at)
+            player.playWhenReady = wasPlaying
+        }
+    }
+
+    /** Carte de qualité : OK / « Passer en 1080p » (ou « Oui » à la seconde question). */
+    fun acceptQualityCard() {
+        when (qualityCard) {
+            QualityCardKind.SUGGEST -> {
+                reducedQuality?.let(::setQuality)
+                // Une seule fois par TV : en faire le réglage par défaut ?
+                val ask = app.prefs.defaultQuality == DefaultQuality.ORIGINAL && !app.prefs.qualityAsked
+                qualityCard = if (ask) QualityCardKind.ALWAYS else null
+            }
+            QualityCardKind.ALWAYS -> {
+                app.prefs.defaultQuality = DefaultQuality.HD_1080
+                app.prefs.qualityAsked = true
+                qualityCard = null
+                Toast.makeText(context, "Cette TV lira en 1080p (modifiable dans Réglages)", Toast.LENGTH_LONG).show()
+            }
+            null -> Unit
+        }
+    }
+
+    /** Carte de qualité : Retour / « Non merci » (la proposition ne revient plus de la séance). */
+    fun declineQualityCard() {
+        when (qualityCard) {
+            QualityCardKind.SUGGEST -> qualityDeclined = true
+            QualityCardKind.ALWAYS -> app.prefs.qualityAsked = true
+            null -> Unit
+        }
+        qualityCard = null
     }
 
     // Menu pause → « Sous-titres FR » : film ou épisode de la médiathèque
@@ -629,7 +712,22 @@ private fun PlayerSurface(
     }
 
     LaunchedEffect(Unit) {
-        if (sdrAtStart) Toast.makeText(context, DV_SDR_MESSAGE, Toast.LENGTH_LONG).show()
+        if (sdrAtStart) {
+            Toast.makeText(context, DV_SDR_MESSAGE, Toast.LENGTH_LONG).show()
+        } else if (startQuality != Quality.ORIGINAL) {
+            // Réglage « 1080p » de la TV : on le dit, l'original reste au menu pause
+            Toast.makeText(context, QualityLogic.switchMessage(startQuality), Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // Carte de qualité : non bloquante, elle s'efface seule après 20 s (sans
+    // réponse : pas un refus, mais le compte des coupures repart de zéro)
+    LaunchedEffect(qualityCard) {
+        if (qualityCard == null) return@LaunchedEffect
+        delay(QUALITY_CARD_MS)
+        if (qualityCard == QualityCardKind.ALWAYS) app.prefs.qualityAsked = true
+        qualityCard = null
+        rebuffers = emptyList()
     }
 
     // Écran d'appoint (tablette sous la TV) : « lecture en cours » envoyée au
@@ -700,6 +798,8 @@ private fun PlayerSurface(
                 if (info.sdrStream.isNotBlank()) {
                     toneMapped = true
                     remuxed = true
+                    quality = Quality.HD_SDR
+                    doviForcedSdr = true
                     val at = player.currentPosition.takeIf { it > 0 } ?: (request.startSeconds * 1000L)
                     load(info.sdrStream, hls = true, at = at)
                     player.play()
@@ -717,6 +817,19 @@ private fun PlayerSurface(
 
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == Player.STATE_READY && player.duration > 0) duration = player.duration
+                if (state == Player.STATE_READY) readyOnce = true
+                // Attente de chargement en pleine lecture : le réseau suit-il le fichier ?
+                if (state == Player.STATE_BUFFERING) {
+                    val now = System.currentTimeMillis()
+                    if (QualityLogic.isRebuffer(player.playWhenReady, readyOnce, now, lastSeekAt)) {
+                        rebuffers = QualityLogic.record(rebuffers, now)
+                        if (qualityCard == null &&
+                            QualityLogic.shouldSuggest(rebuffers, now, quality, reducedQuality, qualityDeclined, info.bitrate)
+                        ) {
+                            qualityCard = QualityCardKind.SUGGEST
+                        }
+                    }
+                }
                 // Première image prête : la séance commence (une seule fois, même
                 // si l'on bascule ensuite en remux ou en SDR)
                 if (state == Player.STATE_READY && !scrobbleStarted) {
@@ -724,6 +837,13 @@ private fun PlayerSurface(
                     sendScrobble("play", false)
                 }
                 if (state == Player.STATE_ENDED) onEnded()
+            }
+
+            // Saut (avance rapide, chapitre, intro passée…) : l'attente qui suit n'est pas une coupure
+            override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
+                if (reason == Player.DISCONTINUITY_REASON_SEEK || reason == Player.DISCONTINUITY_REASON_SEEK_ADJUSTMENT) {
+                    lastSeekAt = System.currentTimeMillis()
+                }
             }
 
             // Pause / reprise demandées (et non les attentes de chargement)
@@ -753,6 +873,7 @@ private fun PlayerSurface(
                 // là où on en était
                 if (!remuxed && info.remuxStream.isNotBlank() && e.errorCode in REMUX_RETRY) {
                     remuxed = true
+                    originalSource = info.remuxStream to true // « Original » = ce remux désormais
                     val at = player.currentPosition.takeIf { it > 0 } ?: (request.startSeconds * 1000L)
                     load(info.remuxStream, hls = true, at = at)
                     player.play()
@@ -881,6 +1002,7 @@ private fun PlayerSurface(
     BackHandler {
         when {
             showUpNext -> upNextDismissed = true
+            qualityCard != null && !showMenu -> declineQualityCard()
             showMenu -> onExit()
             else -> pause()
         }
@@ -920,6 +1042,7 @@ private fun PlayerSurface(
                 if (showMenu || playbackError != null || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when {
                     ok && showUpNext -> { playNext(); true }
+                    ok && qualityCard != null -> { acceptQualityCard(); true }
                     ok && activeSkip != null -> { player.seekTo((activeSkip.end * 1000).toLong()); true }
                     else -> when (code) {
                         AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER,
@@ -1014,6 +1137,32 @@ private fun PlayerSurface(
             upNext?.let { UpNextCard(it, countdown, app.api::absolute) }
         }
 
+        // Carte « Le réseau ne suit pas ce fichier… Passer en 1080p ? » (ADR-012)
+        AnimatedVisibility(
+            visible = qualityCard != null && !showMenu && !showUpNext,
+            enter = fadeIn() + slideInHorizontally { it },
+            exit = fadeOut() + slideOutHorizontally { it },
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = gutter, bottom = 48.dp),
+        ) {
+            when (qualityCard) {
+                QualityCardKind.SUGGEST -> QualityCard(
+                    QualityLogic.suggestMessage(info.bitrate),
+                    accept = "Passer en 1080p",
+                    decline = "Non merci",
+                    onAccept = ::acceptQualityCard,
+                    onDecline = ::declineQualityCard,
+                )
+                QualityCardKind.ALWAYS -> QualityCard(
+                    "Toujours lire en 1080p sur cette TV ?",
+                    accept = "Oui, toujours",
+                    decline = "Non",
+                    onAccept = ::acceptQualityCard,
+                    onDecline = ::declineQualityCard,
+                )
+                null -> Unit
+            }
+        }
+
         // Menu pause façon Apple TV
         AnimatedVisibility(visible = showMenu, enter = fadeIn(), exit = fadeOut()) {
             PauseMenu(
@@ -1047,6 +1196,22 @@ private fun PlayerSurface(
                     onShift = ::shiftSubtitles,
                     shiftMs = subtitleShiftMs,
                 ),
+                quality = QualityChoice(
+                    options = QualityLogic.options(
+                        info,
+                        screenHdr10,
+                        // Format de l'original : la piste lue si c'est lui, sinon la fiche du titre
+                        originalFormat = ScrobbleLogic.videoLabel(
+                            selectedVideoFormat(tracks)?.height?.takeIf { quality == Quality.ORIGINAL },
+                            techBadges(meta?.file),
+                            info.videoRange,
+                            toneMapped = false,
+                        ),
+                        doviForcedSdr = doviForcedSdr,
+                    ),
+                    current = quality,
+                    onSelect = ::setQuality,
+                ),
             )
         }
 
@@ -1076,6 +1241,45 @@ fun SkipButton(label: String) {
     ) {
         Text(label, style = MaterialTheme.typography.titleMedium, color = ArrColors.Night)
         Text("OK", style = MaterialTheme.typography.labelSmall, color = ArrColors.Night.copy(alpha = 0.7f))
+    }
+}
+
+/** Carte de qualité : proposition du 1080p, puis « Toujours lire en 1080p ? ». */
+private enum class QualityCardKind { SUGGEST, ALWAYS }
+
+/** La carte de qualité s'efface seule au bout de 20 s. */
+private const val QUALITY_CARD_MS = 20_000L
+
+/**
+ * Carte non bloquante façon « Épisode suivant » : à la télécommande, OK
+ * accepte et Retour refuse (le focus reste sur le lecteur) ; au doigt, les
+ * deux boutons.
+ */
+@Composable
+private fun QualityCard(message: String, accept: String, decline: String, onAccept: () -> Unit, onDecline: () -> Unit) {
+    val touch = LocalScreen.current.isTouch
+    Column(
+        Modifier
+            .widthIn(max = 420.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(ArrColors.CardDeep.copy(alpha = 0.96f))
+            .padding(16.dp),
+    ) {
+        Text("Qualité de lecture", style = MaterialTheme.typography.labelLarge, color = ArrColors.AccentText)
+        Text(message, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 4.dp))
+        if (touch) {
+            Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ArrButton(accept, onAccept, primary = true)
+                ArrButton(decline, onDecline)
+            }
+        } else {
+            Text(
+                "OK : $accept  ·  Retour : $decline",
+                style = MaterialTheme.typography.labelSmall,
+                color = ArrColors.TextSecondary,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
     }
 }
 
