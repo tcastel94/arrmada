@@ -36,7 +36,8 @@ S'y ajoutent :
 
 > **Synology** : crée d'abord les dossiers partagés `docker` et `data`
 > (Panneau de configuration → Dossier partagé). Un dossier créé en ligne de
-> commande n'apparaît pas dans File Station, et le script te prévient.
+> commande n'apparaît pas dans File Station, et le script te prévient. Tout
+> le détail est dans la section [Synology](#synology-dsm-72) ci-dessous.
 
 ## Ce que fait le script
 
@@ -92,6 +93,170 @@ S'y ajoutent :
    - **Prowlarr** : tes indexeurs (ils sont ensuite poussés automatiquement).
    - **SABnzbd** : ton fournisseur Usenet.
    - **Sonarr / Radarr** : la méthode d'authentification, au premier accès.
+
+## Synology (DSM 7.2+)
+
+Retour d'une installation réelle (DS1618+, DSM 7.2, Container Manager). Les
+points sont dans l'ordre où ils se posent.
+
+### 1. Les dossiers partagés `docker` et `data`, avant tout
+
+*Panneau de configuration › Dossier partagé › Créer*, sur le volume choisi :
+
+| Dossier partagé | Contenu | Réglages |
+|---|---|---|
+| `docker` | configs des applis (`/volume1/docker/<appli>`) | par défaut |
+| `data` | `media/`, `torrents/`, `usenet/` (arborescence TRaSH) | **corbeille désactivée**, ton utilisateur en lecture / écriture |
+
+Pourquoi c'est la première étape :
+
+- un dossier créé en ligne de commande (`mkdir /volume1/data`) **n'est pas un
+  dossier partagé DSM** : `drwx------`, sans ACL (pas de `+` dans `ls -l`),
+  invisible dans File Station **et en SMB**. Kodi ne peut alors ni parcourir
+  ni scanner les films ;
+- les imports par **hardlink** (instantanés, sans doubler l'espace disque)
+  exigent que téléchargements et médias soient dans le **même** dossier
+  partagé : c'est le rôle de `data`, monté tel quel en `/data` dans chaque
+  conteneur ;
+- la corbeille d'un dossier partagé garde chaque fichier supprimé par
+  Radarr / Sonarr (remplacement d'une release) : désactivée, elle ne remplit
+  pas le disque en silence.
+
+`install.sh` le vérifie : il s'arrête si le dossier manque et prévient si
+`synoshare --get` ne le reconnaît pas comme dossier partagé.
+
+**Rattraper un `data` créé à la main** (constaté : 30 min, mieux vaut
+l'éviter) :
+
+**A.** Arrêter la pile et mettre l'ancien dossier de côté :
+
+```bash
+sudo -i                 # shell root : mot de passe demandé une fois, AVANT le collage
+cd /volume1/docker/arrmada && ./compose.sh stop
+mv /volume1/data /volume1/data_old
+```
+
+**B.** Dans DSM : *Panneau de configuration › Dossier partagé › Créer*
+`data` (même volume, corbeille désactivée, ton utilisateur en lecture /
+écriture). Ne colle pas la suite avant que le dossier existe.
+
+**C.** Remettre les fichiers, leurs droits et les ACL, puis redémarrer :
+
+```bash
+mv /volume1/data_old/* /volume1/data/ && rmdir /volume1/data_old
+chown -R 1034:100 /volume1/data/{media,torrents,usenet}       # ← ton PUID:PGID
+chmod -R u=rwX,g=rwX,o=rX /volume1/data/{media,torrents,usenet}
+# Les ACL du nouveau dossier partagé doivent descendre sur les fichiers déplacés :
+find /volume1/data/{media,torrents,usenet} -exec synoacltool -enforce-inherit {} \;
+cd /volume1/docker/arrmada && ./compose.sh start
+exit
+```
+
+Pourquoi `sudo -i` plutôt que `sudo` devant chaque ligne : sous `sudo`, DSM
+retire `/usr/syno/bin` et `/usr/syno/sbin` du `PATH`, et `synoacltool` devient
+« command not found ».
+
+> ⚠️ `synoacltool -enforce-inherit /volume1/data` seul **n'est pas récursif** :
+> il ne traite que le dossier nommé. D'où le `find … -exec`, qui l'applique à
+> chaque fichier et sous-dossier (comme un `chmod -R` fait à la main).
+
+### 2. PUID / PGID
+
+Les conteneurs écrivent avec l'identité donnée par `PUID` / `PGID`. Sur
+Synology : ton utilisateur DSM, groupe `users` (100).
+
+```bash
+id ton-utilisateur      # ex. uid=1034(papa) gid=100(users) → PUID=1034 PGID=100
+```
+
+`install.sh` le détecte (utilisateur qui lance `sudo`), à vérifier quand il
+tourne depuis le Planificateur de tâches (root).
+
+### 3. `sudo -v` avant de coller un bloc de commandes
+
+Collé d'un seul bloc, un *heredoc* (`cat <<EOF … EOF`) précédé de `sudo` est
+**avalé par l'invite du mot de passe** : la première ligne devient le mot de
+passe, le reste part dans le vide. Toujours commencer par `sudo -v` (saisie
+du mot de passe seule, valable quelques minutes), puis coller le bloc. Pour
+une série de commandes d'administration, `sudo -i` (shell root) évite aussi
+le piège du `PATH` de DSM (§ 1).
+
+### 4. Projet Compose et réseau : `arrmada-stack`
+
+La pile générée fixe `name: arrmada-stack` : le réseau s'appelle
+`arrmada-stack_default` quel que soit le dossier (`/volume1/docker/arrmada`).
+
+- Gère la pile avec `compose.sh` (généré à côté), ou toujours avec
+  `docker compose -p arrmada-stack …`. Sans `-p`, Compose prendrait le nom
+  du dossier (`arrmada`) et voudrait recréer des conteneurs portant les mêmes
+  `container_name` : conflit.
+- Un service ajouté à la main (FlareSolverr…) rejoint ce réseau en étant
+  déclaré **dans le même fichier** (exemple commenté dans le compose généré).
+
+### 5. Hairpin : les conteneurs ne joignent pas l'IP du NAS
+
+Sur Synology, un conteneur placé sur un réseau *bridge* (le cas d'un projet
+Compose) **ne peut pas joindre l'IP LAN de son propre NAS** (`192.168.1.49`) :
+le pare-feu de DSM ne fait pas de *hairpin NAT*, et désactiver le pare-feu
+n'y change rien. Analogie : appeler son propre numéro depuis le standard de
+l'immeuble.
+
+Ce qui marche : les **noms Docker** (`http://radarr:7878`), résolus par le
+DNS du réseau `arrmada-stack_default`.
+
+- L'auto-configuration d'ArrMada les préfère quand ils répondent (ADR-011) ;
+- *Paramètres › Services › Tester* sur un service enregistré avec l'IP du NAS
+  propose **« Utiliser http://radarr:7878 »** ;
+- message « Délai dépassé » = hairpin ; « Connexion refusée » = l'appli ne
+  tourne pas ou n'écoute pas sur ce port ; « refuse la clé API » = clé.
+- Juste après `docker compose up`, une appli peut répondre « en cours de
+  démarrage » : la détection réessaie toute seule quelques secondes.
+
+**Pare-feu DSM (optionnel)** : s'il est activé avec une règle « tout refuser »,
+ajoute *Panneau de configuration › Sécurité › Pare-feu › Modifier les règles
+› Créer* : **Autoriser**, source **172.16.0.0/12** (réseaux Docker), tous les
+ports. Il n'était pas en cause dans l'installation de référence, mais c'est
+la cause habituelle d'un « délai dépassé » entre conteneurs quand le pare-feu
+filtre tout.
+
+### 6. Kodi : ajouter les sources des médias
+
+La lecture depuis ArrMada passe par la **médiathèque Kodi** de la TV : le
+titre y est cherché par son identifiant TMDB. Sur chaque TV :
+*Vidéos › Fichiers › Ajouter des vidéos* :
+
+| Source | Contenu | Scraper | Langue |
+|---|---|---|---|
+| `smb://192.168.1.49/data/media/movies` | Films | The Movie Database | fr-FR |
+| `smb://192.168.1.49/data/media/tv` | Séries TV | The Movie Database | fr-FR |
+
+Identifiants SMB : un utilisateur DSM qui a au moins la **lecture** sur `data`.
+Depuis l'appli Kodi 1.25.1, « Lire » sur un titre absent de la médiathèque
+indique la source exacte à ajouter (ou « Pas encore sur le NAS » si Radarr /
+Sonarr n'ont pas encore le fichier).
+
+### 7. Dossiers vidéo (mangas, vidéos perso)
+
+Le chemin à déclarer dans *Paramètres › Dossiers vidéo* est celui **vu depuis
+le conteneur**, pas celui du NAS. Ce qui est sous `data` se déclare tel quel
+(`/data/media/mangas`). Un autre dossier partagé se monte d'abord dans le
+service `arrmada` du compose, en lecture seule :
+
+```yaml
+    volumes:
+      - /volume1/mangas:/mnt/user/mangas:ro
+```
+
+puis `sudo ./compose.sh up -d arrmada` (depuis `/volume1/docker/arrmada`) et
+déclaration de `/mnt/user/mangas`.
+ArrMada donne cette ligne toute prête quand on saisit `/volume1/mangas`.
+
+### 8. FlareSolverr (indexeurs protégés par Cloudflare)
+
+Exemple commenté dans le compose généré : décommente-le, puis
+`sudo ./compose.sh up -d flaresolverr`. Dans Prowlarr : *Settings › Indexers ›
+➕ › FlareSolverr*, hôte `http://flaresolverr:8191/`, un tag (ex.
+`flaresolverr`), puis ce même tag sur chaque indexeur qui en a besoin.
 
 ## Relancer, mettre à jour, désinstaller
 

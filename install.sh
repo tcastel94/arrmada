@@ -403,6 +403,20 @@ stack_owns() {
     [ "$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project"}}' "$1" 2>/dev/null)" = "arrmada-stack" ]
 }
 
+# Dossier partagé DSM ? (Panneau de configuration → Dossier partagé)
+# synoshare est dans /usr/syno/sbin, retiré du PATH par sudo sur DSM. Son
+# code retour n'est pas documenté par Synology : sans l'outil, ou s'il ne
+# répond pas, on ne conclut rien (vrai) — ce test ne sert qu'à prévenir.
+is_dsm_share() {
+    local bin
+    for bin in /usr/syno/sbin/synoshare /usr/syno/bin/synoshare "$(command -v synoshare 2>/dev/null || true)"; do
+        if [ -z "$bin" ] || [ ! -x "$bin" ]; then continue; fi
+        "$bin" --get "$1" >/dev/null 2>&1
+        return
+    done
+    return 0
+}
+
 choose_paths() {
     title "Emplacements (${PLATFORM_LABEL})"
     CONFIG_ROOT="$(ask "Configs des applis (appdata)" "$CONFIG_ROOT")"
@@ -421,6 +435,11 @@ choose_paths() {
             if [ ! -d "$share" ]; then
                 warn "Crée d'abord le dossier partagé « $(basename "$share") » : Panneau de configuration → Dossier partagé."
                 ask_yn "Continuer quand même ?" "n" || die "Annulé : crée le dossier partagé puis relance." "$E_CONFIG"
+            elif ! is_dsm_share "$(basename "$share")"; then
+                # Dossier présent mais créé en ligne de commande (constaté : « data »
+                # en drwx------, sans ACL) : invisible en SMB, donc pour Kodi.
+                warn "« ${share} » existe mais n'est pas un dossier partagé DSM : invisible dans File Station et en SMB (Kodi)."
+                warn "Correction : docs/installer.md, section Synology, « Rattraper un data créé à la main »."
             fi
         done
     fi
@@ -880,6 +899,21 @@ EOF
                     ;;
             esac
         done
+        cat <<EOF
+
+  # FlareSolverr (optionnel) : indexeurs protégés par Cloudflare. Décommente,
+  # puis « compose.sh up -d flaresolverr ». Même projet que les autres applis,
+  # donc même réseau : Prowlarr le joint par http://flaresolverr:8191/
+  # (Settings › Indexers › + › FlareSolverr, avec un tag mis aussi sur les
+  # indexeurs concernés).
+  # flaresolverr:
+  #   image: ghcr.io/flaresolverr/flaresolverr:latest
+  #   container_name: flaresolverr
+  #   restart: unless-stopped
+  #   environment:
+  #     - TZ=${TZ_VALUE}
+  #     - LOG_LEVEL=info
+EOF
     } | write_file "$file" 644
     ok "${file}"
     write_compose_wrapper

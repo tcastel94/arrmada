@@ -41,6 +41,12 @@ services:
       # Optionnel : accès aux fichiers médias (nettoyage, doublons, artworks
       # des dossiers, auto-import…).
       # - /chemin/vers/medias:/mnt/user:rw
+      # Synology (dossier partagé « data » créé dans DSM, arborescence TRaSH) :
+      # - /volume1/data:/data
+      # Écran « Vidéos » : un autre dossier du NAS, monté en lecture seule SOUS
+      # VIDEO_ALLOWED_BASE (ci-dessous), puis déclaré dans Paramètres › Dossiers
+      # vidéo avec le chemin de DROITE (/mnt/user/mangas) :
+      # - /volume1/mangas:/mnt/user/mangas:ro
       # Optionnel : logs des conteneurs pour l'analyse IA. ⚠️ Le socket Docker
       # donne le contrôle de tous les conteneurs de la machine.
       # - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -118,3 +124,27 @@ services:
       - PORT=${EUFY_WS_PORT:-8424}
     volumes:
       - ./data/eufy:/data
+
+  # ── FlareSolverr (optionnel) ────────────────────────────────
+  # Indexeurs protégés par Cloudflare. À placer sur le MÊME réseau que
+  # Prowlarr (voir « networks » ci-dessous), qui le joint alors par
+  # http://flaresolverr:8191/ (Settings › Indexers › + › FlareSolverr, avec un
+  # tag mis aussi sur les indexeurs concernés).
+  # flaresolverr:
+  #   image: ghcr.io/flaresolverr/flaresolverr:latest
+  #   container_name: flaresolverr
+  #   restart: unless-stopped
+  #   environment:
+  #     - TZ=${TZ:-Europe/Paris}
+  #     - LOG_LEVEL=info
+
+# ── Réseau des autres applis (Synology surtout) ─────────────────
+# Sur Synology, un conteneur ne peut pas joindre l'IP du NAS lui-même
+# (hairpin NAT) : ArrMada doit parler à Sonarr, Radarr… par leur NOM Docker
+# (http://radarr:7878), donc être sur LEUR réseau. Si tes applis tournent dans
+# un autre projet Compose (ex. la pile d'install.sh, réseau
+# « arrmada-stack_default » — `docker network ls` pour le nom exact) :
+# networks:
+#   default:
+#     name: arrmada-stack_default
+#     external: true
