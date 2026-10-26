@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Plus d'IP du mainteneur dans l'appli Kodi : « Serveur ArrMada non configuré » (appli Kodi 1.25.1)
+
+#### Fixed
+- **Une TV pas encore configurée interrogeait `192.168.2.3:8420`**, l'IP du réseau du mainteneur, puis l'enregistrait dans ses réglages : sur une nouvelle installation (Synology chez quelqu'un d'autre), erreur de connexion vers une machine qui n'existe pas, et adresse fantôme gardée. `ArrMadaAPI.get_config()` n'invente plus d'adresse : vide, `127.0.0.1` ou `localhost` = **non configuré**, aucun appel réseau, et la réponse d'erreur porte `reason: "not_configured"`
+- Le réglage « URL du serveur ArrMada » n'a plus de valeur par défaut (`resources/settings.xml`), l'exemple des réglages devient `http://192.168.1.10:8420`
+
+#### Added
+- **« Serveur ArrMada non configuré »** à l'écran au lieu de « ArrMada est injoignable » (accueil, listes, grille, tableau de bord : `home_data.describe_error`), avec quoi faire : Réglages de l'accueil, puis « Trouver le serveur ArrMada »
+- **Trouver le serveur** (`lib/server_setup.py`, logique pure dans `lib/server_data.py`) : **recherche sur le réseau** (chaque adresse du /24 de la TV sur le port 8420, `/api/health` doit répondre `service: "arrmada"`, 32 essais en parallèle, 0,8 s maxi chacun, annulable) ou **saisie de l'adresse** (vérifiée, enregistrable même si le serveur ne répond pas). Proposé tout seul avant l'appairage quand aucune adresse n'est réglée : une TV neuve passe de l'accueil à la recherche, puis au code d'appairage. Aussi dans Réglages de l'accueil (« Trouver le serveur ArrMada » / « Changer de serveur (…) », suivi de l'appairage) et `plugin://script.arrmada/?action=server`
+- Tests : 41 tests add-on, dont 38 dans `tests/test_server_data.py` (adresse vide ou vers la TV, adresses configurées gardées telles quelles, 3420 → 8420 sur le port seulement, reprise de l'adresse de l'appairage, balayage du /24, réponse de `/api/health`, aucun défaut ni IP privée en dur) ; les 3 autres : écran d'erreur, entrée de Réglages, ouverture automatique sans serveur
+
+#### Changed
+- **TV déjà configurée : rien ne change**, son `server_url` est utilisé tel quel (même normalisation, port 3420 converti en 8420). Une TV appairée dont le réglage était resté à l'ancienne valeur par défaut retrouve l'adresse de son appairage (`device.json`), qui est alors écrite dans les réglages
+- Ouverture automatique de l'appairage sur l'accueil : aussi quand la TV a encore l'ancien mot de passe mais aucune adresse (le service ne peut pas l'appairer sans serveur)
+
 ### Dossiers vidéo : chemin du NAS expliqué (retour d'installation Synology, lot 4)
 
 #### Fixed

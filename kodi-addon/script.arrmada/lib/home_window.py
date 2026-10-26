@@ -96,7 +96,7 @@ class HomeWindow(xbmcgui.WindowXML):
         self.setProperty("icon", ui.ADDON.getAddonInfo("icon"))
         self.setProperty("version", ui.ADDON.getAddonInfo("version"))
         self.setProperty("skin", xbmc.getSkinDir())
-        self.setProperty("server_url", ArrMadaAPI.get_config()["url"])
+        self.setProperty("server_url", ArrMadaAPI.get_config()["url"] or "non configurée")
         self.setProperty("greeting", home_data.greeting(datetime.now().hour))
         self.setProperty("device_label", _device_label())
 

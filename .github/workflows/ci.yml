@@ -166,6 +166,7 @@ jobs:
           FILES="$FILES $LIB/board_data.py $LIB/unstick_window.py"
           FILES="$FILES $LIB/ready_data.py $LIB/ready_window.py"
           FILES="$FILES $LIB/toast_data.py $LIB/toast.py"
+          FILES="$FILES $LIB/server_data.py $LIB/server_setup.py"
           FILES="$FILES kodi-addon/tests kodi-addon/tools"
           ruff check $FILES
           ruff format --check $FILES

@@ -23,6 +23,8 @@ import tempfile
 from datetime import datetime, timezone
 from typing import Any
 
+import server_data
+
 # Version du format du cache : à incrémenter si la structure du modèle change,
 # pour ignorer proprement un ancien cache au lieu de planter à l'affichage.
 CACHE_VERSION = 3
@@ -63,12 +65,29 @@ ERROR_DOWN = {
 }
 
 
+# Aucune adresse réglée (1.25.1) : ni panne, ni refus, la TV ne sait pas
+# encore où est le serveur (lib/server_data.py).
+ERROR_UNCONFIGURED = {
+    "title": server_data.NOT_CONFIGURED_TITLE,
+    "short": "Serveur non configuré",
+    "action": "Réglages de l'accueil ArrMada, puis « Trouver le serveur ArrMada »",
+    "hint": (
+        "Cette TV ne connaît pas encore l'adresse du serveur. Réglages de l'accueil "
+        "ArrMada, puis « Trouver le serveur ArrMada » : recherche sur ton réseau ou "
+        "saisie de l'adresse (port 8420), puis appairage de la TV."
+    ),
+}
+
+
 def describe_error(response: Any) -> dict[str, str]:
     """Titre, résumé, action et conseil de l'écran d'erreur, selon la réponse de l'API.
 
     `response` : le {"status": "error", "message": …, "code": …} renvoyé par
-    lib/api.py (`code` présent seulement quand le serveur a répondu).
+    lib/api.py (`code` présent seulement quand le serveur a répondu ;
+    `reason` = « not_configured » quand aucune adresse n'est réglée).
     """
+    if server_data.is_not_configured(response):
+        return dict(ERROR_UNCONFIGURED)
     code = response.get("code") if isinstance(response, dict) else None
     return dict(ERROR_AUTH if code in (401, 403) else ERROR_DOWN)
 

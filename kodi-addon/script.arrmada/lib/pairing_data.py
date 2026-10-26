@@ -59,7 +59,7 @@ def fmt_countdown(seconds: float) -> str:
 
 
 def web_hint(verification_url: str) -> str:
-    """Adresse à taper sans le code : « http://192.168.2.3:3420/settings/kodi »."""
+    """Adresse à taper sans le code : « http://192.168.1.10:3420/settings/kodi »."""
     return (verification_url or "").split("?")[0]
 
 
@@ -101,22 +101,34 @@ def has_amp(info: Mapping[str, Any]) -> bool:
     return str((info or {}).get("room") or "").lower() != "bureau"
 
 
-def should_offer(paired: bool, legacy_password: bool, already_asked: bool) -> bool:
+def should_offer(
+    paired: bool, legacy_password: bool, already_asked: bool, configured: bool = True
+) -> bool:
     """Ouvrir l'appairage tout seul à l'arrivée sur l'accueil ArrMada ?
 
     Seulement si la TV n'est pas appairée, n'a pas d'ancien mot de passe
     (le service l'appaire alors tout seul) et une fois par session de Kodi
     (Retour ferme l'écran d'appairage : on ne le rouvre pas en boucle).
+    Serveur non configuré (1.25.1) : proposé même avec un ancien mot de passe,
+    le service ne peut pas l'appairer sans adresse ; l'écran d'appairage
+    commence alors par « Trouver le serveur ArrMada ».
     """
+    if not configured:
+        return not already_asked
     return not paired and not legacy_password and not already_asked
 
 
-def settings_choices(info: Mapping[str, Any]) -> List[Tuple[str, str]]:
-    """Menu « Réglages » de l'accueil : (clé, libellé)."""
+def settings_choices(info: Mapping[str, Any], server_url: str = "") -> List[Tuple[str, str]]:
+    """Menu « Réglages » de l'accueil : (clé, libellé).
+
+    `server_url` : adresse utilisée (« » = serveur non configuré).
+    """
     summary = device_summary(dict(info or {})) if (info or {}).get("token") else ""
     pair = f"Refaire l'appairage ({summary})" if summary else "Appairer cette TV"
+    server = f"Changer de serveur ({server_url})" if server_url else "Trouver le serveur ArrMada"
     return [
         ("pair", pair),
+        ("server", server),
         ("addon", "Paramètres de l'add-on"),
         ("kodi", "Réglages de Kodi"),
     ]

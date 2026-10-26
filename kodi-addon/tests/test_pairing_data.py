@@ -93,9 +93,18 @@ class TestOffice:
         # Déjà proposé dans cette session de Kodi : Retour l'a fermé, on n'insiste pas
         assert not pd.should_offer(paired=False, legacy_password=False, already_asked=True)
 
+    def test_should_offer_when_the_server_is_not_configured(self) -> None:
+        """Sans adresse, le service ne peut rien appairer : on propose quand même, une fois."""
+        assert pd.should_offer(
+            paired=False, legacy_password=True, already_asked=False, configured=False
+        )
+        assert not pd.should_offer(
+            paired=False, legacy_password=True, already_asked=True, configured=False
+        )
+
     def test_settings_choices(self) -> None:
         keys = [key for key, _ in pd.settings_choices({})]
-        assert keys == ["pair", "addon", "kodi"]
+        assert keys == ["pair", "server", "addon", "kodi"]
         assert pd.settings_choices({})[0][1] == "Appairer cette TV"
         # Sans jeton, la description ne compte pas : la TV n'est pas appairée
         assert (
@@ -103,6 +112,14 @@ class TestOffice:
         )
         paired = {"token": "x", "name": "TV Sony", "room": "bureau", "avr_name": ""}
         assert pd.settings_choices(paired)[0] == ("pair", "Refaire l'appairage (TV Sony · Bureau)")
+
+    def test_settings_choices_server_entry(self) -> None:
+        """Serveur non configuré : « Trouver » ; configuré : son adresse est rappelée."""
+        assert dict(pd.settings_choices({}))["server"] == "Trouver le serveur ArrMada"
+        assert (
+            dict(pd.settings_choices({}, "http://nas:8420"))["server"]
+            == "Changer de serveur (http://nas:8420)"
+        )
 
 
 class TestMigration:

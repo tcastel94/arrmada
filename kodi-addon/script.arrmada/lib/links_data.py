@@ -93,6 +93,7 @@ WINDOW_ACTIONS = frozenset(
         "queue",
         "salon",
         "pair",
+        "server",
         "search_input",
         "qr",
         "settings",
