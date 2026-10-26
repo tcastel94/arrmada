@@ -221,6 +221,7 @@ async def build_inventory(
     known_hosts = lan_first([h for h in (host_of(a.url or "") for a in apps) if h])
 
     configs = scan_appdata(settings.APPDATA_DIR)
+    todo: list[FoundConfig] = []
     for cfg in configs:
         # Already registered (same type + same key)? Enrich, don't duplicate.
         twin = next(
@@ -229,6 +230,9 @@ async def build_inventory(
         )
         if twin:
             twin.config_path = cfg.source
+            continue
+        # Same key as a config found just before (copy of the same app): keep one.
+        if any(t.type == cfg.type and cfg.api_key and t.api_key == cfg.api_key for t in todo):
             continue
         creds = credentials.get(cfg.type, {})
         if cfg.type in ("deluge", "qbittorrent") and creds.get("password"):
@@ -239,9 +243,17 @@ async def build_inventory(
             else:
                 cfg.password = creds["password"]
                 cfg.username = creds.get("username") or cfg.username
-        endpoint = await locate(
-            cfg, user_hosts=user_hosts, known_hosts=known_hosts, password=cfg.password
+        todo.append(cfg)
+
+    # Toutes les applis sondées EN MÊME TEMPS : une appli qui démarre est
+    # réessayée quelques secondes (voir probe.locate), sans retarder les autres.
+    endpoints = await asyncio.gather(
+        *(
+            locate(cfg, user_hosts=user_hosts, known_hosts=known_hosts, password=cfg.password)
+            for cfg in todo
         )
+    )
+    for cfg, endpoint in zip(todo, endpoints, strict=True):
         app = _from_config(cfg, endpoint.urls, endpoint.version, endpoint.error)
         if endpoint.password_ok is True and cfg.type == "qbittorrent" and not app.password:
             app.needs_password = False  # subnet whitelisted: no login required

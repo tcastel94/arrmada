@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Détection et santé des services (retour d'installation Synology, lot 3)
+
+#### Fixed
+- **Synology : les applis étaient enregistrées avec l'IP du NAS**, injoignable depuis un conteneur sur un réseau Docker *bridge* (hairpin NAT du pare-feu DSM). Quand ArrMada partage le réseau Docker des applis, leur **nom Docker** (`http://radarr:7878`) passe désormais en premier ; l'IP du LAN reste l'adresse retenue quand le nom ne répond pas (applis hors Docker, autre machine) (ADR-011)
+- **Fini le « Injoignable » générique** : chaque essai est classé et la détection dit ce qui ne va pas — clé API refusée (401/403), application en cours de démarrage (503), autre application sur ce port, connexion refusée, délai dépassé (avec le conseil Synology), nom inconnu — suivi du détail par adresse essayée (« 192.168.1.49 (délai dépassé), radarr (clé API refusée)… »). Un port fermé était classé « erreur réseau » : avec httpx 0.28 / anyio 4, la vraie cause n'est que dans la chaîne des exceptions, désormais remontée
+- **`/ping` testé avant l'appel authentifié** (Sonarr, Radarr, Prowlarr, Lidarr, Readarr, Whisparr) : il répond sans clé, ce qui sépare « l'appli ne répond pas » de « l'appli refuse la clé »
+
+#### Added
+- **Nouvel essai au démarrage** : une appli qui démarre (503, ou connexion refusée alors que son nom de conteneur se résout) est réessayée après 3 s puis 6 s ; les applis sont désormais sondées **en parallèle**, une appli lente ne retarde plus les autres
+- **« Tester » propose la bonne adresse** (Paramètres › Services) : si l'URL enregistrée échoue mais que l'appli répond sur son nom Docker (type ou nom du service, même port, même clé), la carte affiche la cause et un bouton « Utiliser http://radarr:7878 » qui met l'URL à jour puis re-teste. Même proposition dans le formulaire, avant d'enregistrer. `POST /api/services/{id}/test` et `POST /api/services/test` renvoient `diagnosis` et `suggested_url`
+- Tests : 29 tests backend (`tests/test_utils/test_stack_probe.py`) sur un faux réseau reproduisant les réponses réelles de Radarr / Sonarr / Prowlarr et la vraie forme des exceptions httpx, plus un vrai port fermé ; test Playwright du diagnostic sur la carte et dans le formulaire
+
 ### « Appliquer TRaSH » complet (retour d'installation Synology, lot 2)
 
 #### Fixed

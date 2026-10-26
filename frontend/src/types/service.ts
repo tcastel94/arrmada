@@ -76,6 +76,10 @@ export interface TestConnectionResult {
     latency_ms: number | null;
     version: string | null;
     error: string | null;
+    /** Hors ligne : cause en français (délai dépassé, connexion refusée, clé refusée…). */
+    diagnosis?: string | null;
+    /** L'appli répond sur son nom Docker : URL à utiliser à la place (ex. http://radarr:7878). */
+    suggested_url?: string | null;
 }
 
 /**

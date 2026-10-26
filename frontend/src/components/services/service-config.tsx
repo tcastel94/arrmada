@@ -15,7 +15,7 @@
  */
 import { useState, type FormEvent } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { CheckCircle2, KeyRound, Loader2, Plus, Save, XCircle, Zap } from "lucide-react";
+import { CheckCircle2, KeyRound, Loader2, Plus, Save, Wand2, XCircle, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -307,7 +307,15 @@ function ServiceForm({
                         className="overflow-hidden"
                         aria-live="polite"
                     >
-                        <TestBanner pending={test.isPending} result={testResult} label={visual.label} />
+                        <TestBanner
+                            pending={test.isPending}
+                            result={testResult}
+                            label={visual.label}
+                            onUseUrl={(next) => {
+                                setUrl(next);
+                                setTestResult(null);
+                            }}
+                        />
                     </motion.div>
                 )}
             </AnimatePresence>
@@ -354,10 +362,13 @@ function TestBanner({
     pending,
     result,
     label,
+    onUseUrl,
 }: {
     pending: boolean;
     result: TestConnectionResult | null;
     label: string;
+    /** Remplit le champ URL avec l'adresse proposée (nom Docker qui répond). */
+    onUseUrl: (url: string) => void;
 }) {
     if (pending) {
         return (
@@ -382,11 +393,26 @@ function TestBanner({
         );
     }
     return (
-        <div className="flex items-start gap-2.5 rounded-xl border border-destructive/25 bg-destructive/10 px-3.5 py-2.5 text-sm text-destructive">
-            <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
-            <span className="min-w-0 break-words">
-                Échec de la connexion{result.error ? ` : ${result.error}` : "."}
-            </span>
+        <div className="flex flex-col gap-2 rounded-xl border border-destructive/25 bg-destructive/10 px-3.5 py-2.5 text-sm text-destructive">
+            <div className="flex items-start gap-2.5">
+                <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                {/* Le diagnostic (en français, avec la cause) passe avant l'erreur brute */}
+                <span className="min-w-0 break-words">
+                    Échec de la connexion
+                    {result.diagnosis ? ` : ${result.diagnosis}` : result.error ? ` : ${result.error}` : "."}
+                </span>
+            </div>
+            {result.suggested_url && (
+                <div className="flex flex-wrap items-center gap-2 pl-[26px] text-xs">
+                    <span>
+                        {label} répond sur <span className="font-mono">{result.suggested_url}</span>.
+                    </span>
+                    <Button type="button" size="sm" variant="outline" onClick={() => onUseUrl(result.suggested_url!)}>
+                        <Wand2 />
+                        Utiliser cette adresse
+                    </Button>
+                </div>
+            )}
         </div>
     );
 }
