@@ -125,6 +125,10 @@ def _clean_name(value: object) -> str:
 def _checked_path(value: object) -> str:
     try:
         return video_files.check_root_path(str(value or ""))
+    except video_files.RootPathError as exc:
+        # {message, volume_line, container_path} : la web app affiche la ligne
+        # de volume à ajouter et propose le chemin à saisir ensuite
+        raise HTTPException(status_code=422, detail=exc.as_detail()) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -134,7 +138,8 @@ async def list_roots(db: AsyncSession = Depends(get_db)) -> dict:
     rows = (
         await db.execute(select(VideoRoot).order_by(VideoRoot.position, VideoRoot.id))
     ).scalars()
-    return {"items": [_public(r) for r in rows]}
+    # bases : où les dossiers sont acceptés (aide et exemple du formulaire)
+    return {"items": [_public(r) for r in rows], "bases": video_files.allowed_bases()}
 
 
 @router.post("/roots", dependencies=[Depends(require_admin)])

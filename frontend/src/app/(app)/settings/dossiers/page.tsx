@@ -8,9 +8,15 @@
  * sous-titres posés à côté). Pour les vidéos sans fiche officielle (mangas
  * « Kai », montages, vidéos perso) que Radarr, Sonarr et Jellyfin ignorent.
  * Retirer un dossier ne supprime rien sur le disque.
+ *
+ * Le chemin est celui vu DEPUIS LE CONTENEUR ArrMada (comme un point de
+ * montage NFS vu depuis le client, pas le chemin d'export du serveur). Sur
+ * Synology, le réflexe est de saisir « /volume1/mangas » : le serveur refuse
+ * alors en donnant la ligne de volume à ajouter au docker-compose.yml et le
+ * chemin à saisir ensuite, affichés ici avec un bouton « Copier ».
  */
 import { useState, type FormEvent } from "react";
-import { AlertTriangle, FolderOpen, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { AlertTriangle, Copy, CornerDownLeft, FolderOpen, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,30 +27,94 @@ import { ErrorState } from "@/components/shared/empty-state";
 import { TableSkeleton } from "@/components/shared/loading-skeleton";
 import { FormField } from "@/components/settings/form-field";
 import { LocalSeriesPanel } from "@/components/settings/local-series-panel";
+import { copyText } from "@/components/media-detail/labels";
 import {
     MAX_VIDEO_ROOTS,
     useCreateVideoRoot,
     useDeleteVideoRoot,
     useUpdateVideoRoot,
+    useVideoRootBases,
     useVideoRoots,
+    videoRootHint,
     type VideoRoot,
 } from "@/hooks/use-video-roots";
+
+/**
+ * Refus du serveur avec aide : la ligne à ajouter au service arrmada du
+ * docker-compose.yml (bouton Copier) et le chemin à saisir une fois le
+ * conteneur relancé (bouton qui remplit le champ).
+ */
+function MountHint({ error, onUsePath }: { error: unknown; onUsePath: (path: string) => void }) {
+    const hint = videoRootHint(error);
+    if (!hint) return null;
+    const copy = async (text: string) => {
+        if (await copyText(text)) toast.success("Ligne copiée", { description: text });
+        else toast.error("Copie impossible", { description: "Sélectionne la ligne et copie-la à la main." });
+    };
+    return (
+        <div data-testid="mount-hint" role="alert" className="space-y-3 rounded-xl border border-warning/25 bg-warning/10 p-3 text-xs text-warning">
+            <p className="flex items-start gap-2 leading-relaxed">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span className="min-w-0 break-words">{hint.message}</span>
+            </p>
+            {hint.volume_line && (
+                <div className="space-y-1.5">
+                    <p className="font-medium text-foreground">
+                        1. Ajoute cette ligne sous <code>volumes:</code> du service <code>arrmada</code>, puis relance le conteneur :
+                    </p>
+                    <div className="flex items-center gap-2">
+                        <code
+                            data-testid="volume-line"
+                            className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded-lg bg-background/60 px-2.5 py-1.5 font-mono text-[11px] text-foreground">
+                            {hint.volume_line}
+                        </code>
+                        <Button type="button" size="sm" variant="outline" onClick={() => copy(hint.volume_line!)}>
+                            <Copy />
+                            Copier
+                        </Button>
+                    </div>
+                    <p className="text-muted-foreground">
+                        Puis : <code>docker compose up -d arrmada</code> (ou « Action › Construire » dans Container Manager).
+                    </p>
+                </div>
+            )}
+            {hint.container_path && (
+                <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-medium text-foreground">
+                        {hint.volume_line ? "2. " : ""}Chemin à saisir ensuite : <code className="font-mono">{hint.container_path}</code>
+                    </p>
+                    <Button type="button" size="sm" variant="outline" onClick={() => onUsePath(hint.container_path!)}>
+                        <CornerDownLeft />
+                        Utiliser ce chemin
+                    </Button>
+                </div>
+            )}
+        </div>
+    );
+}
 
 /** Formulaire commun (ajout, modification) : libellé et chemin sur le serveur. */
 function RootForm({
     initial,
     submitLabel,
     pending,
+    bases,
+    error,
     onSubmit,
 }: {
     initial: { name: string; path: string };
     submitLabel: string;
     pending: boolean;
+    /** Bases autorisées (VIDEO_ALLOWED_BASE), pour l'aide et l'exemple. */
+    bases: string[];
+    /** Dernière erreur du serveur : son aide (ligne de volume) s'affiche ici. */
+    error: unknown;
     onSubmit: (values: { name: string; path: string }) => void;
 }) {
     const [name, setName] = useState(initial.name);
     const [path, setPath] = useState(initial.path);
     const valid = name.trim() !== "" && path.trim().startsWith("/");
+    const example = `${bases[0] ?? "/mnt/user"}/medias/mangas-kai`;
     const submit = (e: FormEvent) => {
         e.preventDefault();
         if (valid) onSubmit({ name: name.trim(), path: path.trim() });
@@ -54,16 +124,21 @@ function RootForm({
             <FormField id="root-name" label="Nom affiché sur la TV">
                 <Input id="root-name" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} placeholder="Mangas Kai" autoFocus />
             </FormField>
-            <FormField id="root-path" label="Chemin sur le serveur" hint="Tel que le voit le serveur ArrMada, sous /mnt/user (ex. /mnt/user/medias/mangas-kai).">
+            <FormField
+                id="root-path"
+                label="Chemin sur le serveur"
+                hint={`Tel que le voit le conteneur ArrMada (pas le chemin du NAS), sous ${bases.join(" ou ") || "n'importe quel dossier"} (ex. ${example}).`}
+            >
                 <Input
                     id="root-path"
                     value={path}
                     maxLength={500}
                     onChange={(e) => setPath(e.target.value)}
-                    placeholder="/mnt/user/medias/mangas-kai"
+                    placeholder={example}
                     className="font-mono text-xs"
                 />
             </FormField>
+            <MountHint error={error} onUsePath={setPath} />
             <div className="flex justify-end">
                 <Button type="submit" disabled={pending || !valid}>
                     {pending ? <Loader2 className="animate-spin" /> : null}
@@ -76,6 +151,7 @@ function RootForm({
 
 export default function VideoRootsPage() {
     const { data: roots, isLoading, isError, error, refetch } = useVideoRoots();
+    const { data: bases = ["/mnt/user"] } = useVideoRootBases();
     const create = useCreateVideoRoot();
     const update = useUpdateVideoRoot();
     const del = useDeleteVideoRoot();
@@ -91,7 +167,14 @@ export default function VideoRootsPage() {
                 icon={FolderOpen}
                 iconClassName="text-warning"
                 action={
-                    <Button size="sm" onClick={() => setAdding(true)} disabled={full || isLoading}>
+                    <Button
+                        size="sm"
+                        onClick={() => {
+                            create.reset(); // pas d'aide d'un essai précédent
+                            setAdding(true);
+                        }}
+                        disabled={full || isLoading}
+                    >
                         <Plus />
                         Ajouter
                     </Button>
@@ -110,7 +193,7 @@ export default function VideoRootsPage() {
                     <ErrorState error={error} onRetry={() => refetch()} />
                 ) : roots && roots.length === 0 ? (
                     <p className="rounded-lg border border-dashed border-white/10 p-4 text-sm text-muted-foreground">
-                        Aucun dossier pour l&apos;instant : ajoute par exemple <code>/mnt/user/medias/mangas-kai</code>.
+                        Aucun dossier pour l&apos;instant : ajoute par exemple <code>{bases[0] ?? "/mnt/user"}/medias/mangas-kai</code>.
                     </p>
                 ) : (
                     <ul className="divide-y divide-white/[0.05]">
@@ -127,7 +210,15 @@ export default function VideoRootsPage() {
                                         </p>
                                     )}
                                 </div>
-                                <Button variant="ghost" size="sm" onClick={() => setEditing(r)} aria-label={`Modifier ${r.name}`}>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                        update.reset();
+                                        setEditing(r);
+                                    }}
+                                    aria-label={`Modifier ${r.name}`}
+                                >
                                     <Pencil />
                                 </Button>
                                 <Button variant="ghost" size="sm" onClick={() => setDeleting(r)} aria-label={`Retirer ${r.name}`}>
@@ -150,16 +241,19 @@ export default function VideoRootsPage() {
                         <DialogDescription>Il apparaît aussitôt dans l&apos;écran « Vidéos » des TV et téléphones.</DialogDescription>
                     </DialogHeader>
                     <RootForm
-                        initial={{ name: "", path: "/mnt/user/medias/" }}
+                        initial={{ name: "", path: `${bases[0] ?? "/mnt/user"}/` }}
                         submitLabel="Ajouter"
                         pending={create.isPending}
+                        bases={bases}
+                        error={create.error}
                         onSubmit={(values) =>
                             create.mutate(values, {
                                 onSuccess: (r) => {
                                     toast.success(`Dossier « ${r.name} » ajouté`);
                                     setAdding(false);
                                 },
-                                onError: (e) => toast.error("Ajout impossible", { description: e.message }),
+                                // Avec une aide (ligne de volume), elle s'affiche dans le formulaire
+                                onError: (e) => videoRootHint(e) || toast.error("Ajout impossible", { description: e.message }),
                             })
                         }
                     />
@@ -178,6 +272,8 @@ export default function VideoRootsPage() {
                             initial={{ name: editing.name, path: editing.path }}
                             submitLabel="Enregistrer"
                             pending={update.isPending}
+                            bases={bases}
+                            error={update.error}
                             onSubmit={(values) =>
                                 update.mutate(
                                     { id: editing.id, ...values },
@@ -186,7 +282,8 @@ export default function VideoRootsPage() {
                                             toast.success("Dossier enregistré");
                                             setEditing(null);
                                         },
-                                        onError: (e) => toast.error("Enregistrement impossible", { description: e.message }),
+                                        onError: (e) =>
+                                            videoRootHint(e) || toast.error("Enregistrement impossible", { description: e.message }),
                                     },
                                 )
                             }

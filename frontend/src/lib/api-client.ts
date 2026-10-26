@@ -49,6 +49,38 @@ export function absoluteMediaUrls<T>(data: T): T {
 }
 
 /**
+ * Erreur renvoyée par l'API : `message` lisible (affiché tel quel), plus le
+ * `detail` brut. La plupart des routes renvoient un texte ; certaines
+ * ajoutent une aide structurée ({message, volume_line, …}) que la page
+ * concernée peut exploiter. Reste une `Error` : le code existant ne change pas.
+ */
+export class ApiRequestError extends Error {
+    constructor(
+        message: string,
+        readonly status: number,
+        readonly detail: unknown,
+    ) {
+        super(message);
+        this.name = "ApiRequestError";
+    }
+}
+
+/** `detail` de FastAPI → texte : chaîne, objet {message}, ou liste d'erreurs de validation. */
+function detailMessage(detail: unknown): string {
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail)) {
+        return detail
+            .map((d) => (d && typeof d === "object" && "msg" in d ? String((d as { msg: unknown }).msg) : ""))
+            .filter(Boolean)
+            .join(" · ");
+    }
+    if (detail && typeof detail === "object" && "message" in detail) {
+        return String((detail as { message: unknown }).message);
+    }
+    return "";
+}
+
+/**
  * Base fetch wrapper for the ArrMada backend API.
  * Automatically adds auth headers and handles errors.
  */
@@ -88,7 +120,7 @@ export async function apiFetch<T>(
         const errorBody = await response.json().catch(() => ({
             detail: response.statusText,
         }));
-        throw new Error(errorBody.detail || `HTTP ${response.status}`);
+        throw new ApiRequestError(detailMessage(errorBody.detail) || `HTTP ${response.status}`, response.status, errorBody.detail);
     }
 
     return absoluteMediaUrls(await response.json()) as T;

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Dossiers vidéo : chemin du NAS expliqué (retour d'installation Synology, lot 4)
+
+#### Fixed
+- **« Dossier refusé : il doit être sous /mnt/user »** sans autre explication quand on saisissait le chemin du NAS (`/volume1/mangas` sur Synology) : le refus dit maintenant que le chemin attendu est celui **vu depuis le conteneur**, donne la **ligne de volume à ajouter** au service `arrmada` du `docker-compose.yml` (`- /volume1/mangas:/mnt/user/mangas:ro`, bouton « Copier ») et le **chemin à saisir ensuite** (bouton « Utiliser ce chemin »)
+- Dossier sous la base mais **absent du conteneur** (montage oublié) : même aide, la ligne suit la plateforme notée par `install.sh` (`/volume1/…` sur Synology, `/mnt/user/…` sur Unraid). Dossier déjà monté ailleurs : le message propose d'élargir `VIDEO_ALLOWED_BASE`
+
+#### Added
+- **Plusieurs bases** dans `VIDEO_ALLOWED_BASE`, séparées par des virgules (`/mnt/user,/data`) ; défaut inchangé (`/mnt/user`). `GET /api/videos/roots` renvoie les bases (`bases`) : l'aide et l'exemple du formulaire les reprennent
+- `install.sh` : le service `arrmada` de la pile reçoit `VIDEO_ALLOWED_BASE=/mnt/user,/data` (ce qui est déjà sous `/data` se déclare tel quel) et un exemple de montage commenté adapté à la plateforme (`/volume1/mangas`, `/mnt/user/mangas`, `/srv/mangas`). Vérifié par le dry-run de la CI sur les 4 plateformes
+- API : un refus de `POST`/`PATCH /api/videos/roots` porte, quand une aide existe, `detail = {message, volume_line, container_path}` (texte seul sinon, comme avant) ; la web app affiche le `message` de ces erreurs structurées
+- Tests : 8 tests backend (bases multiples, chemin du NAS, dossier hors base déjà monté, montage absent selon la plateforme, réponse de l'API) ; test Playwright du parcours refus → ligne de volume → « Utiliser ce chemin » → ajout
+
 ### Détection et santé des services (retour d'installation Synology, lot 3)
 
 #### Fixed
