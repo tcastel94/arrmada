@@ -141,6 +141,34 @@ def find_in_library(entry: dict) -> int | None:
     )
 
 
+def explain_not_found(label: str, kind: str, has_file: str) -> None:
+    """Titre absent de la médiathèque Kodi : dit pourquoi et quoi faire (fenêtre OK).
+
+    `has_file` : « 0 » pas encore téléchargé (bulle courte), « 1 » sur le NAS,
+    « » inconnu. Sinon la source SMB à ajouter, avec l'adresse du NAS et le
+    dossier donné par le serveur, ou la source existante à scanner.
+    """
+    import urllib.parse
+
+    import remote_data
+
+    sources: list = []
+    share = ""
+    if has_file != "0":
+        folder = remote_data.CONTENT.get(kind, remote_data.CONTENT["movie"])[0]
+        paths = ArrMadaAPI.get_library_sources()
+        share = str(paths.get(folder) or "") if paths.get("status") != "error" else ""
+        found = jsonrpc("Files.GetSources", {"media": "video"}).get("sources") or []
+        sources = [str(item.get("file") or "") for item in found]
+    host = urllib.parse.urlparse(ArrMadaAPI.get_config()["url"]).hostname or ""
+    heading, text = remote_data.not_found_message(label, kind, has_file, share, host, sources)
+    log("Lecture", f"{label} introuvable dans la médiathèque : {heading}", xbmc.LOGWARNING)
+    if has_file == "0":
+        notify(heading, text, ms=6000)
+    else:
+        xbmcgui.Dialog().ok(heading, text)
+
+
 def room() -> str:
     """Pièce de cet appareil : « salon », « cinema » ou « bureau ».
 
@@ -197,7 +225,13 @@ def play_entry(entry: dict, resume=None) -> bool:
     """
     found = find_in_library(entry)
     if found is None:
-        notify(entry["title"], "Pas (encore) dans la médiathèque Kodi de cet appareil")
+        import remote_data
+
+        kind = entry.get("kind", "movie")
+        # En fond : la question au serveur ne doit pas figer l'écran
+        run_in_background(
+            explain_not_found, entry["title"], kind, remote_data.file_flag(entry.get("has_file"))
+        )
         return False
     if entry.get("kind", "movie") == "movie":
         import kodi_library  # import local : évite un import circulaire

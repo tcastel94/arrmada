@@ -737,6 +737,7 @@ write_stack_json() {
 {
   "installer_version": "${SCRIPT_VERSION}",
   "platform": "${PLATFORM}",
+  "data_root": "${DATA_ROOT}",
   "layout": "trash",
   "root_folders": {"sonarr": "/data/media/tv", "radarr": "/data/media/movies"},
   "credentials": {${creds}}

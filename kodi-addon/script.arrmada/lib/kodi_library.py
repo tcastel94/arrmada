@@ -205,7 +205,9 @@ def remote_play(params: dict, quiet: bool = False) -> bool:
             return play_episode(episodeid, episodes, resume=resume, wait=True)
     _log(f"« Lire sur la TV » : {label} absent de la médiathèque de cette TV", xbmc.LOGWARNING)
     if not quiet:
-        ui.notify("Lecture impossible", f"{label} n'est pas dans la médiathèque de cette TV")
+        # Pas encore téléchargé, ou source SMB à ajouter / scanner (has_file du serveur)
+        kind = "episode" if params.get("media_type") == "episode" else "movie"
+        ui.explain_not_found(label, kind, params.get("has_file") or "")
     return False
 
 

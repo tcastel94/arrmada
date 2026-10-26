@@ -44,6 +44,7 @@ def test_plugin_params():
         "id": "371980",
         "resume": "0",
         "title": "Severance",
+        "has_file": "",  # serveur d'avant la 1.25.1 : inconnu
         "season": "2",
         "episode": "5",
     }
@@ -78,3 +79,65 @@ def test_describe():
     assert rd.describe(rd.plugin_params(REQUEST)) == "Severance S02E05"
     assert rd.describe({"media_type": "movie", "title": "Dune"}) == "Dune"
     assert rd.describe({"media_type": "movie"}) == "Ce titre"
+
+
+# ── Titre absent de la médiathèque Kodi (1.25.1, retour d'installation Synology) ──
+
+
+def test_has_file_passed_to_the_plugin():
+    assert rd.plugin_params(dict(REQUEST, has_file=True))["has_file"] == "1"
+    assert rd.plugin_params(dict(REQUEST, has_file=False))["has_file"] == "0"
+    assert rd.plugin_params(dict(REQUEST, has_file=None))["has_file"] == ""
+    # Relu depuis l'URL du plugin (texte)
+    assert rd.file_flag("1") == "1" and rd.file_flag("0") == "0" and rd.file_flag("") == ""
+
+
+def test_smb_url():
+    assert (
+        rd.smb_url("192.168.1.49", "data/media/movies") == "smb://192.168.1.49/data/media/movies/"
+    )
+    assert rd.smb_url("192.168.1.49", "/data/media/tv/") == "smb://192.168.1.49/data/media/tv/"
+    assert rd.smb_url("", "data/media/movies") == ""
+    assert rd.smb_url("192.168.1.49", "") == ""
+
+
+def test_no_file_on_the_nas():
+    """Titre « Missing » dans Radarr : rien à faire côté Kodi, pas de source à ajouter."""
+    heading, text = rd.not_found_message("Dune", "movie", "0", "data/media/movies", "192.168.1.49")
+    assert heading == "Pas encore sur le NAS"
+    assert "pas encore de fichier" in text and "smb://" not in text
+
+
+def test_on_the_nas_gives_the_smb_source():
+    heading, text = rd.not_found_message(
+        "Dune", "movie", "1", "data/media/movies", "192.168.1.49", []
+    )
+    assert heading == "Absent de la médiathèque Kodi"
+    assert "Dune est sur le NAS" in text
+    assert "smb://192.168.1.49/data/media/movies/" in text
+    assert "« Films »" in text and "scraper TMDB" in text and "fr-FR" in text
+
+
+def test_series_source_and_unknown_file():
+    _, text = rd.not_found_message("Severance S02E05", "episode", "", "data/media/tv", "nas.local")
+    assert "smb://nas.local/data/media/tv/" in text
+    assert "« Séries TV »" in text
+    assert "S'il est déjà téléchargé" in text  # statut du fichier inconnu
+
+
+def test_existing_source_to_scan():
+    """La TV a déjà la source (par le nom du NAS) : la vérifier et la scanner, pas l'ajouter."""
+    sources = ["smb://192.168.1.49/photos/", "smb://DS1618/data/media/movies/"]
+    _, text = rd.not_found_message(
+        "Dune", "movie", "1", "data/media/movies", "192.168.1.49", sources
+    )
+    assert "La source smb://DS1618/data/media/movies/ existe" in text
+    assert "Mettre à jour la médiathèque" in text
+    assert "Ajoute" not in text
+
+
+def test_unknown_share_path():
+    """Pile sans stack.json : pas d'adresse exacte, mais la marche à suivre."""
+    _, text = rd.not_found_message("Dune", "movie", "1", "", "192.168.1.49", [])
+    assert "le dossier où le NAS range les films (partage SMB)" in text
+    assert "smb://" not in text
