@@ -27,6 +27,10 @@ export interface TrashCFSummary {
     scores: Record<string, number> | null;
     /** hdr | audio | language | anime | unwanted | quality | autre… */
     category: string;
+    /** Score réellement appliqué dans le profil (jeu de scores TRaSH du profil). */
+    score?: number | null;
+    /** « profil » ou nom du groupe TRaSH d'où vient le format. */
+    source?: string | null;
 }
 
 export interface RecommendedProfile {
@@ -36,6 +40,13 @@ export interface RecommendedProfile {
     description: string;
     custom_formats: TrashCFSummary[];
     score_profile: string;
+    /** Nom du profil tel qu'il sera créé dans Sonarr / Radarr. */
+    trash_name?: string;
+    cutoff?: string;
+    /** Qualités autorisées, meilleure en premier. */
+    qualities?: string[];
+    /** Groupes de formats TRaSH appliqués. */
+    groups?: string[];
 }
 
 export interface MediaPreferences {
@@ -47,13 +58,48 @@ export interface MediaPreferences {
     watches_french_series: boolean;
 }
 
+export interface FormatScore {
+    name: string;
+    score: number;
+    source: string;
+}
+
+export interface ProfileChange {
+    name: string;
+    id: number | null;
+    action: "created" | "updated" | "unchanged";
+    cutoff: string;
+    min_format_score: number;
+    cutoff_format_score: number;
+    upgrade_allowed: boolean;
+    qualities: string[];
+    groups: string[];
+    scores: FormatScore[];
+    unknown_qualities: string[];
+}
+
+/** Taille de qualité (Mo par minute ; null = illimité). */
+export interface SizeChange {
+    quality: string;
+    min: number;
+    preferred: number | null;
+    max: number | null;
+}
+
 /** Résultat d'une application (ou d'un aperçu `dry_run`) sur un service. */
 export interface ApplyResult {
     success: boolean;
+    dry_run: boolean;
     cfs_created: number;
     cfs_updated: number;
+    cfs_unchanged: number;
     profiles_created: number;
     profiles_updated: number;
+    created_formats: string[];
+    updated_formats: string[];
+    profiles: ProfileChange[];
+    sizes: SizeChange[];
+    warnings: string[];
     errors: string[];
 }
 
@@ -61,6 +107,8 @@ export interface ApplyPayload {
     service_id: number;
     /** IDs de profils TRaSH (= nom de fichier source). */
     recommendations: string[];
+    /** Réponses de l'assistant (groupes liés à l'écran et à l'audio). */
+    prefs?: MediaPreferences;
     /** true = simulation : le backend compte ce qui changerait sans rien écrire. */
     dry_run?: boolean;
 }
@@ -120,6 +168,28 @@ export function useTrashApply() {
         onSuccess: (_res, body) => {
             if (!body.dry_run) qc.invalidateQueries({ queryKey: ["trash-guides", "compliance"] });
         },
+    });
+}
+
+// ── Bascule de la bibliothèque vers un profil ───────────────
+
+export interface AssignResult {
+    profile: string;
+    profile_id: number;
+    total: number;
+    to_change: number;
+    changed: number;
+    dry_run: boolean;
+}
+
+/** Bascule tous les films / séries vers un profil (dry_run : compte seulement). */
+export function useTrashAssign() {
+    return useMutation<AssignResult, Error, { service_id: number; profile_name: string; dry_run: boolean }>({
+        mutationFn: (body) =>
+            apiFetch<AssignResult>("/api/trash-guides/assign-profile", {
+                method: "POST",
+                body: JSON.stringify(body),
+            }),
     });
 }
 

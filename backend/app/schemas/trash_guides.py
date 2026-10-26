@@ -104,6 +104,10 @@ class TrashCFSummary(BaseModel):
     name: str
     scores: dict[str, int] | None = None
     category: str = "other"
+    #: Score effectivement appliqué dans le profil (jeu de scores du profil)
+    score: int | None = None
+    #: « profil » ou nom du groupe TRaSH d'où vient le format
+    source: str | None = None
 
 
 class RecommendedProfile(BaseModel):
@@ -115,6 +119,13 @@ class RecommendedProfile(BaseModel):
     description: str
     custom_formats: list[TrashCFSummary]
     score_profile: str  # e.g. "default", "french-vostfr", "anime-sonarr"
+    #: Nom du profil qualité TRaSH tel qu'il sera créé dans Sonarr/Radarr
+    trash_name: str = ""
+    cutoff: str = ""
+    #: Qualités autorisées, meilleure en premier
+    qualities: list[str] = []
+    #: Groupes de formats TRaSH appliqués (par défaut + selon les réponses)
+    groups: list[str] = []
 
 
 class AuditResult(BaseModel):
@@ -129,12 +140,63 @@ class AuditResult(BaseModel):
     missing_profiles: list[str] = []
 
 
+class FormatScore(BaseModel):
+    name: str
+    score: int
+    source: str = ""
+
+
+class ProfileChange(BaseModel):
+    """Profil qualité écrit (ou qui serait écrit en aperçu)."""
+
+    name: str
+    id: int | None = None
+    #: created | updated | unchanged
+    action: str
+    cutoff: str
+    min_format_score: int = 0
+    cutoff_format_score: int = 0
+    upgrade_allowed: bool = True
+    qualities: list[str] = []
+    groups: list[str] = []
+    scores: list[FormatScore] = []
+    #: Qualités TRaSH que ce Sonarr/Radarr ne connaît pas (version trop ancienne)
+    unknown_qualities: list[str] = []
+
+
+class SizeChange(BaseModel):
+    """Taille de qualité modifiée (Mo/min ; None = illimité)."""
+
+    quality: str
+    min: float
+    preferred: float | None = None
+    max: float | None = None
+
+
 class ApplyResult(BaseModel):
     """Result of applying TRaSH recommendations."""
 
     success: bool
+    dry_run: bool = False
     cfs_created: int = 0
     cfs_updated: int = 0
+    cfs_unchanged: int = 0
     profiles_created: int = 0
     profiles_updated: int = 0
+    created_formats: list[str] = []
+    updated_formats: list[str] = []
+    profiles: list[ProfileChange] = []
+    sizes: list[SizeChange] = []
+    warnings: list[str] = []
     errors: list[str] = []
+
+
+class AssignResult(BaseModel):
+    """Bascule des films / séries vers un profil."""
+
+    profile: str
+    profile_id: int
+    total: int
+    to_change: int
+    changed: int
+    dry_run: bool
