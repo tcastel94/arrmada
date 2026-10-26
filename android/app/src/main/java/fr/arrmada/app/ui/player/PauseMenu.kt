@@ -62,6 +62,8 @@ import fr.arrmada.app.data.AmpDevice
 import fr.arrmada.app.data.SoundAdvisor
 import fr.arrmada.app.data.Chapter
 import fr.arrmada.app.data.PlayInfo
+import fr.arrmada.app.data.Quality
+import fr.arrmada.app.data.QualityOption
 import fr.arrmada.app.ui.components.ArrButton
 import fr.arrmada.app.ui.components.ArtImage
 import fr.arrmada.app.ui.components.Badge
@@ -84,6 +86,16 @@ data class SubtitleDownload(
     val onSync: (() -> Unit)? = null, // « Resynchro auto » (Bazarr, ffsubsync)
     val onShift: ((Int) -> Unit)? = null, // −/+ 0,5 s sur la piste affichée
     val shiftMs: Int = 0, // décalage en cours
+)
+
+/**
+ * Bouton « Qualité » (ADR-012) : Original, 1080p HDR, 1080p SDR. [current] :
+ * qualité lue (cochée) ; [onSelect] recharge le flux à la même position.
+ */
+data class QualityChoice(
+    val options: List<QualityOption>,
+    val current: Quality,
+    val onSelect: (Quality) -> Unit,
 )
 
 /** Onglets du menu pause ; le contenu suit l'onglet qui a le focus. */
@@ -124,6 +136,7 @@ fun PauseMenu(
     onQuit: () -> Unit = {}, // tactile : bouton « Quitter » (à la TV, c'est la touche Retour)
     onSkip: (seconds: Int) -> Unit = {}, // tactile : −10 s / +30 s
     subtitleDownload: SubtitleDownload? = null, // null : pas de recherche (vidéo hors médiathèque)
+    quality: QualityChoice? = null, // null, ou original seul : pas de bouton « Qualité »
 ) {
     val touch = LocalScreen.current.isTouch
     // Bouton « Audio » → écran Réglages audio par-dessus le menu ; Retour y revient
@@ -154,6 +167,9 @@ fun PauseMenu(
         }
     }
     var tab by remember { mutableStateOf(tabs.firstOrNull { it.label == initialTab } ?: tabs.first()) }
+    // Bouton « Qualité » : son panneau remplace celui de l'onglet, jusqu'au prochain onglet visité
+    var showQuality by remember { mutableStateOf(false) }
+    val qualityChoice = quality?.takeIf { it.options.size > 1 }
     val resumeFocus = remember { FocusRequester() }
     val remaining = ((duration - position) / 1000).coerceAtLeast(0)
     val endsAt = LocalTime.now().plusSeconds(remaining).format(DateTimeFormatter.ofPattern("HH:mm"))
@@ -232,9 +248,13 @@ fun PauseMenu(
                     ArrButton("Reprendre", onResume, primary = true, leading = "▶", modifier = Modifier.focusRequester(resumeFocus))
                     if (touch) ArrButton("+30 s", { onSkip(30) })
                     ArrButton("Audio", { showAudio = true }, leading = "♪", modifier = Modifier.focusRequester(audioFocus))
+                    if (qualityChoice != null) ArrButton("Qualité", { showQuality = true }, leading = "◐")
                     Spacer(Modifier.width(8.dp))
                     tabs.forEach { option ->
-                        TabButton(option.label, selected = option == tab, onFocus = { tab = option })
+                        TabButton(option.label, selected = option == tab && !showQuality, onFocus = {
+                            tab = option
+                            showQuality = false
+                        })
                     }
                     if (touch) {
                         Spacer(Modifier.width(8.dp))
@@ -247,7 +267,9 @@ fun PauseMenu(
             }
 
             Box(Modifier.fillMaxWidth().height(if (LocalScreen.current.isPhone) 128.dp else 150.dp).padding(top = 14.dp)) {
-                when (tab) {
+                if (showQuality && qualityChoice != null) {
+                    QualityPanel(qualityChoice)
+                } else when (tab) {
                     PauseTab.CHAPTERS -> ChaptersPanel(info.chapters, position, absolute, onSeek)
                     PauseTab.INFO -> InfoPanel(meta, info)
                     PauseTab.CAST -> CastPanel(meta)
@@ -427,6 +449,21 @@ internal fun TracksPanel(
                 selected = choice.selected,
                 supported = choice.supported,
             ) { if (choice.supported) onSelect(choice) }
+        }
+    }
+}
+
+/** Panneau du bouton « Qualité » : la qualité lue est cochée, l'indisponible grisée. */
+@Composable
+private fun QualityPanel(choice: QualityChoice) {
+    LazyRow(contentPadding = PaddingValues(horizontal = gutter), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        items(choice.options, key = { it.quality }) { option ->
+            OptionChip(
+                option.title,
+                option.detail,
+                selected = option.quality == choice.current,
+                supported = option.available,
+            ) { if (option.available) choice.onSelect(option.quality) }
         }
     }
 }

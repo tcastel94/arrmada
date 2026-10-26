@@ -2,6 +2,7 @@ package fr.arrmada.app
 
 import fr.arrmada.app.ui.components.FormFactor
 import android.content.Intent
+import fr.arrmada.app.data.DefaultQuality
 import fr.arrmada.app.data.HomeLink
 import fr.arrmada.app.data.HomeRowsLogic
 import fr.arrmada.app.home.HomeRowsWorker
@@ -40,6 +41,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -721,7 +724,8 @@ private fun resumeRequest(entry: ResumeEntry): PlayRequest {
 @Composable
 private fun SettingsScreen(app: ArrMadaApplication, onChangeServer: () -> Unit, onRepair: () -> Unit) {
     val focus = remember { FocusRequester() }
-    Column(Modifier.fillMaxSize().background(ArrColors.Night).padding(horizontal = gutter * 2, vertical = 48.dp)) {
+    // Défile au besoin : la liste des réglages dépasse la hauteur d'un téléphone en paysage
+    Column(Modifier.fillMaxSize().background(ArrColors.Night).verticalScroll(rememberScrollState()).padding(horizontal = gutter * 2, vertical = 48.dp)) {
         Text("Réglages", style = MaterialTheme.typography.headlineMedium)
         Text("Serveur : ${app.prefs.serverUrl.orEmpty()}", style = MaterialTheme.typography.bodyLarge, color = ArrColors.TextSecondary, modifier = Modifier.padding(top = 18.dp))
         Text("Cette TV : ${app.prefs.deviceName ?: "—"}", style = MaterialTheme.typography.bodyLarge, color = ArrColors.TextSecondary, modifier = Modifier.padding(top = 6.dp))
@@ -742,6 +746,28 @@ private fun SettingsScreen(app: ArrMadaApplication, onChangeServer: () -> Unit, 
                 }
             })
         }
+        // Qualité de lecture par défaut (ADR-012) : l'original, ou le 1080p
+        // converti par Jellyfin quand le réseau de cette TV ne suit pas la 4K
+        var defaultQuality by remember { mutableStateOf(app.prefs.defaultQuality) }
+        ArrButton(
+            when (defaultQuality) {
+                DefaultQuality.ORIGINAL -> "Qualité de lecture par défaut : Original"
+                DefaultQuality.HD_1080 -> "Qualité de lecture par défaut : 1080p (20 Mb/s)"
+            },
+            {
+                defaultQuality = if (defaultQuality == DefaultQuality.ORIGINAL) DefaultQuality.HD_1080 else DefaultQuality.ORIGINAL
+                app.prefs.defaultQuality = defaultQuality
+                app.prefs.qualityAsked = true // choisi ici : la question du lecteur ne se pose plus
+            },
+            leading = "◐",
+            modifier = Modifier.padding(top = 16.dp),
+        )
+        Text(
+            "Choisis 1080p si ta TV est en Wi-Fi ou si les films 4K coupent. L’original reste au menu pause › Qualité.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = ArrColors.TextSecondary,
+            modifier = Modifier.padding(top = 8.dp),
+        )
         // Accueil Android TV : rangée « À suivre » et chaîne « ArrMada · Ajouts récents »
         val context = LocalContext.current
         if (TvHomeRows.supported(context)) {
