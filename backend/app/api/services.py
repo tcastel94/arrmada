@@ -20,6 +20,11 @@ from app.schemas.service import (
     TestConnectionResponse,
 )
 from app.services import encryption, health_checker
+from app.services.arr_client import HealthStatus
+from app.services.stack.probe import PROBED_TYPES, diagnose_url
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter(
     prefix="/api/services",
@@ -77,6 +82,37 @@ class ServiceDraftTest(BaseModel):
     service_id: int | None = None
 
 
+async def _with_diagnosis(
+    result: HealthStatus, service_type: str, url: str, api_key: str, name: str
+) -> TestConnectionResponse:
+    """Réponse de « Tester », complétée par un diagnostic quand c'est hors ligne.
+
+    Le contrôle de santé dit seulement « ça ne répond pas » (souvent en anglais).
+    La sonde de détection dit POURQUOI, et propose le nom Docker de l'appli
+    quand il répond alors que l'URL enregistrée échoue (IP du NAS injoignable
+    depuis un conteneur sur Synology). Un échec du diagnostic ne change rien
+    au résultat du test.
+    """
+    response = TestConnectionResponse(
+        success=result.status == "online",
+        status=result.status,
+        latency_ms=result.latency_ms,
+        version=result.version,
+        error=result.error,
+    )
+    if result.status != "offline" or service_type.lower() not in PROBED_TYPES:
+        return response
+    try:
+        diagnosis = await diagnose_url(service_type.lower(), url, api_key, name)
+    except Exception as exc:  # noqa: BLE001 — aide facultative
+        logger.info("Diagnostic de %s impossible : %s", url, exc)
+        return response
+    if not diagnosis.ok:
+        response.diagnosis = diagnosis.message
+        response.suggested_url = diagnosis.suggested_url
+    return response
+
+
 @router.post("/test", response_model=TestConnectionResponse)
 async def test_draft_connection(
     body: ServiceDraftTest,
@@ -100,13 +136,7 @@ async def test_draft_connection(
         is_enabled=True,
     )
     result = await health_checker.check_service(draft)
-    return TestConnectionResponse(
-        success=result.status == "online",
-        status=result.status,
-        latency_ms=result.latency_ms,
-        version=result.version,
-        error=result.error,
-    )
+    return await _with_diagnosis(result, body.type, draft.url, api_key, body.type)
 
 
 # ── Create ────────────────────────────────────────────────────
@@ -194,13 +224,8 @@ async def test_connection(
         raise HTTPException(status_code=404, detail="Service not found")
 
     result = await health_checker.check_and_record(service, db)
-    return TestConnectionResponse(
-        success=result.status == "online",
-        status=result.status,
-        latency_ms=result.latency_ms,
-        version=result.version,
-        error=result.error,
-    )
+    api_key = encryption.decrypt_api_key(service.api_key) if service.api_key else ""
+    return await _with_diagnosis(result, service.type, service.url, api_key, service.name)
 
 
 # ── Global health ────────────────────────────────────────────

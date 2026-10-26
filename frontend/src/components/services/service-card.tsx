@@ -9,9 +9,14 @@
  * - Interrupteur Activé/Désactivé direct (mise à jour optimiste).
  * - Statut en français + date du dernier contrôle.
  * - Suppression → confirmation gérée par la page (ConfirmDialog).
+ * - Test en échec : la CAUSE reste affichée sur la carte (délai dépassé,
+ *   connexion refusée, clé refusée…). Si l'appli répond sur son nom Docker
+ *   (cas typique du Synology, où l'IP du NAS est injoignable depuis un
+ *   conteneur), un bouton propose de passer à cette adresse en un clic.
  */
+import { useState } from "react";
 import { motion } from "framer-motion";
-import { Clock, Loader2, Pencil, Trash2, Zap } from "lucide-react";
+import { AlertTriangle, Clock, Loader2, Pencil, Trash2, Wand2, X, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -24,7 +29,7 @@ import { useTestConnection, useUpdateService } from "@/hooks/use-services";
 import { formatLongDateTime, timeAgo } from "@/lib/format";
 import { scaleIn } from "@/lib/motion";
 import { cn } from "@/lib/utils";
-import type { ArrService } from "@/types/service";
+import type { ArrService, TestConnectionResult } from "@/types/service";
 
 interface ServiceCardProps {
     service: ArrService;
@@ -41,18 +46,39 @@ export function ServiceCard({ service, onEdit, onDelete }: ServiceCardProps) {
     const status = disabled ? "unknown" : service.last_status ?? "unknown";
     const lastCheck = service.last_health_check;
 
+    // Dernier test en échec qui a un diagnostic : reste affiché jusqu'au test suivant
+    const [diagnosis, setDiagnosis] = useState<TestConnectionResult | null>(null);
+
     const runTest = () =>
         test.mutate(service.id, {
-            onSuccess: (r) =>
-                r.success
-                    ? toast.success(`${service.name} répond`, {
-                          description: [r.latency_ms != null ? `${r.latency_ms} ms` : null, r.version ? `v${r.version}` : null]
-                              .filter(Boolean)
-                              .join(" · "),
-                      })
-                    : toast.error(`${service.name} ne répond pas`, { description: r.error ?? statusLabel(r.status) }),
+            onSuccess: (r) => {
+                setDiagnosis(!r.success && (r.diagnosis || r.suggested_url) ? r : null);
+                if (r.success) {
+                    toast.success(`${service.name} répond`, {
+                        description: [r.latency_ms != null ? `${r.latency_ms} ms` : null, r.version ? `v${r.version}` : null]
+                            .filter(Boolean)
+                            .join(" · "),
+                    });
+                } else {
+                    toast.error(`${service.name} ne répond pas`, { description: r.diagnosis ?? r.error ?? statusLabel(r.status) });
+                }
+            },
             onError: (e) => toast.error(`Test de ${service.name} impossible`, { description: e.message }),
         });
+
+    // Passe à l'adresse proposée (nom Docker), puis re-teste pour confirmer
+    const applySuggested = (url: string) =>
+        update.mutate(
+            { id: service.id, data: { url } },
+            {
+                onSuccess: () => {
+                    toast.success("Adresse mise à jour", { description: url });
+                    setDiagnosis(null);
+                    runTest();
+                },
+                onError: (e) => toast.error("Changement refusé", { description: e.message }),
+            },
+        );
 
     const toggle = (next: boolean) =>
         update.mutate(
@@ -118,6 +144,48 @@ export function ServiceCard({ service, onEdit, onDelete }: ServiceCardProps) {
                             <span className="rounded-full bg-white/[0.04] px-2 py-0.5 font-mono text-muted-foreground">v{service.version}</span>
                         )}
                     </div>
+
+                    {diagnosis && !disabled && (
+                        <div
+                            data-testid="service-diagnosis"
+                            role="status"
+                            className="flex flex-col gap-2 rounded-lg border border-warning/25 bg-warning/10 p-2.5 text-xs text-warning"
+                        >
+                            <div className="flex items-start gap-2">
+                                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                <p className="min-w-0 flex-1 break-words leading-relaxed">
+                                    {diagnosis.diagnosis ?? "La connexion a échoué."}
+                                    {diagnosis.suggested_url && (
+                                        <>
+                                            {" "}
+                                            {service.name} répond en revanche sur{" "}
+                                            <span className="font-mono">{diagnosis.suggested_url}</span>.
+                                        </>
+                                    )}
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={() => setDiagnosis(null)}
+                                    className="shrink-0 rounded p-0.5 opacity-70 hover:opacity-100"
+                                    aria-label="Masquer le diagnostic"
+                                >
+                                    <X className="h-3.5 w-3.5" />
+                                </button>
+                            </div>
+                            {diagnosis.suggested_url && (
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="self-start"
+                                    onClick={() => applySuggested(diagnosis.suggested_url!)}
+                                    disabled={update.isPending || test.isPending}
+                                >
+                                    {update.isPending ? <Loader2 className="animate-spin" /> : <Wand2 />}
+                                    Utiliser {diagnosis.suggested_url}
+                                </Button>
+                            )}
+                        </div>
+                    )}
 
                     <div className="mt-auto flex items-center gap-1.5 border-t border-white/[0.05] pt-3">
                         <Tooltip>

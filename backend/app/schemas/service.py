@@ -96,3 +96,8 @@ class TestConnectionResponse(BaseModel):
     latency_ms: int | None = None
     version: str | None = None
     error: str | None = None
+    # Hors ligne : cause en français (délai dépassé, connexion refusée, clé
+    # refusée, démarrage en cours…) et, si l'appli répond sur son nom Docker,
+    # l'URL à utiliser à la place (ex. http://radarr:7878).
+    diagnosis: str | None = None
+    suggested_url: str | None = None
