@@ -47,8 +47,8 @@ msgid "ArrMada Server URL"
 msgstr "URL du serveur ArrMada"
 
 msgctxt "#30103"
-msgid "Example: http://192.168.2.3:3420"
-msgstr "Exemple : http://192.168.2.3:8420 (Port backend)"
+msgid "Example: http://192.168.1.10:8420"
+msgstr "Exemple : http://192.168.1.10:8420 (port de l'API)"
 
 msgctxt "#30104"
 msgid "API Key / Auth Secret"

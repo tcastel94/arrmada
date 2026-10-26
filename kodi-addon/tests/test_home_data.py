@@ -315,9 +315,19 @@ class TestDescribeError:
             assert described["short"] == "Serveur injoignable"
             assert "8420" in described["hint"]
 
+    def test_unconfigured_server_is_neither_down_nor_refused(self) -> None:
+        """Aucune adresse réglée : on dit quoi faire, pas « injoignable » (1.25.2)."""
+        described = home_data.describe_error(
+            {"status": "error", "reason": "not_configured", "message": "…"}
+        )
+        assert described["title"] == "Serveur ArrMada non configuré"
+        assert "Trouver le serveur ArrMada" in described["action"]
+        assert "8420" in described["hint"]
+
     def test_texts_use_only_glyphs_of_the_silvo_font(self) -> None:
         """Ces textes s'affichent tels quels : pas de « → » (carré vide, vu sur le banc)."""
         missing = {"→", "★", "✓", "✔", "▶", "⏸", "●"}
-        for described in (home_data.ERROR_AUTH, home_data.ERROR_DOWN):
+        errors = (home_data.ERROR_AUTH, home_data.ERROR_DOWN, home_data.ERROR_UNCONFIGURED)
+        for described in errors:
             for text in described.values():
                 assert not missing & set(text), text

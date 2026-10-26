@@ -20,5 +20,5 @@ known-first-party = [
     "player_data", "player_window", "chapter_data", "skip_window", "mkv_chapters",
     "tonight_data", "remote_data", "download_data", "download_window",
     "board_data", "unstick_window", "make_downloads_xml", "ready_data", "ready_window",
-    "toast_data", "toast", "toast_xml",
+    "toast_data", "toast", "toast_xml", "server_data", "server_setup",
 ]

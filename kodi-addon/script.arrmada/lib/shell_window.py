@@ -131,31 +131,48 @@ class ShellWindow(xbmcgui.WindowXML):
         from api import ArrMadaAPI
 
         home = xbmcgui.Window(10000)
-        paired = bool(device.token_for(ArrMadaAPI.get_config()["url"]))
+        url = ArrMadaAPI.get_config()["url"]
+        paired = bool(device.token_for(url))
         asked = home.getProperty(pairing_data.PAIR_ASKED) == "1"
-        if not pairing_data.should_offer(paired, migration.needed(), asked):
+        if not pairing_data.should_offer(paired, migration.needed(), asked, configured=bool(url)):
             return
         home.setProperty(pairing_data.PAIR_ASKED, "1")
         if self._stop.wait(1.5):  # l'accueil s'affiche d'abord
             return
-        _log("TV non appairée : ouverture de l'appairage")
+        # Sans adresse, l'écran d'appairage commence par « Trouver le serveur »
+        _log("TV non appairée : ouverture de l'appairage" if url else "serveur non configuré")
         xbmc.executebuiltin("RunPlugin(plugin://script.arrmada/?action=pair)")
 
     def _settings_menu(self) -> None:
-        """Réglages : appairer cette TV (ou refaire l'appairage), add-on, Kodi."""
+        """Réglages : appairage, serveur ArrMada, add-on, Kodi."""
         import device
+        from api import ArrMadaAPI
 
-        choices = pairing_data.settings_choices(device.load())
+        choices = pairing_data.settings_choices(device.load(), ArrMadaAPI.get_config()["url"])
         # Liste centrée avec titre (un menu contextuel s'ouvrirait en haut à
         # gauche et couperait « Refaire l'appairage (TV Sony Bureau · Bureau) »)
         index = xbmcgui.Dialog().select("Réglages", [label for _, label in choices])
         choice = choices[index][0] if index >= 0 else ""
         if choice == "pair":
             self._pair()
+        elif choice == "server":
+            self._choose_server()
         elif choice == "addon":
             ui.ADDON.openSettings()
         elif choice == "kodi":
             xbmc.executebuiltin("ActivateWindow(Settings)")
+
+    def _choose_server(self) -> None:
+        """Trouver le serveur / en changer, puis appairer la TV avec lui."""
+        import device
+        import server_setup
+        from api import ArrMadaAPI
+
+        if not server_setup.choose_server():
+            return
+        # Le jeton est lié à l'adresse : nouveau serveur = nouvel appairage
+        if not device.token_for(ArrMadaAPI.get_config()["url"]):
+            self._pair()
 
     @staticmethod
     def _pair() -> None:

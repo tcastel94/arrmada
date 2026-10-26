@@ -120,12 +120,15 @@ def show_root(handle: int, base: str) -> None:
 
     icon = ADDON.getAddonInfo("icon")
     unread = catalog_data.unread_count(listing.read_feed("notifications", allow_fetch=False))
-    paired = device.token_for(ArrMadaAPI.get_config()["url"])
-    pair_label = (
-        f"Appareil : {device.load().get('name') or 'cette TV'} (refaire l'appairage)"
-        if paired
-        else "Appairer cette TV"
-    )
+    url = ArrMadaAPI.get_config()["url"]
+    paired = device.token_for(url)
+    if paired:
+        pair_label = f"Appareil : {device.load().get('name') or 'cette TV'} (refaire l'appairage)"
+    elif url:
+        pair_label = "Appairer cette TV"
+    else:
+        # L'appairage commence alors par la recherche du serveur (pair_window)
+        pair_label = "Serveur ArrMada non configuré : le trouver et appairer cette TV"
     entries = [
         listing.action_entry(
             "Accueil",

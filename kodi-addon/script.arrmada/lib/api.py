@@ -15,6 +15,7 @@ import xbmcaddon
 
 import device
 import feeds
+import server_data
 
 ADDON = xbmcaddon.Addon("script.arrmada")
 
@@ -22,20 +23,22 @@ ADDON = xbmcaddon.Addon("script.arrmada")
 class ArrMadaAPI:
     @staticmethod
     def get_config():
-        url = (ADDON.getSetting("server_url") or "").strip().rstrip("/")
-        if not url or "127.0.0.1" in url or "localhost" in url:
-            url = "http://192.168.2.3:8420"
+        # Adresse du serveur (lib/server_data.py) : le réglage tel quel (schéma
+        # ajouté, port 3420 de la web app → 8420 de l'API), sinon le serveur
+        # de l'appairage. Jamais d'adresse inventée : vide = « Serveur ArrMada
+        # non configuré », les écrans proposent la recherche et l'appairage.
+        setting = ADDON.getSetting("server_url") or ""
+        paired = ""
+        if not server_data.normalize_url(setting):
+            paired = device.load().get("server") or ""  # lu seulement si besoin
+        url = server_data.resolve_server_url(setting, paired)
+        if url and paired:
+            # TV appairée qui se fiait à l'ancienne valeur par défaut : on note
+            # l'adresse dans les réglages, elle survit à un jeton révoqué.
             try:
                 ADDON.setSetting("server_url", url)
             except Exception:
                 pass
-
-        if not url.startswith("http://") and not url.startswith("https://"):
-            url = f"http://{url}"
-
-        # If user accidentally configured the web frontend port (3420), auto-switch to backend API (8420)
-        if ":3420" in url:
-            url = url.replace(":3420", ":8420")
 
         # Clé = mot de passe ArrMada (ARRMADA_AUTH_SECRET du serveur), à saisir
         # dans les réglages de l'add-on. Aucune valeur par défaut en dur : le
@@ -51,7 +54,10 @@ class ArrMadaAPI:
             "language": language,
         }
 
-
+    @staticmethod
+    def set_server_url(url: str) -> None:
+        """Enregistre l'adresse choisie (recherche sur le réseau ou saisie)."""
+        ADDON.setSetting("server_url", url)
 
     @classmethod
     def auth_headers(cls, config: dict | None = None) -> dict:
@@ -77,6 +83,9 @@ class ArrMadaAPI:
         headers: dict | None = None,
     ) -> dict:
         config = cls.get_config()
+        if not config["url"]:
+            # Aucune adresse : pas d'appel réseau, l'écran dit quoi faire
+            return server_data.not_configured_error()
         full_url = f"{config['url']}{path}"
         extra_headers = headers or {}
 

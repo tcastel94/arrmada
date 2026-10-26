@@ -1203,7 +1203,7 @@ Copiez le dossier `script.arrmada/` dans le dossier des extensions de Kodi :
 
 1. Ouvrez Kodi > **Extensions** > **Extensions Programmes** > **ArrMada** (ou faites Clic droit > **Paramètres**).
 2. Renseignez :
-   - **URL du serveur ArrMada** : `http://<IP_DE_VOTRE_SERVEUR>:8420` (port du backend ; le port 3420 de l'interface est converti automatiquement).
+   - **URL du serveur ArrMada** : `http://<IP_DE_VOTRE_SERVEUR>:8420` (port du backend ; le port 3420 de l'interface est converti automatiquement). **Vide par défaut** (1.25.2) : sans adresse, l'appli affiche « Serveur ArrMada non configuré » et propose, avant l'appairage, de **chercher le serveur sur le réseau** (adresses du /24 de la TV, port 8420, route publique `/api/health`) ou de **saisir son adresse**. Aussi dans **accueil ArrMada → Réglages → Trouver le serveur ArrMada** (« Changer de serveur » une fois réglé) ou `RunPlugin(plugin://script.arrmada/?action=server)`. Changer de serveur demande un nouvel appairage (le jeton est lié à l'adresse).
    - Plus de mot de passe à saisir depuis la 1.8 : la TV s'**appaire** (§ 7). Une TV
      qui avait l'ancien mot de passe s'appaire toute seule, puis l'efface.
    - **Nom de l'appareil** : Ex: `Kodi Salon`.

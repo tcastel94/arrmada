@@ -22,6 +22,7 @@ import xbmcgui
 
 import device
 import pairing_data
+import server_data
 import ui_common as ui
 from api import ArrMadaAPI
 
@@ -92,6 +93,10 @@ class PairWindow(xbmcgui.WindowXML):
         started = ArrMadaAPI.pair_start(_platform())
         if self._stop.is_set():
             return
+        if server_data.is_not_configured(started):
+            # Adresse effacée entre-temps : pas de « injoignable » trompeur
+            self._fail("error", server_data.NOT_CONFIGURED_TITLE, started["message"])
+            return
         if started.get("status") == "error" or not started.get("device_code"):
             message = started.get("message") or "Réponse inattendue du serveur"
             if started.get("code") == 403:
@@ -157,7 +162,15 @@ class PairWindow(xbmcgui.WindowXML):
 
 
 def open_pairing() -> dict:
-    """Ouvre l'écran d'appairage ; renvoie l'appareil appairé ({} si annulé)."""
+    """Ouvre l'écran d'appairage ; renvoie l'appareil appairé ({} si annulé).
+
+    Sans adresse de serveur (nouvelle installation), on commence par
+    « Trouver le serveur ArrMada » : un code demandé à personne ne sert à rien.
+    """
+    import server_setup
+
+    if not server_setup.ensure_configured():
+        return {}
     window = PairWindow(XML_FILE, ui.ADDON.getAddonInfo("path"), "Default", "1080i")
     try:
         window.doModal()
