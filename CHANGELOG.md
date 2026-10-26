@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Qualité de lecture dans l'appli Android TV : 1080p quand le réseau ne suit pas la 4K (ADR-012)
+
+#### Added
+- **Menu pause › « Qualité »**, à côté de « Audio » : **Original** (fichier d'origine, avec son format et son débit : « 4K · Dolby Vision · 90 Mb/s »), **1080p HDR · 20 Mb/s** (seulement si le serveur fournit `lite_stream` et que l'écran gère le HDR10) et **1080p SDR · 20 Mb/s** (conversion `sdr_stream` de Jellyfin, pour tout le monde). La qualité lue est cochée ; la bascule reprend à la même position, même en pause, avec un message court (« Qualité réduite : 1080p · 20 Mb/s »). Retour à l'original : la conversion Jellyfin est arrêtée (`/api/tv/hls/{id}/stop`) **avant** de relancer le flux, remux et conversion partageant la même session chez Jellyfin. Dolby Vision profil 5 déjà converti en SDR : « Original » reste listé, indisponible (couleurs fausses sur cet écran)
+- **Détection automatique des coupures** : 3 attentes de chargement en moins de 5 minutes, en pleine lecture de l'original, hors démarrage et hors 3 s après un saut ou un changement de flux → carte non bloquante façon « Épisode suivant » : « Le réseau ne suit pas ce fichier (90 Mb/s). Passer en 1080p ? » (OK : passer en 1080p, HDR si possible ; Retour : non merci, plus de proposition de la séance ; effacée seule après 20 s). Pas de proposition pour un fichier de moins de 25 Mb/s, que le 1080p ne soulagerait pas. Après un premier « oui », une seule fois par TV : « Toujours lire en 1080p sur cette TV ? »
+- **Réglages › « Qualité de lecture par défaut »** (Original / 1080p), avec l'aide « Choisis 1080p si ta TV est en Wi-Fi ou si les films 4K coupent ». En 1080p, la lecture part directement sur la version allégée ; le Dolby Vision profil 5 sur un écran sans Dolby Vision reste prioritaire. L'écran Réglages défile désormais au besoin
+- **`bitrate`** dans les infos de lecture (`GET /api/tv/play/…`) : débit moyen du fichier en bit/s (`MediaSources[0].Bitrate` de Jellyfin), `null` s'il est inconnu
+- Logique pure `data/QualityLogic.kt` (options, adresses, qualité de départ, comptage des coupures) ; `PlayInfo` reçoit `lite_stream` et `bitrate` avec des valeurs par défaut : un serveur plus ancien ne propose que « Original » et « 1080p SDR »
+- ADR-012 « Qualité de lecture »
+
+#### Changed
+- **Pas de préréglage `lite.m3u8` (1080p HDR10) côté serveur** : vérifié sur le Jellyfin 12.3 installé, tout réencodage d'une image HDR passe par le mappage tonal (sortie BT.709) et le HEVC réencodé est forcé en Main 8 bits ; `hevc-rangetype=HDR10` ne décide que de la copie de l'image. La qualité réduite réutilise donc le flux `sdr` (H.264 1080p, 20 Mb/s, plafond 30 Mb/s), inchangé. L'appli sait déjà afficher le 1080p HDR si un serveur futur fournit `lite_stream`
+- Le lecteur suit la qualité lue : l'écran d'appoint affiche « 1080p · SDR (converti) », et un direct qui a basculé en remux devient l'« Original » du menu
+
+#### Tests
+- Serveur : 10 cas de plus dans `tests/test_api/test_tv_playback.py` (débit du fichier : valeur, nul, négatif, texte, booléen, absent ; `bitrate` présent et `null` dans la réponse, pas de `lite_stream` ; conversion 1080p plafonnée sous 30 Mb/s sans copie d'image ; `lite.m3u8` refusé), 732 tests verts
+- Appli Android : 14 tests dans `QualityLogicTest` (options selon l'écran et le serveur, serveur ancien, Dolby Vision profil 5 prioritaire, adresses, qualité de départ, coupures : sauts ignorés, fenêtre glissante, pas de proposition en 1080p ni après un refus, fichier léger), 140 tests JVM verts
+
 ### Plus d'IP du mainteneur dans l'appli Kodi : « Serveur ArrMada non configuré » (appli Kodi 1.25.2)
 
 #### Fixed
