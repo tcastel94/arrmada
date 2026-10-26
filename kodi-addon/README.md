@@ -948,8 +948,15 @@ Ce que les TV partagent déjà (vu / reprise, § 20) s'affiche aussi dans la
 >   « absente », et la demande **expire au bout de 2 min** — jamais de film
 >   qui démarre tout seul au rallumage (ni après un redémarrage du serveur,
 >   qui rejoue son historique d'événements) ;
-> - le titre doit être dans la médiathèque Kodi de **cette** TV (scannée) :
->   sinon une bulle « n'est pas dans la médiathèque de cette TV » ;
+> - le titre doit être dans la médiathèque Kodi de **cette** TV (scannée).
+>   Sinon, depuis la 1.25.1, la TV dit pourquoi : **« Pas encore sur le
+>   NAS »** (Radarr / Sonarr n'ont pas de fichier : rien à faire côté Kodi),
+>   ou **« Absent de la médiathèque Kodi »** avec la source à ajouter
+>   (`smb://<NAS>/data/media/movies/`, contenu « Films », scraper TMDB,
+>   langue fr-FR), ou la source déjà déclarée à vérifier puis scanner. Le
+>   chemin dans le partage vient de `GET /api/kodi/library-sources` (déduit
+>   de `stack.json` d'install.sh : Synology `/volumeN/<partage>`, Unraid
+>   `/mnt/user/<partage>`) ;
 > - la TV doit être en 1.19.0 ou plus : une plus ancienne ignore la demande.
 
 ### 25. 🗂️ Pièce « Bureau » sans ampli, appairer depuis l'accueil (1.19.1)

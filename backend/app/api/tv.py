@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
-from app.services import tv_playback, watch_summary
+from app.services import library_hints, tv_playback, watch_summary
 from app.utils.event_bus import event_bus
 
 router = APIRouter(
@@ -115,6 +115,9 @@ async def play_on_target(
     )
     if request is None:
         raise HTTPException(status_code=422, detail="Titre à lire invalide")
+    # Fichier présent sur le NAS ? La TV distingue alors « pas encore
+    # téléchargé » de « absent de SA médiathèque Kodi » (source à ajouter)
+    request = await library_hints.with_file_status(db, request)
     await event_bus.publish(event_type="play_request", data=request)
     return {
         "status": "ok",

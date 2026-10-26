@@ -137,6 +137,8 @@ _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         ("GET", r"/api/kodi/watch-state"),
         ("POST", r"/api/kodi/watch-state"),
         ("GET", r"/api/kodi/series/\d+/episodes"),  # épisodes Sonarr (manquants)
+        # Chemins des films / séries dans le partage SMB (source Kodi à ajouter)
+        ("GET", r"/api/kodi/library-sources"),
         ("POST", r"/api/kodi/actions/(search|subtitles|subtitles/sync)"),
         ("POST", r"/api/kodi/media/(add|download)"),
         ("POST", r"/api/kodi/media/(movie|series|tv)/\d+/grab"),

@@ -11,6 +11,7 @@ from app.api import local_series as api
 from app.config import settings
 from app.services import local_series as scanner
 from app.services.devices import device_may_call, pairings
+from app.utils.event_bus import event_bus
 
 
 async def _pair(client: AsyncClient, admin: dict[str, str]) -> dict[str, str]:
@@ -205,6 +206,8 @@ async def test_local_series_end_to_end(
 
     # « Sur la TV » depuis la web app : la TV reçoit le jeton du fichier et la reprise
     tv_id = (await client.get("/api/devices/me", headers=tv)).json()["id"]
+    # Seulement les événements de CE test (le bus garde ceux des tests précédents)
+    since = event_bus.last_id
     sent = await client.post(
         "/api/kodi/play-on-device",
         json={"media_type": "file", "id_type": "sha1", "id": first["watch_id"], "title": "Naruto Kai",
@@ -213,7 +216,7 @@ async def test_local_series_end_to_end(
         headers=auth_headers,
     )  # fmt: skip
     assert sent.status_code == 200, sent.text
-    events = (await client.get("/api/events/recent?since_id=0", headers=tv)).json()
+    events = (await client.get(f"/api/events/recent?since_id={since}", headers=tv)).json()
     request = next(e["data"] for e in events["events"] if e["type"] == "play_request")
     assert (request["media_type"], request["file"], request["local_series"], request["start"]) == (
         "file", first["token"], series["id"], 420,

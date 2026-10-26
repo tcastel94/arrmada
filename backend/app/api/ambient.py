@@ -33,7 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
 from app.models.device import AMP_ROOMS, ROOMS, Device
-from app.services import ambient_tonight, watch_summary, watch_sync
+from app.services import ambient_tonight, library_hints, watch_summary, watch_sync
 from app.services.now_playing import now_playing
 from app.services.tv_remote import InvalidCommand, clean_command, remote_queue
 from app.utils.cache import cache
@@ -434,6 +434,9 @@ async def play(
     from app.services.activity_log import log_event
     from app.utils.event_bus import event_bus
 
+    # Fichier présent sur le NAS ? La TV distingue alors « pas encore
+    # téléchargé » de « absent de SA médiathèque Kodi » (source à ajouter)
+    request = await library_hints.with_file_status(db, request)
     await event_bus.publish(event_type="play_request", data=request)
     code = (
         f" S{request['season']:02d}E{request['episode']:02d}"

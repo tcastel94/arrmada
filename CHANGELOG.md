@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### « Lire » sur la TV : pas encore téléchargé ou source Kodi à ajouter (retour d'installation Synology, lot 5, appli Kodi 1.25.1)
+
+#### Fixed
+- **« … n'est pas dans la médiathèque de cette TV »** pour deux causes sans rapport : la TV dit maintenant laquelle.
+  - **« Pas encore sur le NAS »** : Radarr / Sonarr n'ont pas de fichier (titre « Missing »), rien à faire côté Kodi
+  - **« Absent de la médiathèque Kodi »** : le fichier est sur le NAS mais la TV n'a pas de source vers son dossier. La fenêtre donne la source exacte à ajouter (`smb://192.168.1.49/data/media/movies/`, contenu « Films » ou « Séries TV », scraper TMDB, langue fr-FR), ou, si la TV a déjà une source vers ce dossier (même par le nom du NAS), dit de vérifier son contenu et de lancer « Mettre à jour la médiathèque »
+  - Même aide depuis les écrans de l'appli (fiche, accueil), qui affichaient « Pas (encore) dans la médiathèque Kodi de cet appareil »
+
+#### Added
+- **`has_file`** dans la demande de lecture (`play_request`) envoyée par la web app, la tablette ou l'appli Android : statut du fichier d'après Radarr (film) ou Sonarr (épisode précis) ; `null` si inconnu (service en panne, titre absent), jamais d'erreur
+- **`GET /api/kodi/library-sources`** (autorisé aux TV) : chemin des films et des séries dans le partage SMB du NAS (`data/media/movies`), déduit de `stack.json` (Synology `/volumeN/<partage>`, Unraid `/mnt/user/<partage>`) ; `install.sh` y note désormais `data_root`, un ancien `stack.json` prend le dossier par défaut de la plateforme
+- Tests : 15 tests serveur (chemin du partage, sources selon la plateforme, route, `has_file` d'un film et d'un épisode avec ou sans fichier sur le faux Radarr / Sonarr, panne), 7 tests de l'appli Kodi (messages selon le cas, source existante, adresse SMB)
+
 ### Dossiers vidéo : chemin du NAS expliqué (retour d'installation Synology, lot 4)
 
 #### Fixed
