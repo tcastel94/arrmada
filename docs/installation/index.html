@@ -526,9 +526,11 @@ footer { margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--line);
       S.push({
         id: "syn-shares",
         h: "Crée deux dossiers partagés : « docker » et « data »",
-        b: "<p>" + path(["Panneau de configuration", "Dossier partagé", "Créer"]) + ". Nom : <code>docker</code>, emplacement : <b>" + esc(vol.replace("volume", "Volume ")) + "</b>, puis <span class=\"ui\">Suivant</span> jusqu'à la fin en gardant les réglages proposés. Recommence avec le nom <code>data</code>.</p>" +
+        b: "<p>" + path(["Panneau de configuration", "Dossier partagé", "Créer"]) + ". Nom : <code>docker</code>, emplacement : <b>" + esc(vol.replace("volume", "Volume ")) + "</b>, puis <span class=\"ui\">Suivant</span> jusqu'à la fin en gardant les réglages proposés. Recommence avec le nom <code>data</code>, en <b>décochant « Activer la Corbeille »</b>.</p>" +
           "<ul><li><code>docker</code> contiendra les réglages des applications.</li><li><code>data</code> contiendra les films, les séries et les téléchargements.</li></ul>" +
           more("Pourquoi passer par DSM et pas par l'installeur ?", "<p>Un dossier créé par un script n'est pas un vrai « dossier partagé » Synology : il serait invisible dans File Station et sur le réseau. Si un dossier <code>docker</code> existe déjà, garde-le, c'est parfait.</p>") +
+          more("Pourquoi c'est la toute première étape", "<p>Les téléchargements et les films doivent être dans le <b>même</b> dossier partagé pour que les imports soient instantanés et ne prennent pas deux fois la place. Et c'est par ce partage que ta TV (Kodi) verra les films. Le corriger après coup demande de tout arrêter et de déplacer les fichiers : mieux vaut le faire maintenant.</p><p>Sans corbeille : Radarr et Sonarr remplacent parfois un fichier par une meilleure version, l'ancien irait sinon remplir la corbeille en silence.</p>") +
+          more("Mon dossier « data » existe déjà", "<p>Ouvre <b>File Station</b> : s'il apparaît dans la liste de gauche, c'est un vrai dossier partagé, garde-le. S'il n'y apparaît pas, il a été créé par une commande : il est invisible sur le réseau (et pour ta TV). La procédure pour le transformer en dossier partagé sans perdre les fichiers est dans la <a href=\"https://github.com/tcastel94/arrmada/blob/main/docs/installer.md#synology-dsm-72\" target=\"_blank\" rel=\"noopener\">documentation de l'installeur</a>.</p>") +
           more("J'ai déjà des films ailleurs", "<p>Pas de problème. Une fois l'installation finie, déplace-les avec File Station dans <code>data/media/movies</code> (films) et <code>data/media/tv</code> (séries), ou laisse-les où ils sont et ajoute leur dossier plus tard dans Radarr et Sonarr.</p>")
       });
       S.push({
@@ -700,12 +702,29 @@ footer { margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--line);
           (state.player === "jellyfin" ? "<li><b>Jellyfin</b> : te connecter avec le compte créé pour toi, puis installer l'appli Jellyfin sur ta TV ou ton téléphone.</li>" : "") +
           "</ul>"
       },
+      state.device === "synology" ? {
+        id: "first-syn-network",
+        h: "Une application en rouge ? Laisse ArrMada la retrouver",
+        b: "<p>Sur un Synology, les applications ne peuvent pas se joindre par l'adresse du NAS (<code class=\"nas-host\">" + esc(host) + "</code>) : elles se parlent par leur <b>nom</b> (<code>radarr</code>, <code>sonarr</code>…). ArrMada le sait et utilise ces noms.</p>" +
+          "<ul><li>« <b>en cours de démarrage</b> » : attends une minute et relance l'analyse.</li>" +
+          "<li>« <b>Délai dépassé</b> » sur un service déjà enregistré : " + path(["Paramètres", "Services", "Tester"]) + ", puis le bouton « Utiliser http://radarr:7878 » qu'ArrMada propose.</li></ul>" +
+          more("Et le pare-feu du NAS ?", "<p>Il n'est en général pas en cause. Seulement si tu l'as activé avec une règle « tout refuser » : " + path(["Panneau de configuration", "Sécurité", "Pare-feu", "Modifier les règles", "Créer"]) + ", <b>Autoriser</b>, adresse source <code>172.16.0.0</code> masque <code>255.240.0.0</code> (les réseaux internes des applications).</p>")
+      } : null,
+      (state.device === "synology" || state.device === "unraid") ? {
+        id: "first-kodi-sources",
+        h: "Ta TV (Kodi) : ajoute les dossiers des films et des séries",
+        b: "<p>Seulement si tu as une TV avec Kodi. Pour lire un film depuis ArrMada, Kodi doit l'avoir dans <b>sa</b> médiathèque. Dans Kodi : " + path(["Vidéos", "Fichiers", "Ajouter des vidéos"]) + ", puis ajoute ces deux sources :</p>" +
+          "<ul><li><code>smb://<span class=\"nas-host\">" + esc(host) + "</span>/data/media/movies</code> : contenu <b>Films</b>, scraper <b>The Movie Database</b>, langue <b>fr-FR</b> ;</li>" +
+          "<li><code>smb://<span class=\"nas-host\">" + esc(host) + "</span>/data/media/tv</code> : contenu <b>Séries TV</b>, mêmes réglages.</li></ul>" +
+          "<p>Identifiants demandés : ceux d'un utilisateur du NAS qui peut lire le dossier <code>data</code>.</p>" +
+          more("« Pas encore sur le NAS » ou « Absent de la médiathèque Kodi » ?", "<p>Le premier : le film n'est pas encore téléchargé, rien à faire. Le second : la source manque ou n'a pas été scannée ; ArrMada affiche l'adresse exacte à ajouter.</p>")
+      } : null,
       {
         id: "first-equipment",
         h: "Indique ton équipement, ou passe",
         b: "<p>Application TV, tablette murale, ampli home cinéma, caméras : coche seulement ce que tu possèdes. Tout le reste reste masqué. Aucun de ces éléments n'est nécessaire.</p>"
       }
-    ]);
+    ].filter(Boolean));
   }
 
   /* ── Copier ──────────────────────────────────────────── */
@@ -767,6 +786,8 @@ footer { margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--line);
     var host = cleanHost(state.host) || (state.device === "windows" || state.device === "mac" ? "localhost" : "adresse-de-ton-appareil");
     $("open-link").textContent = "http://" + host + ":3420";
     $("open-link").href = "http://" + host + ":3420";
+    // Adresse du NAS reprise dans les étapes (sources Kodi, réseau Synology)
+    document.querySelectorAll(".nas-host").forEach(function (el) { el.textContent = host; });
   }
 
   renderDevice();

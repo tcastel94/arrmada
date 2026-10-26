@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation Synology et compose (retour d'installation Synology, lot 6)
+
+#### Added
+- **`docs/installer.md`, section Synology (DSM 7.2+)**, tirée de l'installation réelle, dans l'ordre où les points se posent :
+  1. dossiers partagés `docker` et `data` créés dans DSM **avant tout** (corbeille de `data` désactivée), et pourquoi : hardlinks TRaSH, visibilité SMB pour Kodi. Rattrapage d'un `data` créé en ligne de commande en trois temps (arrêt, création dans DSM, remise en place), avec `find … -exec synoacltool -enforce-inherit {} \;` (la commande seule n'est pas récursive) et `sudo -i`, sous lequel `/usr/syno/{bin,sbin}` restent dans le `PATH`
+  2. PUID / PGID (`id`)
+  3. `sudo -v` avant de coller un bloc (sinon un heredoc est avalé par l'invite du mot de passe)
+  4. projet Compose `arrmada-stack` et `-p` (conflit de `container_name` sinon)
+  5. hairpin : les conteneurs ne joignent pas l'IP du NAS, les noms Docker oui (lien avec le lot 3), règle de pare-feu 172.16.0.0/12 en option
+  6. sources Kodi (`smb://<NAS>/data/media/movies`, Films, TMDB, fr-FR)
+  7. dossiers vidéo (montage sous `/mnt/user`)
+  8. FlareSolverr dans Prowlarr
+- **Guide web d'installation** (GitHub Pages) : corbeille désactivée pour `data` et pourquoi cette étape vient en premier ; « Mon dossier data existe déjà » (vérification dans File Station, lien vers le rattrapage) ; au premier lancement sur Synology, « Une application en rouge ? » (noms Docker, bouton « Utiliser http://radarr:7878 », pare-feu) ; sur Synology et Unraid, les sources Kodi avec l'adresse saisie
+- **`docker-compose.yml`** : exemples Synology commentés (`/volume1/data:/data`, `/volume1/mangas:/mnt/user/mangas:ro`), FlareSolverr commenté, et le rattachement au réseau d'une pile existante (`networks.default.external`, ex. `arrmada-stack_default`) pour joindre les applis par leur nom
+- **`install.sh`** : sur Synology, un dossier `docker` ou `data` présent mais **non partagé** (créé par `mkdir`) est signalé (`synoshare --get`, cherché dans `/usr/syno/sbin`, simple avertissement : son code retour n'est pas documenté par Synology) ; FlareSolverr commenté dans le compose généré (même projet, donc même réseau que Prowlarr)
+- Tests : contrôle de la détection du dossier partagé en CI (faux `synoshare`, vérifié aussi en cas de régression) ; test Playwright du guide web (parcours Synology, et rien de propre au NAS sur un serveur Linux) ; README : lien vers la section Synology
+
 ### « Lire » sur la TV : pas encore téléchargé ou source Kodi à ajouter (retour d'installation Synology, lot 5, appli Kodi 1.25.1)
 
 #### Fixed

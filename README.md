@@ -69,6 +69,8 @@ curl -fsSL https://raw.githubusercontent.com/tcastel94/arrmada/main/install.sh |
 
 Options utiles : `--yes` (aucune question), `--torrent deluge|qbittorrent`, `--no-usenet`,
 `--no-jellyfin`, `--config-root` / `--data-root`. Détails : [docs/installer.md](docs/installer.md).
+Sur **Synology**, lis d'abord sa [section dédiée](docs/installer.md#synology-dsm-72) : dossier
+partagé `data` créé dans DSM avant tout, PUID/PGID, réseau Compose, hairpin, sources Kodi.
 
 Tu as **déjà** tes applis ? Installe ArrMada seul :
 
