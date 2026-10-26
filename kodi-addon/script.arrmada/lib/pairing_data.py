@@ -109,7 +109,7 @@ def should_offer(
     Seulement si la TV n'est pas appairée, n'a pas d'ancien mot de passe
     (le service l'appaire alors tout seul) et une fois par session de Kodi
     (Retour ferme l'écran d'appairage : on ne le rouvre pas en boucle).
-    Serveur non configuré (1.25.1) : proposé même avec un ancien mot de passe,
+    Serveur non configuré (1.25.2) : proposé même avec un ancien mot de passe,
     le service ne peut pas l'appairer sans adresse ; l'écran d'appairage
     commence alors par « Trouver le serveur ArrMada ».
     """

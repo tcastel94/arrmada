@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Adresse du serveur ArrMada : logique pure, sans Kodi (testée en CI).
 
-Jusqu'à la 1.25.0 incluse, une adresse vide (ou 127.0.0.1 / localhost) était
+Jusqu'à la 1.25.1 incluse, une adresse vide (ou 127.0.0.1 / localhost) était
 remplacée par l'IP du réseau du mainteneur, puis enregistrée dans les
 réglages : sur une nouvelle installation (Synology chez quelqu'un d'autre),
 la TV interrogeait une machine qui n'existe pas chez lui et gardait cette

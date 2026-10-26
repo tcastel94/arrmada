@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <settings>
     <category label="30100">
-        <!-- Vide par défaut (1.25.1) : la TV cherche le serveur sur le réseau ou
+        <!-- Vide par défaut (1.25.2) : la TV cherche le serveur sur le réseau ou
              demande son adresse (lib/server_setup.py), jamais d'IP inventée. -->
         <setting id="server_url" type="text" label="30102" default="" />
         <!-- Ancien mot de passe admin : plus saisi sur la TV depuis la 1.8 (phase 3).

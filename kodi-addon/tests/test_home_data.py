@@ -316,7 +316,7 @@ class TestDescribeError:
             assert "8420" in described["hint"]
 
     def test_unconfigured_server_is_neither_down_nor_refused(self) -> None:
-        """Aucune adresse réglée : on dit quoi faire, pas « injoignable » (1.25.1)."""
+        """Aucune adresse réglée : on dit quoi faire, pas « injoignable » (1.25.2)."""
         described = home_data.describe_error(
             {"status": "error", "reason": "not_configured", "message": "…"}
         )

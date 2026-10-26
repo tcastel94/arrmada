@@ -15,6 +15,7 @@ from app.models.service import Service
 from app.services import kodi as kodi_service
 from app.services import (
     kodi_crash,
+    library_hints,
     tv_board,
     tv_download,
     tv_priority,
@@ -433,6 +434,9 @@ async def play_on_device(
     )
     if request is None:
         raise HTTPException(status_code=422, detail="Titre à lire invalide")
+    # Fichier présent sur le NAS ? La TV distingue alors « pas encore
+    # téléchargé » de « absent de SA médiathèque Kodi » (source à ajouter)
+    request = await library_hints.with_file_status(db, request)
     await event_bus.publish(event_type="play_request", data=request)
 
     from app.services.activity_log import log_event
@@ -457,6 +461,18 @@ async def play_on_device(
         "online": watch_summary.is_online(device.last_seen_at, now),
         "request_id": request["request_id"],
     }
+
+
+# ── Où sont les films et les séries dans le partage SMB du NAS ──
+@router.get("/library-sources")
+async def addon_library_sources():
+    """{"movies": "data/media/movies", "tv": "data/media/tv"} (None si inconnu).
+
+    Titre présent sur le NAS mais introuvable dans la médiathèque Kodi : la
+    TV indique la source à ajouter (smb://<serveur>/data/media/movies, type
+    Films, scraper TMDB). Déduit de stack.json (install.sh).
+    """
+    return library_hints.library_sources()
 
 
 # ── Épisodes d'une série vus par Sonarr (manquants, à venir) ──

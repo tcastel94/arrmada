@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Plus d'IP du mainteneur dans l'appli Kodi : « Serveur ArrMada non configuré » (appli Kodi 1.25.1)
+### Plus d'IP du mainteneur dans l'appli Kodi : « Serveur ArrMada non configuré » (appli Kodi 1.25.2)
 
 #### Fixed
 - **Une TV pas encore configurée interrogeait `192.168.2.3:8420`**, l'IP du réseau du mainteneur, puis l'enregistrait dans ses réglages : sur une nouvelle installation (Synology chez quelqu'un d'autre), erreur de connexion vers une machine qui n'existe pas, et adresse fantôme gardée. `ArrMadaAPI.get_config()` n'invente plus d'adresse : vide, `127.0.0.1` ou `localhost` = **non configuré**, aucun appel réseau, et la réponse d'erreur porte `reason: "not_configured"`
@@ -21,6 +21,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Changed
 - **TV déjà configurée : rien ne change**, son `server_url` est utilisé tel quel (même normalisation, port 3420 converti en 8420). Une TV appairée dont le réglage était resté à l'ancienne valeur par défaut retrouve l'adresse de son appairage (`device.json`), qui est alors écrite dans les réglages
 - Ouverture automatique de l'appairage sur l'accueil : aussi quand la TV a encore l'ancien mot de passe mais aucune adresse (le service ne peut pas l'appairer sans serveur)
+
+### « Lire » sur la TV : pas encore téléchargé ou source Kodi à ajouter (retour d'installation Synology, lot 5, appli Kodi 1.25.1)
+
+#### Fixed
+- **« … n'est pas dans la médiathèque de cette TV »** pour deux causes sans rapport : la TV dit maintenant laquelle.
+  - **« Pas encore sur le NAS »** : Radarr / Sonarr n'ont pas de fichier (titre « Missing »), rien à faire côté Kodi
+  - **« Absent de la médiathèque Kodi »** : le fichier est sur le NAS mais la TV n'a pas de source vers son dossier. La fenêtre donne la source exacte à ajouter (`smb://192.168.1.49/data/media/movies/`, contenu « Films » ou « Séries TV », scraper TMDB, langue fr-FR), ou, si la TV a déjà une source vers ce dossier (même par le nom du NAS), dit de vérifier son contenu et de lancer « Mettre à jour la médiathèque »
+  - Même aide depuis les écrans de l'appli (fiche, accueil), qui affichaient « Pas (encore) dans la médiathèque Kodi de cet appareil »
+
+#### Added
+- **`has_file`** dans la demande de lecture (`play_request`) envoyée par la web app, la tablette ou l'appli Android : statut du fichier d'après Radarr (film) ou Sonarr (épisode précis) ; `null` si inconnu (service en panne, titre absent), jamais d'erreur
+- **`GET /api/kodi/library-sources`** (autorisé aux TV) : chemin des films et des séries dans le partage SMB du NAS (`data/media/movies`), déduit de `stack.json` (Synology `/volumeN/<partage>`, Unraid `/mnt/user/<partage>`) ; `install.sh` y note désormais `data_root`, un ancien `stack.json` prend le dossier par défaut de la plateforme
+- Tests : 15 tests serveur (chemin du partage, sources selon la plateforme, route, `has_file` d'un film et d'un épisode avec ou sans fichier sur le faux Radarr / Sonarr, panne), 7 tests de l'appli Kodi (messages selon le cas, source existante, adresse SMB)
 
 ### Dossiers vidéo : chemin du NAS expliqué (retour d'installation Synology, lot 4)
 

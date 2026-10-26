@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""« Serveur ArrMada non configuré » : trouver le serveur ou saisir son adresse (1.25.1).
+"""« Serveur ArrMada non configuré » : trouver le serveur ou saisir son adresse (1.25.2).
 
 Ouvert avant l'appairage quand la TV ne connaît aucune adresse (nouvelle
 installation), et depuis Réglages de l'accueil › « Trouver le serveur

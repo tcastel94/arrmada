@@ -140,6 +140,11 @@ class ArrMadaAPI:
         return cls._request(path, method="GET", timeout=timeout)
 
     @classmethod
+    def get_library_sources(cls) -> dict:
+        """{"movies": "data/media/movies", "tv": "data/media/tv"} : dossiers dans le partage SMB du NAS."""
+        return cls._request("/api/kodi/library-sources", method="GET", timeout=5)
+
+    @classmethod
     def get_media(cls, params: dict) -> dict:
         """Une page de la bibliothèque (Films / Séries, 1.9.0), triée et filtrée par le serveur."""
         return cls._request(f"/api/media?{urllib.parse.urlencode(params)}", method="GET", timeout=15)

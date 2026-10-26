@@ -948,8 +948,15 @@ Ce que les TV partagent déjà (vu / reprise, § 20) s'affiche aussi dans la
 >   « absente », et la demande **expire au bout de 2 min** — jamais de film
 >   qui démarre tout seul au rallumage (ni après un redémarrage du serveur,
 >   qui rejoue son historique d'événements) ;
-> - le titre doit être dans la médiathèque Kodi de **cette** TV (scannée) :
->   sinon une bulle « n'est pas dans la médiathèque de cette TV » ;
+> - le titre doit être dans la médiathèque Kodi de **cette** TV (scannée).
+>   Sinon, depuis la 1.25.1, la TV dit pourquoi : **« Pas encore sur le
+>   NAS »** (Radarr / Sonarr n'ont pas de fichier : rien à faire côté Kodi),
+>   ou **« Absent de la médiathèque Kodi »** avec la source à ajouter
+>   (`smb://<NAS>/data/media/movies/`, contenu « Films », scraper TMDB,
+>   langue fr-FR), ou la source déjà déclarée à vérifier puis scanner. Le
+>   chemin dans le partage vient de `GET /api/kodi/library-sources` (déduit
+>   de `stack.json` d'install.sh : Synology `/volumeN/<partage>`, Unraid
+>   `/mnt/user/<partage>`) ;
 > - la TV doit être en 1.19.0 ou plus : une plus ancienne ignore la demande.
 
 ### 25. 🗂️ Pièce « Bureau » sans ampli, appairer depuis l'accueil (1.19.1)
@@ -1196,7 +1203,7 @@ Copiez le dossier `script.arrmada/` dans le dossier des extensions de Kodi :
 
 1. Ouvrez Kodi > **Extensions** > **Extensions Programmes** > **ArrMada** (ou faites Clic droit > **Paramètres**).
 2. Renseignez :
-   - **URL du serveur ArrMada** : `http://<IP_DE_VOTRE_SERVEUR>:8420` (port du backend ; le port 3420 de l'interface est converti automatiquement). **Vide par défaut** (1.25.1) : sans adresse, l'appli affiche « Serveur ArrMada non configuré » et propose, avant l'appairage, de **chercher le serveur sur le réseau** (adresses du /24 de la TV, port 8420, route publique `/api/health`) ou de **saisir son adresse**. Aussi dans **accueil ArrMada → Réglages → Trouver le serveur ArrMada** (« Changer de serveur » une fois réglé) ou `RunPlugin(plugin://script.arrmada/?action=server)`. Changer de serveur demande un nouvel appairage (le jeton est lié à l'adresse).
+   - **URL du serveur ArrMada** : `http://<IP_DE_VOTRE_SERVEUR>:8420` (port du backend ; le port 3420 de l'interface est converti automatiquement). **Vide par défaut** (1.25.2) : sans adresse, l'appli affiche « Serveur ArrMada non configuré » et propose, avant l'appairage, de **chercher le serveur sur le réseau** (adresses du /24 de la TV, port 8420, route publique `/api/health`) ou de **saisir son adresse**. Aussi dans **accueil ArrMada → Réglages → Trouver le serveur ArrMada** (« Changer de serveur » une fois réglé) ou `RunPlugin(plugin://script.arrmada/?action=server)`. Changer de serveur demande un nouvel appairage (le jeton est lié à l'adresse).
    - Plus de mot de passe à saisir depuis la 1.8 : la TV s'**appaire** (§ 7). Une TV
      qui avait l'ancien mot de passe s'appaire toute seule, puis l'efface.
    - **Nom de l'appareil** : Ex: `Kodi Salon`.

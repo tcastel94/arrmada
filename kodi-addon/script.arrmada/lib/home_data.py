@@ -65,7 +65,7 @@ ERROR_DOWN = {
 }
 
 
-# Aucune adresse réglée (1.25.1) : ni panne, ni refus, la TV ne sait pas
+# Aucune adresse réglée (1.25.2) : ni panne, ni refus, la TV ne sait pas
 # encore où est le serveur (lib/server_data.py).
 ERROR_UNCONFIGURED = {
     "title": server_data.NOT_CONFIGURED_TITLE,

@@ -1,4 +1,4 @@
-"""Adresse du serveur ArrMada (1.25.1) : plus jamais d'IP inventée."""
+"""Adresse du serveur ArrMada (1.25.2) : plus jamais d'IP inventée."""
 
 from __future__ import annotations
 
