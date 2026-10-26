@@ -802,10 +802,17 @@ $($PUBLISH_TV_PORT && echo "      - \"${PORT_ARRMADA_TV}:3420\"   # add-on Kodi 
       - ./data:/app/data
       - ${CONFIG_ROOT}:/appdata:ro      # lecture des clés API des autres applis
       - ${DATA_ROOT}:/data
+      # Écran « Vidéos » (mangas, vidéos perso hors médiathèque) : ce qui est
+      # sous /data se déclare tel quel. Un autre dossier du NAS se monte
+      # d'abord sous /mnt/user (lecture seule), puis se déclare dans
+      # Paramètres › Dossiers vidéo avec le chemin de DROITE, par exemple :
+      # - ${DATA_ROOT%/*}/mangas:/mnt/user/mangas:ro
     environment:
       - PUID=${PUID}
       - PGID=${PGID}
       - TZ=${TZ_VALUE}
+      # Dossiers vidéo acceptés (chemins vus depuis le conteneur, séparés par des virgules)
+      - VIDEO_ALLOWED_BASE=/mnt/user,/data
 EOF
                     ;;
                 sonarr|radarr|prowlarr|bazarr)

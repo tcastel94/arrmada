@@ -213,3 +213,101 @@ async def test_browse_play_stream_from_a_tv(
     assert (await client.delete(f"/api/videos/roots/{root_id}", headers=auth_headers)).is_success
     assert (await client.get(info["stream"], headers=tv)).status_code == 404
     assert (nas / "Kai" / "Dragon Ball Kai" / "DBK - Ep 1.mkv").exists()
+
+
+# ── Dossiers refusés : ligne de volume et chemin à saisir (retour Synology) ──
+@pytest.fixture
+def container(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Faux conteneur : /mnt/user (bases) avec un dossier monté, /data à côté."""
+    root = tmp_path / "ctr"
+    (root / "mnt" / "user" / "medias").mkdir(parents=True)
+    (root / "data" / "media" / "mangas").mkdir(parents=True)
+    (root / "media" / "perso").mkdir(parents=True)
+    monkeypatch.setattr(settings, "VIDEO_ALLOWED_BASE", f"{root}/mnt/user")
+    monkeypatch.setattr(settings, "DATA_DIR", str(tmp_path / "appdata"))
+    return root
+
+
+def test_allowed_bases_comma_separated(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "VIDEO_ALLOWED_BASE", " /mnt/user/ , /data,, ")
+    assert video_files.allowed_bases() == ["/mnt/user", "/data"]
+    monkeypatch.setattr(settings, "VIDEO_ALLOWED_BASE", "")
+    assert video_files.allowed_bases() == []
+
+
+def test_several_bases_accepted(container: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "VIDEO_ALLOWED_BASE", f"{container}/mnt/user,{container}/data")
+    mangas = container / "data" / "media" / "mangas"
+    assert video_files.check_root_path(str(mangas)) == str(mangas.resolve())
+    assert video_files.check_root_path(f"{container}/mnt/user/medias/") == str(
+        (container / "mnt" / "user" / "medias").resolve()
+    )
+    with pytest.raises(video_files.RootPathError, match=r"sous .*/mnt/user ou .*/data"):
+        video_files.check_root_path(str(container / "media" / "perso"))
+
+
+def test_nas_path_gives_volume_line(container: Path) -> None:
+    """Réflexe Synology : saisir /volume1/mangas, chemin du NAS absent du conteneur."""
+    base = f"{container}/mnt/user"
+    with pytest.raises(video_files.RootPathError) as info:
+        video_files.check_root_path("/volume1/mangas/")
+    err = info.value
+    assert err.volume_line == f"- /volume1/mangas:{base}/mangas:ro"
+    assert err.container_path == f"{base}/mangas"
+    assert "chemin du NAS" in str(err)
+    assert "sous" in str(err)  # message historique conservé
+
+
+def test_visible_but_outside_suggests_wider_base(container: Path) -> None:
+    """Déjà monté ailleurs (/media/perso) : pas de ligne de volume, élargir la base."""
+    with pytest.raises(video_files.RootPathError) as info:
+        video_files.check_root_path(str(container / "media" / "perso"))
+    assert info.value.volume_line is None
+    assert f"VIDEO_ALLOWED_BASE={container}/mnt/user,{container}/media" in str(info.value)
+
+
+@pytest.mark.parametrize(
+    ("platform", "host"),
+    [
+        ("synology", "/volume1/mangas"),
+        ("unraid", "/mnt/user/mangas"),
+        ("", "/chemin/sur/le/NAS/mangas"),
+    ],
+)
+def test_missing_under_base_gives_mount_for_platform(
+    container: Path, platform: str, host: str
+) -> None:
+    """Sous la base mais pas monté : la ligne suit la plateforme de install.sh."""
+    if platform:
+        data_dir = Path(settings.DATA_DIR)
+        data_dir.mkdir(parents=True, exist_ok=True)
+        (data_dir / "stack.json").write_text(f'{{"platform": "{platform}"}}', encoding="utf-8")
+    target = f"{container}/mnt/user/mangas"
+    with pytest.raises(video_files.RootPathError, match="introuvable") as info:
+        video_files.check_root_path(target)
+    assert info.value.volume_line == f"- {host}:{target}:ro"
+    assert info.value.container_path == target
+
+
+async def test_api_returns_hint_and_bases(
+    client: AsyncClient, auth_headers: dict[str, str], container: Path
+) -> None:
+    listing = (await client.get("/api/videos/roots", headers=auth_headers)).json()
+    assert listing["bases"] == [f"{container}/mnt/user"]
+
+    resp = await client.post(
+        "/api/videos/roots",
+        json={"name": "Mangas", "path": "/volume1/mangas"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422
+    detail = resp.json()["detail"]
+    assert detail["volume_line"] == f"- /volume1/mangas:{container}/mnt/user/mangas:ro"
+    assert detail["container_path"] == f"{container}/mnt/user/mangas"
+    assert "chemin du NAS" in detail["message"]
+
+    # Sans aide possible (chemin relatif) : texte seul, comme avant
+    resp = await client.post(
+        "/api/videos/roots", json={"name": "Mangas", "path": "mangas"}, headers=auth_headers
+    )
+    assert resp.json()["detail"] == "Chemin absolu attendu (ex. /mnt/user/medias/mangas-kai)"

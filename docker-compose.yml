@@ -70,6 +70,7 @@ services:
       - ANDROID_UPDATE_REPO=${ANDROID_UPDATE_REPO:-tcastel94/arrmada}
       - ANDROID_UPDATE_TAG=${ANDROID_UPDATE_TAG:-android-latest}
       # Écran « Vidéos » : les dossiers déclarés doivent être sous ce chemin
+      # (vu depuis le conteneur ; plusieurs chemins séparés par des virgules)
       - VIDEO_ALLOWED_BASE=${VIDEO_ALLOWED_BASE:-/mnt/user}
       # IA : Ollama local (prioritaire) ou OpenRouter
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}

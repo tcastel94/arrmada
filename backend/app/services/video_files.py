@@ -20,6 +20,7 @@ from __future__ import annotations
 import base64
 import binascii
 import hashlib
+import json
 import os
 import re
 from dataclasses import dataclass
@@ -311,17 +312,102 @@ def subtitle_bytes(real: Path) -> tuple[bytes, str]:
 # ─── Dossiers racines (web app) ──────────────────────────────────────────────
 
 
+#: Hôte d'exemple pour la ligne de volume, selon la plateforme de install.sh
+HOST_EXAMPLES = {"synology": "/volume1", "unraid": "/mnt/user"}
+
+
+class RootPathError(ValueError):
+    """Dossier refusé, avec de quoi corriger : ligne de volume et chemin à saisir.
+
+    Hérite de ValueError : les appelants qui ne connaissent que le message
+    continuent de fonctionner.
+    """
+
+    def __init__(
+        self, message: str, *, volume_line: str | None = None, container_path: str | None = None
+    ) -> None:
+        super().__init__(message)
+        self.volume_line = volume_line
+        self.container_path = container_path
+
+    def as_detail(self) -> str | dict[str, str | None]:
+        """Détail de l'erreur HTTP : texte seul, ou objet si une aide existe."""
+        if not self.volume_line and not self.container_path:
+            return str(self)
+        return {
+            "message": str(self),
+            "volume_line": self.volume_line,
+            "container_path": self.container_path,
+        }
+
+
+def allowed_bases() -> list[str]:
+    """VIDEO_ALLOWED_BASE → bases autorisées, séparées par des virgules.
+
+    « /mnt/user,/data » : l'une OU l'autre. Vide = n'importe où.
+    """
+    raw = settings.VIDEO_ALLOWED_BASE or ""
+    return [b.rstrip("/") or "/" for b in (part.strip() for part in raw.split(",")) if b]
+
+
+def _platform() -> str:
+    """Plateforme notée par install.sh dans stack.json (vide si inconnue)."""
+    try:
+        data = json.loads((Path(settings.DATA_DIR) / "stack.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    return str(data.get("platform") or "") if isinstance(data, dict) else ""
+
+
+def _under(real: str, base: str) -> bool:
+    allowed = os.path.realpath(base)
+    return real == allowed or real.startswith(allowed.rstrip(os.sep) + os.sep)
+
+
 def check_root_path(path: str) -> str:
-    """Chemin proposé dans la web app → chemin réel accepté, ou ValueError en clair."""
+    """Chemin proposé dans la web app → chemin réel accepté, ou ValueError en clair.
+
+    Le chemin est celui vu DEPUIS LE CONTENEUR ArrMada. Quand il est refusé
+    ou absent, l'erreur (RootPathError) porte la ligne de volume à ajouter au
+    docker-compose.yml et le chemin à saisir ensuite : sur Synology, saisir
+    « /volume1/mangas » (chemin du NAS) est le réflexe naturel.
+    """
     path = (path or "").strip()
     if not path.startswith("/"):
         raise ValueError("Chemin absolu attendu (ex. /mnt/user/medias/mangas-kai)")
+    path = path.rstrip("/") or "/"
     real = os.path.realpath(path)
-    base = settings.VIDEO_ALLOWED_BASE.strip()
-    if base:
-        allowed = os.path.realpath(base)
-        if real != allowed and not real.startswith(allowed + os.sep):
-            raise ValueError(f"Dossier refusé : il doit être sous {base}")
+    bases = allowed_bases()
+    name = os.path.basename(path) or "videos"
+    # Le dossier se monte sous la première base (ex. /mnt/user/mangas)
+    target = f"{bases[0].rstrip('/')}/{name}" if bases else f"/videos/{name}"
+    shown = " ou ".join(bases)
+
+    if bases and not any(_under(real, b) for b in bases):
+        if os.path.isdir(real):
+            # Déjà visible dans le conteneur, mais hors des bases : élargir la base
+            raise RootPathError(
+                f"Dossier refusé : il doit être sous {shown}. Monte-le sous {bases[0]}, ou "
+                f"ajoute son dossier parent à VIDEO_ALLOWED_BASE (ex. "
+                f"VIDEO_ALLOWED_BASE={','.join([*bases, os.path.dirname(path)])})."
+            )
+        # Chemin du NAS (/volume1/mangas) : à monter dans le conteneur d'abord
+        raise RootPathError(
+            f"Dossier refusé : il doit être sous {shown}, tel que le voit le conteneur "
+            f"ArrMada. {path} est sans doute un chemin du NAS : monte-le dans le service "
+            f"arrmada du docker-compose.yml, relance le conteneur, puis saisis {target}.",
+            volume_line=f"- {path}:{target}:ro",
+            container_path=target,
+        )
     if not os.path.isdir(real):
-        raise ValueError("Dossier introuvable sur le serveur (vérifie le montage du NAS)")
+        # Sous une base mais absent : le montage manque (ou faute de frappe)
+        host = f"{HOST_EXAMPLES.get(_platform(), '/chemin/sur/le/NAS')}/{name}"
+        raise RootPathError(
+            f"Dossier introuvable dans le conteneur ArrMada : {path} n'est pas monté (ou "
+            f"le nom est mal tapé). Ajoute son montage au service arrmada du "
+            f"docker-compose.yml (remplace {host} par l'emplacement réel sur le NAS), "
+            "relance le conteneur, puis enregistre à nouveau.",
+            volume_line=f"- {host}:{path}:ro",
+            container_path=path,
+        )
     return real

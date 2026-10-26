@@ -116,6 +116,7 @@ jobs:
               ARRMADA_PLATFORM=$platform ./install.sh --dry-run --yes --torrent $torrent > out.log 2>&1 \
                 || { cat out.log; exit 1; }
               grep -q "name: arrmada-stack" out.log
+              grep -q "VIDEO_ALLOWED_BASE=/mnt/user,/data" out.log
               echo "::endgroup::"
             done
           done
