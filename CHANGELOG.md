@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Recherche IA : l'IA locale Ollama d'abord, OpenRouter en secours
+
+#### Fixed
+- **Recherche › IA ne répondait plus** (« Client error '404 Not Found' for url 'https://openrouter.ai/api/v1/chat/completions' ») : OpenRouter ne sert plus `google/gemini-2.0-flash-001`. Modèle par défaut remplacé par `google/gemini-3.5-flash-lite` (`AI_MODEL` dans `config.py`, `docker-compose.yml` et `.env.example`) ; un `.env` qui fixe encore l'ancien modèle doit être mis à jour à la main
+
+#### Changed
+- **La recherche IA passe par l'IA locale Ollama** (`OLLAMA_URL` / `OLLAMA_MODEL`), comme l'analyse des logs : gratuit, sans appel externe, environ 0,5 s par requête une fois le modèle chargé. OpenRouter ne répond plus qu'en secours ; l'une ou l'autre suffit (avant, `OPENROUTER_API_KEY` était obligatoire). La réponse indique l'IA utilisée (`engine` : `ollama` ou `openrouter`)
+- Appels aux deux IA regroupés dans `app/services/llm.py` (`chat_json`, `parse_json_object`), partagés par la recherche IA et l'analyse des logs ; l'analyse des logs garde les mêmes réglages et le même message d'erreur
+- Bandeau « Recherche IA non configurée » : indique `OLLAMA_URL` en premier, `OPENROUTER_API_KEY` en secours
+
+#### Tests
+- 4 cas dans `tests/test_api/test_ai_search.py` (Ollama répond en premier, OpenRouter en secours avec bloc de code Markdown, les deux en panne, aucune IA configurée), 749 tests verts
+
 ### Qualité de lecture dans l'appli Android TV : 1080p quand le réseau ne suit pas la 4K (ADR-012)
 
 #### Added

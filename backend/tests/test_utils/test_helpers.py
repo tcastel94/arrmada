@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from app.services.docker_logs import _classify, _demux, _parse_json_object
+from app.services.docker_logs import _classify, _demux
 from app.services.kodi import _resolution_label, _secs, _tech_details
+from app.services.llm import parse_json_object
 from app.services.media_aggregator import _calc_progress, _normalise_movie, _normalise_series
 from app.services.media_detail import _extract_images, _format_file_info, _key_crew
 from app.services.trash_profiles import _categorize_cf
@@ -187,8 +188,8 @@ class TestDockerLogs:
         assert _demux(b"plain tty output\n") == b"plain tty output\n"
 
     def test_parse_llm_json(self) -> None:
-        assert _parse_json_object('```json\n{"a": 1}\n```') == {"a": 1}
-        assert _parse_json_object('Voici : {"b": [1, 2]} fin') == {"b": [1, 2]}
+        assert parse_json_object('```json\n{"a": 1}\n```') == {"a": 1}
+        assert parse_json_object('Voici : {"b": [1, 2]} fin') == {"b": [1, 2]}
 
 
 class TestYamahaYxc:

@@ -350,8 +350,8 @@ function AiNotice({
             <div className="glass rounded-2xl border border-warning/20 p-4 text-sm">
                 <p className="font-semibold text-warning">Recherche IA non configurée</p>
                 <p className="mt-1 text-muted-foreground">
-                    Ajoute <code className="kbd">OPENROUTER_API_KEY</code> dans le fichier <code className="kbd">.env</code> du backend, puis redémarre
-                    le conteneur. En attendant, le mode Titre fonctionne sans IA.
+                    Renseigne <code className="kbd">OLLAMA_URL</code> (IA locale) ou, en secours, <code className="kbd">OPENROUTER_API_KEY</code> dans
+                    le fichier <code className="kbd">.env</code> du backend, puis redémarre le conteneur. En attendant, le mode Titre fonctionne sans IA.
                 </p>
             </div>
         );
