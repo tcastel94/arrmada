@@ -1,17 +1,19 @@
-"""AI-powered search — natural language media queries via OpenRouter LLM."""
+"""AI-powered search — natural language media queries.
+
+The LLM (local Ollama first, OpenRouter as fallback) turns the query into
+structured filters, which are then applied to the cached media library.
+"""
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
-import httpx
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
-from app.config import settings
 from app.services import media_aggregator
+from app.services.llm import LLMUnavailableError, ai_configured, chat_json, parse_json_object
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -49,38 +51,24 @@ Exemples :
 """
 
 
-async def _call_llm(user_query: str) -> dict[str, Any]:
-    """Call OpenRouter to extract structured filters from natural language."""
-    if not settings.OPENROUTER_API_KEY:
-        return {"error": "OPENROUTER_API_KEY not configured"}
+async def _call_llm(user_query: str) -> tuple[dict[str, Any], str]:
+    """Extract structured filters from natural language.
 
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": settings.AI_MODEL,
-                "messages": [
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": user_query},
-                ],
-                "temperature": 0.1,
-                "max_tokens": 300,
-            },
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        content = data["choices"][0]["message"]["content"].strip()
-
-        # Strip markdown code fences if present
-        if content.startswith("```"):
-            content = content.split("\n", 1)[-1]
-            content = content.rsplit("```", 1)[0].strip()
-
-        return json.loads(content)
+    Returns ``(filters, engine_name)``; raises :class:`LLMUnavailableError`
+    when no engine answered.
+    """
+    content, engine = await chat_json(
+        SYSTEM_PROMPT,
+        user_query,
+        temperature=0.1,
+        ollama_max_tokens=300,
+        # First query after a while also loads the model into memory.
+        ollama_timeout=60,
+        openrouter_max_tokens=300,
+        openrouter_timeout=15,
+        purpose="Recherche IA",
+    )
+    return parse_json_object(content), engine
 
 
 def _apply_filters(media: list[dict], filters: dict[str, Any]) -> list[dict]:
@@ -158,9 +146,9 @@ async def ai_search(
     db: AsyncSession = Depends(get_db),
 ):
     """AI-powered natural language search across the media library."""
-    if not settings.OPENROUTER_API_KEY:
+    if not ai_configured():
         return {
-            "error": "AI search not configured (OPENROUTER_API_KEY missing)",
+            "error": "Recherche IA non configurée (ni OLLAMA_URL ni OPENROUTER_API_KEY)",
             "items": [],
             "filters": {},
             "ai_available": False,
@@ -168,18 +156,17 @@ async def ai_search(
 
     # 1. Extract filters from natural language
     try:
-        filters = await _call_llm(q)
-    except Exception as exc:
+        filters, engine = await _call_llm(q)
+    except LLMUnavailableError as exc:
+        return {"error": str(exc), "items": [], "filters": {}, "ai_available": True}
+    except Exception as exc:  # noqa: BLE001 — unreadable LLM reply
         logger.error("AI filter extraction failed: %s", exc)
         return {
-            "error": f"AI processing error: {str(exc)}",
+            "error": f"Réponse IA illisible : {exc}",
             "items": [],
             "filters": {},
             "ai_available": True,
         }
-
-    if "error" in filters:
-        return {"error": filters["error"], "items": [], "filters": filters, "ai_available": True}
 
     # 2. Fetch full media library (cached)
     media = await media_aggregator.cached_library(db)
@@ -194,4 +181,5 @@ async def ai_search(
         "items": results[:50],
         "total": len(results),
         "ai_available": True,
+        "engine": engine,
     }

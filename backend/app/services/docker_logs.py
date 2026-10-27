@@ -11,7 +11,6 @@ and return the most recent lines across all containers.
 from __future__ import annotations
 
 import asyncio
-import json
 import re
 from collections import Counter
 from typing import Any
@@ -19,8 +18,8 @@ from typing import Any
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
 from app.services.file_manager import get_docker_containers
+from app.services.llm import LLMUnavailableError, chat_json, parse_json_object
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -157,74 +156,6 @@ Limite-toi aux 6 problèmes les plus importants.
 Classe les problèmes du plus critique au moins critique. Concret, technique mais concis. En français."""
 
 
-def _ollama_cfg() -> tuple[str, str]:
-    url = (getattr(settings, "OLLAMA_URL", "") or "").rstrip("/")
-    model = getattr(settings, "OLLAMA_MODEL", "") or "qwen2.5:3b-instruct-q4_K_M"
-    return url, model
-
-
-async def _chat_ollama(system: str, user: str) -> str:
-    """Local Ollama on the NAS — primary engine (no cost, no external call)."""
-    url, model = _ollama_cfg()
-    if not url:
-        raise RuntimeError("OLLAMA_URL non défini")
-    async with httpx.AsyncClient(timeout=180) as client:
-        resp = await client.post(
-            f"{url}/api/chat",
-            json={
-                "model": model,
-                "stream": False,
-                "format": "json",  # force valid JSON output
-                "keep_alive": "30m",  # keep the model warm for repeat analyses
-                "options": {"temperature": 0.2, "num_predict": 1000},
-                "messages": [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-            },
-        )
-        resp.raise_for_status()
-        return resp.json()["message"]["content"].strip()
-
-
-async def _chat_openrouter(system: str, user: str) -> str:
-    """OpenRouter — fallback if the local Ollama is unavailable."""
-    if not settings.OPENROUTER_API_KEY:
-        raise RuntimeError("OPENROUTER_API_KEY manquante")
-    async with httpx.AsyncClient(timeout=45) as client:
-        resp = await client.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": settings.AI_MODEL,
-                "messages": [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                "temperature": 0.2,
-                "max_tokens": 1600,
-            },
-        )
-        resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"].strip()
-
-
-def _parse_json_object(content: str) -> dict[str, Any]:
-    """Parse an LLM reply into a dict, tolerating code fences / stray prose."""
-    if content.startswith("```"):
-        content = content.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
-    try:
-        return json.loads(content)
-    except json.JSONDecodeError:
-        m = re.search(r"\{.*\}", content, re.DOTALL)
-        if m:
-            return json.loads(m.group(0))
-        raise
-
-
 async def analyze_logs(db: AsyncSession, tail: int = 150) -> dict[str, Any]:
     """Send recent error/warning log lines to the LLM for problem analysis.
 
@@ -261,28 +192,26 @@ async def analyze_logs(db: AsyncSession, tail: int = 150) -> dict[str, Any]:
     )
     user_msg = f"Logs (erreurs/avertissements dédupliqués) :\n\n{log_text}"
 
-    engines = [("ollama", _chat_ollama), ("openrouter", _chat_openrouter)]
-    content: str | None = None
-    engine_used: str | None = None
-    last_err: Exception | None = None
-    for name, fn in engines:
-        try:
-            content = await fn(ANALYZE_SYSTEM_PROMPT, user_msg)
-            engine_used = name
-            break
-        except Exception as exc:  # noqa: BLE001 — try the next engine
-            last_err = exc
-            logger.warning("Analyse via %s échouée: %s", name, exc)
-
-    if content is None:
+    try:
+        content, engine_used = await chat_json(
+            ANALYZE_SYSTEM_PROMPT,
+            user_msg,
+            temperature=0.2,
+            ollama_max_tokens=1000,
+            ollama_timeout=180,
+            openrouter_max_tokens=1600,
+            openrouter_timeout=45,
+            purpose="Analyse IA",
+        )
+    except LLMUnavailableError as exc:
         return {
-            "error": f"Analyse IA échouée (Ollama + OpenRouter) : {type(last_err).__name__}",
+            "error": str(exc),
             # Aucun moteur n'a répondu : l'interface affiche comment en configurer un.
             "ai_available": False,
         }
 
     try:
-        result = _parse_json_object(content)
+        result = parse_json_object(content)
     except Exception as exc:  # noqa: BLE001
         logger.error("Parsing de la réponse IA échoué: %s", exc)
         return {"error": "Réponse IA illisible", "ai_available": True, "engine": engine_used}

@@ -104,7 +104,7 @@ class Settings(BaseSettings):
 
     # ── AI / OpenRouter ───────────────────────────────────────
     OPENROUTER_API_KEY: str = ""
-    AI_MODEL: str = "google/gemini-2.0-flash-001"  # cost-effective, fast
+    AI_MODEL: str = "google/gemini-3.5-flash-lite"  # cost-effective, fast
     # Local Ollama (e.g. http://192.168.1.10:11434) — primary engine for log
     # analysis when set, OpenRouter as fallback. Empty = no local AI.
     OLLAMA_URL: str = ""
