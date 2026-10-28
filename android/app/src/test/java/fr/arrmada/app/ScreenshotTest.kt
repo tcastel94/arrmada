@@ -269,8 +269,16 @@ class ScreenshotTest {
 
     @Test
     fun fiche() {
+        // Film commencé, dans « Ma liste », avec bande-annonce : la rangée de
+        // boutons défile au lieu d'écraser « Bande-annonce »
         captureRoboImage(shot("02-fiche-film")) {
-            ArrMadaTheme { MovieContent(dune, play, noAbsolute, onPlay = { _, _ -> }) }
+            ArrMadaTheme {
+                MovieContent(
+                    dune, play, noAbsolute, onPlay = { _, _ -> },
+                    onTrailer = {},
+                    extraActions = { fr.arrmada.app.ui.components.ArrButton("Dans ma liste", {}, leading = "✓") },
+                )
+            }
         }
     }
 

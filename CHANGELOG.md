@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Bandes-annonces dans l'appli Android TV et sur le téléphone
+
+#### Fixed
+- **« Bande-annonce » ne marchait pas sur la fiche film de l'appli TV.** Deux causes. 1) Le bouton venait en dernier dans une rangée qui ne défilait pas à la TV : avec « Reprendre à… », « Depuis le début » et « Dans ma liste », il ne restait presque plus de place et il était écrasé (vérifié sur la capture d'écran de test 1920×1080). 2) Il ne savait qu'ouvrir `vnd.youtube:`, que YouTube pour Android TV n'ouvre pas toujours sur la Shield ; sans identifiant YouTube dans Radarr (31 films sur 398 ici), pas de bouton du tout. La web app n'était pas touchée (lecteur YouTube intégré)
+- La rangée de boutons de la fiche défile maintenant aussi à la télécommande (le focus amène le bouton à l'écran) ; « Bande-annonce » vient juste après les boutons de lecture
+
+#### Added
+- **Écran Bande-annonce** (route `trailer/{tmdb}`) : le fichier « -trailer » rangé sur le NAS est lu **dans l'appli, en plein écran avec le son** (OK : pause, gauche / droite, Retour : la fiche) ; sinon **YouTube** : YouTube pour Android TV d'abord, puis l'appli YouTube du téléphone, puis toute appli qui ouvre un lien YouTube (SmartTube, navigateur) ; message clair si rien ne peut la lire. Fichier du NAS illisible : YouTube en secours
+- `GET /api/tv/trailer/movie/{tmdb}` renvoie aussi **`youtube`** : bande-annonce TMDB **en français d'abord** (puis anglaise ; bande-annonce avant teaser, officielle d'abord), utilisée avant celle de Radarr (souvent en anglais) ; vide sans `TMDB_API_KEY` ou si TMDB ne répond pas. Un serveur plus ancien garde l'identifiant de Radarr
+- Logique pure `data/TrailerLogic.kt` (choix de la source, applis YouTube à essayer)
+
+#### Tests
+- Serveur : 7 cas de plus dans `tests/test_api/test_tv_playback.py` (choix de la vidéo TMDB : français officiel d'abord, anglais, teaser ; vidéos inutilisables ignorées ; bout en bout avec un faux TMDB : langue demandée, TMDB en panne), réponses existantes complétées par `youtube`
+- Appli Android : 5 tests dans `TrailerLogicTest` (NAS d'abord, YouTube français avant Radarr, serveur ancien, rien d'utilisable, ordre des applis YouTube) ; capture `02-fiche-film` avec un film commencé, dans « Ma liste », avec bande-annonce
+
 ### « Ma liste » à jour tout de suite dans l'appli TV et sur le téléphone
 
 #### Fixed

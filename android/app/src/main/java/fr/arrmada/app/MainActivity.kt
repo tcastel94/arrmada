@@ -77,6 +77,7 @@ import fr.arrmada.app.ui.components.ArrButton
 import fr.arrmada.app.ui.components.MessageScreen
 import fr.arrmada.app.ui.detail.MovieScreen
 import fr.arrmada.app.ui.detail.SeriesScreen
+import fr.arrmada.app.ui.detail.TrailerScreen
 import fr.arrmada.app.ui.home.DiscoverScreen
 import fr.arrmada.app.ui.home.HomeActions
 import fr.arrmada.app.ui.home.HomeScreen
@@ -194,6 +195,7 @@ private object Routes {
     const val PLAY = "play/{kind}/{id}/{season}/{episode}/{start}?radarr={radarr}&sonarr={sonarr}&file={file}&local={local}"
     const val LOCAL_SHOW = "localshow/{id}" // série maison (Naruto Kai, One Pace…)
     const val VIDEOS = "videos?path={path}" // écran Vidéos : un dossier (sans path : les dossiers déclarés)
+    const val TRAILER = "trailer/{tmdb}?yt={yt}" // bande-annonce plein écran (NAS, sinon YouTube)
 
     fun library(type: String) = "library/$type"
     fun search(voice: Boolean) = "search?voice=$voice"
@@ -203,6 +205,7 @@ private object Routes {
         "?radarr=${r.radarrId.orEmpty()}&sonarr=${r.sonarrId.orEmpty()}&file=${r.file.orEmpty()}&local=${r.localSeries}"
     fun localShow(id: Int) = "localshow/$id"
     fun videos(token: String? = null) = "videos?path=${token.orEmpty()}"
+    fun trailer(tmdbId: Long, youtubeId: String?) = "trailer/$tmdbId?yt=${youtubeId.orEmpty()}"
 }
 
 /** Intro à l'écran ([active]) et demande de la passer ([skip]), partagées avec l'activité. */
@@ -549,6 +552,22 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
                     }
                 },
                 onDownload = { openDownload(DownloadTarget.of(it)) },
+                onTrailer = { tmdb, youtube -> nav.navigate(Routes.trailer(tmdb, youtube)) },
+            )
+        }
+        composable(
+            Routes.TRAILER,
+            arguments = listOf(
+                navArgument("tmdb") { type = NavType.LongType },
+                navArgument("yt") { type = NavType.StringType; defaultValue = "" },
+            ),
+        ) { entry ->
+            TrailerScreen(
+                tmdbId = entry.arguments?.getLong("tmdb") ?: 0L,
+                radarrYoutubeId = entry.arguments?.getString("yt")?.takeIf { it.isNotBlank() },
+                repository = app.repository,
+                api = app.api,
+                onClose = { nav.popBackStack() },
             )
         }
         composable(Routes.SHOW, arguments = listOf(navArgument("sonarrId") { type = NavType.StringType })) { entry ->

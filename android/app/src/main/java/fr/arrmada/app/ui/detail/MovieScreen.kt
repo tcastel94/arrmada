@@ -9,7 +9,6 @@ import fr.arrmada.app.ui.request.SendToTvDialog
 import fr.arrmada.app.ui.components.touchScroll
 import fr.arrmada.app.ui.components.LocalScreen
 import fr.arrmada.app.ui.components.gutter
-import android.content.ActivityNotFoundException
 import android.view.TextureView
 import androidx.annotation.OptIn
 import androidx.compose.animation.core.animateFloatAsState
@@ -28,8 +27,6 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import fr.arrmada.app.ui.components.Motion
 import kotlinx.coroutines.delay
 import okhttp3.OkHttpClient
-import android.content.Intent
-import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -100,6 +97,8 @@ fun MovieScreen(
     api: Api,
     onPlay: (movie: MovieDetail, startSeconds: Int) -> Unit,
     onDownload: (MovieDetail) -> Unit = {},
+    // « Bande-annonce » : écran plein écran (fichier du NAS, sinon YouTube)
+    onTrailer: (tmdbId: Long, radarrYoutubeId: String?) -> Unit = { _, _ -> },
 ) {
     val scope = rememberCoroutineScope()
     var movie by remember { mutableStateOf<MovieDetail?>(null) }
@@ -129,13 +128,16 @@ fun MovieScreen(
         scope.launch { runCatching { repository.playMovie(id) }.getOrNull()?.let { play = it } }
     }
 
-    // Bande-annonce du NAS en fond, après 2,5 s sur la fiche (muette, une fois)
+    // Bande-annonce du NAS en fond, après 2,5 s sur la fiche (muette, une fois).
+    // Les infos servent aussi au bouton « Bande-annonce » (YouTube de TMDB, en français)
     var trailer by remember { mutableStateOf<String?>(null) }
     var trailerDone by remember { mutableStateOf(false) }
+    var trailerInfo by remember { mutableStateOf<fr.arrmada.app.data.TrailerInfo?>(null) }
     LaunchedEffect(movie?.tmdbId) {
         val id = movie?.tmdbId ?: return@LaunchedEffect
-        if (!Motion.enabled) return@LaunchedEffect
         val info = runCatching { repository.movieTrailer(id) }.getOrNull() ?: return@LaunchedEffect
+        trailerInfo = info
+        if (!Motion.enabled) return@LaunchedEffect
         if (info.status == "ok" && info.stream.isNotBlank()) {
             delay(2_500)
             trailer = api.baseUrl + info.stream
@@ -153,6 +155,9 @@ fun MovieScreen(
         backdropVideo = video?.let { url -> @Composable { TrailerVideo(url, api.http) { trailerDone = true } } },
         // Téléphone / tablette : « Sur la TV »
         onSendToTv = if (LocalScreen.current.isTouch && m.tmdbId != null) { { sending = true } } else null,
+        onTrailer = m.tmdbId
+            ?.takeIf { fr.arrmada.app.data.TrailerLogic.available(trailerInfo, m.trailerId) }
+            ?.let { tmdb -> { onTrailer(tmdb, m.trailerId) } },
         // Liste « À voir » du profil qui regarde
         extraActions = {
             m.tmdbId?.let { tmdb ->
@@ -232,6 +237,7 @@ fun MovieContent(
     onDownload: (MovieDetail) -> Unit = {},
     backdropVideo: (@Composable () -> Unit)? = null,
     onSendToTv: (() -> Unit)? = null,
+    onTrailer: (() -> Unit)? = null,
     // Boutons en plus, après « Sur la TV » (« Ma liste »)
     extraActions: @Composable () -> Unit = {},
 ) {
@@ -295,9 +301,12 @@ fun MovieContent(
                 modifier = Modifier.widthIn(max = 560.dp).padding(top = 12.dp),
             )
 
-            // ── Actions ── (téléphone : la rangée défile au doigt plutôt que d'écraser les boutons)
+            // ── Actions ── La rangée défile (au doigt, ou en suivant le focus à
+            // la télécommande) plutôt que d'écraser les derniers boutons : à la TV,
+            // « Reprendre à… » + « Depuis le début » + « Dans ma liste » ne
+            // laissaient presque plus de place à « Bande-annonce »
             Row(
-                Modifier.padding(top = 18.dp).then(if (LocalScreen.current.isTouch) Modifier.horizontalScroll(rememberScrollState()) else Modifier),
+                Modifier.padding(top = 18.dp).horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 val notReady = { Toast.makeText(context, play?.reason ?: "Lecture impossible : Jellyfin ne répond pas", Toast.LENGTH_LONG).show() }
@@ -310,11 +319,9 @@ fun MovieContent(
                     // Suivi par Radarr mais pas encore sur le disque
                     ArrButton("Télécharger", { onDownload(m) }, primary = true, modifier = Modifier.focusRequester(playFocus))
                 }
+                if (onTrailer != null) ArrButton("Bande-annonce", onTrailer, leading = "🎬")
                 if (onSendToTv != null && playable) ArrButton("Sur la TV", onSendToTv, leading = "📺")
                 extraActions()
-                m.trailerId?.takeIf { it.isNotBlank() }?.let { id ->
-                    ArrButton("Bande-annonce", { openTrailer(context, id) })
-                }
             }
             if (play != null && !playable) {
                 Text(play?.reason ?: "", style = MaterialTheme.typography.labelMedium, color = ArrColors.Warning, modifier = Modifier.padding(top = 8.dp))
@@ -373,19 +380,4 @@ fun techBadges(file: FileInfo?): List<String> {
     val channels = file.audioChannels
     if (channels != null && channels > 2.0) badges.add("%.1f".format(java.util.Locale.ROOT, channels))
     return badges
-}
-
-/** Bande-annonce dans l'appli YouTube (ou le navigateur s'il n'y en a pas). */
-private fun openTrailer(context: android.content.Context, youtubeId: String) {
-    val app = Intent(Intent.ACTION_VIEW, Uri.parse("vnd.youtube:$youtubeId"))
-    val web = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=$youtubeId"))
-    try {
-        context.startActivity(app)
-    } catch (_: ActivityNotFoundException) {
-        try {
-            context.startActivity(web)
-        } catch (_: ActivityNotFoundException) {
-            Toast.makeText(context, "Installe l’appli YouTube pour voir la bande-annonce", Toast.LENGTH_LONG).show()
-        }
-    }
 }

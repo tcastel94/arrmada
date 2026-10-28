@@ -49,6 +49,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.services import jellyfin, watch_sync
 from app.services.family_profiles import profiled_key
 from app.utils.logger import get_logger
@@ -429,12 +430,22 @@ async def movie(db: AsyncSession, tmdb_id: int, profile_id: int | None = None) -
 
 
 async def movie_trailer(db: AsyncSession, tmdb_id: int) -> dict[str, Any]:
-    """Bande-annonce locale d'un film (fichier « -trailer » rangé par Radarr,
-    connu de Jellyfin), lue en fond sur la fiche par la TV.
+    """Bande-annonce d'un film pour la TV.
 
-    TMDB ne donne que des liens YouTube, que la TV ne peut pas lire en fond :
-    seules les bandes-annonces présentes sur le NAS servent ici.
+    - `status` « ok » + `stream` : fichier « -trailer » rangé sur le NAS
+      (connu de Jellyfin), lu en fond sur la fiche et en plein écran par le
+      bouton « Bande-annonce » ;
+    - `youtube` : identifiant YouTube de la bande-annonce TMDB, en français
+      d'abord (vide si TMDB n'est pas configuré ou n'en a pas). L'appli s'en
+      sert quand il n'y a rien sur le NAS ; il manque à Radarr pour certains
+      films, et celui de Radarr est en anglais.
     """
+    local, youtube = await asyncio.gather(_local_trailer(db, tmdb_id), youtube_trailer(tmdb_id))
+    return {**local, "youtube": youtube}
+
+
+async def _local_trailer(db: AsyncSession, tmdb_id: int) -> dict[str, Any]:
+    """Bande-annonce locale (NAS) d'un film ; {"status": "none"} sinon."""
     cfg = await jellyfin.get_config(db)
     if not cfg:
         return {"status": "none"}
@@ -464,6 +475,52 @@ async def movie_trailer(db: AsyncSession, tmdb_id: int) -> dict[str, Any]:
                 "duration": duration_seconds(trailer),
             }
     return {"status": "none"}
+
+
+YOUTUBE_ID = re.compile(r"^[\w-]{6,20}$")
+_VIDEO_TYPES = {"Trailer": 0, "Teaser": 1}
+_VIDEO_LANGS = {"fr": 0, "en": 1}
+
+
+def pick_youtube(videos: Any) -> str:
+    """Réponse TMDB `/movie/{id}/videos` → meilleure bande-annonce YouTube.
+
+    Français avant anglais, bande-annonce avant teaser, officielle d'abord ;
+    "" si aucune vidéo ne convient (making-of, extraits, autre site…).
+    """
+    results = videos.get("results") if isinstance(videos, dict) else None
+    candidates = []
+    for video in results if isinstance(results, list) else []:
+        if not isinstance(video, dict) or video.get("site") != "YouTube":
+            continue
+        key = str(video.get("key") or "")
+        kind = _VIDEO_TYPES.get(str(video.get("type") or ""))
+        if kind is None or not YOUTUBE_ID.match(key):
+            continue
+        lang = _VIDEO_LANGS.get(str(video.get("iso_639_1") or ""), 2)
+        candidates.append((lang, kind, 0 if video.get("official") else 1, key))
+    return min(candidates)[3] if candidates else ""
+
+
+async def youtube_trailer(tmdb_id: int) -> str:
+    """Bande-annonce YouTube d'un film chez TMDB (français d'abord), "" sinon."""
+    if not settings.TMDB_API_KEY:
+        return ""
+    try:
+        async with httpx.AsyncClient(timeout=6) as client:
+            r = await client.get(
+                f"https://api.themoviedb.org/3/movie/{tmdb_id}/videos",
+                params={
+                    "api_key": settings.TMDB_API_KEY,
+                    "language": "fr-FR",
+                    "include_video_language": "fr,en",
+                },
+            )
+            r.raise_for_status()
+            return pick_youtube(r.json())
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.debug("Bandes-annonces TMDB de %s : %s", tmdb_id, exc)
+        return ""
 
 
 async def episode(

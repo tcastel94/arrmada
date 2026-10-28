@@ -281,9 +281,10 @@ data class PlayOnTv(
 /** Bande-annonce locale d'un film (GET /api/tv/trailer/movie/{tmdb}). */
 @Serializable
 data class TrailerInfo(
-    val status: String = "none",
+    val status: String = "none", // « ok » : fichier sur le NAS ([stream])
     val stream: String = "",
     val duration: Int = 0,
+    val youtube: String = "", // bande-annonce TMDB, en français d'abord (vide sur un serveur ancien)
 )
 
 // ─── Mises à jour de l'appli (ADR-009) ──────────────────────────────────────
