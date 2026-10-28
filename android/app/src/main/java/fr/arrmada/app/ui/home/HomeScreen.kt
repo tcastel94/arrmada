@@ -52,6 +52,7 @@ import fr.arrmada.app.data.Repository
 import fr.arrmada.app.data.ResumeEntry
 import fr.arrmada.app.data.TmdbItem
 import fr.arrmada.app.data.RatingLogic
+import fr.arrmada.app.data.MediaMenuLogic
 import fr.arrmada.app.data.WatchlistItem
 import fr.arrmada.app.data.WatchlistLogic
 import fr.arrmada.app.ui.components.ArrButton
@@ -106,6 +107,8 @@ class HomeViewModel(private val repository: Repository) : ViewModel() {
                 if (list != null) _state.value = _state.value.copy(watchlist = WatchlistLogic.ordered(list))
             }
         }
+        // « Marquer comme vu » depuis l'appui long : « Reprendre » relu
+        viewModelScope.launch { repository.watchChanges.collect { load() } }
     }
 
     fun load() {
@@ -169,6 +172,7 @@ class HomeActions(
     // Profil qui regarde (ADR-008), à droite du menu ; null : pas de profils dans la maison
     val viewer: fr.arrmada.app.data.FamilyProfile? = null,
     val showMenu: Boolean = true, // téléphone / tablette : la barre de navigation le remplace
+    val menu: (fr.arrmada.app.data.MenuTarget) -> Unit = {}, // appui long sur une carte : menu du titre
 )
 
 @Composable
@@ -249,6 +253,7 @@ fun HomeContent(state: HomeState, absolute: (String?) -> String?, onRetry: () ->
                             progress = entry.progress,
                             onClick = { actions.resume(entry) },
                             onFocus = { hero = heroOf(entry, absolute) },
+                            onLongClick = { actions.menu(MediaMenuLogic.of(entry)) },
                             modifier = if (entry == state.resume.first()) Modifier.focusRequester(firstFocus) else Modifier,
                         )
                     }
@@ -260,6 +265,7 @@ fun HomeContent(state: HomeState, absolute: (String?) -> String?, onRetry: () ->
                             title = item.title,
                             onClick = { actions.openWatchlist(item) },
                             onFocus = { hero = heroOf(item, absolute) },
+                            onLongClick = { actions.menu(MediaMenuLogic.of(item)) },
                             modifier = if (state.resume.isEmpty() && item == state.watchlist.first()) Modifier.focusRequester(firstFocus) else Modifier,
                         )
                     }
@@ -274,6 +280,7 @@ fun HomeContent(state: HomeState, absolute: (String?) -> String?, onRetry: () ->
                                 hero = heroOf(item, absolute)
                                 actions.prefetch(item)
                             },
+                            onLongClick = { actions.menu(MediaMenuLogic.of(item)) },
                             modifier = if (state.resume.isEmpty() && state.watchlist.isEmpty() && item == state.recent.first()) Modifier.focusRequester(firstFocus) else Modifier,
                         )
                     }

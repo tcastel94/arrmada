@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Appui long sur les affiches : menu du titre (appli TV et téléphone)
+
+#### Added
+- **Appui long** (OK maintenu à la télécommande, doigt appuyé sur le téléphone) sur les cartes de l'accueil (**Reprendre**, **Ma liste**, **Ajouts récents**) et des grilles **Films / Séries** : menu du titre, comme celui des épisodes. Avant, rien ne se passait : seuls les épisodes et l'écran Vidéos avaient un appui long
+  - film sur le NAS : **Lire**, **Ouvrir la fiche**, **Bande-annonce**, **Ajouter à ma liste / Retirer de ma liste**, **Marquer comme vu / non vu** ;
+  - série : **Ouvrir la série**, **Ma liste** ; série maison (Naruto Kai…) : **Ouvrir la série** ;
+  - carte « Reprendre » : **Reprendre à 42:10**, **Lire depuis le début**, ouvrir la fiche ou la série, Ma liste, **Marquer comme vu** (l'épisode pour une série) ;
+  - titre de « Ma liste » pas encore téléchargé : Bande-annonce, Retirer de ma liste
+- « Dans ma liste ? » et « déjà vu ? » sont lus avant d'ouvrir le menu (en mémoire le plus souvent) pour proposer la bonne action ; un message court confirme (« Ajouté à ma liste », « Marqué comme vu »). « Marquer comme vu » depuis le menu relit la rangée « Reprendre » de l'accueil ; « Ma liste » suit d'elle-même
+- `PosterCard` et `LandscapeCard` acceptent `onLongClick` ; menu commun `ui/components/MediaMenu.kt`, logique pure `data/MediaMenuLogic.kt`
+
+#### Tests
+- 7 tests dans `MediaMenuLogicTest` (film sur le disque, série par son TVDB, série maison, titre de « Ma liste » absent du NAS, carte « Reprendre » d'un épisode, état « vu » d'un film, vidéo maison non marquée d'ici) ; 161 tests JVM verts
+
 ### Filmographie des acteurs dans l'appli Android TV (et sur le téléphone)
 
 #### Added

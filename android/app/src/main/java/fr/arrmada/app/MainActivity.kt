@@ -80,6 +80,11 @@ import fr.arrmada.app.ui.detail.SeriesScreen
 import fr.arrmada.app.ui.detail.PersonScreen
 import fr.arrmada.app.ui.detail.TrailerScreen
 import fr.arrmada.app.data.CreditOpen
+import fr.arrmada.app.data.MediaMenuLogic
+import fr.arrmada.app.data.MenuAction
+import fr.arrmada.app.data.MenuTarget
+import fr.arrmada.app.data.Repository
+import fr.arrmada.app.ui.components.MediaMenu
 import fr.arrmada.app.ui.home.DiscoverScreen
 import fr.arrmada.app.ui.home.HomeActions
 import fr.arrmada.app.ui.home.HomeScreen
@@ -394,6 +399,50 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
         )
     }
 
+    // ── Appui long sur une carte : menu du titre (MediaMenu) ──
+    var menu by remember { mutableStateOf<MenuTarget?>(null) }
+
+    fun toast(text: String) = Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
+
+    fun runMenu(target: MenuTarget, action: MenuAction) {
+        val resume = target.resume
+        when (action) {
+            MenuAction.RESUME -> resume?.let { nav.navigate(Routes.play(resumeRequest(it))) }
+            MenuAction.FROM_START -> resume?.let { nav.navigate(Routes.play(resumeRequest(it).copy(startSeconds = 0))) }
+            MenuAction.PLAY -> target.tmdbId?.let { nav.navigate(Routes.play(PlayRequest("movie", it, radarrId = target.arrId))) }
+            MenuAction.OPEN -> {
+                val arr = target.arrId
+                when {
+                    target.localSeries != null -> nav.navigate(Routes.localShow(target.localSeries))
+                    arr != null && target.isMovie -> nav.navigate(Routes.movie(arr, target.tmdbId))
+                    arr != null -> nav.navigate(Routes.show(arr))
+                }
+            }
+            MenuAction.TRAILER -> target.tmdbId?.let { nav.navigate(Routes.trailer(it, null)) }
+            MenuAction.ADD_TO_LIST, MenuAction.REMOVE_FROM_LIST -> {
+                val item = target.watchlist ?: return
+                scope.launch {
+                    val adding = action == MenuAction.ADD_TO_LIST
+                    runCatching { if (adding) app.repository.addToWatchlist(item) else app.repository.removeFromWatchlist(item) }
+                        .onSuccess { toast(if (adding) "Ajouté à ma liste" else "Retiré de ma liste") }
+                        .onFailure { toast(it.message ?: "Liste injoignable") }
+                }
+            }
+            MenuAction.MARK_WATCHED, MenuAction.MARK_UNWATCHED -> {
+                val watched = action == MenuAction.MARK_WATCHED
+                val update = MediaMenuLogic.watchedUpdate(target, watched, Repository.nowLastPlayed()) ?: return
+                scope.launch {
+                    runCatching { app.repository.saveWatchState(update) }
+                        .onSuccess {
+                            app.repository.notifyWatchChanged()
+                            toast(if (watched) "Marqué comme vu" else "Marqué comme non vu")
+                        }
+                        .onFailure { toast(it.message ?: "Échec") }
+                }
+            }
+        }
+    }
+
     fun playAnnounced(a: PlayAnnounce) {
         scope.launch {
             val request = announced(a)
@@ -507,11 +556,15 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
                     prefetch = prefetcher::focus,
                     viewer = if (app.hasProfiles) viewer ?: FamilyProfile(name = "Famille", isDefault = true) else null,
                     showMenu = !LocalScreen.current.isTouch, // tactile : la barre de navigation remplace le menu
+                    menu = { menu = it },
                 ),
             )
         }
         composable(Routes.LIBRARY, arguments = listOf(navArgument("type") { type = NavType.StringType })) { entry ->
-            LibraryScreen(entry.arguments?.getString("type") ?: "movie", app.repository, app.api, ::openItem, prefetcher::focus)
+            LibraryScreen(
+                entry.arguments?.getString("type") ?: "movie", app.repository, app.api, ::openItem, prefetcher::focus,
+                onMenu = { menu = MediaMenuLogic.of(it) },
+            )
         }
         composable(Routes.DISCOVER) {
             DiscoverScreen(app.repository, ::openTmdb)
@@ -704,6 +757,10 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
     // Mise à jour proposée : pas pendant un film, l'intro ou la mise en route
     update?.let { offer ->
         if (!showIntro && route !in listOf(Routes.PLAY, Routes.SERVER, Routes.PAIR)) UpdateDialog(app.updates, offer)
+    }
+
+    menu?.let { target ->
+        MediaMenu(target, app.repository, onDismiss = { menu = null }) { action -> runMenu(target, action) }
     }
 
     // Par-dessus tous les écrans : bulles, « Prêt à regarder », caméra

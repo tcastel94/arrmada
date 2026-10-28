@@ -140,6 +140,15 @@ class Repository(private val api: Api) {
 
     private fun stateKey(s: WatchState) = "${s.mediaType}|${s.idType}|${s.id}|${s.season}|${s.episode}"
 
+    // Vu / pas vu changé depuis un menu (appui long) : l'accueil relit sa
+    // rangée « Reprendre ». Pas à chaque position enregistrée par le lecteur.
+    private val _watchChanges = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val watchChanges: kotlinx.coroutines.flow.SharedFlow<Unit> = _watchChanges
+
+    fun notifyWatchChanged() {
+        _watchChanges.tryEmit(Unit)
+    }
+
     suspend fun saveWatchState(update: WatchStateUpdate) {
         api.post<kotlinx.serialization.json.JsonObject, WatchStatePost>("/api/kodi/watch-state", WatchStatePost(listOf(update)))
         // La reprise d'un film a changé : sa prochaine lecture relit le serveur

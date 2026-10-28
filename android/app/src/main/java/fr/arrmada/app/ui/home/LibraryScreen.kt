@@ -52,7 +52,14 @@ private val TOP_RATED = GridView("Mieux notés") { list -> list.filter { it.rati
  * [type] : « movie » ou « series ».
  */
 @Composable
-fun LibraryScreen(type: String, repository: Repository, api: Api, onOpen: (LibraryItem) -> Unit, onFocusItem: (LibraryItem) -> Unit = {}) {
+fun LibraryScreen(
+    type: String,
+    repository: Repository,
+    api: Api,
+    onOpen: (LibraryItem) -> Unit,
+    onFocusItem: (LibraryItem) -> Unit = {},
+    onMenu: (LibraryItem) -> Unit = {}, // appui long : menu du titre
+) {
     var items by remember { mutableStateOf<List<LibraryItem>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     val label = if (type == "movie") "Films" else "Séries"
@@ -76,12 +83,19 @@ fun LibraryScreen(type: String, repository: Repository, api: Api, onOpen: (Libra
         error != null -> return MessageScreen("$label indisponibles", error)
         all == null -> return MessageScreen("Chargement des ${label.lowercase()}…")
     }
-    LibraryContent(label, all!!, api::absolute, onOpen, onFocusItem)
+    LibraryContent(label, all!!, api::absolute, onOpen, onFocusItem, onMenu)
 }
 
 /** Affichage de la grille (séparé du chargement pour les captures d'écran de test). */
 @Composable
-fun LibraryContent(label: String, all: List<LibraryItem>, absolute: (String?) -> String?, onOpen: (LibraryItem) -> Unit, onFocusItem: (LibraryItem) -> Unit = {}) {
+fun LibraryContent(
+    label: String,
+    all: List<LibraryItem>,
+    absolute: (String?) -> String?,
+    onOpen: (LibraryItem) -> Unit,
+    onFocusItem: (LibraryItem) -> Unit = {},
+    onMenu: ((LibraryItem) -> Unit)? = null,
+) {
     val views = if (all.firstOrNull()?.isMovie != false) listOf(RECENT, TITLE, YEAR, FOUR_K) else listOf(RECENT, TITLE, YEAR, TOP_RATED)
     var view by remember { mutableStateOf(views.first()) }
     val firstFocus = remember { FocusRequester() }
@@ -99,7 +113,7 @@ fun LibraryContent(label: String, all: List<LibraryItem>, absolute: (String?) ->
             }
             Text("${sorted.size} titres", style = MaterialTheme.typography.labelMedium, color = ArrColors.TextSecondary, modifier = Modifier.padding(start = 12.dp))
         }
-        PosterGrid(sorted, absolute, onOpen, Modifier, firstFocus, onFocusItem)
+        PosterGrid(sorted, absolute, onOpen, Modifier, firstFocus, onFocusItem, onMenu)
     }
     LaunchedEffect(view) { runCatching { firstFocus.requestFocus() } }
 }
@@ -113,6 +127,7 @@ fun PosterGrid(
     modifier: Modifier = Modifier,
     firstFocus: FocusRequester? = null,
     onFocusItem: (LibraryItem) -> Unit = {},
+    onMenu: ((LibraryItem) -> Unit)? = null,
 ) {
     LazyVerticalGrid(
         // 7 colonnes à la TV, 3 sur un téléphone (largeur mini d'une affiche)
@@ -129,6 +144,7 @@ fun PosterGrid(
                 width = 108.dp,
                 onClick = { onOpen(item) },
                 onFocus = { onFocusItem(item) },
+                onLongClick = onMenu?.let { menu -> { menu(item) } },
                 modifier = if (firstFocus != null && item == items.first()) Modifier.focusRequester(firstFocus) else Modifier,
             )
         }
