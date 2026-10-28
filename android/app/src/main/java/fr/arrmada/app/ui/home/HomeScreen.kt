@@ -99,6 +99,13 @@ class HomeViewModel(private val repository: Repository) : ViewModel() {
 
     init {
         load()
+        // « Ma liste » change ailleurs (bouton d'une fiche, appui long) : la
+        // rangée suit tout de suite, sans recharger tout l'accueil
+        viewModelScope.launch {
+            repository.watchlistFlow.collect { list ->
+                if (list != null) _state.value = _state.value.copy(watchlist = WatchlistLogic.ordered(list))
+            }
+        }
     }
 
     fun load() {

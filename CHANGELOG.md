@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### « Ma liste » à jour tout de suite dans l'appli TV et sur le téléphone
+
+#### Fixed
+- **Un titre ajouté à « Ma liste » depuis sa fiche n'apparaissait sur l'accueil qu'après avoir quitté et relancé l'appli** (TV comme téléphone, même APK). Cause : l'accueil lisait la liste une seule fois, à sa création ; en revenant de la fiche, Android réaffiche le même écran avec ses anciennes données, et le bouton « Ma liste » ne tenait à jour que ses propres coches. La liste est maintenant **gardée par le `Repository` et partagée** (`watchlistFlow`) : ajout ou retrait depuis une fiche (ou l'appui long) → la rangée « Ma liste » de l'accueil change aussitôt, sans recharger tout l'écran. Changement de profil : liste oubliée, relue pour le nouveau spectateur
+- La web app n'était pas concernée (React Query invalide déjà la liste après chaque ajout / retrait)
+
+#### Tests
+- 3 tests de plus dans `WatchlistLogicTest` (titre ajouté en tête sans doublon, réponse vide d'un serveur ancien complétée par la fiche, retrait)
+
 ### Synopsis en français partout (appli TV, téléphone, web app)
 
 #### Fixed

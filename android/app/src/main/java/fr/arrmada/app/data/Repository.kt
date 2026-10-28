@@ -1,6 +1,7 @@
 package fr.arrmada.app.data
 
 import android.os.Build
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
 import java.time.LocalDateTime
@@ -298,31 +299,37 @@ class Repository(private val api: Api) {
             statesCursor = ""
         }
         details.keys.removeAll { it.startsWith("play:") }
-        watchlistKeys = null // chacun sa liste
+        _watchlist.value = null // chacun sa liste
     }
 
     // ── Liste « À voir » du profil qui regarde ──
-    // Clés des titres de la liste, gardées en mémoire : le bouton « Ma liste »
-    // d'une fiche sait tout de suite s'il est coché, sans relire le serveur.
-    private var watchlistKeys: Set<String>? = null
+    // La liste est gardée ici et PARTAGÉE par les écrans (comme un cache que
+    // l'on met à jour à l'écriture) : le bouton « Ma liste » d'une fiche sait
+    // tout de suite s'il est coché, et la rangée « Ma liste » de l'accueil
+    // change dès qu'on ajoute ou retire un titre, sans relancer l'appli.
+    // null : pas encore lue (ou profil changé).
+    private val _watchlist = kotlinx.coroutines.flow.MutableStateFlow<List<WatchlistItem>?>(null)
+    val watchlistFlow: kotlinx.coroutines.flow.StateFlow<List<WatchlistItem>?> = _watchlist
 
     suspend fun watchlist(): List<WatchlistItem> =
-        api.get<Watchlist>("/api/watchlist").items.also { list -> watchlistKeys = list.map { it.key }.toSet() }
+        api.get<Watchlist>("/api/watchlist").items.also { _watchlist.value = it }
 
     /** Le titre est-il dans la liste ? (première question : la liste est relue une fois) */
     suspend fun inWatchlist(key: String): Boolean {
-        if (watchlistKeys == null) runCatching { watchlist() }
-        return watchlistKeys?.contains(key) == true
+        if (_watchlist.value == null) runCatching { watchlist() }
+        return _watchlist.value?.any { it.key == key } == true
     }
 
-    suspend fun addToWatchlist(target: WatchlistTarget): WatchlistItem =
-        api.post<WatchlistAdded, WatchlistAdd>("/api/watchlist", target.body()).item.also {
-            watchlistKeys = watchlistKeys.orEmpty() + target.key
-        }
+    suspend fun addToWatchlist(target: WatchlistTarget): WatchlistItem {
+        val item = api.post<WatchlistAdded, WatchlistAdd>("/api/watchlist", target.body()).item
+        // Liste pas encore lue : on la relit en entier (avec le titre ajouté)
+        if (_watchlist.value == null) runCatching { watchlist() } else _watchlist.update { WatchlistLogic.added(it, item, target) }
+        return item
+    }
 
     suspend fun removeFromWatchlist(target: WatchlistTarget) {
         api.delete<kotlinx.serialization.json.JsonObject>("/api/watchlist/${target.mediaType}/${target.id}")
-        watchlistKeys = watchlistKeys.orEmpty() - target.key
+        _watchlist.update { it?.let { list -> WatchlistLogic.removed(list, target.key) } }
     }
 
     // ── « Précédemment dans… » : une fois par série et par séance (6 h) ──
