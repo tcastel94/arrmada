@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Synopsis en français partout (appli TV, téléphone, web app)
+
+#### Fixed
+- **Les résumés des films et séries s'affichaient en anglais.** Cause vérifiée sur le serveur : Radarr est réglé sur « English » pour les infos des films (`movieInfoLanguage` = 1) et Sonarr ne connaît que l'anglais ; la médiathèque et les fiches reprenaient leur `overview` tel quel. Radarr n'est pas modifié (sa langue traduirait aussi les titres, donc les noms de dossiers au prochain renommage) : ArrMada demande le résumé à TMDB en **`fr-FR`** et garde **l'anglais de Radarr / Sonarr quand TMDB n'a pas de traduction**
+
+#### Added
+- `services/translations.py` et table **`media_translations`** (créée au démarrage) : un résumé par titre, même clé que les artworks (`movie:<TMDB>`, `series:<TVDB>`), redemandé au bout de 30 jours (7 sans traduction, 1 h après une panne de TMDB)
+- **Fiche film / série** (`/api/media/movie|series/{id}`) : titre pas encore traduit → TMDB interrogé à l'ouverture (4 s au plus, puis gardé en base) ; séries par leur identifiant TMDB connu de Sonarr
+- **Médiathèque** (accueil et grilles des applis, Ma liste, web app) : résumés français lus en base, sans appel réseau ; tâche planifiée **« Synopsis en français »** toutes les 6 h (premier passage 3 min après le démarrage, seulement avec `TMDB_API_KEY`) pour les titres manquants
+
+#### Tests
+- `tests/test_api/test_translations.py` : choix du texte, réponse TMDB, délais de rafraîchissement, cibles (séries sans TMDB ignorées), fiche film et série en français puis lue en base, film sans traduction, TMDB en panne, sans clé TMDB, remplissage de la médiathèque puis aucun appel au passage suivant, nouvel essai dans l'heure après une panne ; 764 tests verts
+
 ### Recherche IA : l'IA locale Ollama d'abord, OpenRouter en secours
 
 #### Fixed
