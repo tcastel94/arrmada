@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Volume de l'ampli Yamaha à la télécommande de la TV (ADR-013)
+
+#### Added
+- **Vol + / Vol − / Muet de la télécommande règlent l'ampli Yamaha de la pièce**, dans ArrMada comme dans les autres applis, avec un message court (« Ampli : 42 % (−38,5 dB) », « Ampli : muet »). Touche maintenue : un envoi toutes les 150 ms (2 dB par appui, comme Vol + du menu pause)
+- **Faisabilité vérifiée** : une appli Android TV ne reçoit jamais les touches volume (le système de la Shield les garde pour le HDMI-CEC / l'IR, `PhoneWindowManager`). D'où un **service d'accessibilité** dans l'APK (`amp/AmpVolumeService`), qui ne lit que ces trois touches (filtre des touches, aucun contenu de l'écran) et passe par le serveur, comme le menu pause. **À activer une fois** : Paramètres › Accessibilité › « ArrMada : volume de l'ampli ». Le bouton **Réglages › « Touches volume de la télécommande → ampli : activer »** y mène, puis devient un interrupteur (ampli Yamaha / volume de la TV)
+- Garde-fous : pièce sans ampli (`no_amp`) → touches rendues à la TV pendant 10 min ; serveur ou ampli injoignable → 1 min ; rien d'intercepté si le réglage est coupé, si la TV n'est pas appairée ou sur un téléphone
+- Serveur : `POST /api/yamaha/control` accepte **`mute` = `"toggle"`** (état relu puis inversé) et renvoie **`volume_pct`, `mute`, `actual_db`** après `volume`, `volume_step` et `mute`
+- **ADR-013** « Volume de l'ampli à la télécommande » (pourquoi l'accessibilité, alternatives HDMI-CEC / IR)
+
+#### Notes
+- Sans rien installer, l'IR ou le HDMI-CEC restent la solution la plus directe quand le matériel le permet : télécommande de la Shield réglée en IR sur l'ampli (Paramètres › Télécommandes et accessoires), ou « HDMI Control » de l'ampli avec la TV en ARC. Le texte d'aide des Réglages le rappelle
+- Non vérifié sur la Shield elle-même (pas d'accès à l'appareil depuis le serveur) : à valider en activant le service
+
+#### Tests
+- Serveur : 3 cas dans `tests/test_yamaha_status.py` (nouveau niveau après `volume_step`, muet inversé deux fois, muet explicite et autres commandes inchangés) ; 774 tests verts
+- Appli Android : 5 tests dans `VolumeKeyLogicTest` (seules les touches volume / muet, pas du menu pause, garde-fou 10 min / 1 min / retour immédiat, message affiché, réponse du serveur) ; 166 tests JVM verts, APK de debug construite
+
 ### Appui long sur les affiches : menu du titre (appli TV et téléphone)
 
 #### Added

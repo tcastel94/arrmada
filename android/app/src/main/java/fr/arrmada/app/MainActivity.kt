@@ -2,6 +2,10 @@ package fr.arrmada.app
 
 import fr.arrmada.app.ui.components.FormFactor
 import android.content.Intent
+import android.provider.Settings
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import fr.arrmada.app.amp.AmpVolumeService
 import fr.arrmada.app.data.DefaultQuality
 import fr.arrmada.app.data.HomeLink
 import fr.arrmada.app.data.HomeRowsLogic
@@ -861,6 +865,8 @@ private fun SettingsScreen(app: ArrMadaApplication, onChangeServer: () -> Unit, 
             color = ArrColors.TextSecondary,
             modifier = Modifier.padding(top = 8.dp),
         )
+        // Touches volume de la télécommande → ampli Yamaha de la pièce (ADR-013)
+        if (LocalScreen.current.isTv) AmpVolumeKeysSetting(app)
         // Accueil Android TV : rangée « À suivre » et chaîne « ArrMada · Ajouts récents »
         val context = LocalContext.current
         if (TvHomeRows.supported(context)) {
@@ -884,4 +890,51 @@ private fun SettingsScreen(app: ArrMadaApplication, onChangeServer: () -> Unit, 
         }
     }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+}
+
+/**
+ * Réglage « Touches volume → ampli » : tant que le service d'accessibilité
+ * n'est pas activé dans Android, un bouton y mène ; ensuite, un interrupteur.
+ */
+@Composable
+private fun AmpVolumeKeysSetting(app: ArrMadaApplication) {
+    val context = LocalContext.current
+    var serviceOn by remember { mutableStateOf(AmpVolumeService.isEnabled(context)) }
+    // Retour des Paramètres d'Android : l'état a pu changer
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { serviceOn = AmpVolumeService.isEnabled(context) }
+    var keys by remember { mutableStateOf(app.prefs.ampVolumeKeys) }
+    if (!serviceOn) {
+        ArrButton(
+            "Touches volume de la télécommande → ampli : activer",
+            {
+                try {
+                    context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                } catch (_: android.content.ActivityNotFoundException) {
+                    Toast.makeText(context, "Paramètres › Préférences de l’appareil › Accessibilité › ArrMada", Toast.LENGTH_LONG).show()
+                }
+            },
+            leading = "🔊",
+            modifier = Modifier.padding(top = 16.dp),
+        )
+    } else {
+        ArrButton(
+            if (keys) "Touches volume de la télécommande : ampli Yamaha" else "Touches volume de la télécommande : volume de la TV",
+            {
+                keys = !keys
+                app.prefs.ampVolumeKeys = keys
+            },
+            leading = if (keys) "✓" else "✕",
+            modifier = Modifier.padding(top = 16.dp),
+        )
+    }
+    Text(
+        if (serviceOn) {
+            "Vol + / Vol − / Muet règlent l’ampli de la pièce de cette TV, dans ArrMada comme dans les autres applis. Sans ampli dans la pièce ou serveur injoignable, les touches reviennent à la TV."
+        } else {
+            "Android TV garde les touches volume pour lui : pour qu’ArrMada les envoie à l’ampli Yamaha, active « ArrMada : volume de l’ampli » dans Paramètres › Accessibilité (une seule fois). Autre solution sans ArrMada : régler la télécommande de la Shield en IR sur l’ampli, ou activer le HDMI-CEC de l’ampli."
+        },
+        style = MaterialTheme.typography.bodyMedium,
+        color = ArrColors.TextSecondary,
+        modifier = Modifier.padding(top = 8.dp),
+    )
 }

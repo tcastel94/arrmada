@@ -273,6 +273,10 @@ class Repository(private val api: Api) {
 
     suspend fun resumeAll(service: String): ActionResult = api.post("/api/kodi/downloads/$service/0/resume", empty)
 
+    /** Touche volume / muet de la télécommande (service d'accessibilité) : nouveau niveau en retour. */
+    suspend fun ampKey(action: String, value: kotlinx.serialization.json.JsonElement): AmpLevel =
+        api.post("/api/yamaha/control", AmpControl(action, value))
+
     // ── Ampli Yamaha (onglet « Ampli » du menu pause) ──
     suspend fun ampState(): AmpState = api.get("/api/yamaha/state")
 
