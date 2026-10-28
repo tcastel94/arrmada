@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Filmographie des acteurs dans l'appli Android TV (et sur le téléphone)
+
+#### Added
+- **Clic sur un acteur de la distribution d'une fiche film → sa page**, comme dans la web app : photo, métier, date et lieu de naissance, biographie (TMDB en français), puis sa filmographie en deux rangées. **« Dans ta médiathèque (N) »** : OK ouvre la fiche du film ; **« À découvrir »** : OK ouvre la feuille « Télécharger ». Le film survolé s'affiche au-dessus (« 1999 · Neo · Sur le NAS »). Avant, la distribution n'était qu'une rangée d'images, sans focus ni action
+- Les acteurs cliquables prennent le focus bleu (télécommande) et réagissent au doigt (téléphone, tablette). Rien à changer côté serveur : `GET /api/media/person/{tmdb}` (celle de la web app) était déjà ouverte aux appareils appairés
+- Route `person/{tmdb}`, écran `ui/detail/PersonScreen.kt`, logique pure `data/PersonLogic.kt`
+
+#### Notes
+- Séries : Sonarr ne fournit pas de distribution, l'écran Série n'en a donc toujours pas (comme la web app)
+
+#### Tests
+- 5 tests dans `PersonLogicTest` (métier et naissance en français, date illisible, ligne du film survolé, fiche ou feuille « Télécharger », lecture de la réponse du serveur et de son erreur) ; capture `41-acteur`
+
 ### Bandes-annonces dans l'appli Android TV et sur le téléphone
 
 #### Fixed

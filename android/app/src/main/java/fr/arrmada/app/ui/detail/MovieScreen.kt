@@ -6,6 +6,7 @@ import fr.arrmada.app.data.PlayOnTv
 import fr.arrmada.app.data.WatchlistTarget
 import fr.arrmada.app.ui.components.WatchlistButton
 import fr.arrmada.app.ui.request.SendToTvDialog
+import fr.arrmada.app.ui.components.tapToClick
 import fr.arrmada.app.ui.components.touchScroll
 import fr.arrmada.app.ui.components.LocalScreen
 import fr.arrmada.app.ui.components.gutter
@@ -99,6 +100,8 @@ fun MovieScreen(
     onDownload: (MovieDetail) -> Unit = {},
     // « Bande-annonce » : écran plein écran (fichier du NAS, sinon YouTube)
     onTrailer: (tmdbId: Long, radarrYoutubeId: String?) -> Unit = { _, _ -> },
+    // Clic sur un acteur : sa filmographie
+    onPerson: (tmdbId: Long) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     var movie by remember { mutableStateOf<MovieDetail?>(null) }
@@ -158,6 +161,7 @@ fun MovieScreen(
         onTrailer = m.tmdbId
             ?.takeIf { fr.arrmada.app.data.TrailerLogic.available(trailerInfo, m.trailerId) }
             ?.let { tmdb -> { onTrailer(tmdb, m.trailerId) } },
+        onPerson = onPerson,
         // Liste « À voir » du profil qui regarde
         extraActions = {
             m.tmdbId?.let { tmdb ->
@@ -238,6 +242,7 @@ fun MovieContent(
     backdropVideo: (@Composable () -> Unit)? = null,
     onSendToTv: (() -> Unit)? = null,
     onTrailer: (() -> Unit)? = null,
+    onPerson: ((tmdbId: Long) -> Unit)? = null,
     // Boutons en plus, après « Sur la TV » (« Ma liste »)
     extraActions: @Composable () -> Unit = {},
 ) {
@@ -332,21 +337,48 @@ fun MovieContent(
                 Text("Distribution", style = MaterialTheme.typography.titleMedium, color = ArrColors.TextSecondary, modifier = Modifier.padding(top = 22.dp, bottom = 8.dp))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(end = gutter)) {
                     items(m.cast.take(15)) { person -> // pas de clé : deux rôles peuvent avoir le même nom
-                        Column(Modifier.width(76.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Box(Modifier.size(60.dp).clip(CircleShape).background(ArrColors.Card)) {
-                                if (person.photo != null) {
-                                    AsyncImage(model = person.photo, contentDescription = person.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                                }
-                            }
-                            Text(person.name, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp))
-                            Text(person.character, style = MaterialTheme.typography.labelSmall, color = ArrColors.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
-                        }
+                        // OK sur un acteur : sa filmographie (comme la web app)
+                        val tmdb = person.tmdbId
+                        CastCard(person, if (onPerson != null && tmdb != null) { { onPerson(tmdb) } } else null)
                     }
                 }
             }
         }
     }
     LaunchedEffect(m.id) { runCatching { playFocus.requestFocus() } }
+}
+
+/** Un membre de la distribution ; cliquable (focus bleu) quand sa filmographie est connue. */
+@Composable
+private fun CastCard(person: fr.arrmada.app.data.Person, onClick: (() -> Unit)?) {
+    val content = @Composable {
+        Column(Modifier.width(76.dp).padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(Modifier.size(60.dp).clip(CircleShape).background(ArrColors.Card)) {
+                if (person.photo != null) {
+                    AsyncImage(model = person.photo, contentDescription = person.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                }
+            }
+            Text(person.name, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp))
+            Text(person.character, style = MaterialTheme.typography.labelSmall, color = ArrColors.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+        }
+    }
+    if (onClick == null) return content()
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
+    androidx.tv.material3.Surface(
+        onClick = onClick,
+        modifier = Modifier.tapToClick(onClick),
+        shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(shape),
+        scale = androidx.tv.material3.ClickableSurfaceDefaults.scale(focusedScale = 1.08f),
+        border = androidx.tv.material3.ClickableSurfaceDefaults.border(
+            focusedBorder = androidx.tv.material3.Border(androidx.compose.foundation.BorderStroke(2.dp, ArrColors.Accent), shape = shape),
+        ),
+        colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+            containerColor = androidx.compose.ui.graphics.Color.Transparent,
+            contentColor = ArrColors.Text,
+            focusedContainerColor = ArrColors.Card,
+            focusedContentColor = ArrColors.Text,
+        ),
+    ) { content() }
 }
 
 /** Pastilles « 4K », « Dolby Vision », « Atmos »… lues dans le fichier. */

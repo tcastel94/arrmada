@@ -77,7 +77,9 @@ import fr.arrmada.app.ui.components.ArrButton
 import fr.arrmada.app.ui.components.MessageScreen
 import fr.arrmada.app.ui.detail.MovieScreen
 import fr.arrmada.app.ui.detail.SeriesScreen
+import fr.arrmada.app.ui.detail.PersonScreen
 import fr.arrmada.app.ui.detail.TrailerScreen
+import fr.arrmada.app.data.CreditOpen
 import fr.arrmada.app.ui.home.DiscoverScreen
 import fr.arrmada.app.ui.home.HomeActions
 import fr.arrmada.app.ui.home.HomeScreen
@@ -196,6 +198,7 @@ private object Routes {
     const val LOCAL_SHOW = "localshow/{id}" // série maison (Naruto Kai, One Pace…)
     const val VIDEOS = "videos?path={path}" // écran Vidéos : un dossier (sans path : les dossiers déclarés)
     const val TRAILER = "trailer/{tmdb}?yt={yt}" // bande-annonce plein écran (NAS, sinon YouTube)
+    const val PERSON = "person/{tmdb}" // acteur : biographie et filmographie
 
     fun library(type: String) = "library/$type"
     fun search(voice: Boolean) = "search?voice=$voice"
@@ -206,6 +209,7 @@ private object Routes {
     fun localShow(id: Int) = "localshow/$id"
     fun videos(token: String? = null) = "videos?path=${token.orEmpty()}"
     fun trailer(tmdbId: Long, youtubeId: String?) = "trailer/$tmdbId?yt=${youtubeId.orEmpty()}"
+    fun person(tmdbId: Long) = "person/$tmdbId"
 }
 
 /** Intro à l'écran ([active]) et demande de la passer ([skip]), partagées avec l'activité. */
@@ -553,6 +557,19 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
                 },
                 onDownload = { openDownload(DownloadTarget.of(it)) },
                 onTrailer = { tmdb, youtube -> nav.navigate(Routes.trailer(tmdb, youtube)) },
+                onPerson = { nav.navigate(Routes.person(it)) },
+            )
+        }
+        composable(Routes.PERSON, arguments = listOf(navArgument("tmdb") { type = NavType.LongType })) { entry ->
+            PersonScreen(
+                personId = entry.arguments?.getLong("tmdb") ?: 0L,
+                repository = app.repository,
+                onOpen = { credit ->
+                    when (credit) {
+                        is CreditOpen.Movie -> nav.navigate(Routes.movie(credit.radarrId, credit.tmdbId))
+                        is CreditOpen.Download -> openDownload(credit.target)
+                    }
+                },
             )
         }
         composable(

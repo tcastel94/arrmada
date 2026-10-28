@@ -342,6 +342,10 @@ class Repository(private val api: Api) {
         recapShown[tvdbId] = System.currentTimeMillis()
     }
 
+    /** Filmographie d'un acteur (clic sur la distribution d'une fiche). */
+    suspend fun person(tmdbId: Long): Filmography =
+        cached("person:$tmdbId", DETAIL_TTL, false) { api.get<Filmography>("/api/media/person/$tmdbId") }
+
     suspend fun movieTrailer(tmdbId: Long): TrailerInfo =
         cached("trailer:$tmdbId", DETAIL_TTL, false) { api.get<TrailerInfo>("/api/tv/trailer/movie/$tmdbId") }
 

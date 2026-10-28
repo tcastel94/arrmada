@@ -283,6 +283,27 @@ class ScreenshotTest {
     }
 
     @Test
+    fun acteur() {
+        // Clic sur un acteur de la distribution : sa filmographie (comme la web app)
+        val data = fr.arrmada.app.data.Filmography(
+            person = fr.arrmada.app.data.PersonInfo(
+                tmdbId = 1190668, name = "Timothée Chalamet", photo = "https://img/tc", knownFor = "Acting",
+                birthday = "1995-12-27", placeOfBirth = "New York, États-Unis",
+                biography = "Timothée Hal Chalamet est un acteur franco-américain. Révélé par Call Me by Your Name, il incarne Paul Atréides dans Dune de Denis Villeneuve.",
+            ),
+            inLibrary = titles.take(3).mapIndexed { i, t ->
+                fr.arrmada.app.data.FilmCredit(tmdbId = 8000L + i, title = t, year = 2021 - i, character = "Rôle $i", poster = "https://img/p$i", radarrId = i + 1, hasFile = i != 2)
+            },
+            discover = titles.drop(3).take(6).mapIndexed { i, t ->
+                fr.arrmada.app.data.FilmCredit(tmdbId = 9000L + i, title = t, year = 2015 + i, poster = "https://img/d$i")
+            },
+        )
+        captureRoboImage(shot("41-acteur")) {
+            ArrMadaTheme { fr.arrmada.app.ui.detail.PersonContent(data) {} }
+        }
+    }
+
+    @Test
     fun ficheBlurayDiscart() {
         // Blu-ray 1080p avec rond imprimé fanart.tv
         val bluray = dune.copy(
