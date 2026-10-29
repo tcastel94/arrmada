@@ -6,10 +6,10 @@ import fr.arrmada.app.data.PlayOnTv
 import fr.arrmada.app.data.WatchlistTarget
 import fr.arrmada.app.ui.components.WatchlistButton
 import fr.arrmada.app.ui.request.SendToTvDialog
+import fr.arrmada.app.ui.components.tapToClick
 import fr.arrmada.app.ui.components.touchScroll
 import fr.arrmada.app.ui.components.LocalScreen
 import fr.arrmada.app.ui.components.gutter
-import android.content.ActivityNotFoundException
 import android.view.TextureView
 import androidx.annotation.OptIn
 import androidx.compose.animation.core.animateFloatAsState
@@ -28,8 +28,6 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import fr.arrmada.app.ui.components.Motion
 import kotlinx.coroutines.delay
 import okhttp3.OkHttpClient
-import android.content.Intent
-import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -100,6 +98,10 @@ fun MovieScreen(
     api: Api,
     onPlay: (movie: MovieDetail, startSeconds: Int) -> Unit,
     onDownload: (MovieDetail) -> Unit = {},
+    // « Bande-annonce » : écran plein écran (fichier du NAS, sinon YouTube)
+    onTrailer: (tmdbId: Long, radarrYoutubeId: String?) -> Unit = { _, _ -> },
+    // Clic sur un acteur : sa filmographie
+    onPerson: (tmdbId: Long) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     var movie by remember { mutableStateOf<MovieDetail?>(null) }
@@ -129,13 +131,16 @@ fun MovieScreen(
         scope.launch { runCatching { repository.playMovie(id) }.getOrNull()?.let { play = it } }
     }
 
-    // Bande-annonce du NAS en fond, après 2,5 s sur la fiche (muette, une fois)
+    // Bande-annonce du NAS en fond, après 2,5 s sur la fiche (muette, une fois).
+    // Les infos servent aussi au bouton « Bande-annonce » (YouTube de TMDB, en français)
     var trailer by remember { mutableStateOf<String?>(null) }
     var trailerDone by remember { mutableStateOf(false) }
+    var trailerInfo by remember { mutableStateOf<fr.arrmada.app.data.TrailerInfo?>(null) }
     LaunchedEffect(movie?.tmdbId) {
         val id = movie?.tmdbId ?: return@LaunchedEffect
-        if (!Motion.enabled) return@LaunchedEffect
         val info = runCatching { repository.movieTrailer(id) }.getOrNull() ?: return@LaunchedEffect
+        trailerInfo = info
+        if (!Motion.enabled) return@LaunchedEffect
         if (info.status == "ok" && info.stream.isNotBlank()) {
             delay(2_500)
             trailer = api.baseUrl + info.stream
@@ -153,6 +158,10 @@ fun MovieScreen(
         backdropVideo = video?.let { url -> @Composable { TrailerVideo(url, api.http) { trailerDone = true } } },
         // Téléphone / tablette : « Sur la TV »
         onSendToTv = if (LocalScreen.current.isTouch && m.tmdbId != null) { { sending = true } } else null,
+        onTrailer = m.tmdbId
+            ?.takeIf { fr.arrmada.app.data.TrailerLogic.available(trailerInfo, m.trailerId) }
+            ?.let { tmdb -> { onTrailer(tmdb, m.trailerId) } },
+        onPerson = onPerson,
         // Liste « À voir » du profil qui regarde
         extraActions = {
             m.tmdbId?.let { tmdb ->
@@ -232,6 +241,8 @@ fun MovieContent(
     onDownload: (MovieDetail) -> Unit = {},
     backdropVideo: (@Composable () -> Unit)? = null,
     onSendToTv: (() -> Unit)? = null,
+    onTrailer: (() -> Unit)? = null,
+    onPerson: ((tmdbId: Long) -> Unit)? = null,
     // Boutons en plus, après « Sur la TV » (« Ma liste »)
     extraActions: @Composable () -> Unit = {},
 ) {
@@ -295,9 +306,12 @@ fun MovieContent(
                 modifier = Modifier.widthIn(max = 560.dp).padding(top = 12.dp),
             )
 
-            // ── Actions ── (téléphone : la rangée défile au doigt plutôt que d'écraser les boutons)
+            // ── Actions ── La rangée défile (au doigt, ou en suivant le focus à
+            // la télécommande) plutôt que d'écraser les derniers boutons : à la TV,
+            // « Reprendre à… » + « Depuis le début » + « Dans ma liste » ne
+            // laissaient presque plus de place à « Bande-annonce »
             Row(
-                Modifier.padding(top = 18.dp).then(if (LocalScreen.current.isTouch) Modifier.horizontalScroll(rememberScrollState()) else Modifier),
+                Modifier.padding(top = 18.dp).horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 val notReady = { Toast.makeText(context, play?.reason ?: "Lecture impossible : Jellyfin ne répond pas", Toast.LENGTH_LONG).show() }
@@ -310,11 +324,9 @@ fun MovieContent(
                     // Suivi par Radarr mais pas encore sur le disque
                     ArrButton("Télécharger", { onDownload(m) }, primary = true, modifier = Modifier.focusRequester(playFocus))
                 }
+                if (onTrailer != null) ArrButton("Bande-annonce", onTrailer, leading = "🎬")
                 if (onSendToTv != null && playable) ArrButton("Sur la TV", onSendToTv, leading = "📺")
                 extraActions()
-                m.trailerId?.takeIf { it.isNotBlank() }?.let { id ->
-                    ArrButton("Bande-annonce", { openTrailer(context, id) })
-                }
             }
             if (play != null && !playable) {
                 Text(play?.reason ?: "", style = MaterialTheme.typography.labelMedium, color = ArrColors.Warning, modifier = Modifier.padding(top = 8.dp))
@@ -325,21 +337,48 @@ fun MovieContent(
                 Text("Distribution", style = MaterialTheme.typography.titleMedium, color = ArrColors.TextSecondary, modifier = Modifier.padding(top = 22.dp, bottom = 8.dp))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(end = gutter)) {
                     items(m.cast.take(15)) { person -> // pas de clé : deux rôles peuvent avoir le même nom
-                        Column(Modifier.width(76.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Box(Modifier.size(60.dp).clip(CircleShape).background(ArrColors.Card)) {
-                                if (person.photo != null) {
-                                    AsyncImage(model = person.photo, contentDescription = person.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                                }
-                            }
-                            Text(person.name, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp))
-                            Text(person.character, style = MaterialTheme.typography.labelSmall, color = ArrColors.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
-                        }
+                        // OK sur un acteur : sa filmographie (comme la web app)
+                        val tmdb = person.tmdbId
+                        CastCard(person, if (onPerson != null && tmdb != null) { { onPerson(tmdb) } } else null)
                     }
                 }
             }
         }
     }
     LaunchedEffect(m.id) { runCatching { playFocus.requestFocus() } }
+}
+
+/** Un membre de la distribution ; cliquable (focus bleu) quand sa filmographie est connue. */
+@Composable
+private fun CastCard(person: fr.arrmada.app.data.Person, onClick: (() -> Unit)?) {
+    val content = @Composable {
+        Column(Modifier.width(76.dp).padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(Modifier.size(60.dp).clip(CircleShape).background(ArrColors.Card)) {
+                if (person.photo != null) {
+                    AsyncImage(model = person.photo, contentDescription = person.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                }
+            }
+            Text(person.name, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp))
+            Text(person.character, style = MaterialTheme.typography.labelSmall, color = ArrColors.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+        }
+    }
+    if (onClick == null) return content()
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
+    androidx.tv.material3.Surface(
+        onClick = onClick,
+        modifier = Modifier.tapToClick(onClick),
+        shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(shape),
+        scale = androidx.tv.material3.ClickableSurfaceDefaults.scale(focusedScale = 1.08f),
+        border = androidx.tv.material3.ClickableSurfaceDefaults.border(
+            focusedBorder = androidx.tv.material3.Border(androidx.compose.foundation.BorderStroke(2.dp, ArrColors.Accent), shape = shape),
+        ),
+        colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+            containerColor = androidx.compose.ui.graphics.Color.Transparent,
+            contentColor = ArrColors.Text,
+            focusedContainerColor = ArrColors.Card,
+            focusedContentColor = ArrColors.Text,
+        ),
+    ) { content() }
 }
 
 /** Pastilles « 4K », « Dolby Vision », « Atmos »… lues dans le fichier. */
@@ -373,19 +412,4 @@ fun techBadges(file: FileInfo?): List<String> {
     val channels = file.audioChannels
     if (channels != null && channels > 2.0) badges.add("%.1f".format(java.util.Locale.ROOT, channels))
     return badges
-}
-
-/** Bande-annonce dans l'appli YouTube (ou le navigateur s'il n'y en a pas). */
-private fun openTrailer(context: android.content.Context, youtubeId: String) {
-    val app = Intent(Intent.ACTION_VIEW, Uri.parse("vnd.youtube:$youtubeId"))
-    val web = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=$youtubeId"))
-    try {
-        context.startActivity(app)
-    } catch (_: ActivityNotFoundException) {
-        try {
-            context.startActivity(web)
-        } catch (_: ActivityNotFoundException) {
-            Toast.makeText(context, "Installe l’appli YouTube pour voir la bande-annonce", Toast.LENGTH_LONG).show()
-        }
-    }
 }

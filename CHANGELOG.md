@@ -7,6 +7,87 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Volume de l'ampli Yamaha à la télécommande de la TV (ADR-013)
+
+#### Added
+- **Vol + / Vol − / Muet de la télécommande règlent l'ampli Yamaha de la pièce**, dans ArrMada comme dans les autres applis, avec un message court (« Ampli : 42 % (−38,5 dB) », « Ampli : muet »). Touche maintenue : un envoi toutes les 150 ms (2 dB par appui, comme Vol + du menu pause)
+- **Faisabilité vérifiée** : une appli Android TV ne reçoit jamais les touches volume (le système de la Shield les garde pour le HDMI-CEC / l'IR, `PhoneWindowManager`). D'où un **service d'accessibilité** dans l'APK (`amp/AmpVolumeService`), qui ne lit que ces trois touches (filtre des touches, aucun contenu de l'écran) et passe par le serveur, comme le menu pause. **À activer une fois** : Paramètres › Accessibilité › « ArrMada : volume de l'ampli ». Le bouton **Réglages › « Touches volume de la télécommande → ampli : activer »** y mène, puis devient un interrupteur (ampli Yamaha / volume de la TV)
+- Garde-fous : pièce sans ampli (`no_amp`) → touches rendues à la TV pendant 10 min ; serveur ou ampli injoignable → 1 min ; rien d'intercepté si le réglage est coupé, si la TV n'est pas appairée ou sur un téléphone
+- Serveur : `POST /api/yamaha/control` accepte **`mute` = `"toggle"`** (état relu puis inversé) et renvoie **`volume_pct`, `mute`, `actual_db`** après `volume`, `volume_step` et `mute`
+- **ADR-013** « Volume de l'ampli à la télécommande » (pourquoi l'accessibilité, alternatives HDMI-CEC / IR)
+
+#### Notes
+- Sans rien installer, l'IR ou le HDMI-CEC restent la solution la plus directe quand le matériel le permet : télécommande de la Shield réglée en IR sur l'ampli (Paramètres › Télécommandes et accessoires), ou « HDMI Control » de l'ampli avec la TV en ARC. Le texte d'aide des Réglages le rappelle
+- Non vérifié sur la Shield elle-même (pas d'accès à l'appareil depuis le serveur) : à valider en activant le service
+
+#### Tests
+- Serveur : 3 cas dans `tests/test_yamaha_status.py` (nouveau niveau après `volume_step`, muet inversé deux fois, muet explicite et autres commandes inchangés) ; 774 tests verts
+- Appli Android : 5 tests dans `VolumeKeyLogicTest` (seules les touches volume / muet, pas du menu pause, garde-fou 10 min / 1 min / retour immédiat, message affiché, réponse du serveur) ; 166 tests JVM verts, APK de debug construite
+
+### Appui long sur les affiches : menu du titre (appli TV et téléphone)
+
+#### Added
+- **Appui long** (OK maintenu à la télécommande, doigt appuyé sur le téléphone) sur les cartes de l'accueil (**Reprendre**, **Ma liste**, **Ajouts récents**) et des grilles **Films / Séries** : menu du titre, comme celui des épisodes. Avant, rien ne se passait : seuls les épisodes et l'écran Vidéos avaient un appui long
+  - film sur le NAS : **Lire**, **Ouvrir la fiche**, **Bande-annonce**, **Ajouter à ma liste / Retirer de ma liste**, **Marquer comme vu / non vu** ;
+  - série : **Ouvrir la série**, **Ma liste** ; série maison (Naruto Kai…) : **Ouvrir la série** ;
+  - carte « Reprendre » : **Reprendre à 42:10**, **Lire depuis le début**, ouvrir la fiche ou la série, Ma liste, **Marquer comme vu** (l'épisode pour une série) ;
+  - titre de « Ma liste » pas encore téléchargé : Bande-annonce, Retirer de ma liste
+- « Dans ma liste ? » et « déjà vu ? » sont lus avant d'ouvrir le menu (en mémoire le plus souvent) pour proposer la bonne action ; un message court confirme (« Ajouté à ma liste », « Marqué comme vu »). « Marquer comme vu » depuis le menu relit la rangée « Reprendre » de l'accueil ; « Ma liste » suit d'elle-même
+- `PosterCard` et `LandscapeCard` acceptent `onLongClick` ; menu commun `ui/components/MediaMenu.kt`, logique pure `data/MediaMenuLogic.kt`
+
+#### Tests
+- 7 tests dans `MediaMenuLogicTest` (film sur le disque, série par son TVDB, série maison, titre de « Ma liste » absent du NAS, carte « Reprendre » d'un épisode, état « vu » d'un film, vidéo maison non marquée d'ici) ; 161 tests JVM verts
+
+### Filmographie des acteurs dans l'appli Android TV (et sur le téléphone)
+
+#### Added
+- **Clic sur un acteur de la distribution d'une fiche film → sa page**, comme dans la web app : photo, métier, date et lieu de naissance, biographie (TMDB en français), puis sa filmographie en deux rangées. **« Dans ta médiathèque (N) »** : OK ouvre la fiche du film ; **« À découvrir »** : OK ouvre la feuille « Télécharger ». Le film survolé s'affiche au-dessus (« 1999 · Neo · Sur le NAS »). Avant, la distribution n'était qu'une rangée d'images, sans focus ni action
+- Les acteurs cliquables prennent le focus bleu (télécommande) et réagissent au doigt (téléphone, tablette). Rien à changer côté serveur : `GET /api/media/person/{tmdb}` (celle de la web app) était déjà ouverte aux appareils appairés
+- Route `person/{tmdb}`, écran `ui/detail/PersonScreen.kt`, logique pure `data/PersonLogic.kt`
+
+#### Notes
+- Séries : Sonarr ne fournit pas de distribution, l'écran Série n'en a donc toujours pas (comme la web app)
+
+#### Tests
+- 5 tests dans `PersonLogicTest` (métier et naissance en français, date illisible, ligne du film survolé, fiche ou feuille « Télécharger », lecture de la réponse du serveur et de son erreur) ; capture `41-acteur`
+
+### Bandes-annonces dans l'appli Android TV et sur le téléphone
+
+#### Fixed
+- **« Bande-annonce » ne marchait pas sur la fiche film de l'appli TV.** Deux causes. 1) Le bouton venait en dernier dans une rangée qui ne défilait pas à la TV : avec « Reprendre à… », « Depuis le début » et « Dans ma liste », il ne restait presque plus de place et il était écrasé (vérifié sur la capture d'écran de test 1920×1080). 2) Il ne savait qu'ouvrir `vnd.youtube:`, que YouTube pour Android TV n'ouvre pas toujours sur la Shield ; sans identifiant YouTube dans Radarr (31 films sur 398 ici), pas de bouton du tout. La web app n'était pas touchée (lecteur YouTube intégré)
+- La rangée de boutons de la fiche défile maintenant aussi à la télécommande (le focus amène le bouton à l'écran) ; « Bande-annonce » vient juste après les boutons de lecture
+
+#### Added
+- **Écran Bande-annonce** (route `trailer/{tmdb}`) : le fichier « -trailer » rangé sur le NAS est lu **dans l'appli, en plein écran avec le son** (OK : pause, gauche / droite, Retour : la fiche) ; sinon **YouTube** : YouTube pour Android TV d'abord, puis l'appli YouTube du téléphone, puis toute appli qui ouvre un lien YouTube (SmartTube, navigateur) ; message clair si rien ne peut la lire. Fichier du NAS illisible : YouTube en secours
+- `GET /api/tv/trailer/movie/{tmdb}` renvoie aussi **`youtube`** : bande-annonce TMDB **en français d'abord** (puis anglaise ; bande-annonce avant teaser, officielle d'abord), utilisée avant celle de Radarr (souvent en anglais) ; vide sans `TMDB_API_KEY` ou si TMDB ne répond pas. Un serveur plus ancien garde l'identifiant de Radarr
+- Logique pure `data/TrailerLogic.kt` (choix de la source, applis YouTube à essayer)
+
+#### Tests
+- Serveur : 7 cas de plus dans `tests/test_api/test_tv_playback.py` (choix de la vidéo TMDB : français officiel d'abord, anglais, teaser ; vidéos inutilisables ignorées ; bout en bout avec un faux TMDB : langue demandée, TMDB en panne), réponses existantes complétées par `youtube`
+- Appli Android : 5 tests dans `TrailerLogicTest` (NAS d'abord, YouTube français avant Radarr, serveur ancien, rien d'utilisable, ordre des applis YouTube) ; capture `02-fiche-film` avec un film commencé, dans « Ma liste », avec bande-annonce
+
+### « Ma liste » à jour tout de suite dans l'appli TV et sur le téléphone
+
+#### Fixed
+- **Un titre ajouté à « Ma liste » depuis sa fiche n'apparaissait sur l'accueil qu'après avoir quitté et relancé l'appli** (TV comme téléphone, même APK). Cause : l'accueil lisait la liste une seule fois, à sa création ; en revenant de la fiche, Android réaffiche le même écran avec ses anciennes données, et le bouton « Ma liste » ne tenait à jour que ses propres coches. La liste est maintenant **gardée par le `Repository` et partagée** (`watchlistFlow`) : ajout ou retrait depuis une fiche (ou l'appui long) → la rangée « Ma liste » de l'accueil change aussitôt, sans recharger tout l'écran. Changement de profil : liste oubliée, relue pour le nouveau spectateur
+- La web app n'était pas concernée (React Query invalide déjà la liste après chaque ajout / retrait)
+
+#### Tests
+- 3 tests de plus dans `WatchlistLogicTest` (titre ajouté en tête sans doublon, réponse vide d'un serveur ancien complétée par la fiche, retrait)
+
+### Synopsis en français partout (appli TV, téléphone, web app)
+
+#### Fixed
+- **Les résumés des films et séries s'affichaient en anglais.** Cause vérifiée sur le serveur : Radarr est réglé sur « English » pour les infos des films (`movieInfoLanguage` = 1) et Sonarr ne connaît que l'anglais ; la médiathèque et les fiches reprenaient leur `overview` tel quel. Radarr n'est pas modifié (sa langue traduirait aussi les titres, donc les noms de dossiers au prochain renommage) : ArrMada demande le résumé à TMDB en **`fr-FR`** et garde **l'anglais de Radarr / Sonarr quand TMDB n'a pas de traduction**
+
+#### Added
+- `services/translations.py` et table **`media_translations`** (créée au démarrage) : un résumé par titre, même clé que les artworks (`movie:<TMDB>`, `series:<TVDB>`), redemandé au bout de 30 jours (7 sans traduction, 1 h après une panne de TMDB)
+- **Fiche film / série** (`/api/media/movie|series/{id}`) : titre pas encore traduit → TMDB interrogé à l'ouverture (4 s au plus, puis gardé en base) ; séries par leur identifiant TMDB connu de Sonarr
+- **Médiathèque** (accueil et grilles des applis, Ma liste, web app) : résumés français lus en base, sans appel réseau ; tâche planifiée **« Synopsis en français »** toutes les 6 h (premier passage 3 min après le démarrage, seulement avec `TMDB_API_KEY`) pour les titres manquants
+
+#### Tests
+- `tests/test_api/test_translations.py` : choix du texte, réponse TMDB, délais de rafraîchissement, cibles (séries sans TMDB ignorées), fiche film et série en français puis lue en base, film sans traduction, TMDB en panne, sans clé TMDB, remplissage de la médiathèque puis aucun appel au passage suivant, nouvel essai dans l'heure après une panne ; 764 tests verts
+
 ### Recherche IA : l'IA locale Ollama d'abord, OpenRouter en secours
 
 #### Fixed

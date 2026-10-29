@@ -80,6 +80,34 @@ object WatchlistLogic {
     /** « movie:tmdb:438631 » / « series:tvdb:280619 » (même clé que le serveur). */
     fun key(mediaType: String, id: Long): String = if (mediaType == "movie") "movie:tmdb:$id" else "series:tvdb:$id"
 
+    /**
+     * Liste après un ajout : le titre en tête (le serveur range les plus
+     * récents d'abord), sans doublon. [item] est la réponse du serveur ; sa
+     * clé manque sur un serveur ancien, on prend celle de la fiche.
+     */
+    fun added(list: List<WatchlistItem>?, item: WatchlistItem, target: WatchlistTarget): List<WatchlistItem> {
+        val key = item.key.ifBlank { target.key }
+        val entry = if (item.title.isBlank()) {
+            // Réponse vide (serveur ancien) : ce que la fiche sait du titre
+            WatchlistItem(
+                key = key,
+                mediaType = target.mediaType,
+                externalId = target.id.toString(),
+                tmdbId = target.id.takeIf { target.mediaType == "movie" },
+                tvdbId = target.id.takeIf { target.mediaType == "series" },
+                title = target.title,
+                year = target.year,
+                posterUrl = target.poster,
+            )
+        } else {
+            item.copy(key = key)
+        }
+        return listOf(entry) + list.orEmpty().filter { it.key != key }
+    }
+
+    /** Liste après un retrait. */
+    fun removed(list: List<WatchlistItem>, key: String): List<WatchlistItem> = list.filter { it.key != key }
+
     /** Disponibles d'abord (on peut les lancer ce soir), puis l'ordre du serveur (récents d'abord). */
     fun ordered(items: List<WatchlistItem>): List<WatchlistItem> =
         items.withIndex().sortedWith(compareBy({ if (it.value.hasFile) 0 else 1 }, { it.index })).map { it.value }

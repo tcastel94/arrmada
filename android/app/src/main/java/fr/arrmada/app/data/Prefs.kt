@@ -94,6 +94,15 @@ class Prefs(context: Context) {
             ?.let { saved -> DefaultQuality.entries.firstOrNull { it.name == saved } } ?: DefaultQuality.ORIGINAL
         set(value) = prefs.edit().putString(KEY_DEFAULT_QUALITY, value.name).apply()
 
+    /**
+     * Touches volume / muet de la télécommande envoyées à l'ampli Yamaha de
+     * la pièce (Réglages). Ne joue que si le service d'accessibilité
+     * d'ArrMada est activé dans Android (amp/AmpVolumeService).
+     */
+    var ampVolumeKeys: Boolean
+        get() = prefs.getBoolean(KEY_AMP_VOLUME_KEYS, true)
+        set(value) = prefs.edit().putBoolean(KEY_AMP_VOLUME_KEYS, value).apply()
+
     /** « Toujours lire en 1080p sur cette TV ? » déjà posée (une seule fois). */
     var qualityAsked: Boolean
         get() = prefs.getBoolean(KEY_QUALITY_ASKED, false)
@@ -113,6 +122,7 @@ class Prefs(context: Context) {
         const val KEY_HOME_ROWS = "home_rows"
         const val KEY_DEFAULT_QUALITY = "default_quality"
         const val KEY_QUALITY_ASKED = "quality_asked"
+        const val KEY_AMP_VOLUME_KEYS = "amp_volume_keys"
         const val KEY_PROFILE_ID = "profile_id"
         const val KEY_PROFILE_NAME = "profile_name"
         const val KEY_PROFILE_COLOR = "profile_color"

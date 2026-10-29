@@ -286,8 +286,12 @@ async def control(
     """Send a command to the AVR: volume | mute | power | input.
 
     ``volume`` accepts an absolute value (0..max_volume). ``power`` accepts
-    on|standby|toggle. ``mute`` accepts a truthy/falsey value. ``input`` accepts
-    an input id string.
+    on|standby|toggle. ``mute`` accepts a truthy/falsey value, or "toggle"
+    (touche « muet » de la télécommande : l'état actuel est relu puis
+    inversé). ``input`` accepts an input id string.
+
+    Volume et muet : la réponse porte le nouvel état (`volume_pct`, `mute`,
+    `actual_db`) pour que la TV l'affiche (« Ampli : 42 % »).
     """
     svc = await _pick(db, service_id)
     if not svc:
@@ -306,6 +310,8 @@ async def control(
                 base, f"/{zone}/setVolume?volume={'up' if step > 0 else 'down'}&step={abs(step)}"
             )
         elif action == "mute":
+            if value == "toggle":
+                value = not (await _zone_status(base, zone))["mute"]
             enable = "true" if value else "false"
             await _get(base, f"/{zone}/setMute?enable={enable}")
         elif action == "power":
@@ -341,7 +347,18 @@ async def control(
         logger.error("Yamaha control %s failed on %s: %s", action, base, exc)
         return {"status": "error", "detail": f"{type(exc).__name__}"}
 
-    return {"status": "ok", "action": action}
+    result: dict[str, Any] = {"status": "ok", "action": action}
+    if action in _LEVEL_ACTIONS:
+        try:
+            st = await _zone_status(base, zone)
+            result.update({k: st[k] for k in ("volume_pct", "mute", "actual_db")})
+        except Exception as exc:  # la commande est passée ; seul l'affichage manque
+            logger.debug("Yamaha : état après %s illisible : %s", action, exc)
+    return result
+
+
+# Commandes après lesquelles la TV affiche le volume
+_LEVEL_ACTIONS = ("volume", "volume_step", "mute")
 
 
 # ── Room Audio Profiles & Automation ─────────────────────────

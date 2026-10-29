@@ -304,8 +304,11 @@ async def fetch_all_media(db: AsyncSession) -> list[dict[str, Any]]:
 
     # Logos, disques, clearart… récupérés sur fanart.tv / TMDB (services/artwork.py)
     from app.services.artwork import apply_to_library
+    from app.services.translations import apply_to_library as apply_french_overviews
 
     await apply_to_library(all_media)
+    # Résumés en français (TMDB) à la place de l'anglais de Radarr / Sonarr
+    await apply_french_overviews(all_media)
     return all_media
 
 

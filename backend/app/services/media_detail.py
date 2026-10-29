@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.service import Service
-from app.services import artwork
+from app.services import artwork, translations
 from app.services.bazarr import BazarrClient
 from app.services.encryption import decrypt_api_key
 from app.services.radarr import RadarrClient
@@ -191,7 +191,10 @@ async def get_movie_detail(
         "original_title": raw.get("originalTitle", ""),
         "sort_title": raw.get("sortTitle", ""),
         "year": raw.get("year"),
-        "overview": raw.get("overview", ""),
+        # Résumé français (TMDB), l'anglais de Radarr en secours
+        "overview": await translations.detail_overview(
+            db, "movie", raw.get("tmdbId"), raw.get("tmdbId"), raw.get("overview", "")
+        ),
         "studio": raw.get("studio", ""),
         "genres": genres,
         "runtime": raw.get("runtime"),
@@ -331,7 +334,10 @@ async def get_series_detail(
         "original_title": raw.get("title", ""),
         "sort_title": raw.get("sortTitle", ""),
         "year": raw.get("year"),
-        "overview": raw.get("overview", ""),
+        # Résumé français (TMDB), l'anglais de Sonarr en secours
+        "overview": await translations.detail_overview(
+            db, "series", raw.get("tvdbId"), raw.get("tmdbId"), raw.get("overview", "")
+        ),
         "network": raw.get("network", ""),
         "genres": raw.get("genres", []),
         "runtime": raw.get("runtime"),

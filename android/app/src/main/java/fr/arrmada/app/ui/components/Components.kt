@@ -74,14 +74,16 @@ fun PosterCard(
     progress: Float? = null,
     seen: Boolean = false,
     onFocus: () -> Unit = {},
+    onLongClick: (() -> Unit)? = null, // appui long (OK maintenu) : menu du titre
 ) {
     Column(modifier.width(width)) {
         Surface(
             onClick = onClick,
+            onLongClick = onLongClick,
             modifier = Modifier
                 .width(width)
                 .height(width * 1.5f)
-                .tapToClick(onClick)
+                .tapToClick(onClick, onLongClick)
                 .onFocusChanged { if (it.isFocused) onFocus() },
             shape = ClickableSurfaceDefaults.shape(PosterShape),
             scale = ClickableSurfaceDefaults.scale(focusedScale = 1.08f),
@@ -114,14 +116,16 @@ fun LandscapeCard(
     width: Dp = 200.dp,
     progress: Float? = null,
     onFocus: () -> Unit = {},
+    onLongClick: (() -> Unit)? = null, // appui long (OK maintenu) : menu du titre
 ) {
     Column(modifier.width(width)) {
         Surface(
             onClick = onClick,
+            onLongClick = onLongClick,
             modifier = Modifier
                 .width(width)
                 .height(width * 9f / 16f)
-                .tapToClick(onClick)
+                .tapToClick(onClick, onLongClick)
                 .onFocusChanged { if (it.isFocused) onFocus() },
             shape = ClickableSurfaceDefaults.shape(PosterShape),
             scale = ClickableSurfaceDefaults.scale(focusedScale = 1.06f),

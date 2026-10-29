@@ -66,6 +66,24 @@
             </intent-filter>
         </activity>
 
+        <!-- Touches volume / muet de la télécommande → ampli Yamaha (ADR-013).
+             Android TV ne donne jamais ces touches à l'appli au premier plan :
+             seul un service d'accessibilité, activé à la main dans les
+             Paramètres, peut les lire. La permission BIND_ACCESSIBILITY_SERVICE
+             réserve la liaison au système. -->
+        <service
+            android:name=".amp.AmpVolumeService"
+            android:exported="true"
+            android:label="@string/amp_volume_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/amp_volume_service" />
+        </service>
+
         <!-- Réponse de l'installeur d'Android pendant une mise à jour (interne). -->
         <receiver
             android:name=".update.UpdateReceiver"

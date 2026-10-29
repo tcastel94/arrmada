@@ -3,4 +3,7 @@
      nom affiché sous l'icône. -->
 <resources>
     <string name="app_name">ArrMada</string>
+    <!-- Paramètres › Accessibilité (amp/AmpVolumeService.kt) -->
+    <string name="amp_volume_label">ArrMada : volume de l’ampli</string>
+    <string name="amp_volume_description">Les touches volume et muet de la télécommande règlent l’ampli Yamaha de la pièce (via le serveur ArrMada), dans ArrMada comme dans les autres applis. ArrMada ne lit que ces touches, rien de ce qui est à l’écran. Pièce sans ampli ou serveur injoignable : les touches reviennent au volume de la TV.</string>
 </resources>

@@ -644,7 +644,8 @@ async def test_movie_trailer(client: AsyncClient, jellyfin: dict[str, str]) -> N
     tv = await _tv(client, jellyfin)
     data = (await client.get("/api/tv/trailer/movie/438631", headers=tv)).json()
     assert data == {
-        "status": "ok", "item_id": TRAILER_ID, "stream": f"/api/tv/stream/{TRAILER_ID}", "duration": 150
+        "status": "ok", "item_id": TRAILER_ID, "stream": f"/api/tv/stream/{TRAILER_ID}",
+        "duration": 150, "youtube": "",
     }  # fmt: skip
     assert SEEN["trailers"]["params"] == {"ApiKey": "j-key"}
 
@@ -652,9 +653,76 @@ async def test_movie_trailer(client: AsyncClient, jellyfin: dict[str, str]) -> N
 async def test_movie_without_trailer(client: AsyncClient, jellyfin: dict[str, str]) -> None:
     tv = await _tv(client, jellyfin)
     assert (await client.get("/api/tv/trailer/movie/453405", headers=tv)).json() == {
-        "status": "none"
+        "status": "none",
+        "youtube": "",
     }
-    assert (await client.get("/api/tv/trailer/movie/1", headers=tv)).json() == {"status": "none"}
+    assert (await client.get("/api/tv/trailer/movie/1", headers=tv)).json() == {
+        "status": "none",
+        "youtube": "",
+    }
+
+
+# Vidéos TMDB d'un film (`/movie/{id}/videos`, fr + en)
+TMDB_VIDEOS = {
+    "results": [
+        {"site": "YouTube", "key": "en_trailer1", "type": "Trailer", "iso_639_1": "en", "official": True},
+        {"site": "YouTube", "key": "fr_teaser01", "type": "Teaser", "iso_639_1": "fr", "official": True},
+        {"site": "YouTube", "key": "fr_trailer1", "type": "Trailer", "iso_639_1": "fr", "official": False},
+        {"site": "YouTube", "key": "fr_trailer2", "type": "Trailer", "iso_639_1": "fr", "official": True},
+        {"site": "Vimeo", "key": "123456789", "type": "Trailer", "iso_639_1": "fr"},
+        {"site": "YouTube", "key": "fr_making01", "type": "Behind the Scenes", "iso_639_1": "fr"},
+    ]
+}  # fmt: skip
+
+
+def test_pick_youtube_prefers_french_official_trailer() -> None:
+    assert tv_playback.pick_youtube(TMDB_VIDEOS) == "fr_trailer2"
+    english_only = {"results": [v for v in TMDB_VIDEOS["results"] if v["iso_639_1"] == "en"]}
+    assert tv_playback.pick_youtube(english_only) == "en_trailer1"
+    teaser_only = {"results": [TMDB_VIDEOS["results"][1]]}
+    assert tv_playback.pick_youtube(teaser_only) == "fr_teaser01"
+
+
+@pytest.mark.parametrize(
+    "videos",
+    [
+        {},
+        {"results": None},
+        {"results": [{"site": "YouTube", "key": "https://youtu.be/x", "type": "Trailer"}]},
+        {"results": [{"site": "YouTube", "key": "abcdefgh", "type": "Featurette"}]},
+        ["pas", "un", "objet"],
+    ],
+)
+def test_pick_youtube_ignores_unusable_videos(videos: Any) -> None:
+    assert tv_playback.pick_youtube(videos) == ""
+
+
+async def test_movie_trailer_youtube_from_tmdb(
+    client: AsyncClient, jellyfin: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pas de fichier sur le NAS : l'appli reçoit la bande-annonce TMDB, en français."""
+    from app.config import settings
+
+    asked: dict[str, str] = {}
+
+    def videos(params: dict, _m: Any) -> Any:
+        asked.update(params)
+        return TMDB_VIDEOS
+
+    monkeypatch.setattr(settings, "TMDB_API_KEY", "tmdb-test")
+    routes = dict(fake_arr.ROUTES)
+    routes["api.themoviedb.org"] = [(r"/3/movie/453405/videos", videos)]
+    monkeypatch.setattr(fake_arr, "ROUTES", routes)
+    tv = await _tv(client, jellyfin)
+    data = (await client.get("/api/tv/trailer/movie/453405", headers=tv)).json()
+    assert data == {"status": "none", "youtube": "fr_trailer2"}
+    assert asked["language"] == "fr-FR"
+    assert asked["include_video_language"] == "fr,en"
+
+    # TMDB en panne : pas de bande-annonce YouTube, la fiche s'affiche quand même
+    routes["api.themoviedb.org"] = [(r"/3/movie/453405/videos", lambda *_: httpx.Response(503))]
+    data = (await client.get("/api/tv/trailer/movie/453405", headers=tv)).json()
+    assert data == {"status": "none", "youtube": ""}
 
 
 async def test_play_movie_resume_is_per_profile(

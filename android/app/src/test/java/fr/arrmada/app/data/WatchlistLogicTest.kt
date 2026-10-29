@@ -55,4 +55,33 @@ class WatchlistLogicTest {
         assertEquals("Demandé : en attente de téléchargement", WatchlistLogic.note(WatchlistItem(inLibrary = true)))
         assertEquals("Pas encore sur le NAS", WatchlistLogic.note(WatchlistItem()))
     }
+
+    @Test
+    fun addedTitleComesFirstWithoutDuplicate() {
+        val list = listOf(WatchlistItem(key = "movie:tmdb:1", title = "Dune"), WatchlistItem(key = "series:tvdb:5", title = "The Bear"))
+        val target = WatchlistTarget("series", 5, "The Bear")
+        val after = WatchlistLogic.added(list, WatchlistItem(key = "series:tvdb:5", mediaType = "series", title = "The Bear", hasFile = true), target)
+        assertEquals(listOf("series:tvdb:5", "movie:tmdb:1"), after.map { it.key })
+        assertEquals(true, after.first().hasFile)
+    }
+
+    @Test
+    fun addedWithEmptyServerAnswerUsesTheSheet() {
+        // Serveur ancien : réponse sans le titre ; la fiche sait ce qu'il faut
+        val target = WatchlistTarget("movie", 438631, "Dune", 2021, "https://image.tmdb.org/dune.jpg")
+        val after = WatchlistLogic.added(null, WatchlistItem(), target)
+        val item = after.single()
+        assertEquals("movie:tmdb:438631", item.key)
+        assertEquals("Dune", item.title)
+        assertEquals(438631L, item.tmdbId)
+        assertNull(item.tvdbId)
+        assertEquals("https://image.tmdb.org/dune.jpg", item.posterUrl)
+    }
+
+    @Test
+    fun removedTitleLeavesTheRow() {
+        val list = listOf(WatchlistItem(key = "a"), WatchlistItem(key = "b"))
+        assertEquals(listOf("b"), WatchlistLogic.removed(list, "a").map { it.key })
+        assertEquals(listOf("a", "b"), WatchlistLogic.removed(list, "zzz").map { it.key })
+    }
 }

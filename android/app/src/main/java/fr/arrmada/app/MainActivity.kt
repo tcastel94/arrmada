@@ -2,6 +2,10 @@ package fr.arrmada.app
 
 import fr.arrmada.app.ui.components.FormFactor
 import android.content.Intent
+import android.provider.Settings
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import fr.arrmada.app.amp.AmpVolumeService
 import fr.arrmada.app.data.DefaultQuality
 import fr.arrmada.app.data.HomeLink
 import fr.arrmada.app.data.HomeRowsLogic
@@ -77,6 +81,14 @@ import fr.arrmada.app.ui.components.ArrButton
 import fr.arrmada.app.ui.components.MessageScreen
 import fr.arrmada.app.ui.detail.MovieScreen
 import fr.arrmada.app.ui.detail.SeriesScreen
+import fr.arrmada.app.ui.detail.PersonScreen
+import fr.arrmada.app.ui.detail.TrailerScreen
+import fr.arrmada.app.data.CreditOpen
+import fr.arrmada.app.data.MediaMenuLogic
+import fr.arrmada.app.data.MenuAction
+import fr.arrmada.app.data.MenuTarget
+import fr.arrmada.app.data.Repository
+import fr.arrmada.app.ui.components.MediaMenu
 import fr.arrmada.app.ui.home.DiscoverScreen
 import fr.arrmada.app.ui.home.HomeActions
 import fr.arrmada.app.ui.home.HomeScreen
@@ -194,6 +206,8 @@ private object Routes {
     const val PLAY = "play/{kind}/{id}/{season}/{episode}/{start}?radarr={radarr}&sonarr={sonarr}&file={file}&local={local}"
     const val LOCAL_SHOW = "localshow/{id}" // série maison (Naruto Kai, One Pace…)
     const val VIDEOS = "videos?path={path}" // écran Vidéos : un dossier (sans path : les dossiers déclarés)
+    const val TRAILER = "trailer/{tmdb}?yt={yt}" // bande-annonce plein écran (NAS, sinon YouTube)
+    const val PERSON = "person/{tmdb}" // acteur : biographie et filmographie
 
     fun library(type: String) = "library/$type"
     fun search(voice: Boolean) = "search?voice=$voice"
@@ -203,6 +217,8 @@ private object Routes {
         "?radarr=${r.radarrId.orEmpty()}&sonarr=${r.sonarrId.orEmpty()}&file=${r.file.orEmpty()}&local=${r.localSeries}"
     fun localShow(id: Int) = "localshow/$id"
     fun videos(token: String? = null) = "videos?path=${token.orEmpty()}"
+    fun trailer(tmdbId: Long, youtubeId: String?) = "trailer/$tmdbId?yt=${youtubeId.orEmpty()}"
+    fun person(tmdbId: Long) = "person/$tmdbId"
 }
 
 /** Intro à l'écran ([active]) et demande de la passer ([skip]), partagées avec l'activité. */
@@ -387,6 +403,50 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
         )
     }
 
+    // ── Appui long sur une carte : menu du titre (MediaMenu) ──
+    var menu by remember { mutableStateOf<MenuTarget?>(null) }
+
+    fun toast(text: String) = Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
+
+    fun runMenu(target: MenuTarget, action: MenuAction) {
+        val resume = target.resume
+        when (action) {
+            MenuAction.RESUME -> resume?.let { nav.navigate(Routes.play(resumeRequest(it))) }
+            MenuAction.FROM_START -> resume?.let { nav.navigate(Routes.play(resumeRequest(it).copy(startSeconds = 0))) }
+            MenuAction.PLAY -> target.tmdbId?.let { nav.navigate(Routes.play(PlayRequest("movie", it, radarrId = target.arrId))) }
+            MenuAction.OPEN -> {
+                val arr = target.arrId
+                when {
+                    target.localSeries != null -> nav.navigate(Routes.localShow(target.localSeries))
+                    arr != null && target.isMovie -> nav.navigate(Routes.movie(arr, target.tmdbId))
+                    arr != null -> nav.navigate(Routes.show(arr))
+                }
+            }
+            MenuAction.TRAILER -> target.tmdbId?.let { nav.navigate(Routes.trailer(it, null)) }
+            MenuAction.ADD_TO_LIST, MenuAction.REMOVE_FROM_LIST -> {
+                val item = target.watchlist ?: return
+                scope.launch {
+                    val adding = action == MenuAction.ADD_TO_LIST
+                    runCatching { if (adding) app.repository.addToWatchlist(item) else app.repository.removeFromWatchlist(item) }
+                        .onSuccess { toast(if (adding) "Ajouté à ma liste" else "Retiré de ma liste") }
+                        .onFailure { toast(it.message ?: "Liste injoignable") }
+                }
+            }
+            MenuAction.MARK_WATCHED, MenuAction.MARK_UNWATCHED -> {
+                val watched = action == MenuAction.MARK_WATCHED
+                val update = MediaMenuLogic.watchedUpdate(target, watched, Repository.nowLastPlayed()) ?: return
+                scope.launch {
+                    runCatching { app.repository.saveWatchState(update) }
+                        .onSuccess {
+                            app.repository.notifyWatchChanged()
+                            toast(if (watched) "Marqué comme vu" else "Marqué comme non vu")
+                        }
+                        .onFailure { toast(it.message ?: "Échec") }
+                }
+            }
+        }
+    }
+
     fun playAnnounced(a: PlayAnnounce) {
         scope.launch {
             val request = announced(a)
@@ -500,11 +560,15 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
                     prefetch = prefetcher::focus,
                     viewer = if (app.hasProfiles) viewer ?: FamilyProfile(name = "Famille", isDefault = true) else null,
                     showMenu = !LocalScreen.current.isTouch, // tactile : la barre de navigation remplace le menu
+                    menu = { menu = it },
                 ),
             )
         }
         composable(Routes.LIBRARY, arguments = listOf(navArgument("type") { type = NavType.StringType })) { entry ->
-            LibraryScreen(entry.arguments?.getString("type") ?: "movie", app.repository, app.api, ::openItem, prefetcher::focus)
+            LibraryScreen(
+                entry.arguments?.getString("type") ?: "movie", app.repository, app.api, ::openItem, prefetcher::focus,
+                onMenu = { menu = MediaMenuLogic.of(it) },
+            )
         }
         composable(Routes.DISCOVER) {
             DiscoverScreen(app.repository, ::openTmdb)
@@ -549,6 +613,35 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
                     }
                 },
                 onDownload = { openDownload(DownloadTarget.of(it)) },
+                onTrailer = { tmdb, youtube -> nav.navigate(Routes.trailer(tmdb, youtube)) },
+                onPerson = { nav.navigate(Routes.person(it)) },
+            )
+        }
+        composable(Routes.PERSON, arguments = listOf(navArgument("tmdb") { type = NavType.LongType })) { entry ->
+            PersonScreen(
+                personId = entry.arguments?.getLong("tmdb") ?: 0L,
+                repository = app.repository,
+                onOpen = { credit ->
+                    when (credit) {
+                        is CreditOpen.Movie -> nav.navigate(Routes.movie(credit.radarrId, credit.tmdbId))
+                        is CreditOpen.Download -> openDownload(credit.target)
+                    }
+                },
+            )
+        }
+        composable(
+            Routes.TRAILER,
+            arguments = listOf(
+                navArgument("tmdb") { type = NavType.LongType },
+                navArgument("yt") { type = NavType.StringType; defaultValue = "" },
+            ),
+        ) { entry ->
+            TrailerScreen(
+                tmdbId = entry.arguments?.getLong("tmdb") ?: 0L,
+                radarrYoutubeId = entry.arguments?.getString("yt")?.takeIf { it.isNotBlank() },
+                repository = app.repository,
+                api = app.api,
+                onClose = { nav.popBackStack() },
             )
         }
         composable(Routes.SHOW, arguments = listOf(navArgument("sonarrId") { type = NavType.StringType })) { entry ->
@@ -670,6 +763,10 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
         if (!showIntro && route !in listOf(Routes.PLAY, Routes.SERVER, Routes.PAIR)) UpdateDialog(app.updates, offer)
     }
 
+    menu?.let { target ->
+        MediaMenu(target, app.repository, onDismiss = { menu = null }) { action -> runMenu(target, action) }
+    }
+
     // Par-dessus tous les écrans : bulles, « Prêt à regarder », caméra
     if (paired) EventOverlays(app.events, app.api::absolute, onWatch = ::playAnnounced)
 
@@ -768,6 +865,8 @@ private fun SettingsScreen(app: ArrMadaApplication, onChangeServer: () -> Unit, 
             color = ArrColors.TextSecondary,
             modifier = Modifier.padding(top = 8.dp),
         )
+        // Touches volume de la télécommande → ampli Yamaha de la pièce (ADR-013)
+        if (LocalScreen.current.isTv) AmpVolumeKeysSetting(app)
         // Accueil Android TV : rangée « À suivre » et chaîne « ArrMada · Ajouts récents »
         val context = LocalContext.current
         if (TvHomeRows.supported(context)) {
@@ -791,4 +890,51 @@ private fun SettingsScreen(app: ArrMadaApplication, onChangeServer: () -> Unit, 
         }
     }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+}
+
+/**
+ * Réglage « Touches volume → ampli » : tant que le service d'accessibilité
+ * n'est pas activé dans Android, un bouton y mène ; ensuite, un interrupteur.
+ */
+@Composable
+private fun AmpVolumeKeysSetting(app: ArrMadaApplication) {
+    val context = LocalContext.current
+    var serviceOn by remember { mutableStateOf(AmpVolumeService.isEnabled(context)) }
+    // Retour des Paramètres d'Android : l'état a pu changer
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { serviceOn = AmpVolumeService.isEnabled(context) }
+    var keys by remember { mutableStateOf(app.prefs.ampVolumeKeys) }
+    if (!serviceOn) {
+        ArrButton(
+            "Touches volume de la télécommande → ampli : activer",
+            {
+                try {
+                    context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                } catch (_: android.content.ActivityNotFoundException) {
+                    Toast.makeText(context, "Paramètres › Préférences de l’appareil › Accessibilité › ArrMada", Toast.LENGTH_LONG).show()
+                }
+            },
+            leading = "🔊",
+            modifier = Modifier.padding(top = 16.dp),
+        )
+    } else {
+        ArrButton(
+            if (keys) "Touches volume de la télécommande : ampli Yamaha" else "Touches volume de la télécommande : volume de la TV",
+            {
+                keys = !keys
+                app.prefs.ampVolumeKeys = keys
+            },
+            leading = if (keys) "✓" else "✕",
+            modifier = Modifier.padding(top = 16.dp),
+        )
+    }
+    Text(
+        if (serviceOn) {
+            "Vol + / Vol − / Muet règlent l’ampli de la pièce de cette TV, dans ArrMada comme dans les autres applis. Sans ampli dans la pièce ou serveur injoignable, les touches reviennent à la TV."
+        } else {
+            "Android TV garde les touches volume pour lui : pour qu’ArrMada les envoie à l’ampli Yamaha, active « ArrMada : volume de l’ampli » dans Paramètres › Accessibilité (une seule fois). Autre solution sans ArrMada : régler la télécommande de la Shield en IR sur l’ampli, ou activer le HDMI-CEC de l’ampli."
+        },
+        style = MaterialTheme.typography.bodyMedium,
+        color = ArrColors.TextSecondary,
+        modifier = Modifier.padding(top = 8.dp),
+    )
 }
