@@ -40,6 +40,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -51,6 +52,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import fr.arrmada.app.data.MenuKeyLogic
 import fr.arrmada.app.ui.theme.ArrColors
 
 /*
@@ -348,6 +350,21 @@ fun MessageScreen(title: String, detail: String? = null, action: String? = null,
 }
 
 /**
+ * À poser sur le contenu d'un menu qu'un appui long peut ouvrir : ignore la
+ * fin de l'appui sur OK qui l'a ouvert, sinon le relâchement validait le
+ * choix qui a le focus (voir [MenuKeyLogic.Gate]). Un nouvel appui sur OK
+ * marche normalement ; sans effet au doigt.
+ */
+@Composable
+fun Modifier.ignoreHeldOk(): Modifier {
+    val gate = remember { MenuKeyLogic.Gate() }
+    return this.onPreviewKeyEvent { event ->
+        val key = event.nativeKeyEvent
+        gate.blocks(key.keyCode, key.action, key.repeatCount)
+    }
+}
+
+/**
  * Menu de choix (OK sur un élément) : titre, sous-titre facultatif, une
  * ligne de boutons par action, « Annuler » en dernier. Le premier choix a le
  * focus. Équivalent du `Dialog().select()` de l'add-on.
@@ -366,7 +383,8 @@ fun ChoiceDialog(
                 .widthIn(max = 420.dp)
                 .fillMaxWidth()
                 .background(ArrColors.CardDeep, RoundedCornerShape(16.dp))
-                .padding(24.dp),
+                .padding(24.dp)
+                .ignoreHeldOk(), // ouvert à l'appui long : le relâchement de OK ne valide rien
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(title, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)

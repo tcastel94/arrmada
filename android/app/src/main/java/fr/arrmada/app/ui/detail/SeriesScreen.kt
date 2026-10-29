@@ -78,6 +78,7 @@ import fr.arrmada.app.ui.components.ProgressBar
 import fr.arrmada.app.ui.components.SeenBadge
 import fr.arrmada.app.ui.components.formatClock
 import fr.arrmada.app.ui.components.formatDuration
+import fr.arrmada.app.ui.components.ignoreHeldOk
 import fr.arrmada.app.ui.theme.ArrColors
 import kotlinx.coroutines.launch
 
@@ -481,7 +482,8 @@ private fun EpisodeMenu(
         Column(
             Modifier
                 .background(ArrColors.CardDeep, RoundedCornerShape(16.dp))
-                .padding(24.dp),
+                .padding(24.dp)
+                .ignoreHeldOk(), // le relâchement de OK (appui long) ne lance pas « Lire depuis le début »
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text("${row.code} · ${row.title}", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
