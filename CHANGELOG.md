@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Appui long à la télécommande : le menu ne valide plus son premier choix tout seul
+
+#### Fixed
+- **Au relâchement de OK, le menu de l'appui long lançait son premier choix** (« Lire », « Reprendre à… », « Lire depuis le début »…) sans qu'on ait rien choisi. Cause : c'est le maintien de OK qui ouvre le menu, la touche est donc encore enfoncée quand il apparaît ; Android envoie la fin de cet appui (répétitions, relâchement) au menu, et le bouton qui a le focus se déclenche au relâchement. Le menu ignore désormais OK tant qu'un nouvel appui n'a pas commencé chez lui ; les flèches et Retour ne changent pas
+- Corrigé pour tous les menus que l'appui long peut ouvrir : affiches et cartes (accueil, Films / Séries), **épisodes**, **Vidéos**, et les autres menus de choix (`ChoiceDialog`). Rien ne change au doigt (téléphone, tablette)
+- Logique pure `data/MenuKeyLogic.kt`, posée sur les menus par `Modifier.ignoreHeldOk()` (`ui/components/Components.kt`)
+
+#### Tests
+- 4 tests dans `MenuKeyLogicTest` (fin de l'appui long ignorée, nouvel appui accepté, touches Entrée, flèches et Retour jamais bloquées)
+
+#### Notes
+- APK non construite dans l'environnement du correctif (SDK Android non téléchargeable) : seuls `MenuKeyLogic` et ses tests y ont été compilés et passés. Compilation complète et tests à confirmer par la CI Android, puis sur la Shield
+
 ### Volume de l'ampli Yamaha à la télécommande de la TV (ADR-013)
 
 #### Added
