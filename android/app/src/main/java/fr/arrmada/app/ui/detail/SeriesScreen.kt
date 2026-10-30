@@ -70,6 +70,11 @@ import fr.arrmada.app.data.WatchState
 import fr.arrmada.app.data.WatchStateUpdate
 import fr.arrmada.app.data.shortDate
 import fr.arrmada.app.ui.components.ArrButton
+import fr.arrmada.app.ui.components.CardShape
+import fr.arrmada.app.ui.components.Glass
+import fr.arrmada.app.ui.components.GlassEdge
+import fr.arrmada.app.ui.components.GlassStrong
+import fr.arrmada.app.ui.components.Ink
 import fr.arrmada.app.ui.components.ArtImage
 import fr.arrmada.app.ui.components.Badge
 import fr.arrmada.app.ui.components.KenBurnsBackdrop
@@ -391,20 +396,21 @@ fun SeriesContent(
 /** Pastille de saison : elle s'active dès qu'elle reçoit le focus. */
 @Composable
 private fun SeasonChip(label: String, subtitle: String, selected: Boolean, onFocus: () -> Unit) {
-    val shape = RoundedCornerShape(8.dp)
+    // Saison affichée : verre plus clair + liseré (comme un réglage choisi) ; focus blanc
+    val shape = RoundedCornerShape(14.dp)
     Surface(
         onClick = onFocus,
         modifier = Modifier.height(46.dp).onFocusChanged { if (it.isFocused) onFocus() }.tapToClick(onFocus),
         shape = ClickableSurfaceDefaults.shape(shape),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.06f),
         border = ClickableSurfaceDefaults.border(
-            border = if (selected) Border(BorderStroke(1.5.dp, ArrColors.AccentText), shape = shape) else Border.None,
+            border = if (selected) Border(BorderStroke(1.dp, GlassEdge), shape = shape) else Border.None,
         ),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (selected) ArrColors.Accent.copy(alpha = 0.22f) else Color(0x26FFFFFF),
-            contentColor = ArrColors.Text,
-            focusedContainerColor = ArrColors.Accent,
-            focusedContentColor = ArrColors.Night,
+            containerColor = if (selected) GlassStrong else Glass,
+            contentColor = Color.White,
+            focusedContainerColor = Color.White,
+            focusedContentColor = Ink,
         ),
     ) {
         Column(Modifier.fillMaxHeight().padding(horizontal = 14.dp), verticalArrangement = Arrangement.Center) {
@@ -423,7 +429,7 @@ private fun EpisodeCard(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
-    val shape = RoundedCornerShape(7.dp)
+    val shape = CardShape
     val dimmed = row.status != EpisodeStatus.AVAILABLE
     Column(Modifier.width(200.dp)) {
         Surface(
@@ -432,9 +438,9 @@ private fun EpisodeCard(
             modifier = Modifier.width(200.dp).height(112.dp).onFocusChanged { if (it.isFocused) onFocus() }
                 .tapToClick(onClick, onLongClick),
             shape = ClickableSurfaceDefaults.shape(shape),
-            scale = ClickableSurfaceDefaults.scale(focusedScale = 1.08f),
-            border = ClickableSurfaceDefaults.border(focusedBorder = Border(BorderStroke(2.dp, ArrColors.Accent), shape = shape)),
-            glow = ClickableSurfaceDefaults.glow(focusedGlow = Glow(ArrColors.Accent.copy(alpha = 0.65f), 14.dp)),
+            scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
+            border = ClickableSurfaceDefaults.border(focusedBorder = Border(BorderStroke(3.dp, Color.White), shape = shape)),
+            glow = ClickableSurfaceDefaults.glow(focusedGlow = Glow(Color.White.copy(alpha = 0.22f), 10.dp)),
             colors = ClickableSurfaceDefaults.colors(containerColor = ArrColors.Card, focusedContainerColor = ArrColors.Card),
         ) {
             ArtImage(imageUrl, row.title, Modifier.fillMaxSize())

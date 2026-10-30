@@ -1,8 +1,10 @@
 # ArrMada Android (TV, tablette, téléphone)
 
 Appli native ArrMada pour **Android TV** (Shield en tête), les **tablettes**
-et les **téléphones**, avec son propre lecteur vidéo. L'interface reprend celle de l'add-on Kodi : mêmes couleurs,
-police condensée, focus bleu qui grossit, fond qui zoome lentement. Les choix
+et les **téléphones**, avec son propre lecteur vidéo. L'interface garde la police condensée, l'accent bleu et le fond qui
+zoome lentement de l'add-on Kodi, avec le style « verre » du lecteur partout :
+focus blanc (pastille ou contour), bleu réservé à ce qui est « en cours »
+(`ui/components/GlassStyle.kt`). Les choix
 sont expliqués dans l'[ADR-007](../docs/adr/007-appli-android-native.md).
 
 > Une seule APK : elle reconnaît l'écran au lancement (TV, tablette ou

@@ -56,6 +56,8 @@ import fr.arrmada.app.data.MediaMenuLogic
 import fr.arrmada.app.data.WatchlistItem
 import fr.arrmada.app.data.WatchlistLogic
 import fr.arrmada.app.ui.components.ArrButton
+import fr.arrmada.app.ui.components.Glass
+import fr.arrmada.app.ui.components.Ink
 import fr.arrmada.app.ui.components.ContentRow
 import fr.arrmada.app.ui.components.KenBurnsBackdrop
 import fr.arrmada.app.ui.components.LandscapeCard
@@ -405,10 +407,10 @@ private fun ViewerChip(viewer: fr.arrmada.app.data.FamilyProfile, onClick: () ->
         shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(RoundedCornerShape(17.dp)),
         scale = androidx.tv.material3.ClickableSurfaceDefaults.scale(focusedScale = 1.06f),
         colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
-            containerColor = Color(0x26FFFFFF),
-            contentColor = ArrColors.Text,
-            focusedContainerColor = ArrColors.Accent,
-            focusedContentColor = ArrColors.Night,
+            containerColor = Glass,
+            contentColor = Color.White,
+            focusedContainerColor = Color.White,
+            focusedContentColor = Ink,
         ),
     ) {
         Row(

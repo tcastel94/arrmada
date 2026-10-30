@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Appli TV : style « verre » partout (passe 1 : le socle)
+
+#### Changed
+- **Une seule règle de focus dans toute l'appli**, celle du lecteur : **blanc = focus** (pastille blanche à texte sombre pour un bouton, contour blanc de 3 dp + zoom 105 % pour une affiche ou une vignette), **bleu = « en cours »** (barres de progression, réglage coché ✓). Fini le focus bleu qui grossit hérité du skin Kodi
+- Briques communes (`ui/components/Components.kt`) redessinées sans changer leur usage : `ArrButton` en pastille de verre (le `GlassButton` du lecteur l'appelle désormais : une seule définition), `PosterCard` / `LandscapeCard` aux coins de 12 dp avec contour blanc au focus, `Badge` en pastille de verre (liseré blanc pour 4K / Dolby Vision / Atmos au lieu du bleu), `ProgressBar` bleu uni comme dans le lecteur, `FocusPanel` à contour blanc (vert « prêt » et rouge « bloqué » gardés), menu de choix en panneau arrondi
+- Focus codés en dur alignés sur la même règle : pastille du profil (accueil), distribution (fiche film), saisons et vignettes d'épisodes (fiche série), choix et lignes d'épisodes (demande de téléchargement), file de téléchargements
+- `GlassStyle.kt` déplacé de `ui/player/` vers `ui/components/` : le style du verre est commun à toute l'appli. Le boîtier 4K, la police condensée et l'accent #4A9EFF restent
+
+#### Notes
+- Passe 1 de la proposition « Salle obscure » : la barre du haut en deux groupes (passe 2) et la carte technique / les étiquettes de cartes (passe 3) viendront ensuite
+- APK non construite dans l'environnement de la modification (SDK Android non téléchargeable) : compilation et captures Roborazzi à confirmer par la CI Android
+
 ### Lecteur TV : Réglages audio au style du menu pause
 
 #### Changed
