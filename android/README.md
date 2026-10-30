@@ -15,7 +15,7 @@ sont expliqués dans l'[ADR-007](../docs/adr/007-appli-android-native.md).
 | Écran | Contenu |
 |---|---|
 | **Mise en route** | Adresse du serveur (celle de l'add-on Kodi, port **8420**), testée sur `/api/health`. Puis appairage par **code + QR code**, validé dans la web app (*Réglages › Appareils*), exactement comme une TV sous Kodi |
-| **Accueil** | Menu du haut, héros (logo ou titre, méta, résumé, « Reprendre à… ») sur le fond de l'élément sélectionné, rangées **Reprendre** (états vu / reprise partagés avec les TV sous Kodi), **Ajouts récents**, **Pour toi**, **Bientôt** |
+| **Accueil** | Barre du haut (sections en onglets texte à gauche ; Rechercher, Téléchargements, Applis, Tableau de bord, Réglages en pictogrammes à droite, nommés au focus ; profil), héros (logo ou titre, méta, résumé, « Reprendre à… ») sur le fond de l'élément sélectionné, rangées **Reprendre** (états vu / reprise partagés avec les TV sous Kodi), **Ajouts récents**, **Pour toi**, **Bientôt** |
 | **Films / Séries** | Murs d'affiches de 7 colonnes : *Récents*, *A à Z*, *Année*, *4K* (films) ou *Mieux notés* (séries) |
 | **Série** | Saisons en pastilles (« 3/10 vus », « 4/10 sur le NAS »), épisodes en vignettes Jellyfin : **vu**, barre de reprise, **MANQUANT**, **À VENIR**. Bouton **Lire la suite** (reprend l'épisode commencé, sinon la suite du dernier vu). Appui long sur un épisode : *Lire depuis le début*, *Marquer comme vu / non vu*. OK sur un manquant : Sonarr le cherche |
 | **Découvrir** | Tendances TMDB (films, séries) et « Parce que tu as… » : OK ouvre la fiche si le titre est déjà là, sinon la feuille *Télécharger* |
