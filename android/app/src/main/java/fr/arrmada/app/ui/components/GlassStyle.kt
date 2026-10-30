@@ -1,4 +1,4 @@
-package fr.arrmada.app.ui.player
+package fr.arrmada.app.ui.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -23,25 +23,30 @@ import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
-import fr.arrmada.app.ui.components.tapToClick
 import fr.arrmada.app.ui.theme.ArrColors
 
 /**
- * Style « verre dépoli » façon Apple TV, commun au menu pause et à ses
- * sous-menus (Réglages audio…) : une seule définition, comme un fichier
- * de conf inclus partout, pour que tout le lecteur garde le même look.
+ * Style « verre dépoli », commun à toute l'appli (né dans le menu pause du
+ * lecteur) : une seule définition, comme un fichier de conf inclus partout,
+ * pour que l'appli et le lecteur gardent le même look.
  *
- * Focus = pastille blanche, texte sombre (comme tvOS) ; l'accent bleu reste
- * pour ce qui est « en cours » (chapitre lu, réglage coché ✓).
+ * Règle unique : focus = pastille ou contour blanc, texte sombre ; l'accent
+ * bleu est réservé à ce qui est « en cours » (progression, chapitre lu,
+ * réglage coché ✓).
+ *
+ * Pas de vrai flou (il n'existe qu'à partir d'Android 12 et coûte cher sur
+ * un petit boîtier) : le « verre » est du blanc translucide posé sur l'image.
  */
 internal val Glass = Color(0x2EFFFFFF) // fond des boutons au repos (blanc 18 %)
 internal val GlassStrong = Color(0x47FFFFFF) // onglet choisi, bouton principal, réglage actuel
 internal val GlassPanel = Color(0x1AFFFFFF) // fond d'une section (blanc 10 %)
+internal val GlassEdge = Color(0x66FFFFFF) // liseré d'une pastille choisie (blanc 40 %)
 internal val Dim = Color(0x99FFFFFF) // texte secondaire sur l'image (blanc 60 %)
 internal val Ink = Color(0xFF0B0F17) // texte sur une pastille blanche
+internal val Pressed = Color(0xE6FFFFFF) // pastille enfoncée (OK appuyé)
 internal val CardShape = RoundedCornerShape(12.dp)
 internal val PillShape = RoundedCornerShape(50)
-private val PanelShape = RoundedCornerShape(18.dp)
+internal val PanelShape = RoundedCornerShape(18.dp)
 
 /** Voile du menu pause : haut à peine voilé (image lisible), bas très sombre. */
 internal val PauseScrim = Brush.verticalGradient(
@@ -59,7 +64,11 @@ internal val SubMenuScrim = Brush.verticalGradient(
     1f to Color(0xF2050810),
 )
 
-/** Bouton pastille « verre » : blanc au focus, texte sombre. */
+/**
+ * Bouton pastille du lecteur : c'est [ArrButton], le bouton de toute
+ * l'appli (une seule définition). `glyph` = le petit symbole à gauche (▶, ♪…),
+ * `selected` = sous-menu ouvert (même fond que le bouton principal).
+ */
 @Composable
 internal fun GlassButton(
     text: String,
@@ -69,29 +78,7 @@ internal fun GlassButton(
     primary: Boolean = false,
     selected: Boolean = false,
 ) {
-    Surface(
-        onClick = onClick,
-        modifier = modifier.height(42.dp).tapToClick(onClick),
-        shape = ClickableSurfaceDefaults.shape(PillShape),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.08f),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (primary || selected) GlassStrong else Glass,
-            contentColor = Color.White,
-            focusedContainerColor = Color.White,
-            focusedContentColor = Ink,
-            pressedContainerColor = Color(0xE6FFFFFF),
-            pressedContentColor = Ink,
-        ),
-    ) {
-        Row(
-            Modifier.fillMaxHeight().padding(horizontal = 18.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            if (glyph != null) Text(glyph, style = MaterialTheme.typography.titleMedium)
-            Text(text, style = MaterialTheme.typography.labelLarge, maxLines = 1)
-        }
-    }
+    ArrButton(text, onClick, modifier, primary = primary || selected, leading = glyph)
 }
 
 /**
@@ -106,14 +93,14 @@ internal fun GlassChip(label: String, selected: Boolean, modifier: Modifier = Mo
         shape = ClickableSurfaceDefaults.shape(PillShape),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.07f),
         border = ClickableSurfaceDefaults.border(
-            border = if (selected) Border(BorderStroke(1.dp, Color(0x66FFFFFF)), shape = PillShape) else Border.None,
+            border = if (selected) Border(BorderStroke(1.dp, GlassEdge), shape = PillShape) else Border.None,
         ),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = if (selected) GlassStrong else Glass,
             contentColor = Color.White,
             focusedContainerColor = Color.White,
             focusedContentColor = Ink,
-            pressedContainerColor = Color(0xE6FFFFFF),
+            pressedContainerColor = Pressed,
             pressedContentColor = Ink,
         ),
     ) {

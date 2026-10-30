@@ -368,9 +368,9 @@ private fun CastCard(person: fr.arrmada.app.data.Person, onClick: (() -> Unit)?)
         onClick = onClick,
         modifier = Modifier.tapToClick(onClick),
         shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(shape),
-        scale = androidx.tv.material3.ClickableSurfaceDefaults.scale(focusedScale = 1.08f),
+        scale = androidx.tv.material3.ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
         border = androidx.tv.material3.ClickableSurfaceDefaults.border(
-            focusedBorder = androidx.tv.material3.Border(androidx.compose.foundation.BorderStroke(2.dp, ArrColors.Accent), shape = shape),
+            focusedBorder = androidx.tv.material3.Border(androidx.compose.foundation.BorderStroke(3.dp, androidx.compose.ui.graphics.Color.White), shape = shape),
         ),
         colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
             containerColor = androidx.compose.ui.graphics.Color.Transparent,

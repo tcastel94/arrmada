@@ -70,6 +70,14 @@ import fr.arrmada.app.data.SubtitleShiftLogic
 import fr.arrmada.app.data.Trickplay
 import fr.arrmada.app.data.TrickplayLogic
 import fr.arrmada.app.ui.components.Badge
+import fr.arrmada.app.ui.components.CardShape
+import fr.arrmada.app.ui.components.Dim
+import fr.arrmada.app.ui.components.Glass
+import fr.arrmada.app.ui.components.GlassButton
+import fr.arrmada.app.ui.components.GlassStrong
+import fr.arrmada.app.ui.components.Ink
+import fr.arrmada.app.ui.components.PauseScrim
+import fr.arrmada.app.ui.components.PillShape
 import fr.arrmada.app.ui.components.LocalScreen
 import fr.arrmada.app.ui.components.formatClock
 import fr.arrmada.app.ui.components.gutter
@@ -109,7 +117,7 @@ private enum class PauseTab(val label: String) {
     CHAPTERS("Chapitres"), INFO("Infos"), CAST("Distribution"), SUBTITLES("Sous-titres")
 }
 
-// Palette « verre », boutons et voiles : GlassStyle.kt (partagés avec les sous-menus)
+// Palette « verre », boutons et voiles : ui/components/GlassStyle.kt (communs à toute l'appli)
 
 /**
  * Menu pause « façon Apple TV » : l'image figée reste visible, assombrie
