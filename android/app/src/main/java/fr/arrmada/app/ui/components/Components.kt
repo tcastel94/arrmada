@@ -61,6 +61,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import fr.arrmada.app.data.MenuKeyLogic
 import fr.arrmada.app.data.PosterColorLogic
+import fr.arrmada.app.data.TechSpecLogic
 import fr.arrmada.app.ui.theme.ArrColors
 
 /*
@@ -258,6 +259,30 @@ fun ProgressBar(progress: Float, modifier: Modifier = Modifier, height: Dp = 3.d
                 .fillMaxWidth(progress.coerceIn(0f, 1f))
                 .background(ArrColors.Accent)
         )
+    }
+}
+
+/**
+ * Carte technique en trois lignes au plus (« Vidéo  2160p · Dolby Vision ·
+ * HEVC »…) : la fiche du fichier, lisible d'un coup d'œil. Fiche film, et
+ * fiche série pour l'épisode au focus.
+ */
+@Composable
+fun TechCard(lines: List<TechSpecLogic.Line>, modifier: Modifier = Modifier) {
+    Column(
+        modifier
+            .widthIn(max = 480.dp)
+            .background(GlassPanel, PanelShape)
+            .border(1.dp, Color(0x14FFFFFF), PanelShape)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        lines.forEach { line ->
+            Row {
+                Text(line.label, style = MaterialTheme.typography.labelLarge, color = Dim, modifier = Modifier.width(92.dp))
+                Text(line.value, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
     }
 }
 

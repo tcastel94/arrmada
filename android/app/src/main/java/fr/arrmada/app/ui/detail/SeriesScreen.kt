@@ -71,6 +71,8 @@ import fr.arrmada.app.data.WatchStateUpdate
 import fr.arrmada.app.data.shortDate
 import fr.arrmada.app.ui.components.ArrButton
 import fr.arrmada.app.ui.components.CardShape
+import fr.arrmada.app.ui.components.TechCard
+import fr.arrmada.app.data.TechSpecLogic
 import fr.arrmada.app.ui.components.PosterGlow
 import fr.arrmada.app.ui.components.focusGlow
 import fr.arrmada.app.ui.components.Glass
@@ -354,28 +356,33 @@ fun SeriesContent(
                 }
             }
 
-            // ── Épisode sélectionné : résumé ──
+            // ── Épisode sélectionné : résumé, et à droite la carte technique de son fichier ──
             val current = focused
             if (current != null) {
-                Column(Modifier.padding(horizontal = gutter).widthIn(max = 760.dp)) {
-                    Text(
-                        listOfNotNull(
-                            "${current.code} · ${current.title}",
-                            current.runtime.takeIf { it > 0 }?.let { formatDuration(it) },
-                            shortDate(current.airDate)?.let { "diffusé le $it" }.takeIf { current.status != EpisodeStatus.UPCOMING },
-                        ).joinToString("  ·  "),
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        current.overview.orEmpty(),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = ArrColors.TextSecondary,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 4.dp),
-                    )
+                Row(Modifier.padding(horizontal = gutter), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column(Modifier.weight(1f, fill = false).widthIn(max = 760.dp)) {
+                        Text(
+                            listOfNotNull(
+                                "${current.code} · ${current.title}",
+                                current.runtime.takeIf { it > 0 }?.let { formatDuration(it) },
+                                shortDate(current.airDate)?.let { "diffusé le $it" }.takeIf { current.status != EpisodeStatus.UPCOMING },
+                            ).joinToString("  ·  "),
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            current.overview.orEmpty(),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = ArrColors.TextSecondary,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
+                    // Épisode pas encore sur le disque : pas de fichier, pas de carte
+                    val spec = TechSpecLogic.lines(current.file)
+                    if (spec.isNotEmpty()) TechCard(spec, Modifier.widthIn(max = 380.dp))
                 }
             }
         }

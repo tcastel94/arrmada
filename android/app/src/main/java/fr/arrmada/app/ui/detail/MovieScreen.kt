@@ -30,7 +30,6 @@ import kotlinx.coroutines.delay
 import okhttp3.OkHttpClient
 import android.widget.Toast
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -74,9 +73,7 @@ import fr.arrmada.app.data.MovieDetail
 import fr.arrmada.app.data.PlayInfo
 import fr.arrmada.app.data.Repository
 import fr.arrmada.app.ui.components.ArrButton
-import fr.arrmada.app.ui.components.Dim
-import fr.arrmada.app.ui.components.GlassPanel
-import fr.arrmada.app.ui.components.PanelShape
+import fr.arrmada.app.ui.components.TechCard
 import fr.arrmada.app.data.TechSpecLogic
 import fr.arrmada.app.ui.components.Badge
 import fr.arrmada.app.ui.components.KenBurnsBackdrop
@@ -388,29 +385,6 @@ private fun CastCard(person: fr.arrmada.app.data.Person, onClick: (() -> Unit)?)
             focusedContentColor = ArrColors.Text,
         ),
     ) { content() }
-}
-
-/**
- * Carte de verre en trois lignes au plus (« Vidéo  2160p · Dolby Vision ·
- * HEVC »…) : la fiche technique du fichier, lisible d'un coup d'œil.
- */
-@Composable
-private fun TechCard(lines: List<TechSpecLogic.Line>, modifier: Modifier = Modifier) {
-    Column(
-        modifier
-            .widthIn(max = 480.dp)
-            .background(GlassPanel, PanelShape)
-            .border(1.dp, androidx.compose.ui.graphics.Color(0x14FFFFFF), PanelShape)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        lines.forEach { line ->
-            Row {
-                Text(line.label, style = MaterialTheme.typography.labelLarge, color = Dim, modifier = Modifier.width(92.dp))
-                Text(line.value, style = MaterialTheme.typography.labelLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            }
-        }
-    }
 }
 
 /** Pastilles « 4K », « Dolby Vision », « Atmos »… lues dans le fichier (menu pause, lecteur). */
