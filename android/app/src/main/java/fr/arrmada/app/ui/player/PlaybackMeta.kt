@@ -5,6 +5,7 @@ import fr.arrmada.app.data.MovieDetail
 import fr.arrmada.app.data.Person
 import fr.arrmada.app.data.PlayInfo
 import fr.arrmada.app.data.SeriesDetail
+import fr.arrmada.app.data.TrackLanguageLogic
 
 /**
  * Ce que le menu pause affiche du titre en cours, qu'il s'agisse d'un film
@@ -18,6 +19,7 @@ data class PlaybackMeta(
     val metaLine: String? = null, // « 2021 · Science-fiction · Réalisé par … »
     val cast: List<Person> = emptyList(),
     val file: FileInfo? = null, // pour les pastilles 4K, Atmos…
+    val originalLanguage: String? = null, // « fr », « en »… : pistes choisies d'office
 )
 
 fun MovieDetail.toMeta() = PlaybackMeta(
@@ -31,6 +33,7 @@ fun MovieDetail.toMeta() = PlaybackMeta(
     ).joinToString("  ·  "),
     cast = cast,
     file = file,
+    originalLanguage = TrackLanguageLogic.isoCode(originalLanguage),
 )
 
 fun SeriesDetail.toMeta(season: Int, episode: Int, info: PlayInfo?): PlaybackMeta {
@@ -44,5 +47,6 @@ fun SeriesDetail.toMeta(season: Int, episode: Int, info: PlayInfo?): PlaybackMet
         metaLine = listOfNotNull(year?.toString(), network?.takeIf { it.isNotBlank() }, genres.take(2).joinToString(", ").ifBlank { null })
             .joinToString("  ·  "),
         file = ep?.file,
+        originalLanguage = TrackLanguageLogic.isoCode(originalLanguage),
     )
 }

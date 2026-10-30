@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Lecteur TV : menu pause façon Apple TV, vignettes des chapitres, VO + sous-titres FR d'office
+
+#### Changed
+- **Menu pause redessiné « façon tvOS »** : l'image figée reste visible (voile léger en haut, sombre en bas) ; en bas, le logo du titre et l'épisode avec les boutons en pastilles « verre » à droite, une **barre de lecture fine et blanche** avec des **repères de chapitres**, le temps écoulé, l'**heure de fin** et le **temps restant** (« −1:02:33 ») ; puis les onglets en texte et leur rangée. Focus façon Apple TV : **pastille blanche, texte sombre** ; l'accent bleu reste pour ce qui est « en cours » (chapitre lu, piste cochée ✓). Les pastilles 4K / Atmos passent dans l'onglet Infos
+- Navigation : en revenant sur les onglets ou une rangée, le focus retrouve l'élément quitté (plus de changement d'onglet involontaire en remontant)
+
+#### Fixed
+- **Chapitres sans vignette** (carte bleue avec le nom) : Jellyfin n'extrait pas les images de chapitres par défaut. La vignette vient maintenant de l'**aperçu « trickplay »** à cet instant (quelques secondes après le début du chapitre, recadrée en 16:9), et l'image du chapitre reste prioritaire quand elle existe. Sans aperçu non plus : carte sombre numérotée. Le chapitre en cours a une barre d'avancement
+- Planches d'aperçu partagées (`TrickplayTiles`) : chaque planche n'est téléchargée qu'une fois pour toute la rangée
+
+#### Added
+- **Pistes choisies d'office au lancement** (`data/TrackLanguageLogic.kt`) :
+  - titre étranger dont le fichier a la **VO et des sous-titres français complets** → **VO + sous-titres français** ;
+  - **film français** (ou pas de sous-titres FR complets) → piste **française + sous-titres « forcés » français** s'il y en a (dialogues dans une autre langue), aucun sinon ;
+  - VO seule → VO + sous-titres français si possible ; langue originale inconnue (vidéo hors médiathèque) → comportement d'avant
+  - Le choix est appliqué une fois ; ensuite c'est celui de l'utilisateur. Les préférences du lecteur suivent ce choix, pour qu'un changement de qualité (rechargement du flux) le garde
+- Serveur : `original_language` dans les fiches film (Radarr) et série (Sonarr v4) — `GET /api/media/movie/{id}`, `GET /api/media/series/{id}`
+- La fiche du titre est lue **avant** de lancer le lecteur (3 s au plus, souvent en cache) pour connaître la langue originale
+
+#### Tests
+- Serveur : `tests/test_api/test_original_language.py`
+- Appli : 10 tests dans `TrackLanguageLogicTest`, 1 dans `TrickplayLogicTest` (instant de la vignette d'un chapitre)
+
+#### Notes
+- APK non construite dans l'environnement de la modification (SDK Android non téléchargeable) : seuls `TrackLanguageLogic`, `TrickplayLogic` et leurs tests y ont été compilés et passés. Compilation complète, captures Roborazzi et essai sur la Shield à faire
+
 ### Appui long à la télécommande : le menu ne valide plus son premier choix tout seul
 
 #### Fixed

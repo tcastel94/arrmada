@@ -238,6 +238,8 @@ data class MovieDetail(
     @SerialName("tmdb_id") val tmdbId: Long? = null,
     @SerialName("youtube_trailer_id") val trailerId: String? = null,
     @SerialName("has_file") val hasFile: Boolean = false,
+    // Langue originale (« French », « English »… de Radarr) : VO + sous-titres FR à la lecture
+    @SerialName("original_language") val originalLanguage: String? = null,
     val ratings: Ratings = Ratings(),
     val images: Images = Images(),
     val file: FileInfo? = null,
@@ -386,6 +388,7 @@ data class SeriesDetail(
     val status: String? = null, // « continuing », « ended »
     val certification: String? = null,
     @SerialName("tvdb_id") val tvdbId: Long? = null,
+    @SerialName("original_language") val originalLanguage: String? = null, // Sonarr v4
     val ratings: SeriesRatings = SeriesRatings(),
     val images: Images = Images(),
     val seasons: List<SeasonInfo> = emptyList(),
