@@ -1,0 +1,145 @@
+package fr.arrmada.app.ui.player
+
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import androidx.tv.material3.Border
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Surface
+import androidx.tv.material3.Text
+import fr.arrmada.app.ui.components.tapToClick
+import fr.arrmada.app.ui.theme.ArrColors
+
+/**
+ * Style « verre dépoli » façon Apple TV, commun au menu pause et à ses
+ * sous-menus (Réglages audio…) : une seule définition, comme un fichier
+ * de conf inclus partout, pour que tout le lecteur garde le même look.
+ *
+ * Focus = pastille blanche, texte sombre (comme tvOS) ; l'accent bleu reste
+ * pour ce qui est « en cours » (chapitre lu, réglage coché ✓).
+ */
+internal val Glass = Color(0x2EFFFFFF) // fond des boutons au repos (blanc 18 %)
+internal val GlassStrong = Color(0x47FFFFFF) // onglet choisi, bouton principal, réglage actuel
+internal val GlassPanel = Color(0x1AFFFFFF) // fond d'une section (blanc 10 %)
+internal val Dim = Color(0x99FFFFFF) // texte secondaire sur l'image (blanc 60 %)
+internal val Ink = Color(0xFF0B0F17) // texte sur une pastille blanche
+internal val CardShape = RoundedCornerShape(12.dp)
+internal val PillShape = RoundedCornerShape(50)
+private val PanelShape = RoundedCornerShape(18.dp)
+
+/** Voile du menu pause : haut à peine voilé (image lisible), bas très sombre. */
+internal val PauseScrim = Brush.verticalGradient(
+    0f to Color(0x80000000),
+    0.22f to Color(0x14000000),
+    0.42f to Color(0x33000000),
+    0.62f to Color(0xB3050810),
+    1f to Color(0xF2050810),
+)
+
+/** Voile d'un sous-menu : plus couvrant (il y a du texte partout), l'image reste devinable. */
+internal val SubMenuScrim = Brush.verticalGradient(
+    0f to Color(0xB3000000),
+    0.5f to Color(0xD9050810),
+    1f to Color(0xF2050810),
+)
+
+/** Bouton pastille « verre » : blanc au focus, texte sombre. */
+@Composable
+internal fun GlassButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    glyph: String? = null,
+    primary: Boolean = false,
+    selected: Boolean = false,
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier.height(42.dp).tapToClick(onClick),
+        shape = ClickableSurfaceDefaults.shape(PillShape),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.08f),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = if (primary || selected) GlassStrong else Glass,
+            contentColor = Color.White,
+            focusedContainerColor = Color.White,
+            focusedContentColor = Ink,
+            pressedContainerColor = Color(0xE6FFFFFF),
+            pressedContentColor = Ink,
+        ),
+    ) {
+        Row(
+            Modifier.fillMaxHeight().padding(horizontal = 18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (glyph != null) Text(glyph, style = MaterialTheme.typography.titleMedium)
+            Text(text, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+        }
+    }
+}
+
+/**
+ * Pastille de réglage (programme sonore, mode nuit…) : verre au repos,
+ * plus claire et cochée ✓ quand c'est le réglage actuel, blanche au focus.
+ */
+@Composable
+internal fun GlassChip(label: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier.height(38.dp).tapToClick(onClick),
+        shape = ClickableSurfaceDefaults.shape(PillShape),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.07f),
+        border = ClickableSurfaceDefaults.border(
+            border = if (selected) Border(BorderStroke(1.dp, Color(0x66FFFFFF)), shape = PillShape) else Border.None,
+        ),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = if (selected) GlassStrong else Glass,
+            contentColor = Color.White,
+            focusedContainerColor = Color.White,
+            focusedContentColor = Ink,
+            pressedContainerColor = Color(0xE6FFFFFF),
+            pressedContentColor = Ink,
+        ),
+    ) {
+        Row(
+            Modifier.fillMaxHeight().padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            if (selected) Text("✓", style = MaterialTheme.typography.labelLarge, color = ArrColors.AccentText)
+            Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+        }
+    }
+}
+
+/** Section d'un sous-menu : carte de verre arrondie, titre discret, contenu. */
+@Composable
+internal fun GlassSection(title: String, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        modifier
+            .fillMaxWidth()
+            .background(GlassPanel, PanelShape)
+            .border(1.dp, Color(0x14FFFFFF), PanelShape)
+            .padding(horizontal = 18.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(title, style = MaterialTheme.typography.labelLarge, color = Dim, maxLines = 1)
+        content()
+    }
+}

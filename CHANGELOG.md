@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Lecteur TV : Réglages audio au style du menu pause
+
+#### Changed
+- **Écran Réglages audio** (bouton « Audio » du menu pause) au même style « Apple TV » que le menu pause : voile sur l'image figée au lieu d'un fond opaque, sections en **cartes de verre** (Son conseillé, Piste audio, Ampli), **pastilles blanches au focus** avec texte sombre, réglage actuel **coché ✓** (plus de pastilles bleues), bouton « ‹ Menu pause »
+- Style commun extrait dans `ui/player/GlassStyle.kt` (couleurs, voiles, `GlassButton`, `GlassChip`, `GlassSection`) : le menu pause et ses sous-menus ne peuvent plus diverger
+- Téléphone : les rangées de réglages de l'ampli défilent au doigt au lieu de déborder
+
+#### Notes
+- APK non construite dans l'environnement de la modification (SDK Android non téléchargeable) : compilation et captures Roborazzi (`05-reglages-audio-cinema`, `18-reglages-audio-sans-ampli`) à confirmer par la CI Android
+
 ### Lecteur TV : menu pause façon Apple TV, vignettes des chapitres, VO + sous-titres FR d'office
 
 #### Changed

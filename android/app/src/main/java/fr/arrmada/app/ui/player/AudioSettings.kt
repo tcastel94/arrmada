@@ -1,21 +1,14 @@
 package fr.arrmada.app.ui.player
 
-import fr.arrmada.app.ui.components.gutter
-import fr.arrmada.app.ui.components.tapToClick
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -28,15 +21,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.C
 import androidx.media3.common.Tracks
-import androidx.tv.material3.Border
-import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import fr.arrmada.app.data.AmpDevice
 import fr.arrmada.app.data.AmpLogic
 import fr.arrmada.app.data.SoundAdvisor
-import fr.arrmada.app.ui.components.ArrButton
+import fr.arrmada.app.ui.components.LocalScreen
+import fr.arrmada.app.ui.components.gutter
 import fr.arrmada.app.ui.theme.ArrColors
 import kotlinx.serialization.json.JsonPrimitive
 
@@ -52,10 +43,13 @@ data class AudioContext(
 )
 
 /**
- * Réglages audio (bouton « Audio » du menu pause) : le son conseillé pour
- * ce film dans cette pièce (et le décodage auto), la piste audio, puis
- * l'ampli : programme, volume, voix, mode nuit, basses. Sans ampli : le
- * conseil (son de la TV) et la piste seulement.
+ * Réglages audio (bouton « Audio » du menu pause), au style du menu pause
+ * (GlassStyle.kt) : voile sur l'image figée, sections en cartes de verre,
+ * pastilles blanches au focus et réglage actuel coché ✓.
+ *
+ * De haut en bas : le son conseillé pour ce film dans cette pièce (et le
+ * décodage auto), la piste audio, puis l'ampli : programme, volume, voix,
+ * mode nuit, basses. Sans ampli : le conseil (son de la TV) et la piste.
  */
 @Composable
 fun AudioSettings(
@@ -70,51 +64,58 @@ fun AudioSettings(
 ) {
     val focus = remember { FocusRequester() }
     val advice = audio.advice
+    val touch = LocalScreen.current.isTouch
     Column(
         Modifier
             .fillMaxSize()
-            .background(Color(0xF00A0E16))
+            .background(SubMenuScrim)
             .verticalScroll(rememberScrollState())
             .padding(horizontal = gutter, vertical = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
+        // ── En-tête : titre, pièce, retour au menu ──
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Réglages audio", style = MaterialTheme.typography.headlineMedium)
-                Text(audio.room, style = MaterialTheme.typography.bodyLarge, color = ArrColors.TextSecondary)
+                Text("Audio", style = MaterialTheme.typography.headlineMedium, color = Color.White)
+                Text(audio.room, style = MaterialTheme.typography.bodyLarge, color = Dim)
             }
             // Sans réglage d'ampli à proposer, le focus part de ce bouton
-            ArrButton("Retour au menu", onClose, modifier = if (audio.hasAmp && advice.program != null) Modifier else Modifier.focusRequester(focus))
+            GlassButton(
+                "Menu pause",
+                onClose,
+                glyph = "‹",
+                modifier = if (audio.hasAmp && advice.program != null) Modifier else Modifier.focusRequester(focus),
+            )
         }
 
         // ── Son conseillé ──
-        Column(
-            Modifier.fillMaxWidth().background(ArrColors.CardDeep, RoundedCornerShape(14.dp)).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Text("Son conseillé", style = MaterialTheme.typography.labelMedium, color = ArrColors.AccentText)
-            Text(advice.headline, style = MaterialTheme.typography.titleLarge)
+        GlassSection("Son conseillé") {
+            Text(advice.headline, style = MaterialTheme.typography.titleLarge, color = Color.White)
             if (advice.detail.isNotBlank()) {
-                Text(advice.detail, style = MaterialTheme.typography.bodyMedium, color = ArrColors.TextSecondary, modifier = Modifier.widthIn(max = 760.dp))
+                Text(advice.detail, style = MaterialTheme.typography.bodyMedium, color = Dim, modifier = Modifier.widthIn(max = 760.dp))
             }
             if (audio.hasAmp && advice.program != null) {
-                Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(28.dp), verticalAlignment = Alignment.Bottom) {
+                Row(
+                    Modifier.padding(top = 4.dp).touchRowScroll(touch),
+                    horizontalArrangement = Arrangement.spacedBy(28.dp),
+                    verticalAlignment = Alignment.Bottom,
+                ) {
                     AmpGroup("Décodage auto") {
                         AmpChip("Activé", selected = audio.auto, modifier = Modifier.focusRequester(focus)) { onAuto(true) }
                         AmpChip("Désactivé", selected = !audio.auto) { onAuto(false) }
                     }
                     when {
                         amp?.soundProgram == advice.program -> Text(
-                            "Appliqué : ${AmpLogic.programName(advice.program)}",
+                            "✓ Appliqué : ${AmpLogic.programName(advice.program)}",
                             style = MaterialTheme.typography.labelLarge,
                             color = ArrColors.Seen,
-                            modifier = Modifier.padding(bottom = 8.dp),
+                            modifier = Modifier.padding(bottom = 10.dp),
                         )
                         audio.auto -> Text(
                             "S’applique tout seul au lancement et à chaque changement de piste",
                             style = MaterialTheme.typography.labelMedium,
-                            color = ArrColors.TextSecondary,
-                            modifier = Modifier.padding(bottom = 8.dp),
+                            color = Dim,
+                            modifier = Modifier.padding(bottom = 10.dp),
                         )
                         else -> AmpChip("Appliquer : ${AmpLogic.programName(advice.program)}", selected = false, onClick = onApplyAdvice)
                     }
@@ -122,97 +123,89 @@ fun AudioSettings(
             }
         }
 
-        // ── Piste audio du film ──
-        Column {
-            Text("Piste audio", style = MaterialTheme.typography.titleMedium, color = ArrColors.TextSecondary, modifier = Modifier.padding(bottom = 6.dp))
-            TracksPanel(trackChoices(tracks, C.TRACK_TYPE_AUDIO), allowOff = false, sidePadding = 0.dp, onSelect = onSelectTrack)
+        // ── Piste audio du film (mêmes cartes que l'onglet Sous-titres) ──
+        GlassSection("Piste audio") {
+            // 6 dp : la carte grossie au focus n'est pas rognée par le bord de la rangée
+            TracksPanel(trackChoices(tracks, C.TRACK_TYPE_AUDIO), allowOff = false, sidePadding = 6.dp, onSelect = onSelectTrack)
         }
 
         // ── Ampli ──
         if (amp != null && amp.online) {
-            Text("Ampli · ${AmpLogic.summary(amp)}", style = MaterialTheme.typography.titleMedium, color = ArrColors.TextSecondary)
-            Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
-                AmpGroup("Programme sonore") {
-                    AmpLogic.PROGRAMS.forEach { (id, label) ->
-                        AmpChip(label, selected = amp.soundProgram == id) { onAmp("sound_program", JsonPrimitive(id)) }
-                    }
-                }
-                AmpGroup("Volume") {
-                    AmpChip("Vol −", selected = false) { onAmp("volume_step", JsonPrimitive(-AmpLogic.VOLUME_STEP)) }
-                    AmpChip("Vol +", selected = false) { onAmp("volume_step", JsonPrimitive(AmpLogic.VOLUME_STEP)) }
-                    AmpChip(if (amp.mute) "Remettre le son" else "Muet", selected = amp.mute) { onAmp("mute", JsonPrimitive(!amp.mute)) }
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
-                amp.dialogLevel?.let { level ->
-                    AmpGroup("Voix plus claires") {
-                        AmpLogic.DIALOG_LEVELS.forEach { (value, label) ->
-                            AmpChip(label, selected = level == value) { onAmp("dialog_level", JsonPrimitive(value)) }
+            GlassSection("Ampli · ${AmpLogic.summary(amp)}") {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Row(Modifier.touchRowScroll(touch), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+                        AmpGroup("Programme sonore") {
+                            AmpLogic.PROGRAMS.forEach { (id, label) ->
+                                AmpChip(label, selected = amp.soundProgram == id) { onAmp("sound_program", JsonPrimitive(id)) }
+                            }
+                        }
+                        AmpGroup("Volume") {
+                            AmpChip("Vol −", selected = false) { onAmp("volume_step", JsonPrimitive(-AmpLogic.VOLUME_STEP)) }
+                            AmpChip("Vol +", selected = false) { onAmp("volume_step", JsonPrimitive(AmpLogic.VOLUME_STEP)) }
+                            AmpChip(if (amp.mute) "Remettre le son" else "Muet", selected = amp.mute) { onAmp("mute", JsonPrimitive(!amp.mute)) }
                         }
                     }
-                }
-                amp.adaptiveDrc?.let { night ->
-                    AmpGroup("Mode nuit") {
-                        AmpChip("Activé", selected = night) { onAmp("adaptive_drc", JsonPrimitive(true)) }
-                        AmpChip("Désactivé", selected = !night) { onAmp("adaptive_drc", JsonPrimitive(false)) }
-                    }
-                }
-            }
-            if (amp.extraBass != null || amp.subwooferVolume != null) {
-                Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
-                    amp.extraBass?.let { bass ->
-                        AmpGroup("Extra Bass") {
-                            AmpChip("Activé", selected = bass) { onAmp("extra_bass", JsonPrimitive(true)) }
-                            AmpChip("Désactivé", selected = !bass) { onAmp("extra_bass", JsonPrimitive(false)) }
+                    Row(Modifier.touchRowScroll(touch), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+                        amp.dialogLevel?.let { level ->
+                            AmpGroup("Voix plus claires") {
+                                AmpLogic.DIALOG_LEVELS.forEach { (value, label) ->
+                                    AmpChip(label, selected = level == value) { onAmp("dialog_level", JsonPrimitive(value)) }
+                                }
+                            }
+                        }
+                        amp.adaptiveDrc?.let { night ->
+                            AmpGroup("Mode nuit") {
+                                AmpChip("Activé", selected = night) { onAmp("adaptive_drc", JsonPrimitive(true)) }
+                                AmpChip("Désactivé", selected = !night) { onAmp("adaptive_drc", JsonPrimitive(false)) }
+                            }
                         }
                     }
-                    amp.subwooferVolume?.let { level ->
-                        AmpGroup("Caisson de basses · ${AmpLogic.subwooferLabel(level)}") {
-                            AmpChip("Basses −", selected = false) { onAmp("subwoofer_volume", JsonPrimitive(level - 1)) }
-                            AmpChip("Basses +", selected = false) { onAmp("subwoofer_volume", JsonPrimitive(level + 1)) }
-                            AmpChip("Neutre", selected = level == 0) { onAmp("subwoofer_volume", JsonPrimitive(0)) }
+                    if (amp.extraBass != null || amp.subwooferVolume != null) {
+                        Row(Modifier.touchRowScroll(touch), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+                            amp.extraBass?.let { bass ->
+                                AmpGroup("Extra Bass") {
+                                    AmpChip("Activé", selected = bass) { onAmp("extra_bass", JsonPrimitive(true)) }
+                                    AmpChip("Désactivé", selected = !bass) { onAmp("extra_bass", JsonPrimitive(false)) }
+                                }
+                            }
+                            amp.subwooferVolume?.let { level ->
+                                AmpGroup("Caisson de basses · ${AmpLogic.subwooferLabel(level)}") {
+                                    AmpChip("Basses −", selected = false) { onAmp("subwoofer_volume", JsonPrimitive(level - 1)) }
+                                    AmpChip("Basses +", selected = false) { onAmp("subwoofer_volume", JsonPrimitive(level + 1)) }
+                                    AmpChip("Neutre", selected = level == 0) { onAmp("subwoofer_volume", JsonPrimitive(0)) }
+                                }
+                            }
                         }
                     }
                 }
             }
         } else if (audio.hasAmp) {
-            Text("L’ampli ne répond pas : vérifie qu’il est allumé et sur le réseau.", style = MaterialTheme.typography.bodyMedium, color = ArrColors.Warning)
+            GlassSection("Ampli") {
+                Text("L’ampli ne répond pas : vérifie qu’il est allumé et sur le réseau.", style = MaterialTheme.typography.bodyMedium, color = ArrColors.Warning)
+            }
         }
 
-        Text("Retour : revenir au menu pause", style = MaterialTheme.typography.labelMedium, color = ArrColors.TextSecondary)
+        if (!touch) Text("Retour : revenir au menu pause", style = MaterialTheme.typography.labelMedium, color = Dim)
     }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
 }
 
+/** Téléphone : une rangée de pastilles défile au doigt plutôt que de déborder (une position par rangée). */
+@Composable
+private fun Modifier.touchRowScroll(touch: Boolean): Modifier =
+    if (touch) horizontalScroll(rememberScrollState()) else this
+
+/** Groupe de pastilles avec son nom au-dessus (« Mode nuit » : Activé / Désactivé). */
 @Composable
 internal fun AmpGroup(label: String, chips: @Composable () -> Unit) {
     Column {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = ArrColors.TextSecondary, maxLines = 1)
-        Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { chips() }
+        Text(label, style = MaterialTheme.typography.labelMedium, color = Dim, maxLines = 1)
+        // Petit retrait : la pastille grossie au focus n'est pas rognée
+        Row(Modifier.padding(top = 6.dp, start = 2.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { chips() }
     }
 }
 
-/** Pastille de réglage : bleue au focus, entourée quand c'est le réglage actuel. */
+/** Pastille de réglage de l'ampli : celle du style commun (blanche au focus, ✓ si actuelle). */
 @Composable
-internal fun AmpChip(label: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(8.dp)
-    Surface(
-        onClick = onClick,
-        modifier = modifier.height(34.dp).tapToClick(onClick),
-        shape = ClickableSurfaceDefaults.shape(shape),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.06f),
-        border = ClickableSurfaceDefaults.border(
-            border = if (selected) Border(BorderStroke(2.dp, ArrColors.Accent), shape = shape) else Border.None,
-        ),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (selected) ArrColors.Accent.copy(alpha = 0.22f) else Color(0x26FFFFFF),
-            contentColor = ArrColors.Text,
-            focusedContainerColor = ArrColors.Accent,
-            focusedContentColor = ArrColors.Night,
-        ),
-    ) {
-        Box(Modifier.fillMaxHeight().padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {
-            Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1)
-        }
-    }
-}
+internal fun AmpChip(label: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) =
+    GlassChip(label, selected, modifier, onClick)
