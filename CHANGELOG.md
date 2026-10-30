@@ -15,12 +15,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Pastille bleue sur le pictogramme Téléchargements** : nombre d'éléments dans la file Radarr / Sonarr (« Téléchargements · 2 en cours » au focus)
 - **Carte technique sur la fiche film**, en trois lignes : *Vidéo* (2160p · Dolby Vision · HEVC), *Audio* (TrueHD Atmos · 7.1 · Français, Anglais), *Sous-titres*. Codecs sous leur nom courant (x265 → HEVC, EAC3 → Dolby Digital Plus), langues en français
 
+- **Halo à la couleur de l'affiche** : au focus, une affiche, une vignette « Reprendre » ou une vignette d'épisode s'entoure d'un halo de sa teinte la plus vive (orange pour un coucher de soleil, bleu pour un film polaire…). Affiche grise, noire ou blanche : halo blanc discret. Calcul maison sur l'image réduite à 6 × 9 pixels (`PosterColorLogic`, sans bibliothèque), une seule fois par affiche (gardé en mémoire)
+
 #### Changed
 - Fiche film : les pastilles 4K / Dolby Vision / Atmos laissent la place à la carte technique (les notes restent en pastilles)
 
 #### Notes
-- Passe 3 de la proposition « Salle obscure », construite sur la passe 2. Logique testée : `HomeLayoutLogicTest`, `CardTagLogicTest`, `TechSpecLogicTest`
-- Pas fait : le halo du focus teinté par la couleur de l'affiche (demanderait la bibliothèque `androidx.palette`), la carte technique de la fiche série (un fichier par épisode)
+- Passe 3 de la proposition « Salle obscure », construite sur la passe 2. Logique testée : `HomeLayoutLogicTest`, `CardTagLogicTest`, `TechSpecLogicTest`, `PosterColorLogicTest`
+- Pas fait : la carte technique de la fiche série (un fichier par épisode)
 - APK non construite dans l'environnement de la modification (SDK Android non téléchargeable) : compilation, tests et captures à confirmer par la CI Android
 
 ### Appli TV : barre du haut en deux groupes (passe 2)

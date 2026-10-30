@@ -71,6 +71,8 @@ import fr.arrmada.app.data.WatchStateUpdate
 import fr.arrmada.app.data.shortDate
 import fr.arrmada.app.ui.components.ArrButton
 import fr.arrmada.app.ui.components.CardShape
+import fr.arrmada.app.ui.components.PosterGlow
+import fr.arrmada.app.ui.components.focusGlow
 import fr.arrmada.app.ui.components.Glass
 import fr.arrmada.app.ui.components.GlassEdge
 import fr.arrmada.app.ui.components.GlassStrong
@@ -431,6 +433,7 @@ private fun EpisodeCard(
 ) {
     val shape = CardShape
     val dimmed = row.status != EpisodeStatus.AVAILABLE
+    var tint by remember(imageUrl) { mutableStateOf(PosterGlow.cached(imageUrl)) }
     Column(Modifier.width(200.dp)) {
         Surface(
             onClick = onClick,
@@ -440,10 +443,10 @@ private fun EpisodeCard(
             shape = ClickableSurfaceDefaults.shape(shape),
             scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
             border = ClickableSurfaceDefaults.border(focusedBorder = Border(BorderStroke(3.dp, Color.White), shape = shape)),
-            glow = ClickableSurfaceDefaults.glow(focusedGlow = Glow(Color.White.copy(alpha = 0.22f), 10.dp)),
+            glow = ClickableSurfaceDefaults.glow(focusedGlow = focusGlow(tint)),
             colors = ClickableSurfaceDefaults.colors(containerColor = ArrColors.Card, focusedContainerColor = ArrColors.Card),
         ) {
-            ArtImage(imageUrl, row.title, Modifier.fillMaxSize())
+            ArtImage(imageUrl, row.title, Modifier.fillMaxSize(), onColor = { tint = it })
             if (dimmed) Box(Modifier.fillMaxSize().background(Color(0xB30A0E16)))
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.6f to Color.Transparent, 1f to Color(0xCC0A0E16))))
             when {
