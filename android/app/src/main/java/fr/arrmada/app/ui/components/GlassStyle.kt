@@ -1,25 +1,40 @@
 package fr.arrmada.app.ui.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.tv.material3.Border
 import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
@@ -111,6 +126,101 @@ internal fun GlassChip(label: String, selected: Boolean, modifier: Modifier = Mo
         ) {
             if (selected) Text("✓", style = MaterialTheme.typography.labelLarge, color = ArrColors.AccentText)
             Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+        }
+    }
+}
+
+/**
+ * Onglet texte (onglets du menu pause, sections de la barre du haut) :
+ * transparent au repos, verre léger quand il est choisi, blanc au focus.
+ * [current] ajoute le petit trait bleu de la section où l'on est.
+ * [onFocus] : appelé quand il prend le focus (le menu pause change d'onglet
+ * dès le focus ; la barre du haut, elle, attend OK).
+ */
+@Composable
+internal fun GlassTab(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    current: Boolean = false,
+    onFocus: () -> Unit = {},
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier.height(36.dp).onFocusChanged { if (it.isFocused) onFocus() }.tapToClick(onClick),
+        shape = ClickableSurfaceDefaults.shape(PillShape),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = if (selected) Color(0x24FFFFFF) else Color.Transparent,
+            contentColor = if (selected) Color.White else Dim,
+            focusedContainerColor = Color.White,
+            focusedContentColor = Ink,
+        ),
+    ) {
+        // Largeur = celle du texte (fillMaxSize étirerait l'onglet sur toute la rangée)
+        Box(Modifier.fillMaxHeight().padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
+            Text(label, style = MaterialTheme.typography.titleMedium, maxLines = 1)
+            if (current) {
+                Box(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 3.dp)
+                        .size(width = 14.dp, height = 3.dp)
+                        .background(ArrColors.Accent, PillShape)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Bouton rond à pictogramme (outils de la barre du haut) : discret au
+ * repos, pastille blanche au focus. Son nom s'affiche alors dessous, pour
+ * ne jamais avoir à deviner ce que fait un pictogramme.
+ */
+@Composable
+internal fun GlassIconButton(icon: ImageVector, label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    var focused by remember { mutableStateOf(false) }
+    // zIndex : le nom, qui déborde sous le bouton, passe au-dessus du contenu de l'écran
+    Box(modifier.size(36.dp).zIndex(if (focused) 1f else 0f)) {
+        Surface(
+            onClick = onClick,
+            modifier = Modifier.fillMaxSize().onFocusChanged { focused = it.isFocused }.tapToClick(onClick),
+            shape = ClickableSurfaceDefaults.shape(PillShape),
+            scale = ClickableSurfaceDefaults.scale(focusedScale = 1.1f),
+            colors = ClickableSurfaceDefaults.colors(
+                containerColor = Color.Transparent,
+                contentColor = Dim,
+                focusedContainerColor = Color.White,
+                focusedContentColor = Ink,
+                pressedContainerColor = Pressed,
+                pressedContentColor = Ink,
+            ),
+        ) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Image(
+                    imageVector = icon,
+                    contentDescription = label,
+                    colorFilter = ColorFilter.tint(LocalContentColor.current),
+                    modifier = Modifier.size(19.dp),
+                )
+            }
+        }
+        if (focused) {
+            // Bulle du nom, centrée sous le bouton ; elle peut être plus large que lui
+            Text(
+                label,
+                style = MaterialTheme.typography.labelMedium,
+                color = Ink,
+                maxLines = 1,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .offset(y = 44.dp)
+                    .wrapContentWidth(unbounded = true)
+                    .background(Color(0xEBFFFFFF), PillShape)
+                    .padding(horizontal = 9.dp, vertical = 3.dp),
+            )
         }
     }
 }

@@ -11,9 +11,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -23,6 +21,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -35,6 +35,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -55,8 +57,10 @@ import fr.arrmada.app.data.RatingLogic
 import fr.arrmada.app.data.MediaMenuLogic
 import fr.arrmada.app.data.WatchlistItem
 import fr.arrmada.app.data.WatchlistLogic
-import fr.arrmada.app.ui.components.ArrButton
 import fr.arrmada.app.ui.components.Glass
+import fr.arrmada.app.ui.components.GlassIconButton
+import fr.arrmada.app.ui.components.GlassIcons
+import fr.arrmada.app.ui.components.GlassTab
 import fr.arrmada.app.ui.components.Ink
 import fr.arrmada.app.ui.components.ContentRow
 import fr.arrmada.app.ui.components.KenBurnsBackdrop
@@ -183,11 +187,26 @@ fun HomeScreen(viewModel: HomeViewModel, api: Api, actions: HomeActions) {
     HomeContent(state, api::absolute, viewModel::load, actions)
 }
 
-/** Menu du haut, commun à l'accueil et aux grilles (comme la coquille de l'add-on). */
-val TOP_MENU = listOf(
+/**
+ * Barre du haut de l'accueil TV, en deux groupes, tout visible sur une
+ * ligne et sans sous-menu : à gauche les sections de contenu en onglets
+ * texte (les mêmes que dans le menu pause)…
+ */
+val TOP_SECTIONS = listOf(
     "home" to "Accueil", "movies" to "Films", "series" to "Séries", "tonight" to "Ce soir",
-    "videos" to "Vidéos", "apps" to "Applis", "discover" to "Découvrir", "search" to "Rechercher", "queue" to "Téléchargements",
-    "board" to "Tableau de bord", "settings" to "Réglages",
+    "videos" to "Vidéos", "discover" to "Découvrir",
+)
+
+/** Outil de la barre du haut : écran (nom utilisé par `go`), nom affiché au focus, pictogramme. */
+data class TopTool(val route: String, val label: String, val icon: ImageVector)
+
+/** …et à droite les outils, en pictogrammes (leur nom s'affiche au focus). */
+val TOP_TOOLS = listOf(
+    TopTool("search", "Rechercher", GlassIcons.Search),
+    TopTool("queue", "Téléchargements", GlassIcons.Download),
+    TopTool("apps", "Applis", GlassIcons.Apps),
+    TopTool("board", "Tableau de bord", GlassIcons.Board),
+    TopTool("settings", "Réglages", GlassIcons.Settings),
 )
 
 /** Affichage de l'accueil à partir d'un état (séparé pour les captures d'écran de test). */
@@ -210,18 +229,27 @@ fun HomeContent(state: HomeState, absolute: (String?) -> String?, onRetry: () ->
 
     KenBurnsBackdrop(url = shown?.backdrop) {
         Column(Modifier.fillMaxSize()) {
-            // ── Menu du haut (comme la coquille de l'add-on) ──
-            // Défile si besoin : l'entrée qui prend le focus est toujours amenée à l'écran
+            // ── Barre du haut : sections en texte à gauche, outils en pictogrammes à droite ──
+            // zIndex : le nom d'un outil au focus déborde sous la barre, par-dessus le héros
             if (actions.showMenu) {
                 Row(
-                    Modifier.padding(top = 20.dp).horizontalScroll(rememberScrollState()).padding(horizontal = gutter),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    Modifier.fillMaxWidth().zIndex(1f).padding(top = 20.dp).padding(horizontal = gutter),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    TOP_MENU.forEach { (route, label) ->
-                        ArrButton(label, { if (route != "home") actions.go(route) }, primary = route == "home", compact = true)
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        TOP_SECTIONS.forEach { (route, label) ->
+                            // OK ouvre la section ; on est sur l'accueil : son onglet est le « choisi »
+                            GlassTab(label, selected = route == "home", current = route == "home", onClick = { if (route != "home") actions.go(route) })
+                        }
                     }
-                    actions.viewer?.let { viewer -> ViewerChip(viewer) { actions.go("profiles") } }
+                    Spacer(Modifier.weight(1f))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        TOP_TOOLS.forEach { tool -> GlassIconButton(tool.icon, tool.label, onClick = { actions.go(tool.route) }) }
+                        actions.viewer?.let { viewer ->
+                            Spacer(Modifier.width(6.dp))
+                            ViewerChip(viewer) { actions.go("profiles") }
+                        }
+                    }
                 }
             } else {
                 // Tactile : le profil en haut à droite seulement

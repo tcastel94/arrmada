@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Appli TV : barre du haut en deux groupes (passe 2)
+
+#### Changed
+- **Menu du haut de l'accueil redessiné** : il tient maintenant sur une ligne, sans défiler ni sous-menu. À gauche, les **sections de contenu en onglets texte** (Accueil, Films, Séries, Ce soir, Vidéos, Découvrir), les mêmes que les onglets du menu pause ; un **petit trait bleu** marque la section où l'on est. À droite, les **outils en pictogrammes** (Rechercher, Téléchargements, Applis, Tableau de bord, Réglages) puis le profil : au focus, le pictogramme devient une pastille blanche et **son nom s'affiche dessous**
+- Onglet texte commun (`GlassTab`) et bouton à pictogramme (`GlassIconButton`) dans `ui/components/GlassStyle.kt` : le menu pause et l'accueil partagent le même onglet
+- Pictogrammes dessinés en vectoriel dans `ui/components/GlassIcons.kt` (aucune bibliothèque d'icônes ajoutée)
+
+#### Notes
+- Passe 2 de la proposition « Salle obscure », construite sur la passe 1. Pas encore de pastille « téléchargements en cours » sur le pictogramme : l'accueil n'a pas ce nombre aujourd'hui (à brancher en passe 3)
+- APK non construite dans l'environnement de la modification (SDK Android non téléchargeable) : compilation et capture de l'accueil à confirmer par la CI Android
+
 ### Appli TV : style « verre » partout (passe 1 : le socle)
 
 #### Changed
