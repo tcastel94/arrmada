@@ -27,7 +27,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -110,15 +109,7 @@ private enum class PauseTab(val label: String) {
     CHAPTERS("Chapitres"), INFO("Infos"), CAST("Distribution"), SUBTITLES("Sous-titres")
 }
 
-// ── Palette « verre dépoli » façon Apple TV ──
-// Focus = pastille blanche, texte sombre (comme tvOS) ; l'accent bleu reste
-// pour ce qui est « en cours » (chapitre lu, piste cochée).
-private val Glass = Color(0x2EFFFFFF) // fond des boutons au repos (blanc 18 %)
-private val GlassStrong = Color(0x47FFFFFF) // onglet choisi, bouton principal
-private val Dim = Color(0x99FFFFFF) // texte secondaire sur l'image (blanc 60 %)
-private val Ink = Color(0xFF0B0F17) // texte sur une pastille blanche
-private val CardShape = RoundedCornerShape(12.dp)
-private val PillShape = RoundedCornerShape(50)
+// Palette « verre », boutons et voiles : GlassStyle.kt (partagés avec les sous-menus)
 
 /**
  * Menu pause « façon Apple TV » : l'image figée reste visible, assombrie
@@ -208,16 +199,7 @@ fun PauseMenu(
     Box(
         Modifier
             .fillMaxSize()
-            .background(
-                // Haut à peine voilé (l'image reste lisible), bas très sombre sous les rangées
-                Brush.verticalGradient(
-                    0f to Color(0x80000000),
-                    0.22f to Color(0x14000000),
-                    0.42f to Color(0x33000000),
-                    0.62f to Color(0xB3050810),
-                    1f to Color(0xF2050810),
-                )
-            )
+            .background(PauseScrim) // haut à peine voilé, bas très sombre sous les rangées
     ) {
         // ── En haut à droite (TV) : rappel discret de la touche Retour ──
         if (!touch) {
@@ -389,41 +371,6 @@ private fun Scrubber(progress: Float, marks: List<Float>, modifier: Modifier) {
         val gap = 2.dp.toPx()
         marks.forEach { mark ->
             drawRect(Color(0xCC05080F), topLeft = Offset(size.width * mark - gap / 2, 0f), size = Size(gap, size.height))
-        }
-    }
-}
-
-/** Bouton pastille « verre » : blanc au focus, texte sombre (comme tvOS). */
-@Composable
-private fun GlassButton(
-    text: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    glyph: String? = null,
-    primary: Boolean = false,
-    selected: Boolean = false,
-) {
-    Surface(
-        onClick = onClick,
-        modifier = modifier.height(42.dp).tapToClick(onClick),
-        shape = ClickableSurfaceDefaults.shape(PillShape),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.08f),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (primary || selected) GlassStrong else Glass,
-            contentColor = Color.White,
-            focusedContainerColor = Color.White,
-            focusedContentColor = Ink,
-            pressedContainerColor = Color(0xE6FFFFFF),
-            pressedContentColor = Ink,
-        ),
-    ) {
-        Row(
-            Modifier.fillMaxHeight().padding(horizontal = 18.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            if (glyph != null) Text(glyph, style = MaterialTheme.typography.titleMedium)
-            Text(text, style = MaterialTheme.typography.labelLarge, maxLines = 1)
         }
     }
 }
