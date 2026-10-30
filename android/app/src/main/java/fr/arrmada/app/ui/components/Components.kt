@@ -31,6 +31,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,6 +45,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -52,8 +55,13 @@ import androidx.tv.material3.Glow
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import android.graphics.drawable.Drawable
+import androidx.core.graphics.drawable.toBitmap
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import fr.arrmada.app.data.MenuKeyLogic
+import fr.arrmada.app.data.PosterColorLogic
+import fr.arrmada.app.data.TechSpecLogic
 import fr.arrmada.app.ui.theme.ArrColors
 
 /*
@@ -71,6 +79,43 @@ private val FocusRing = BorderStroke(3.dp, Color.White)
 /** Halo discret autour d'une image au focus : la décolle du fond sans colorer. */
 private val FocusGlow = Glow(Color.White.copy(alpha = 0.22f), 10.dp)
 
+/**
+ * Halo d'une carte au focus : la teinte vive de son affiche quand elle en a
+ * une (voir [PosterGlow]), sinon le halo blanc discret.
+ */
+internal fun focusGlow(tint: Color?): Glow = if (tint != null) Glow(tint.copy(alpha = 0.6f), 16.dp) else FocusGlow
+
+/**
+ * Couleur de halo de chaque affiche, gardée en mémoire : une affiche n'est
+ * analysée qu'une fois, même en faisant défiler la rangée dans tous les sens
+ * (comme un cache, limité aux 400 dernières).
+ */
+object PosterGlow {
+    private const val NO_COLOR = 0 // affiche sans teinte nette (jamais renvoyé par l'analyse : alpha 0)
+
+    private val cache = object : LinkedHashMap<String, Int>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Int>?): Boolean = size > 400
+    }
+
+    /** Couleur déjà connue de cette affiche (null : sans teinte, ou pas encore analysée). */
+    @Synchronized
+    fun cached(url: String?): Color? = url?.let { cache[it] }?.takeIf { it != NO_COLOR }?.let { Color(it) }
+
+    /** Analyse l'image chargée (réduite à 6 × 9 pixels) et retient le résultat. */
+    @Synchronized
+    fun learn(url: String, image: Drawable): Color? {
+        cache[url]?.let { return it.takeIf { c -> c != NO_COLOR }?.let { c -> Color(c) } }
+        val argb = runCatching {
+            val small = image.toBitmap(6, 9)
+            val pixels = IntArray(6 * 9)
+            small.getPixels(pixels, 0, 6, 0, 0, 6, 9)
+            PosterColorLogic.accent(pixels)
+        }.getOrNull()
+        cache[url] = argb ?: NO_COLOR
+        return argb?.let { Color(it) }
+    }
+}
+
 /** Affiche 2:3 cliquable (rangées et grilles). */
 @Composable
 fun PosterCard(
@@ -83,7 +128,9 @@ fun PosterCard(
     seen: Boolean = false,
     onFocus: () -> Unit = {},
     onLongClick: (() -> Unit)? = null, // appui long (OK maintenu) : menu du titre
+    tag: String? = null, // étiquette en haut à gauche (« Hier », « Il y a 3 j »…)
 ) {
+    var tint by remember(imageUrl) { mutableStateOf(PosterGlow.cached(imageUrl)) }
     Column(modifier.width(width)) {
         Surface(
             onClick = onClick,
@@ -96,13 +143,14 @@ fun PosterCard(
             shape = ClickableSurfaceDefaults.shape(CardShape),
             scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
             border = ClickableSurfaceDefaults.border(focusedBorder = Border(FocusRing, shape = CardShape)),
-            glow = ClickableSurfaceDefaults.glow(focusedGlow = FocusGlow),
+            glow = ClickableSurfaceDefaults.glow(focusedGlow = focusGlow(tint)),
             colors = ClickableSurfaceDefaults.colors(
                 containerColor = ArrColors.Card,
                 focusedContainerColor = ArrColors.Card,
             ),
         ) {
-            ArtImage(imageUrl, title, Modifier.fillMaxSize())
+            ArtImage(imageUrl, title, Modifier.fillMaxSize(), onColor = { tint = it })
+            if (tag != null) CardTag(tag, Modifier.align(Alignment.TopStart).padding(6.dp))
             if (seen) SeenBadge(Modifier.align(Alignment.TopEnd).padding(5.dp))
             if (progress != null && progress > 0f) {
                 ProgressBar(progress, Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(6.dp))
@@ -124,6 +172,7 @@ fun LandscapeCard(
     onFocus: () -> Unit = {},
     onLongClick: (() -> Unit)? = null, // appui long (OK maintenu) : menu du titre
 ) {
+    var tint by remember(imageUrl) { mutableStateOf(PosterGlow.cached(imageUrl)) }
     Column(modifier.width(width)) {
         Surface(
             onClick = onClick,
@@ -136,13 +185,13 @@ fun LandscapeCard(
             shape = ClickableSurfaceDefaults.shape(CardShape),
             scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
             border = ClickableSurfaceDefaults.border(focusedBorder = Border(FocusRing, shape = CardShape)),
-            glow = ClickableSurfaceDefaults.glow(focusedGlow = FocusGlow),
+            glow = ClickableSurfaceDefaults.glow(focusedGlow = focusGlow(tint)),
             colors = ClickableSurfaceDefaults.colors(
                 containerColor = ArrColors.Card,
                 focusedContainerColor = ArrColors.Card,
             ),
         ) {
-            ArtImage(imageUrl, title, Modifier.fillMaxSize())
+            ArtImage(imageUrl, title, Modifier.fillMaxSize(), onColor = { tint = it })
             // Voile bas pour lire le titre sur l'image
             Box(
                 Modifier
@@ -162,11 +211,31 @@ fun LandscapeCard(
     }
 }
 
-/** Image distante ; fond de carte uni tant qu'elle charge ou si elle manque. */
+/**
+ * Image distante ; fond de carte uni tant qu'elle charge ou si elle manque.
+ * [onColor] : reçoit la teinte de l'image une fois chargée (halo des cartes) ;
+ * l'image est alors gardée lisible par l'appli (pas en mémoire graphique seule).
+ */
 @Composable
-fun ArtImage(url: String?, description: String, modifier: Modifier = Modifier, contentScale: ContentScale = ContentScale.Crop) {
+fun ArtImage(
+    url: String?,
+    description: String,
+    modifier: Modifier = Modifier,
+    contentScale: ContentScale = ContentScale.Crop,
+    onColor: ((Color?) -> Unit)? = null,
+) {
     Box(modifier.background(ArrColors.Card)) {
-        if (url != null) {
+        if (url != null && onColor != null) {
+            val context = LocalContext.current
+            val request = remember(url) { ImageRequest.Builder(context).data(url).allowHardware(false).build() }
+            AsyncImage(
+                model = request,
+                contentDescription = description,
+                contentScale = contentScale,
+                modifier = Modifier.fillMaxSize(),
+                onSuccess = { state -> onColor(PosterGlow.learn(url, state.result.drawable)) },
+            )
+        } else if (url != null) {
             AsyncImage(model = url, contentDescription = description, contentScale = contentScale, modifier = Modifier.fillMaxSize())
         } else {
             Text(
@@ -190,6 +259,43 @@ fun ProgressBar(progress: Float, modifier: Modifier = Modifier, height: Dp = 3.d
                 .fillMaxWidth(progress.coerceIn(0f, 1f))
                 .background(ArrColors.Accent)
         )
+    }
+}
+
+/**
+ * Carte technique en trois lignes au plus (« Vidéo  2160p · Dolby Vision ·
+ * HEVC »…) : la fiche du fichier, lisible d'un coup d'œil. Fiche film, et
+ * fiche série pour l'épisode au focus.
+ */
+@Composable
+fun TechCard(lines: List<TechSpecLogic.Line>, modifier: Modifier = Modifier) {
+    Column(
+        modifier
+            .widthIn(max = 480.dp)
+            .background(GlassPanel, PanelShape)
+            .border(1.dp, Color(0x14FFFFFF), PanelShape)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        lines.forEach { line ->
+            Row {
+                Text(line.label, style = MaterialTheme.typography.labelLarge, color = Dim, modifier = Modifier.width(92.dp))
+                Text(line.value, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}
+
+/** Étiquette d'une carte : pastille sombre et translucide, lisible sur n'importe quelle affiche. */
+@Composable
+fun CardTag(text: String, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .clip(PillShape)
+            .background(Color(0xB3050810))
+            .padding(horizontal = 7.dp, vertical = 2.dp)
+    ) {
+        Text(text, style = MaterialTheme.typography.labelSmall, color = Color.White, maxLines = 1)
     }
 }
 

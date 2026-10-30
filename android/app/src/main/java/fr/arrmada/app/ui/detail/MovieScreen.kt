@@ -73,6 +73,8 @@ import fr.arrmada.app.data.MovieDetail
 import fr.arrmada.app.data.PlayInfo
 import fr.arrmada.app.data.Repository
 import fr.arrmada.app.ui.components.ArrButton
+import fr.arrmada.app.ui.components.TechCard
+import fr.arrmada.app.data.TechSpecLogic
 import fr.arrmada.app.ui.components.Badge
 import fr.arrmada.app.ui.components.KenBurnsBackdrop
 import fr.arrmada.app.ui.components.MessageScreen
@@ -292,9 +294,9 @@ fun MovieContent(
                 modifier = Modifier.padding(top = 12.dp),
             )
             Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                // IMDb d'abord (la plus fiable), TMDB seulement sans IMDb, puis la critique
+                // IMDb d'abord (la plus fiable), TMDB seulement sans IMDb, puis la critique.
+                // La technique (4K, Atmos…) est dans la carte sous les boutons.
                 fr.arrmada.app.data.RatingLogic.detailBadges(m.ratings).forEach { Badge(it) }
-                techBadges(m.file).forEach { Badge(it, highlight = true) }
             }
 
             Text(
@@ -331,6 +333,10 @@ fun MovieContent(
             if (play != null && !playable) {
                 Text(play?.reason ?: "", style = MaterialTheme.typography.labelMedium, color = ArrColors.Warning, modifier = Modifier.padding(top = 8.dp))
             }
+
+            // ── Carte technique : Vidéo, Audio, Sous-titres (rien si le fichier n'est pas analysé) ──
+            val spec = TechSpecLogic.lines(m.file)
+            if (spec.isNotEmpty()) TechCard(spec, Modifier.padding(top = 16.dp))
 
             // ── Distribution ──
             if (m.cast.isNotEmpty()) {
@@ -381,7 +387,7 @@ private fun CastCard(person: fr.arrmada.app.data.Person, onClick: (() -> Unit)?)
     ) { content() }
 }
 
-/** Pastilles « 4K », « Dolby Vision », « Atmos »… lues dans le fichier. */
+/** Pastilles « 4K », « Dolby Vision », « Atmos »… lues dans le fichier (menu pause, lecteur). */
 fun techBadges(file: FileInfo?): List<String> {
     if (file == null) return emptyList()
     val badges = mutableListOf<String>()

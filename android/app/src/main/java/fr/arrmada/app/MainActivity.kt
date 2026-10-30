@@ -7,6 +7,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import fr.arrmada.app.amp.AmpVolumeService
 import fr.arrmada.app.data.DefaultQuality
+import fr.arrmada.app.data.HomeLayoutLogic
 import fr.arrmada.app.data.HomeLink
 import fr.arrmada.app.data.HomeRowsLogic
 import fr.arrmada.app.home.HomeRowsWorker
@@ -52,6 +53,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -61,6 +63,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -561,6 +564,7 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
                     viewer = if (app.hasProfiles) viewer ?: FamilyProfile(name = "Famille", isDefault = true) else null,
                     showMenu = !LocalScreen.current.isTouch, // tactile : la barre de navigation remplace le menu
                     menu = { menu = it },
+                    rows = HomeLayoutLogic.visible(app.prefs.homeLayout), // relu à chaque retour sur l'accueil
                 ),
             )
         }
@@ -865,6 +869,7 @@ private fun SettingsScreen(app: ArrMadaApplication, onChangeServer: () -> Unit, 
             color = ArrColors.TextSecondary,
             modifier = Modifier.padding(top = 8.dp),
         )
+        HomeLayoutSetting(app)
         // Touches volume de la télécommande → ampli Yamaha de la pièce (ADR-013)
         if (LocalScreen.current.isTv) AmpVolumeKeysSetting(app)
         // Accueil Android TV : rangée « À suivre » et chaîne « ArrMada · Ajouts récents »
@@ -890,6 +895,39 @@ private fun SettingsScreen(app: ArrMadaApplication, onChangeServer: () -> Unit, 
         }
     }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+}
+
+/**
+ * Réglage « Rangées de l'accueil » : OK sur une rangée l'affiche ou la
+ * masque (✓ / ✕), ▲ la monte d'un cran. Enregistré tout de suite ; l'accueil
+ * le relit en y revenant.
+ */
+@Composable
+private fun HomeLayoutSetting(app: ArrMadaApplication) {
+    var layout by remember { mutableStateOf(app.prefs.homeLayout) }
+    fun save(next: List<HomeLayoutLogic.Slot>) {
+        layout = next
+        app.prefs.homeLayout = next
+    }
+    Text("Rangées de l’accueil", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 28.dp))
+    Text(
+        "OK affiche ou masque une rangée, ▲ la monte d’un cran.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = ArrColors.TextSecondary,
+        modifier = Modifier.padding(top = 4.dp),
+    )
+    layout.forEachIndexed { index, slot ->
+        Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            ArrButton(
+                slot.row.label,
+                { save(HomeLayoutLogic.toggle(layout, slot.row)) },
+                primary = slot.visible,
+                leading = if (slot.visible) "✓" else "✕",
+                modifier = Modifier.width(220.dp),
+            )
+            if (index > 0) ArrButton("▲", { save(HomeLayoutLogic.moveUp(layout, slot.row)) }, compact = true)
+        }
+    }
 }
 
 /**

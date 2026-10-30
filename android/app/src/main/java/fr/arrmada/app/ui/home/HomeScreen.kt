@@ -48,6 +48,8 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import fr.arrmada.app.data.Api
 import fr.arrmada.app.data.CalendarEntry
+import fr.arrmada.app.data.CardTagLogic
+import fr.arrmada.app.data.HomeLayoutLogic
 import fr.arrmada.app.data.LibraryItem
 import fr.arrmada.app.data.LocalSeriesLogic
 import fr.arrmada.app.data.Repository
@@ -70,6 +72,7 @@ import fr.arrmada.app.ui.components.PosterCard
 import fr.arrmada.app.ui.components.formatClock
 import fr.arrmada.app.ui.theme.ArrColors
 import kotlinx.coroutines.async
+import java.time.LocalDate
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -92,6 +95,7 @@ data class HomeState(
     val recent: List<LibraryItem> = emptyList(),
     val forYou: List<TmdbItem> = emptyList(),
     val upcoming: List<CalendarEntry> = emptyList(),
+    val downloads: Int = 0, // téléchargements en cours (file Radarr / Sonarr) : pastille de la barre du haut
 )
 
 /**
@@ -124,6 +128,7 @@ class HomeViewModel(private val repository: Repository) : ViewModel() {
             val forYou = async { runCatching { repository.recommendations() } }
             val upcoming = async { runCatching { repository.upcoming() } }
             val watchlist = async { runCatching { WatchlistLogic.ordered(repository.watchlist()) } }
+            val downloads = async { runCatching { repository.board().queue.size } }
             val resume = async {
                 runCatching {
                     val states = repository.watchStates()
@@ -157,6 +162,7 @@ class HomeViewModel(private val repository: Repository) : ViewModel() {
                         .take(20)
                 } ?: emptyList(),
                 upcoming = upcoming.await().getOrNull()?.items.orEmpty().take(20),
+                downloads = downloads.await().getOrDefault(0),
             )
         }
     }
@@ -179,6 +185,7 @@ class HomeActions(
     val viewer: fr.arrmada.app.data.FamilyProfile? = null,
     val showMenu: Boolean = true, // téléphone / tablette : la barre de navigation le remplace
     val menu: (fr.arrmada.app.data.MenuTarget) -> Unit = {}, // appui long sur une carte : menu du titre
+    val rows: List<HomeLayoutLogic.Row> = HomeLayoutLogic.visible(HomeLayoutLogic.DEFAULT), // Réglages › Rangées de l'accueil
 )
 
 @Composable
@@ -244,7 +251,14 @@ fun HomeContent(state: HomeState, absolute: (String?) -> String?, onRetry: () ->
                     }
                     Spacer(Modifier.weight(1f))
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        TOP_TOOLS.forEach { tool -> GlassIconButton(tool.icon, tool.label, onClick = { actions.go(tool.route) }) }
+                        TOP_TOOLS.forEach { tool ->
+                            GlassIconButton(
+                                tool.icon,
+                                tool.label,
+                                onClick = { actions.go(tool.route) },
+                                badge = if (tool.route == "queue") state.downloads else null,
+                            )
+                        }
                         actions.viewer?.let { viewer ->
                             Spacer(Modifier.width(6.dp))
                             ViewerChip(viewer) { actions.go("profiles") }
@@ -268,73 +282,76 @@ fun HomeContent(state: HomeState, absolute: (String?) -> String?, onRetry: () ->
                 if (current != null) HeroBlock(current)
             }
 
-            // ── Rangées ──
+            // ── Rangées, dans l'ordre choisi dans Réglages (rangées masquées absentes) ──
+            // Le focus de départ va sur la première carte de la première rangée non vide
+            val firstRow = actions.rows.firstOrNull { !rowIsEmpty(it, state) }
+            val today = remember { LocalDate.now() }
             LazyColumn(
                 contentPadding = PaddingValues(bottom = 40.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                item {
-                    ContentRow("Reprendre", state.resume, key = { it.state.mediaType + it.state.id + it.state.season + it.state.episode }) { entry ->
-                        LandscapeCard(
-                            imageUrl = absolute(entry.item?.fanartUrl ?: entry.item?.posterUrl),
-                            title = entry.title,
-                            subtitle = entry.subtitle,
-                            progress = entry.progress,
-                            onClick = { actions.resume(entry) },
-                            onFocus = { hero = heroOf(entry, absolute) },
-                            onLongClick = { actions.menu(MediaMenuLogic.of(entry)) },
-                            modifier = if (entry == state.resume.first()) Modifier.focusRequester(firstFocus) else Modifier,
-                        )
-                    }
-                }
-                item {
-                    ContentRow("Ma liste", state.watchlist, key = { "w" + it.key }) { item ->
-                        PosterCard(
-                            imageUrl = absolute(item.posterUrl),
-                            title = item.title,
-                            onClick = { actions.openWatchlist(item) },
-                            onFocus = { hero = heroOf(item, absolute) },
-                            onLongClick = { actions.menu(MediaMenuLogic.of(item)) },
-                            modifier = if (state.resume.isEmpty() && item == state.watchlist.first()) Modifier.focusRequester(firstFocus) else Modifier,
-                        )
-                    }
-                }
-                item {
-                    ContentRow("Ajouts récents", state.recent, key = { it.type + it.externalId }) { item ->
-                        PosterCard(
-                            imageUrl = absolute(item.posterUrl),
-                            title = item.title,
-                            onClick = { actions.open(item) },
-                            onFocus = {
-                                hero = heroOf(item, absolute)
-                                actions.prefetch(item)
-                            },
-                            onLongClick = { actions.menu(MediaMenuLogic.of(item)) },
-                            modifier = if (state.resume.isEmpty() && state.watchlist.isEmpty() && item == state.recent.first()) Modifier.focusRequester(firstFocus) else Modifier,
-                        )
-                    }
-                }
-                item {
-                    ContentRow("Pour toi", state.forYou, key = { "t" + it.tmdbId }) { item ->
-                        PosterCard(
-                            imageUrl = item.posterUrl,
-                            title = item.title,
-                            onClick = { actions.request(item) },
-                            onFocus = { hero = heroOf(item) },
-                        )
-                    }
-                }
-                item {
-                    ContentRow("Bientôt", state.upcoming, key = { it.id }) { entry ->
-                        PosterCard(
-                            imageUrl = absolute(entry.posterUrl),
-                            title = entry.title,
-                            onClick = {
-                                entry.movieId?.let(actions.openMovieId) ?: entry.seriesId?.let(actions.openSeriesId)
-                            },
-                            onFocus = { hero = heroOf(entry, absolute) },
-                        )
+                actions.rows.forEach { row ->
+                    item(key = row.id) {
+                        val focusFirst = row == firstRow
+                        when (row) {
+                            HomeLayoutLogic.Row.RESUME -> ContentRow(row.label, state.resume, key = { it.state.mediaType + it.state.id + it.state.season + it.state.episode }) { entry ->
+                                LandscapeCard(
+                                    imageUrl = absolute(entry.item?.fanartUrl ?: entry.item?.posterUrl),
+                                    title = entry.title,
+                                    subtitle = entry.subtitle,
+                                    progress = entry.progress,
+                                    onClick = { actions.resume(entry) },
+                                    onFocus = { hero = heroOf(entry, absolute) },
+                                    onLongClick = { actions.menu(MediaMenuLogic.of(entry)) },
+                                    modifier = if (focusFirst && entry == state.resume.first()) Modifier.focusRequester(firstFocus) else Modifier,
+                                )
+                            }
+                            HomeLayoutLogic.Row.WATCHLIST -> ContentRow(row.label, state.watchlist, key = { "w" + it.key }) { item ->
+                                PosterCard(
+                                    imageUrl = absolute(item.posterUrl),
+                                    title = item.title,
+                                    onClick = { actions.openWatchlist(item) },
+                                    onFocus = { hero = heroOf(item, absolute) },
+                                    onLongClick = { actions.menu(MediaMenuLogic.of(item)) },
+                                    modifier = if (focusFirst && item == state.watchlist.first()) Modifier.focusRequester(firstFocus) else Modifier,
+                                )
+                            }
+                            HomeLayoutLogic.Row.RECENT -> ContentRow(row.label, state.recent, key = { it.type + it.externalId }) { item ->
+                                PosterCard(
+                                    imageUrl = absolute(item.posterUrl),
+                                    title = item.title,
+                                    onClick = { actions.open(item) },
+                                    onFocus = {
+                                        hero = heroOf(item, absolute)
+                                        actions.prefetch(item)
+                                    },
+                                    onLongClick = { actions.menu(MediaMenuLogic.of(item)) },
+                                    tag = CardTagLogic.added(item.added, today), // « Hier », « Il y a 3 j »
+                                    modifier = if (focusFirst && item == state.recent.first()) Modifier.focusRequester(firstFocus) else Modifier,
+                                )
+                            }
+                            HomeLayoutLogic.Row.FOR_YOU -> ContentRow(row.label, state.forYou, key = { "t" + it.tmdbId }) { item ->
+                                PosterCard(
+                                    imageUrl = item.posterUrl,
+                                    title = item.title,
+                                    onClick = { actions.request(item) },
+                                    onFocus = { hero = heroOf(item) },
+                                    modifier = if (focusFirst && item == state.forYou.first()) Modifier.focusRequester(firstFocus) else Modifier,
+                                )
+                            }
+                            HomeLayoutLogic.Row.UPCOMING -> ContentRow(row.label, state.upcoming, key = { it.id }) { entry ->
+                                PosterCard(
+                                    imageUrl = absolute(entry.posterUrl),
+                                    title = entry.title,
+                                    onClick = {
+                                        entry.movieId?.let(actions.openMovieId) ?: entry.seriesId?.let(actions.openSeriesId)
+                                    },
+                                    onFocus = { hero = heroOf(entry, absolute) },
+                                    modifier = if (focusFirst && entry == state.upcoming.first()) Modifier.focusRequester(firstFocus) else Modifier,
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -342,9 +359,18 @@ fun HomeContent(state: HomeState, absolute: (String?) -> String?, onRetry: () ->
     }
 
     // Focus de départ sur la première carte (sinon la télécommande ne « voit » rien)
-    LaunchedEffect(state.resume.isNotEmpty() || state.watchlist.isNotEmpty() || state.recent.isNotEmpty()) {
+    LaunchedEffect(actions.rows.any { !rowIsEmpty(it, state) }) {
         runCatching { firstFocus.requestFocus() }
     }
+}
+
+/** Rangée sans carte : elle ne s'affiche pas (et ne peut pas prendre le focus de départ). */
+private fun rowIsEmpty(row: HomeLayoutLogic.Row, state: HomeState): Boolean = when (row) {
+    HomeLayoutLogic.Row.RESUME -> state.resume.isEmpty()
+    HomeLayoutLogic.Row.WATCHLIST -> state.watchlist.isEmpty()
+    HomeLayoutLogic.Row.RECENT -> state.recent.isEmpty()
+    HomeLayoutLogic.Row.FOR_YOU -> state.forYou.isEmpty()
+    HomeLayoutLogic.Row.UPCOMING -> state.upcoming.isEmpty()
 }
 
 @Composable
