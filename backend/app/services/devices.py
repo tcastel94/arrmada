@@ -176,6 +176,9 @@ _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         ("GET", r"/api/tv/trickplay/[0-9a-f]{32}/\d+/\d+"),
         ("GET", r"/api/tv/item-image/[0-9a-f]{32}"),
         ("GET", r"/api/tv/trailer/movie/\d+"),
+        # Dernier choix de pistes du profil (VF / VO, sous-titres) par série / film
+        ("GET", r"/api/tv/track-preference/(series:tvdb:\d+|movie:tmdb:\d+|local:\d+)"),
+        ("POST", r"/api/tv/track-preference/(series:tvdb:\d+|movie:tmdb:\d+|local:\d+)"),
         # Profils famille (ADR-008) : écran « Qui regarde ? » (lecture seule)
         ("GET", r"/api/profiles"),
         # Liste « À voir » du profil qui regarde : lire, ajouter, retirer un

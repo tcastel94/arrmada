@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Lecteur TV : le choix des pistes est retenu par série et par profil
+
+#### Added
+- **Le dernier choix de pistes est repris à l'épisode suivant** : passer une série en VF, couper les sous-titres, prendre les sous-titres anglais… depuis le menu pause, les Réglages audio ou la tablette du salon. Le choix est rangé **sur le serveur, par profil famille et par série** (ou par film, ou par série maison) : il suit le profil sur n'importe quelle TV, et chaque profil garde le sien
+- Sans choix rangé, ou si l'épisode n'a pas la piste voulue (épisode sans VF…), la **règle automatique** s'applique toujours (VO + sous-titres FR, ou VF + forcés)
+- Seuls les changements faits par quelqu'un sont rangés, jamais le choix automatique du lancement
+- Serveur : table `track_preferences` (créée au démarrage), routes `GET` / `POST /api/tv/track-preference/{scope}` (`series:tvdb:…`, `movie:tmdb:…`, `local:…`), ouvertes aux jetons de TV ; upsert `ON CONFLICT` ; les choix d'un profil supprimé partent avec lui
+
+#### Tests
+- Serveur : `tests/test_api/test_track_preferences.py` (droits des TV, rien de rangé, choix par profil et remplacement, valeurs refusées, profil supprimé)
+- Appli : 7 tests de plus dans `TrackLanguageLogicTest` (choix rangé prioritaire, piste absente → règle, forcés / complets, ce qui est rangé, titre de rangement)
+
+#### Notes
+- APK non construite dans l'environnement de la modification (SDK Android non téléchargeable) : `TrackLanguageLogic` et ses tests y ont été compilés et passés ; compilation complète par la CI Android
+
 ### Lecteur TV : Réglages audio au style du menu pause
 
 #### Changed

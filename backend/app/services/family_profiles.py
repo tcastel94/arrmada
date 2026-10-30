@@ -112,7 +112,8 @@ async def update_profile(
 
 
 async def delete_profile(db: AsyncSession, profile_id: int) -> bool:
-    """Supprime un profil, son vu / reprise ; ses demandes passent à « Famille »."""
+    """Supprime un profil, son vu / reprise, ses choix de pistes ; ses demandes passent à « Famille »."""
+    from app.models.track_preference import TrackPreference
     from app.models.tv_request import TvRequest
     from app.models.watch_state import WatchState
 
@@ -122,6 +123,7 @@ async def delete_profile(db: AsyncSession, profile_id: int) -> bool:
     if profile.is_default:
         raise ValueError("Le profil « Famille » ne se supprime pas")
     await db.execute(delete(WatchState).where(WatchState.profile_id == profile_id))
+    await db.execute(delete(TrackPreference).where(TrackPreference.profile_id == profile_id))
     await db.execute(
         update(TvRequest)
         .where(TvRequest.profile_id == profile_id)

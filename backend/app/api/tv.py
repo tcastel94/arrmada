@@ -56,6 +56,33 @@ async def play_episode(
     return await tv_playback.episode(db, tvdb_id, season, episode, user.get("profile_id"))
 
 
+@router.get("/track-preference/{scope}")
+async def get_track_preference(
+    scope: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)
+) -> dict:
+    """Dernier choix de pistes du profil pour cette série / ce film (« series:tvdb:280619 »)."""
+    from app.services import track_preferences
+
+    if not track_preferences.valid_scope(scope):
+        raise HTTPException(status_code=400, detail="Titre inconnu")
+    return await track_preferences.get(db, user.get("profile_id"), scope)
+
+
+@router.post("/track-preference/{scope}")
+async def set_track_preference(
+    scope: str,
+    body: dict,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Piste changée dans le menu pause : reprise à l'épisode suivant, pour ce profil."""
+    from app.services import track_preferences
+
+    if not track_preferences.valid_scope(scope):
+        raise HTTPException(status_code=400, detail="Titre inconnu")
+    return await track_preferences.store(db, user.get("profile_id"), scope, body)
+
+
 # Appli Android sur un téléphone ou une tablette : appairée comme une TV
 # (même périmètre de jeton), mais ce n'est pas un écran où envoyer un film.
 # Repérée au nom de plateforme qu'elle envoie à l'appairage.

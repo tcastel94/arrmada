@@ -12,6 +12,7 @@ import fr.arrmada.app.ui.components.gutter
 import fr.arrmada.app.data.Recap
 import fr.arrmada.app.data.RecapLogic
 import fr.arrmada.app.data.TrackLanguageLogic
+import fr.arrmada.app.data.TrackPreference
 import fr.arrmada.app.data.TrickplayLogic
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.offset
@@ -167,6 +168,8 @@ fun PlayerScreen(request: PlayRequest, app: ArrMadaApplication, onExit: () -> Un
     var meta by remember { mutableStateOf<PlaybackMeta?>(null) }
     var series by remember { mutableStateOf<SeriesDetail?>(null) }
     var local by remember { mutableStateOf<LocalSeriesDetail?>(null) } // série maison
+    // Dernier choix de pistes du profil pour ce titre (VF, sous-titres coupés…)
+    var trackPreference by remember { mutableStateOf<TrackPreference?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     // « Précédemment dans… » : décidé en parallèle du chargement (2,5 s au plus)
     var recap by remember(request) { mutableStateOf<Recap?>(null) }
@@ -234,7 +237,16 @@ fun PlayerScreen(request: PlayRequest, app: ArrMadaApplication, onExit: () -> Un
             // souvent) ; au-delà, la lecture part sans attendre et la fiche
             // arrive ensuite (pistes du fichier par défaut)
             val metaJob = launch { loadMeta(play) }
-            withTimeoutOrNull(3_000) { metaJob.join() }
+            // En même temps : le dernier choix de pistes du profil (null : rien de rangé)
+            val preferenceJob = launch {
+                TrackLanguageLogic.scope(request.kind, request.id, request.localSeries)?.let { scope ->
+                    trackPreference = runCatching { repository.trackPreference(scope) }.getOrNull()?.takeIf { it.found }
+                }
+            }
+            withTimeoutOrNull(3_000) {
+                metaJob.join()
+                preferenceJob.join()
+            }
             info = play
         } catch (e: Exception) {
             error = e.message ?: "Serveur injoignable"
@@ -311,7 +323,7 @@ fun PlayerScreen(request: PlayRequest, app: ArrMadaApplication, onExit: () -> Un
         )
         return
     }
-    PlayerSurface(request, play!!, meta, upNext, app, presetDone, onExit, onPlayNext)
+    PlayerSurface(request, play!!, meta, trackPreference, upNext, app, presetDone, onExit, onPlayNext)
 }
 
 @OptIn(UnstableApi::class)
@@ -320,6 +332,7 @@ private fun PlayerSurface(
     request: PlayRequest,
     info: PlayInfo,
     meta: PlaybackMeta?,
+    trackPreference: TrackPreference?, // dernier choix du profil, null : règle automatique
     upNext: UpNext?,
     app: ArrMadaApplication,
     presetDone: CompletableDeferred<Unit>,
@@ -470,6 +483,11 @@ private fun PlayerSurface(
     // fois, au premier jeu de pistes ; ensuite, c'est le choix de l'utilisateur
     var autoTracksDone by remember { mutableStateOf(false) }
     val currentMeta by rememberUpdatedState(meta) // la fiche peut arriver après le lecteur
+    val currentPreference by rememberUpdatedState(trackPreference)
+    // Titre sous lequel ranger le choix de pistes (série entière, film, série maison)
+    val trackScope = remember { TrackLanguageLogic.scope(request.kind, request.id, request.localSeries) }
+    // Piste changée par l'utilisateur : à ranger dès que le lecteur l'a appliquée
+    var saveTracksPending by remember { mutableStateOf(false) }
     // Le bouton central ouvre le menu à l'appui : son relâchement est avalé
     // (sinon il « clique » sur « Reprendre », qui a le focus, et relance aussitôt)
     var swallowOkUp by remember { mutableStateOf(false) }
@@ -804,6 +822,13 @@ private fun PlayerSurface(
     fun applyLanguagePlan(newTracks: Tracks) {
         val audios = trackChoices(newTracks, C.TRACK_TYPE_AUDIO)
         val texts = trackChoices(newTracks, C.TRACK_TYPE_TEXT)
+        val remembered = currentPreference?.let {
+            TrackLanguageLogic.Remembered(
+                audio = it.audioLanguage.ifBlank { null },
+                subtitle = it.subtitleLanguage.ifBlank { null },
+                subtitleForced = it.subtitleForced,
+            )
+        }
         val plan = TrackLanguageLogic.plan(
             currentMeta?.originalLanguage,
             audios.map { TrackLanguageLogic.Audio(it.group?.getTrackFormat(it.index)?.language, it.supported) },
@@ -817,16 +842,47 @@ private fun PlayerSurface(
                     label = format?.label,
                 )
             },
+            remembered,
         )
         player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
             .setPreferredAudioLanguages(*TrackLanguageLogic.preferredAudioLanguages(plan).toTypedArray())
-            // Sous-titres complets : français préféré (Media3 écarte alors les forcés) ;
+            // Sous-titres complets : leur langue préférée (Media3 écarte alors les forcés) ;
             // sinon aucune préférence : seuls les forcés de la langue entendue s'affichent
-            .setPreferredTextLanguage(if (plan.fullSubtitles) "fr" else null)
+            .setPreferredTextLanguage(plan.textLanguage)
             .build()
         plan.audio?.let { audios.getOrNull(it) }?.let { selectTrack(player, C.TRACK_TYPE_AUDIO, it) }
         // Pas de sous-titre voulu : coupés (pas de piste « par défaut » en anglais sur la VF)
         selectTrack(player, C.TRACK_TYPE_TEXT, plan.text?.let { texts.getOrNull(it) })
+    }
+
+    /** Piste choisie par l'utilisateur (menu pause, tablette) : appliquée, puis rangée pour ce profil. */
+    fun userSelectTrack(type: Int, choice: TrackChoice?) {
+        selectTrack(player, type, choice)
+        saveTracksPending = trackScope != null
+    }
+
+    /** Range ce qui est lu (audio, sous-titres ou « coupés ») : l'épisode suivant le reprendra. */
+    fun saveTrackChoice(newTracks: Tracks) {
+        val scope = trackScope ?: return
+        val audio = trackChoices(newTracks, C.TRACK_TYPE_AUDIO).firstOrNull { it.selected }
+            ?.let { it.group?.getTrackFormat(it.index) }
+        val text = trackChoices(newTracks, C.TRACK_TYPE_TEXT).firstOrNull { it.selected }
+            ?.let { it.group?.getTrackFormat(it.index) }
+        val remembered = TrackLanguageLogic.remember(
+            audioLanguage = audio?.language,
+            subtitlesOn = text != null,
+            subtitleLanguage = text?.language,
+            subtitleForced = text != null &&
+                TrackLanguageLogic.isForced((text.selectionFlags and C.SELECTION_FLAG_FORCED) != 0, text.label),
+        )
+        val preference = TrackPreference(
+            found = true,
+            audioLanguage = remembered.audio.orEmpty(),
+            subtitleLanguage = remembered.subtitle.orEmpty(),
+            subtitleForced = remembered.subtitleForced,
+        )
+        // En tâche de fond (survit à la sortie du lecteur) ; un échec ne gêne pas la lecture
+        app.appScope.launch { runCatching { repository.saveTrackPreference(scope, preference) } }
     }
 
     DisposableEffect(player) {
@@ -837,6 +893,11 @@ private fun PlayerSurface(
                 if (!autoTracksDone && pendingSubtitleLabel == null && newTracks.groups.any { it.type == C.TRACK_TYPE_AUDIO }) {
                     autoTracksDone = true
                     applyLanguagePlan(newTracks)
+                }
+                // Choix de l'utilisateur appliqué par le lecteur : on le range
+                if (saveTracksPending) {
+                    saveTracksPending = false
+                    saveTrackChoice(newTracks)
                 }
                 // Flux rechargé (décalage, resynchro) : la piste voulue, dès qu'elle apparaît
                 pendingSubtitleLabel?.let { wanted ->
@@ -1030,9 +1091,9 @@ private fun PlayerSurface(
             "track" -> command.track?.let { (kind, index) ->
                 val type = if (kind == "audio") C.TRACK_TYPE_AUDIO else C.TRACK_TYPE_TEXT
                 if (index < 0) {
-                    if (type == C.TRACK_TYPE_TEXT) selectTrack(player, type, null)
+                    if (type == C.TRACK_TYPE_TEXT) userSelectTrack(type, null)
                 } else {
-                    trackChoices(tracks, type).getOrNull(index)?.takeIf { it.supported }?.let { selectTrack(player, type, it) }
+                    trackChoices(tracks, type).getOrNull(index)?.takeIf { it.supported }?.let { userSelectTrack(type, it) }
                 }
             }
         }
@@ -1236,7 +1297,7 @@ private fun PlayerSurface(
                     player.seekTo((seconds * 1000).toLong())
                     resume()
                 },
-                onSelectTrack = { type, choice -> selectTrack(player, type, choice) },
+                onSelectTrack = { type, choice -> userSelectTrack(type, choice) },
                 onQuit = onExit,
                 onSkip = { seconds -> player.seekTo((player.currentPosition + seconds * 1000L).coerceAtLeast(0)) },
                 audio = AudioContext(room, hasAmp, advice, autoSound),
