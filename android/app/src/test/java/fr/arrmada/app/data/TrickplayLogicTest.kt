@@ -28,6 +28,13 @@ class TrickplayLogicTest {
     }
 
     @Test
+    fun chapterPreviewJustAfterItsStart() {
+        assertEquals(125.0, TrickplayLogic.chapterPreviewAt(120.0, 600.0), 0.0) // 5 s après le début
+        assertEquals(121.0, TrickplayLogic.chapterPreviewAt(120.0, 122.0), 0.0) // chapitre très court : son milieu
+        assertEquals(5.0, TrickplayLogic.chapterPreviewAt(0.0, null), 0.0) // dernier chapitre
+    }
+
+    @Test
     fun scrubStaysInsideTheFilm() {
         assertEquals(0L, TrickplayLogic.scrub(5_000, -10_000, 60_000))
         assertEquals(59_000L, TrickplayLogic.scrub(50_000, 30_000, 60_000))

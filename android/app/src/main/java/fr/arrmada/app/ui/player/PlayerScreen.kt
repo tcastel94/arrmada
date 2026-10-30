@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.widthIn
 import fr.arrmada.app.ui.components.gutter
 import fr.arrmada.app.data.Recap
 import fr.arrmada.app.data.RecapLogic
+import fr.arrmada.app.data.TrackLanguageLogic
 import fr.arrmada.app.data.TrickplayLogic
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.offset
@@ -194,6 +195,28 @@ fun PlayerScreen(request: PlayRequest, app: ArrMadaApplication, onExit: () -> Un
         recapChecked = true
     }
 
+    /** Fiche du titre (film Radarr, série Sonarr ou série maison) → [meta]. */
+    suspend fun loadMeta(play: PlayInfo) {
+        if (request.kind == "movie") {
+            request.radarrId?.let { id -> runCatching { repository.movie(id) }.getOrNull()?.let { meta = it.toMeta() } }
+        } else if (request.kind == "file") {
+            // Série maison : « Naruto Kai · S02E15 · L'examen commence », épisode suivant
+            if (request.localSeries > 0) {
+                runCatching { repository.localSeriesDetail(request.localSeries) }.getOrNull()?.let {
+                    local = it
+                    meta = LocalSeriesLogic.toDetail(it).toMeta(request.season, request.episode, play)
+                }
+            }
+        } else {
+            request.sonarrId?.let { id ->
+                runCatching { repository.series(id) }.getOrNull()?.takeIf { it.error == null }?.let {
+                    series = it
+                    meta = it.toMeta(request.season, request.episode, play)
+                }
+            }
+        }
+    }
+
     LaunchedEffect(request) {
         try {
             val play = when (request.kind) {
@@ -205,27 +228,14 @@ fun PlayerScreen(request: PlayRequest, app: ArrMadaApplication, onExit: () -> Un
                 error = play.reason ?: "Titre introuvable dans Jellyfin"
                 return@LaunchedEffect
             }
+            // Fiche du titre pour le menu pause, l'épisode suivant et la langue
+            // originale (VO + sous-titres FR choisis d'office) : lue AVANT de
+            // lancer le lecteur, 3 s au plus (en cache depuis la fiche le plus
+            // souvent) ; au-delà, la lecture part sans attendre et la fiche
+            // arrive ensuite (pistes du fichier par défaut)
+            val metaJob = launch { loadMeta(play) }
+            withTimeoutOrNull(3_000) { metaJob.join() }
             info = play
-            // Fiche du titre pour le menu pause (et l'épisode suivant) : en
-            // arrière-plan, la lecture n'attend pas
-            if (request.kind == "movie") {
-                request.radarrId?.let { id -> runCatching { repository.movie(id) }.getOrNull()?.let { meta = it.toMeta() } }
-            } else if (request.kind == "file") {
-                // Série maison : « Naruto Kai · S02E15 · L'examen commence », épisode suivant
-                if (request.localSeries > 0) {
-                    runCatching { repository.localSeriesDetail(request.localSeries) }.getOrNull()?.let {
-                        local = it
-                        meta = LocalSeriesLogic.toDetail(it).toMeta(request.season, request.episode, play)
-                    }
-                }
-            } else {
-                request.sonarrId?.let { id ->
-                    runCatching { repository.series(id) }.getOrNull()?.takeIf { it.error == null }?.let {
-                        series = it
-                        meta = it.toMeta(request.season, request.episode, play)
-                    }
-                }
-            }
         } catch (e: Exception) {
             error = e.message ?: "Serveur injoignable"
         }
@@ -456,6 +466,10 @@ private fun PlayerSurface(
     // Décalage manuel des sous-titres, et piste à choisir une fois le flux rechargé
     var subtitleShiftMs by remember { mutableIntStateOf(0) }
     var pendingSubtitleLabel by remember { mutableStateOf<String?>(null) }
+    // Pistes choisies d'office (VO + sous-titres FR, ou VF + forcés) : une
+    // fois, au premier jeu de pistes ; ensuite, c'est le choix de l'utilisateur
+    var autoTracksDone by remember { mutableStateOf(false) }
+    val currentMeta by rememberUpdatedState(meta) // la fiche peut arriver après le lecteur
     // Le bouton central ouvre le menu à l'appui : son relâchement est avalé
     // (sinon il « clique » sur « Reprendre », qui a le focus, et relance aussitôt)
     var swallowOkUp by remember { mutableStateOf(false) }
@@ -649,7 +663,12 @@ private fun PlayerSurface(
                 // français est choisi d'office
                 load(source.first, source.second, player.currentPosition)
                 (player.trackSelector as? DefaultTrackSelector)?.let {
-                    it.setParameters(it.buildUponParameters().setPreferredTextLanguage("fr"))
+                    // Réactivés : ils ont pu être coupés au lancement (VF sans forcés)
+                    it.setParameters(
+                        it.buildUponParameters()
+                            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                            .setPreferredTextLanguage("fr")
+                    )
                 }
             }
         }
@@ -775,10 +794,50 @@ private fun PlayerSurface(
         }
     }
 
+    /**
+     * Langues au lancement (TrackLanguageLogic) : titre étranger avec
+     * sous-titres français → VO + sous-titres FR complets ; film français
+     * (ou pas de sous-titres FR) → piste française + sous-titres « forcés »
+     * français s'il y en a. Les préférences du lecteur suivent le même choix,
+     * pour qu'un rechargement du flux (qualité, remux) le garde.
+     */
+    fun applyLanguagePlan(newTracks: Tracks) {
+        val audios = trackChoices(newTracks, C.TRACK_TYPE_AUDIO)
+        val texts = trackChoices(newTracks, C.TRACK_TYPE_TEXT)
+        val plan = TrackLanguageLogic.plan(
+            currentMeta?.originalLanguage,
+            audios.map { TrackLanguageLogic.Audio(it.group?.getTrackFormat(it.index)?.language, it.supported) },
+            texts.map { choice ->
+                val format = choice.group?.getTrackFormat(choice.index)
+                TrackLanguageLogic.Text(
+                    language = format?.language,
+                    forced = format != null && (format.selectionFlags and C.SELECTION_FLAG_FORCED) != 0,
+                    supported = choice.supported,
+                    isDefault = format != null && (format.selectionFlags and C.SELECTION_FLAG_DEFAULT) != 0,
+                    label = format?.label,
+                )
+            },
+        )
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .setPreferredAudioLanguages(*TrackLanguageLogic.preferredAudioLanguages(plan).toTypedArray())
+            // Sous-titres complets : français préféré (Media3 écarte alors les forcés) ;
+            // sinon aucune préférence : seuls les forcés de la langue entendue s'affichent
+            .setPreferredTextLanguage(if (plan.fullSubtitles) "fr" else null)
+            .build()
+        plan.audio?.let { audios.getOrNull(it) }?.let { selectTrack(player, C.TRACK_TYPE_AUDIO, it) }
+        // Pas de sous-titre voulu : coupés (pas de piste « par défaut » en anglais sur la VF)
+        selectTrack(player, C.TRACK_TYPE_TEXT, plan.text?.let { texts.getOrNull(it) })
+    }
+
     DisposableEffect(player) {
         val listener = object : Player.Listener {
             override fun onTracksChanged(newTracks: Tracks) {
                 tracks = newTracks
+                // Premier jeu de pistes du fichier : langues choisies d'office
+                if (!autoTracksDone && pendingSubtitleLabel == null && newTracks.groups.any { it.type == C.TRACK_TYPE_AUDIO }) {
+                    autoTracksDone = true
+                    applyLanguagePlan(newTracks)
+                }
                 // Flux rechargé (décalage, resynchro) : la piste voulue, dès qu'elle apparaît
                 pendingSubtitleLabel?.let { wanted ->
                     trackChoices(newTracks, C.TRACK_TYPE_TEXT)

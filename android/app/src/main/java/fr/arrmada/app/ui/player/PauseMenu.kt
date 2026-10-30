@@ -1,15 +1,12 @@
 package fr.arrmada.app.ui.player
 
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.gestures.detectTapGestures
-import fr.arrmada.app.ui.components.LocalScreen
-import fr.arrmada.app.ui.components.gutter
-import fr.arrmada.app.ui.components.tapToClick
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,6 +25,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -37,13 +35,19 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -57,20 +61,23 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
-import kotlinx.serialization.json.JsonPrimitive
 import fr.arrmada.app.data.AmpDevice
-import fr.arrmada.app.data.SoundAdvisor
 import fr.arrmada.app.data.Chapter
 import fr.arrmada.app.data.PlayInfo
 import fr.arrmada.app.data.Quality
 import fr.arrmada.app.data.QualityOption
-import fr.arrmada.app.ui.components.ArrButton
-import fr.arrmada.app.ui.components.ArtImage
+import fr.arrmada.app.data.SoundAdvisor
+import fr.arrmada.app.data.SubtitleShiftLogic
+import fr.arrmada.app.data.Trickplay
+import fr.arrmada.app.data.TrickplayLogic
 import fr.arrmada.app.ui.components.Badge
-import fr.arrmada.app.ui.components.ProgressBar
+import fr.arrmada.app.ui.components.LocalScreen
 import fr.arrmada.app.ui.components.formatClock
+import fr.arrmada.app.ui.components.gutter
+import fr.arrmada.app.ui.components.tapToClick
 import fr.arrmada.app.ui.detail.techBadges
 import fr.arrmada.app.ui.theme.ArrColors
+import kotlinx.serialization.json.JsonPrimitive
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
@@ -103,18 +110,36 @@ private enum class PauseTab(val label: String) {
     CHAPTERS("Chapitres"), INFO("Infos"), CAST("Distribution"), SUBTITLES("Sous-titres")
 }
 
-private val ChipShape = RoundedCornerShape(8.dp)
+// ── Palette « verre dépoli » façon Apple TV ──
+// Focus = pastille blanche, texte sombre (comme tvOS) ; l'accent bleu reste
+// pour ce qui est « en cours » (chapitre lu, piste cochée).
+private val Glass = Color(0x2EFFFFFF) // fond des boutons au repos (blanc 18 %)
+private val GlassStrong = Color(0x47FFFFFF) // onglet choisi, bouton principal
+private val Dim = Color(0x99FFFFFF) // texte secondaire sur l'image (blanc 60 %)
+private val Ink = Color(0xFF0B0F17) // texte sur une pastille blanche
+private val CardShape = RoundedCornerShape(12.dp)
+private val PillShape = RoundedCornerShape(50)
 
 /**
- * Menu pause « façon Apple TV » : par-dessus l'image figée, le logo du
- * titre, la progression et l'heure de fin, puis des onglets — chapitres
- * (avec vignettes, choisir un chapitre y saute), résumé, distribution,
- * pistes audio et sous-titres.
+ * Menu pause « façon Apple TV » : l'image figée reste visible, assombrie
+ * vers le bas. De haut en bas, tout en bas de l'écran :
+ *  - le titre (logo) et l'épisode, avec les boutons à droite ;
+ *  - la barre de lecture fine et blanche, repères de chapitres, temps
+ *    écoulé, temps restant et heure de fin ;
+ *  - les onglets (texte, pastille blanche au focus) ;
+ *  - la rangée de l'onglet : chapitres en vignettes (image du chapitre,
+ *    sinon l'aperçu « trickplay » de Jellyfin à cet instant), résumé,
+ *    distribution, sous-titres.
+ *
+ * Télécommande : le focus part sur « Reprendre » ; ↓ descend vers les
+ * onglets puis la rangée, ↑ remonte. En revenant sur une rangée, le focus
+ * retrouve l'élément quitté (pas de saut d'onglet par géométrie).
  *
  * Limite assumée (ADR-007 § 4) : « les acteurs à l'écran à cet instant »
  * n'existent dans aucune source de données accessible ; l'onglet
  * Distribution montre la distribution principale.
  */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun PauseMenu(
     info: PlayInfo,
@@ -138,7 +163,9 @@ fun PauseMenu(
     subtitleDownload: SubtitleDownload? = null, // null : pas de recherche (vidéo hors médiathèque)
     quality: QualityChoice? = null, // null, ou original seul : pas de bouton « Qualité »
 ) {
-    val touch = LocalScreen.current.isTouch
+    val screen = LocalScreen.current
+    val touch = screen.isTouch
+    val phone = screen.isPhone
     // Bouton « Audio » → écran Réglages audio par-dessus le menu ; Retour y revient
     var showAudio by remember { mutableStateOf(audioOpen) }
     var backFromAudio by remember { mutableStateOf(false) } // au retour, le focus revient sur « Audio »
@@ -167,110 +194,140 @@ fun PauseMenu(
         }
     }
     var tab by remember { mutableStateOf(tabs.firstOrNull { it.label == initialTab } ?: tabs.first()) }
+    // Un « point d'accroche » par onglet : en descendant des boutons, le focus
+    // arrive sur l'onglet affiché (et non sur le plus proche à l'écran)
+    val tabFocus = remember { PauseTab.entries.associateWith { FocusRequester() } }
     // Bouton « Qualité » : son panneau remplace celui de l'onglet, jusqu'au prochain onglet visité
     var showQuality by remember { mutableStateOf(false) }
     val qualityChoice = quality?.takeIf { it.options.size > 1 }
     val resumeFocus = remember { FocusRequester() }
     val remaining = ((duration - position) / 1000).coerceAtLeast(0)
     val endsAt = LocalTime.now().plusSeconds(remaining).format(DateTimeFormatter.ofPattern("HH:mm"))
+    val progress = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
 
     Box(
         Modifier
             .fillMaxSize()
             .background(
+                // Haut à peine voilé (l'image reste lisible), bas très sombre sous les rangées
                 Brush.verticalGradient(
-                    0f to Color(0xD90A0E16),
-                    0.35f to Color(0x660A0E16),
-                    0.55f to Color(0x990A0E16),
-                    1f to Color(0xF50A0E16),
+                    0f to Color(0x80000000),
+                    0.22f to Color(0x14000000),
+                    0.42f to Color(0x33000000),
+                    0.62f to Color(0xB3050810),
+                    1f to Color(0xF2050810),
                 )
             )
     ) {
-        // ── En haut : logo / titre, méta ──
-        Column(Modifier.align(Alignment.TopStart).padding(start = gutter, top = 32.dp).widthIn(max = 520.dp)) {
-            val logo = absolute(meta?.logo)
-            if (logo != null) {
-                AsyncImage(
-                    model = logo,
-                    contentDescription = meta?.title,
-                    contentScale = ContentScale.Fit,
-                    alignment = Alignment.CenterStart,
-                    modifier = Modifier.heightIn(max = 70.dp).widthIn(max = 300.dp),
-                )
-            } else {
-                Text(meta?.title ?: info.title.orEmpty(), style = MaterialTheme.typography.displayMedium, maxLines = 2)
-            }
-            // Épisode : « S02E03 · Static »
-            meta?.subtitle?.let {
-                Text(it, style = MaterialTheme.typography.titleLarge, color = ArrColors.TextSecondary, modifier = Modifier.padding(top = 6.dp))
-            }
-            Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                techBadges(meta?.file).forEach { Badge(it, highlight = true) }
-            }
+        // ── En haut à droite (TV) : rappel discret de la touche Retour ──
+        if (!touch) {
+            Text(
+                "Retour pour quitter la lecture",
+                style = MaterialTheme.typography.labelMedium,
+                color = Dim,
+                modifier = Modifier.align(Alignment.TopEnd).padding(end = gutter, top = 28.dp),
+            )
         }
 
-        // ── En haut à droite : heure de fin ──
-        Column(Modifier.align(Alignment.TopEnd).padding(end = gutter, top = 36.dp), horizontalAlignment = Alignment.End) {
-            Text("Fin à $endsAt", style = MaterialTheme.typography.titleLarge)
-            Text("encore ${formatClock(remaining)}", style = MaterialTheme.typography.labelLarge, color = ArrColors.TextSecondary)
-        }
-
-        // ── En bas : progression, onglets, contenu ──
-        Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(bottom = 22.dp)) {
-            Column(Modifier.padding(horizontal = gutter)) {
-                val progress = if (duration > 0) position.toFloat() / duration else 0f
-                if (touch) {
-                    // Au doigt : toucher la barre y saute
-                    Box(
-                        Modifier.fillMaxWidth().height(28.dp).pointerInput(duration) {
-                            detectTapGestures { offset ->
-                                if (duration > 0) onSeek(offset.x / size.width * duration / 1000.0)
-                            }
-                        },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        ProgressBar(progress, Modifier.fillMaxWidth(), height = 6.dp)
-                    }
-                } else {
-                    ProgressBar(progress, Modifier.fillMaxWidth(), height = 5.dp)
-                }
-                Row(Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 14.dp)) {
-                    Text(formatClock(position / 1000), style = MaterialTheme.typography.labelLarge)
-                    Spacer(Modifier.weight(1f))
-                    Text(formatClock(duration / 1000), style = MaterialTheme.typography.labelLarge, color = ArrColors.TextSecondary)
-                }
+        Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(bottom = if (phone) 12.dp else 26.dp)) {
+            // ── Titre + boutons ──
+            val buttons: @Composable () -> Unit = {
                 Row(
-                    Modifier.then(if (touch) Modifier.horizontalScroll(rememberScrollState()) else Modifier),
+                    Modifier
+                        .focusRestorer { resumeFocus }
+                        .focusGroup()
+                        .then(if (touch) Modifier.horizontalScroll(rememberScrollState()) else Modifier),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (touch) ArrButton("−10 s", { onSkip(-10) })
-                    ArrButton("Reprendre", onResume, primary = true, leading = "▶", modifier = Modifier.focusRequester(resumeFocus))
-                    if (touch) ArrButton("+30 s", { onSkip(30) })
-                    ArrButton("Audio", { showAudio = true }, leading = "♪", modifier = Modifier.focusRequester(audioFocus))
-                    if (qualityChoice != null) ArrButton("Qualité", { showQuality = true }, leading = "◐")
-                    Spacer(Modifier.width(8.dp))
-                    tabs.forEach { option ->
-                        TabButton(option.label, selected = option == tab && !showQuality, onFocus = {
-                            tab = option
-                            showQuality = false
-                        })
-                    }
-                    if (touch) {
-                        Spacer(Modifier.width(8.dp))
-                        ArrButton("Quitter", onQuit, leading = "✕")
-                    } else {
-                        Spacer(Modifier.weight(1f))
-                        Text("Retour : quitter la lecture", style = MaterialTheme.typography.labelMedium, color = ArrColors.TextSecondary, maxLines = 1)
-                    }
+                    if (touch) GlassButton("10 s", onClick = { onSkip(-10) }, glyph = "↺")
+                    GlassButton("Reprendre", onResume, glyph = "▶", primary = true, modifier = Modifier.focusRequester(resumeFocus))
+                    if (touch) GlassButton("30 s", onClick = { onSkip(30) }, glyph = "↻")
+                    GlassButton("Audio", { showAudio = true }, glyph = "♪", modifier = Modifier.focusRequester(audioFocus))
+                    if (qualityChoice != null) GlassButton("Qualité", { showQuality = true }, glyph = "◐", selected = showQuality)
+                    if (touch) GlassButton("Quitter", onQuit, glyph = "✕")
+                }
+            }
+            if (phone) {
+                // Téléphone : peu de largeur, les boutons passent sous le titre
+                Column(Modifier.padding(horizontal = gutter)) {
+                    TitleBlock(meta, info, absolute, compact = true)
+                    Spacer(Modifier.height(8.dp))
+                    buttons()
+                }
+            } else {
+                Row(Modifier.fillMaxWidth().padding(horizontal = gutter), verticalAlignment = Alignment.Bottom) {
+                    Box(Modifier.weight(1f)) { TitleBlock(meta, info, absolute, compact = false) }
+                    Spacer(Modifier.width(24.dp))
+                    buttons()
                 }
             }
 
-            Box(Modifier.fillMaxWidth().height(if (LocalScreen.current.isPhone) 128.dp else 150.dp).padding(top = 14.dp)) {
+            // ── Barre de lecture : fine, blanche, repères de chapitres ──
+            Column(Modifier.padding(horizontal = gutter).padding(top = if (phone) 10.dp else 18.dp)) {
+                val total = duration / 1000.0
+                val marks = remember(info.chapters, duration) {
+                    if (total <= 0) emptyList() else info.chapters.map { (it.start / total).toFloat() }.filter { it > 0.005f && it < 0.995f }
+                }
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(if (touch) 28.dp else 14.dp)
+                        .then(
+                            if (touch) {
+                                // Au doigt : toucher la barre y saute
+                                Modifier.pointerInput(duration) {
+                                    detectTapGestures { offset ->
+                                        if (duration > 0) onSeek(offset.x / size.width * duration / 1000.0)
+                                    }
+                                }
+                            } else {
+                                Modifier
+                            }
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Scrubber(progress, marks, Modifier.fillMaxWidth().height(if (touch) 6.dp else 5.dp))
+                }
+                Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(formatClock(position / 1000), style = MaterialTheme.typography.labelLarge, color = Color.White)
+                    Spacer(Modifier.weight(1f))
+                    Text("Fin à $endsAt", style = MaterialTheme.typography.labelLarge, color = Dim)
+                    Spacer(Modifier.width(14.dp))
+                    Text("−" + formatClock(remaining), style = MaterialTheme.typography.labelLarge, color = Color.White)
+                }
+            }
+
+            // ── Onglets ──
+            Row(
+                Modifier
+                    .padding(horizontal = gutter)
+                    .padding(top = if (phone) 8.dp else 14.dp)
+                    .focusRestorer { tabFocus.getValue(tab) }
+                    .focusGroup()
+                    .then(if (touch) Modifier.horizontalScroll(rememberScrollState()) else Modifier),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                tabs.forEach { option ->
+                    TabPill(
+                        option.label,
+                        selected = option == tab && !showQuality,
+                        modifier = Modifier.focusRequester(tabFocus.getValue(option)),
+                        onFocus = {
+                            tab = option
+                            showQuality = false
+                        },
+                    )
+                }
+            }
+
+            // ── Contenu de l'onglet ──
+            Box(Modifier.fillMaxWidth().height(if (phone) 112.dp else 158.dp).padding(top = if (phone) 6.dp else 12.dp)) {
                 if (showQuality && qualityChoice != null) {
                     QualityPanel(qualityChoice)
                 } else when (tab) {
-                    PauseTab.CHAPTERS -> ChaptersPanel(info.chapters, position, absolute, onSeek)
+                    PauseTab.CHAPTERS -> ChaptersPanel(info.chapters, info.trickplay, position, duration, absolute, onSeek)
                     PauseTab.INFO -> InfoPanel(meta, info)
                     PauseTab.CAST -> CastPanel(meta)
                     PauseTab.SUBTITLES -> TracksPanel(trackChoices(tracks, C.TRACK_TYPE_TEXT), allowOff = true, download = subtitleDownload) {
@@ -283,114 +340,293 @@ fun PauseMenu(
     LaunchedEffect(Unit) { runCatching { (if (backFromAudio) audioFocus else resumeFocus).requestFocus() } }
 }
 
-/** Onglet : il s'active dès qu'il reçoit le focus (pas besoin de valider). */
+/** Logo du titre (sinon son nom), puis l'épisode « S02E03 · Static ». */
 @Composable
-private fun TabButton(label: String, selected: Boolean, onFocus: () -> Unit) {
-    Surface(
-        onClick = onFocus,
-        modifier = Modifier.height(36.dp).onFocusChanged { if (it.isFocused) onFocus() }.tapToClick(onFocus),
-        shape = ClickableSurfaceDefaults.shape(ChipShape),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.06f),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (selected) Color(0x33FFFFFF) else Color.Transparent,
-            contentColor = if (selected) ArrColors.Text else ArrColors.TextSecondary,
-            focusedContainerColor = ArrColors.Accent,
-            focusedContentColor = ArrColors.Night,
-        ),
-    ) {
-        // Largeur = celle du texte (fillMaxSize étirerait l'onglet sur toute la rangée)
-        Box(Modifier.fillMaxHeight().padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {
-            Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+private fun TitleBlock(meta: PlaybackMeta?, info: PlayInfo, absolute: (String?) -> String?, compact: Boolean) {
+    Column(Modifier.widthIn(max = 560.dp)) {
+        val logo = absolute(meta?.logo)
+        if (logo != null) {
+            AsyncImage(
+                model = logo,
+                contentDescription = meta?.title,
+                contentScale = ContentScale.Fit,
+                alignment = Alignment.BottomStart,
+                modifier = Modifier.heightIn(max = if (compact) 40.dp else 64.dp).widthIn(max = if (compact) 200.dp else 300.dp),
+            )
+        } else {
+            Text(
+                meta?.title ?: info.title.orEmpty(),
+                style = if (compact) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineMedium,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        meta?.subtitle?.let {
+            Text(
+                it,
+                style = MaterialTheme.typography.titleMedium,
+                color = Dim,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 4.dp),
+            )
         }
     }
 }
 
+/**
+ * Barre de lecture tvOS : piste blanche translucide, partie lue blanche,
+ * petits creux aux débuts de chapitres ([marks] : 0..1).
+ */
 @Composable
-private fun ChaptersPanel(chapters: List<Chapter>, position: Long, absolute: (String?) -> String?, onSeek: (Double) -> Unit) {
+private fun Scrubber(progress: Float, marks: List<Float>, modifier: Modifier) {
+    Canvas(modifier) {
+        val radius = CornerRadius(size.height / 2, size.height / 2)
+        drawRoundRect(Color(0x40FFFFFF), cornerRadius = radius)
+        if (progress > 0f) drawRoundRect(Color.White, size = Size(size.width * progress, size.height), cornerRadius = radius)
+        // Creux de 2 px : on « voit » les chapitres sans surcharger la barre
+        val gap = 2.dp.toPx()
+        marks.forEach { mark ->
+            drawRect(Color(0xCC05080F), topLeft = Offset(size.width * mark - gap / 2, 0f), size = Size(gap, size.height))
+        }
+    }
+}
+
+/** Bouton pastille « verre » : blanc au focus, texte sombre (comme tvOS). */
+@Composable
+private fun GlassButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    glyph: String? = null,
+    primary: Boolean = false,
+    selected: Boolean = false,
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier.height(42.dp).tapToClick(onClick),
+        shape = ClickableSurfaceDefaults.shape(PillShape),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.08f),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = if (primary || selected) GlassStrong else Glass,
+            contentColor = Color.White,
+            focusedContainerColor = Color.White,
+            focusedContentColor = Ink,
+            pressedContainerColor = Color(0xE6FFFFFF),
+            pressedContentColor = Ink,
+        ),
+    ) {
+        Row(
+            Modifier.fillMaxHeight().padding(horizontal = 18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (glyph != null) Text(glyph, style = MaterialTheme.typography.titleMedium)
+            Text(text, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+        }
+    }
+}
+
+/** Onglet texte : il s'active dès qu'il reçoit le focus (pas besoin de valider). */
+@Composable
+private fun TabPill(label: String, selected: Boolean, modifier: Modifier = Modifier, onFocus: () -> Unit) {
+    Surface(
+        onClick = onFocus,
+        modifier = modifier.height(36.dp).onFocusChanged { if (it.isFocused) onFocus() }.tapToClick(onFocus),
+        shape = ClickableSurfaceDefaults.shape(PillShape),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = if (selected) Color(0x24FFFFFF) else Color.Transparent,
+            contentColor = if (selected) Color.White else Dim,
+            focusedContainerColor = Color.White,
+            focusedContentColor = Ink,
+        ),
+    ) {
+        // Largeur = celle du texte (fillMaxSize étirerait l'onglet sur toute la rangée)
+        Box(Modifier.fillMaxHeight().padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
+            Text(label, style = MaterialTheme.typography.titleMedium, maxLines = 1)
+        }
+    }
+}
+
+/**
+ * Chapitres en vignettes 16:9. Image du chapitre extraite par Jellyfin
+ * si elle existe ; sinon (cas le plus courant : extraction désactivée
+ * par défaut dans Jellyfin) l'aperçu « trickplay » à cet instant ; sinon
+ * une carte sobre avec le numéro du chapitre.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun ChaptersPanel(
+    chapters: List<Chapter>,
+    trickplay: Trickplay?,
+    position: Long,
+    duration: Long,
+    absolute: (String?) -> String?,
+    onSeek: (Double) -> Unit,
+) {
     val seconds = position / 1000.0
-    val current = chapters.indexOfLast { it.start <= seconds }.coerceAtLeast(0)
+    val sorted = remember(chapters) { chapters.sortedBy { it.start } }
+    val current = sorted.indexOfLast { it.start <= seconds }.coerceAtLeast(0)
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = (current - 1).coerceAtLeast(0))
-    // Téléphone : vignette 16:9 plus petite, pour que le nom tienne sous la vignette
+    val tiles = rememberTrickplayTiles(trickplay)
+    // Téléphone : vignette plus petite, pour que le nom tienne sous la vignette
     val phone = LocalScreen.current.isPhone
-    val thumbWidth = if (phone) 128.dp else 168.dp
-    val thumbHeight = if (phone) 72.dp else 94.dp
+    val thumbWidth = if (phone) 120.dp else 176.dp
+    val thumbHeight = thumbWidth * 9 / 16
     LazyRow(
         state = listState,
-        contentPadding = PaddingValues(horizontal = gutter),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        modifier = Modifier.focusRestorer(),
+        contentPadding = PaddingValues(horizontal = gutter, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(if (phone) 12.dp else 18.dp),
     ) {
-        items(chapters, key = { it.index }) { chapter ->
-            val isCurrent = chapter.index == chapters.getOrNull(current)?.index
+        items(sorted.size, key = { sorted[it].index }) { i ->
+            val chapter = sorted[i]
+            val next = sorted.getOrNull(i + 1)?.start
+            val isCurrent = i == current
+            // Avancement dans le chapitre en cours (petite barre bleue sous l'image)
+            val end = next ?: (duration / 1000.0)
+            val within = if (isCurrent && end > chapter.start) ((seconds - chapter.start) / (end - chapter.start)).toFloat().coerceIn(0f, 1f) else 0f
             Column(Modifier.width(thumbWidth)) {
                 Surface(
                     onClick = { onSeek(chapter.start) },
                     modifier = Modifier.width(thumbWidth).height(thumbHeight).tapToClick({ onSeek(chapter.start) }),
-                    shape = ClickableSurfaceDefaults.shape(ChipShape),
-                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1.08f),
+                    shape = ClickableSurfaceDefaults.shape(CardShape),
+                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1.1f),
                     border = ClickableSurfaceDefaults.border(
-                        border = if (isCurrent) Border(BorderStroke(2.dp, ArrColors.AccentText), shape = ChipShape) else Border.None,
-                        focusedBorder = Border(BorderStroke(2.dp, ArrColors.Accent), shape = ChipShape),
+                        focusedBorder = Border(BorderStroke(3.dp, Color.White), shape = CardShape),
                     ),
                     colors = ClickableSurfaceDefaults.colors(containerColor = ArrColors.Card, focusedContainerColor = ArrColors.Card),
                 ) {
-                    // Vignette relayée par le serveur (le jeton est ajouté par le client HTTP)
-                    ArtImage(absolute(chapter.image), chapter.name, Modifier.fillMaxSize())
+                    ChapterThumb(chapter, i + 1, trickplay, next, absolute, tiles)
+                    if (isCurrent) {
+                        Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(4.dp).background(Color(0x66000000))) {
+                            Box(Modifier.fillMaxHeight().fillMaxWidth(within).background(ArrColors.Accent))
+                        }
+                    }
                 }
                 Text(
                     chapter.name,
                     style = MaterialTheme.typography.labelLarge,
-                    color = if (isCurrent) ArrColors.AccentText else ArrColors.Text,
+                    color = if (isCurrent) ArrColors.AccentText else Color.White,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 6.dp),
+                    modifier = Modifier.padding(top = 8.dp),
                 )
-                Text(formatClock(chapter.start.toLong()), style = MaterialTheme.typography.labelMedium, color = ArrColors.TextSecondary)
+                Text(formatClock(chapter.start.toLong()), style = MaterialTheme.typography.labelMedium, color = Dim)
             }
+        }
+    }
+}
+
+/** Image d'un chapitre : la sienne, l'aperçu trickplay, ou une carte numérotée. */
+@Composable
+private fun ChapterThumb(
+    chapter: Chapter,
+    number: Int,
+    trickplay: Trickplay?,
+    nextStart: Double?,
+    absolute: (String?) -> String?,
+    tiles: TrickplayTiles,
+) {
+    val url = absolute(chapter.image)
+    var imageFailed by remember(url) { mutableStateOf(false) }
+    Box(Modifier.fillMaxSize()) {
+        // Fond : dégradé sombre et numéro du chapitre (visible tant que rien n'est chargé)
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Brush.linearGradient(listOf(ArrColors.Card, ArrColors.CardDeep))),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                number.toString(),
+                style = MaterialTheme.typography.displayMedium,
+                color = Color(0x33FFFFFF),
+            )
+        }
+        if (url != null && !imageFailed) {
+            AsyncImage(
+                model = url,
+                contentDescription = chapter.name,
+                contentScale = ContentScale.Crop,
+                onError = { imageFailed = true }, // image annoncée mais introuvable : l'aperçu prend le relais
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else if (trickplay != null) {
+            TrickplayImage(
+                trickplay,
+                TrickplayLogic.chapterPreviewAt(chapter.start, nextStart),
+                absolute,
+                tiles,
+                Modifier.fillMaxSize(),
+                crop = true,
+            )
         }
     }
 }
 
 @Composable
 private fun InfoPanel(meta: PlaybackMeta?, info: PlayInfo) {
-    Column(Modifier.padding(horizontal = gutter).widthIn(max = 760.dp)) {
-        meta?.metaLine?.takeIf { it.isNotBlank() }?.let {
-            Text(it, style = MaterialTheme.typography.labelLarge, color = ArrColors.TextSecondary)
+    Column(Modifier.padding(horizontal = gutter).widthIn(max = 820.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            techBadges(meta?.file).forEach { Badge(it, highlight = true) }
+            meta?.metaLine?.takeIf { it.isNotBlank() }?.let {
+                Text(it, style = MaterialTheme.typography.labelLarge, color = Dim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
         }
         Text(
             meta?.overview ?: info.overview.orEmpty(),
             style = MaterialTheme.typography.bodyLarge,
-            maxLines = 5,
+            color = Color.White,
+            maxLines = 4,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 6.dp),
+            modifier = Modifier.padding(top = 8.dp),
         )
     }
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun CastPanel(meta: PlaybackMeta?) {
-    LazyRow(contentPadding = PaddingValues(horizontal = gutter), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+    LazyRow(
+        modifier = Modifier.focusRestorer(),
+        contentPadding = PaddingValues(horizontal = gutter, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(20.dp),
+    ) {
         items(meta?.cast.orEmpty().take(20)) { person ->
-            Column(Modifier.width(92.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(Modifier.width(96.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 // Focusable (sans action) : c'est ce qui fait défiler la rangée à la télécommande
                 Surface(
                     onClick = {},
-                    modifier = Modifier.size(72.dp),
+                    modifier = Modifier.size(78.dp),
                     shape = ClickableSurfaceDefaults.shape(CircleShape),
                     scale = ClickableSurfaceDefaults.scale(focusedScale = 1.1f),
-                    border = ClickableSurfaceDefaults.border(focusedBorder = Border(BorderStroke(2.dp, ArrColors.Accent), shape = CircleShape)),
+                    border = ClickableSurfaceDefaults.border(focusedBorder = Border(BorderStroke(3.dp, Color.White), shape = CircleShape)),
                     colors = ClickableSurfaceDefaults.colors(containerColor = ArrColors.Card, focusedContainerColor = ArrColors.Card),
                 ) {
                     if (person.photo != null) {
                         AsyncImage(model = person.photo, contentDescription = person.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().clip(CircleShape))
+                    } else {
+                        // Pas de photo : initiales
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(initials(person.name), style = MaterialTheme.typography.titleLarge, color = Dim)
+                        }
                     }
                 }
-                Text(person.name, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 6.dp))
-                Text(person.character, style = MaterialTheme.typography.labelMedium, color = ArrColors.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+                Text(person.name, style = MaterialTheme.typography.labelLarge, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp))
+                Text(person.character, style = MaterialTheme.typography.labelMedium, color = Dim, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
             }
         }
     }
 }
 
+/** « Timothée Chalamet » → « TC ». */
+private fun initials(name: String): String =
+    name.split(' ').filter { it.isNotBlank() }.take(2).joinToString("") { it.first().uppercase() }
+
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 internal fun TracksPanel(
     choices: List<TrackChoice>,
@@ -400,10 +636,14 @@ internal fun TracksPanel(
     onSelect: (TrackChoice?) -> Unit,
 ) {
     if (choices.isEmpty() && !allowOff) {
-        Text("Aucune piste", style = MaterialTheme.typography.bodyLarge, color = ArrColors.TextSecondary, modifier = Modifier.padding(horizontal = sidePadding))
+        Text("Aucune piste", style = MaterialTheme.typography.bodyLarge, color = Dim, modifier = Modifier.padding(horizontal = sidePadding))
         return
     }
-    LazyRow(contentPadding = PaddingValues(horizontal = sidePadding), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyRow(
+        modifier = Modifier.focusRestorer(),
+        contentPadding = PaddingValues(horizontal = sidePadding, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
         // Outils en tête : visibles même quand le fichier n'a aucune piste
         if (download != null) {
             download.onClick?.let { onClick ->
@@ -424,15 +664,15 @@ internal fun TracksPanel(
                 }
             }
             download.onShift?.let { onShift ->
-                val now = if (download.shiftMs == 0) "Pas de décalage" else "Décalage ${fr.arrmada.app.data.SubtitleShiftLogic.format(download.shiftMs)}"
+                val now = if (download.shiftMs == 0) "Pas de décalage" else "Décalage ${SubtitleShiftLogic.format(download.shiftMs)}"
                 item {
                     OptionChip("− 0,5 s", "$now · plus tôt", selected = false, supported = true) {
-                        onShift(-fr.arrmada.app.data.SubtitleShiftLogic.STEP_MS)
+                        onShift(-SubtitleShiftLogic.STEP_MS)
                     }
                 }
                 item {
                     OptionChip("+ 0,5 s", "$now · plus tard", selected = false, supported = true) {
-                        onShift(fr.arrmada.app.data.SubtitleShiftLogic.STEP_MS)
+                        onShift(SubtitleShiftLogic.STEP_MS)
                     }
                 }
             }
@@ -454,9 +694,14 @@ internal fun TracksPanel(
 }
 
 /** Panneau du bouton « Qualité » : la qualité lue est cochée, l'indisponible grisée. */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun QualityPanel(choice: QualityChoice) {
-    LazyRow(contentPadding = PaddingValues(horizontal = gutter), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyRow(
+        modifier = Modifier.focusRestorer(),
+        contentPadding = PaddingValues(horizontal = gutter, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
         items(choice.options, key = { it.quality }) { option ->
             OptionChip(
                 option.title,
@@ -468,32 +713,30 @@ private fun QualityPanel(choice: QualityChoice) {
     }
 }
 
+/** Carte de choix « verre » : coche ✓ sur le choix en cours, blanche au focus. */
 @Composable
 private fun OptionChip(title: String, detail: String, selected: Boolean, supported: Boolean, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
-        modifier = Modifier.width(220.dp).height(64.dp).tapToClick(onClick),
-        shape = ClickableSurfaceDefaults.shape(ChipShape),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
-        border = ClickableSurfaceDefaults.border(
-            border = if (selected) Border(BorderStroke(2.dp, ArrColors.Accent), shape = ChipShape) else Border.None,
-        ),
+        modifier = Modifier.width(230.dp).height(66.dp).tapToClick(onClick),
+        shape = ClickableSurfaceDefaults.shape(CardShape),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.06f),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (selected) ArrColors.Accent.copy(alpha = 0.22f) else Color(0x26FFFFFF),
-            contentColor = if (supported) ArrColors.Text else ArrColors.TextSecondary,
-            focusedContainerColor = ArrColors.Accent,
-            focusedContentColor = ArrColors.Night,
+            containerColor = if (selected) GlassStrong else Glass,
+            contentColor = if (supported) Color.White else Color(0x66FFFFFF),
+            focusedContainerColor = Color.White,
+            focusedContentColor = Ink,
         ),
     ) {
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (selected) {
-                    Box(Modifier.size(8.dp).clip(CircleShape).background(ArrColors.Seen))
-                    Spacer(Modifier.width(6.dp))
-                }
+        Row(Modifier.fillMaxSize().padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(detail, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            Text(detail, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (selected) {
+                Spacer(Modifier.width(8.dp))
+                Text("✓", style = MaterialTheme.typography.titleLarge, color = ArrColors.AccentText)
+            }
         }
     }
 }

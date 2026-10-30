@@ -30,6 +30,19 @@ object TrickplayLogic {
         )
     }
 
+    /**
+     * Instant montré par la vignette d'un chapitre quand Jellyfin n'a pas
+     * extrait d'image de chapitre : quelques secondes après son début (la
+     * première image est souvent noire, en fondu), sans déborder sur le suivant.
+     */
+    fun chapterPreviewAt(start: Double, nextStart: Double?): Double {
+        val wanted = start.coerceAtLeast(0.0) + CHAPTER_PREVIEW_OFFSET_S
+        if (nextStart == null || nextStart <= start) return wanted
+        return minOf(wanted, (start + nextStart) / 2)
+    }
+
+    private const val CHAPTER_PREVIEW_OFFSET_S = 5.0
+
     /** Adresse (relative au serveur) d'une planche. */
     fun tileUrl(info: Trickplay, tile: Int): String = "${info.url}/$tile"
 

@@ -55,6 +55,19 @@ def _key_crew(crew: list[dict]) -> list[dict]:
     return result[:10]
 
 
+def _language_name(raw: dict[str, Any]) -> str:
+    """Langue originale d'un film / d'une série (« French »), vide si inconnue.
+
+    Radarr et Sonarr v4 la donnent sous `originalLanguage: {id, name}` ;
+    « Unknown », « Any » ou « Original » ne disent rien de la langue réelle.
+    """
+    lang = raw.get("originalLanguage")
+    name = lang.get("name") if isinstance(lang, dict) else None
+    if not isinstance(name, str) or name.strip().lower() in ("", "unknown", "any", "original"):
+        return ""
+    return name.strip()
+
+
 def _extract_images(raw: dict[str, Any]) -> dict[str, str | None]:
     """Extract poster, fanart, banner, logo, clearlogo from images list."""
     images = raw.get("images") or []
@@ -189,6 +202,8 @@ async def get_movie_detail(
         "type": "movie",
         "title": raw.get("title", ""),
         "original_title": raw.get("originalTitle", ""),
+        # Langue originale (« French », « English »…) : la TV choisit VO + sous-titres FR
+        "original_language": _language_name(raw),
         "sort_title": raw.get("sortTitle", ""),
         "year": raw.get("year"),
         # Résumé français (TMDB), l'anglais de Radarr en secours
@@ -332,6 +347,8 @@ async def get_series_detail(
         "type": "series",
         "title": raw.get("title", ""),
         "original_title": raw.get("title", ""),
+        # Langue originale (Sonarr v4) : même usage que pour les films
+        "original_language": _language_name(raw),
         "sort_title": raw.get("sortTitle", ""),
         "year": raw.get("year"),
         # Résumé français (TMDB), l'anglais de Sonarr en secours
