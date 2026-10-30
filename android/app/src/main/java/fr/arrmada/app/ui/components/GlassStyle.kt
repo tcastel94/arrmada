@@ -177,10 +177,12 @@ internal fun GlassTab(
 /**
  * Bouton rond à pictogramme (outils de la barre du haut) : discret au
  * repos, pastille blanche au focus. Son nom s'affiche alors dessous, pour
- * ne jamais avoir à deviner ce que fait un pictogramme.
+ * ne jamais avoir à deviner ce que fait un pictogramme. [badge] : nombre
+ * de choses « en cours » (téléchargements…), en pastille bleue ; 0 ou null :
+ * rien.
  */
 @Composable
-internal fun GlassIconButton(icon: ImageVector, label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+internal fun GlassIconButton(icon: ImageVector, label: String, onClick: () -> Unit, modifier: Modifier = Modifier, badge: Int? = null) {
     var focused by remember { mutableStateOf(false) }
     // zIndex : le nom, qui déborde sous le bouton, passe au-dessus du contenu de l'écran
     Box(modifier.size(36.dp).zIndex(if (focused) 1f else 0f)) {
@@ -201,16 +203,30 @@ internal fun GlassIconButton(icon: ImageVector, label: String, onClick: () -> Un
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Image(
                     imageVector = icon,
-                    contentDescription = label,
+                    contentDescription = if (badge != null && badge > 0) "$label, $badge en cours" else label,
                     colorFilter = ColorFilter.tint(LocalContentColor.current),
                     modifier = Modifier.size(19.dp),
                 )
             }
         }
+        if (badge != null && badge > 0) {
+            // Bleu = « en cours » : le nombre de téléchargements, en haut à droite du pictogramme
+            Box(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = 3.dp, y = (-3).dp)
+                    .size(16.dp)
+                    .background(ArrColors.Accent, PillShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(if (badge > 9) "9+" else badge.toString(), style = MaterialTheme.typography.labelSmall, color = ArrColors.Night, maxLines = 1)
+            }
+        }
         if (focused) {
             // Bulle du nom, centrée sous le bouton ; elle peut être plus large que lui
+            val shown = if (badge != null && badge > 0) "$label · $badge en cours" else label
             Text(
-                label,
+                shown,
                 style = MaterialTheme.typography.labelMedium,
                 color = Ink,
                 maxLines = 1,

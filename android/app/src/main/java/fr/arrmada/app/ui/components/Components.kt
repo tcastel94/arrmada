@@ -83,6 +83,7 @@ fun PosterCard(
     seen: Boolean = false,
     onFocus: () -> Unit = {},
     onLongClick: (() -> Unit)? = null, // appui long (OK maintenu) : menu du titre
+    tag: String? = null, // étiquette en haut à gauche (« Hier », « Il y a 3 j »…)
 ) {
     Column(modifier.width(width)) {
         Surface(
@@ -103,6 +104,7 @@ fun PosterCard(
             ),
         ) {
             ArtImage(imageUrl, title, Modifier.fillMaxSize())
+            if (tag != null) CardTag(tag, Modifier.align(Alignment.TopStart).padding(6.dp))
             if (seen) SeenBadge(Modifier.align(Alignment.TopEnd).padding(5.dp))
             if (progress != null && progress > 0f) {
                 ProgressBar(progress, Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(6.dp))
@@ -190,6 +192,19 @@ fun ProgressBar(progress: Float, modifier: Modifier = Modifier, height: Dp = 3.d
                 .fillMaxWidth(progress.coerceIn(0f, 1f))
                 .background(ArrColors.Accent)
         )
+    }
+}
+
+/** Étiquette d'une carte : pastille sombre et translucide, lisible sur n'importe quelle affiche. */
+@Composable
+fun CardTag(text: String, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .clip(PillShape)
+            .background(Color(0xB3050810))
+            .padding(horizontal = 7.dp, vertical = 2.dp)
+    ) {
+        Text(text, style = MaterialTheme.typography.labelSmall, color = Color.White, maxLines = 1)
     }
 }
 

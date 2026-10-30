@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Appli TV : accueil réglable, étiquettes, carte technique (passe 3)
+
+#### Added
+- **Rangées de l'accueil réglables** (*Réglages › Rangées de l'accueil*, à la façon des skins Kodi) : OK affiche ou masque une rangée (✓ / ✕), ▲ la monte d'un cran. Enregistré tout de suite, l'accueil suit en y revenant. Le focus de départ va sur la première rangée non vide de l'ordre choisi
+- **Étiquettes « Aujourd’hui », « Hier », « Il y a 3 j »** sur les affiches des **Ajouts récents** pendant une semaine (date d'ajout Radarr / Sonarr)
+- **Pastille bleue sur le pictogramme Téléchargements** : nombre d'éléments dans la file Radarr / Sonarr (« Téléchargements · 2 en cours » au focus)
+- **Carte technique sur la fiche film**, en trois lignes : *Vidéo* (2160p · Dolby Vision · HEVC), *Audio* (TrueHD Atmos · 7.1 · Français, Anglais), *Sous-titres*. Codecs sous leur nom courant (x265 → HEVC, EAC3 → Dolby Digital Plus), langues en français
+
+#### Changed
+- Fiche film : les pastilles 4K / Dolby Vision / Atmos laissent la place à la carte technique (les notes restent en pastilles)
+
+#### Notes
+- Passe 3 de la proposition « Salle obscure », construite sur la passe 2. Logique testée : `HomeLayoutLogicTest`, `CardTagLogicTest`, `TechSpecLogicTest`
+- Pas fait : le halo du focus teinté par la couleur de l'affiche (demanderait la bibliothèque `androidx.palette`), la carte technique de la fiche série (un fichier par épisode)
+- APK non construite dans l'environnement de la modification (SDK Android non téléchargeable) : compilation, tests et captures à confirmer par la CI Android
+
 ### Appli TV : barre du haut en deux groupes (passe 2)
 
 #### Changed
