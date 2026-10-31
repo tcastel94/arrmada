@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Appli Android : « Rechercher une mise à jour » sans attendre l'heure
+
+#### Changed
+- **Le bouton *Réglages › Rechercher une mise à jour* fait revérifier GitHub au serveur** avant de répondre : une version publiée par la CI il y a cinq minutes est proposée tout de suite, au lieu d'attendre la vérification horaire du serveur
+- Nouvelle route `POST /api/android/update/check` (jetons d'appareil) : vérification GitHub limitée à une toutes les 2 minutes (quota de l'API GitHub), jamais d'erreur renvoyée à l'appareil (GitHub injoignable : réponse avec l'APK déjà présente). La vérification au lancement de l'appli reste sans appel à GitHub
+- Appli : repli sur l'ancienne route si le serveur n'est pas encore à jour (403 / 404 / 405)
+- ADR-009 à jour ; 3 tests (limite de 2 minutes, GitHub injoignable, route vue par une TV)
+
 ### Appli TV : accueil réglable, étiquettes, carte technique (passe 3)
 
 #### Added

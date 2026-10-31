@@ -41,6 +41,7 @@ def _put(directory: Path, name: str, data: bytes = APK_BYTES) -> Path:
 def apk_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     directory = tmp_path / "apk"
     monkeypatch.setattr(settings, "ANDROID_APK_DIR", str(directory))
+    monkeypatch.setitem(android_update._device_check, "at", None)  # pas de limite héritée
     return directory
 
 
@@ -146,6 +147,7 @@ async def test_refresh_keeps_newer_local_build(apk_dir: Path) -> None:
         ("GET", "/api/android/apk/autre.txt", False),
         ("GET", "/api/android/status", False),
         ("POST", "/api/android/refresh", False),
+        ("POST", "/api/android/update/check", True),
     ],
 )
 def test_device_scope(method: str, path: str, allowed: bool) -> None:
@@ -185,3 +187,49 @@ async def test_device_gets_update_and_apk(
     assert (await client.get("/api/android/status", headers=tv)).status_code == 403
     status = (await client.get("/api/android/status", headers=auth_headers)).json()
     assert [a["version_code"] for a in status["apks"]] == [170, 152]
+
+
+async def test_device_check_is_rate_limited(apk_dir: Path) -> None:
+    name = "arrmada-2.7.0-152-release.apk"
+    files = {name: APK_BYTES, f"{name}.sha256": f"{APK_SHA}  {name}\n".encode()}
+    async with _github(_release(name, f"{name}.sha256"), files) as c:
+        assert "2.7.0" in await android_update.refresh_for_device(c, now=1000.0)
+        # Moins de 2 minutes plus tard : pas de nouvel appel à GitHub
+        assert await android_update.refresh_for_device(c, now=1000.0 + 60) is None
+        # Passé le délai : nouvelle vérification
+        assert (await android_update.refresh_for_device(c, now=1000.0 + 121)).startswith("À jour")
+
+
+async def test_device_check_never_raises(apk_dir: Path) -> None:
+    def broken(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("GitHub injoignable")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(broken)) as c:
+        assert await android_update.refresh_for_device(c, now=1.0) is None
+    assert android_update.status()["error"]
+
+
+async def test_device_check_endpoint(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    apk_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[int] = []
+
+    async def fake_refresh(*args: object, **kwargs: object) -> str:
+        calls.append(1)
+        _put(apk_dir, "arrmada-2.7.0-152-release.apk")  # la vérification rapatrie l'APK
+        return "Nouvelle version rapatriée : 2.7.0"
+
+    monkeypatch.setattr(android_update, "refresh", fake_refresh)
+    tv = await _pair(client, auth_headers)
+
+    offer = await client.post("/api/android/update/check", params={"version_code": 150}, headers=tv)
+    assert offer.is_success
+    assert offer.json()["available"] is True
+    assert offer.json()["version_code"] == 152
+    # Deuxième appui juste après : réponse depuis le serveur, GitHub pas rappelé
+    again = await client.post("/api/android/update/check", params={"version_code": 152}, headers=tv)
+    assert again.json() == {"available": False}
+    assert calls == [1]
