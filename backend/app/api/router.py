@@ -40,6 +40,7 @@ from app.api.quality import router as quality_router
 from app.api.recommendations import router as recommendations_router
 from app.api.requests import router as requests_router
 from app.api.sabnzbd_config import router as sabnzbd_config_router
+from app.api.sagas import router as sagas_router
 from app.api.search import router as search_router
 from app.api.services import router as services_router
 from app.api.settings import router as settings_router
@@ -112,3 +113,4 @@ api_router.include_router(videos_router)  # Écran « Vidéos » : dossiers hors
 api_router.include_router(
     music_router
 )  # Musique : Lidarr (bibliothèque, demandes), Jellyfin (écoute)
+api_router.include_router(sagas_router)  # Sagas de films : collections Radarr (TMDB)

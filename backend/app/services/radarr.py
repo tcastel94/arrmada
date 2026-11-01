@@ -40,6 +40,15 @@ class RadarrClient(ArrBaseClient):
         resp = await self.client.delete(f"{self.API_PREFIX}{url}")
         resp.raise_for_status()
 
+    # ── Collections (sagas TMDB) ─────────────────────────────
+    async def get_collections(self) -> list[dict[str, Any]]:
+        """Sagas (collections TMDB) des films de la bibliothèque, avec tous leurs films."""
+        return await self.get("/collection")
+
+    async def get_collection(self, collection_id: int) -> dict[str, Any]:
+        """Une saga et tous ses films."""
+        return await self.get(f"/collection/{collection_id}")
+
     # ── Quality Profiles ──────────────────────────────────────
     async def get_quality_profiles(self) -> list[dict[str, Any]]:
         """Fetch available quality profiles."""

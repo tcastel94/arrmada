@@ -223,6 +223,10 @@ _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         ("POST", r"/api/music/downloads/import"),
         ("GET", r"/api/music/stream/[0-9a-f]{32}"),
         ("POST", r"/api/music/artists"),
+        # Sagas de films : voir, compléter (ajouter des films, comme une demande)
+        ("GET", r"/api/sagas"),
+        ("GET", r"/api/sagas/(\d+|movie/\d+)"),
+        ("POST", r"/api/sagas/\d+/complete"),
     )
 )
 
