@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Musique (Lidarr) : écoute sur la TV, étape 3
+
+#### Added
+- **Écran Musique de l'appli TV** : onglet « Musique » dans la barre du haut (téléphone, tablette : « Plus › Musique »), artistes suivis en pochettes carrées, conseil en clair si la bibliothèque « Musique » de Jellyfin manque
+- **Fiche d'un artiste** : photo, genres, présentation, albums marqués « 10/12 » (partiel) ou « Absent » ; OK sur un album présent l'ouvre pour l'écouter
+- **Lecteur audio** : pochette, titre, artiste, barre de progression, Précédent / Lecture-Pause / Suivant, liste des pistes (la piste en cours en bleu, OK sur une piste la joue) ; l'album s'enchaîne piste après piste. Même moteur que les films (Media3), pistes relayées par ArrMada depuis Jellyfin
+- **Ajouter un artiste depuis la TV** : recherche MusicBrainz au clavier, OK pour suivre (Lidarr cherche ses albums)
+- Serveur : `GET /api/music/albums/{id}/tracks` (album Lidarr retrouvé dans Jellyfin par son identifiant MusicBrainz, sinon titre + artiste ; raison en clair s'il manque) et `GET /api/music/stream/{id}` (piste d'origine relayée, avance par « Range »), ouvertes aux TV
+- Tests : serveur (correspondance Lidarr ↔ Jellyfin, pistes, flux), appli (`MusicRulesTest`)
+
+#### Changed
+- Barre du haut de l'accueil TV : les onglets de sections défilent si la place manque (8 sections avec Musique)
+
+#### Notes
+- La musique s'arrête en quittant l'écran du lecteur (pas de lecture en arrière-plan)
+- APK non construite dans l'environnement de la modification (SDK Android non téléchargeable) : compilation à confirmer par la CI Android
+
 ### Musique (Lidarr) : pages de la web app, étape 2
 
 #### Added

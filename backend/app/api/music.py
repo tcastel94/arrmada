@@ -10,12 +10,13 @@ from __future__ import annotations
 import asyncio
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
-from app.services import music
+from app.services import music, tv_playback
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -149,6 +150,38 @@ async def add_artist(body: AddArtist, db: AsyncSession = Depends(get_db)) -> dic
     finally:
         await client.close()
     return music.artist_summary(added)
+
+
+@router.get("/albums/{album_id}/tracks")
+async def album_tracks(album_id: int, db: AsyncSession = Depends(get_db)) -> dict:
+    """Pistes d'un album à écouter (Jellyfin), dans l'ordre du disque.
+
+    ``available`` faux avec une raison en clair si Jellyfin n'a pas l'album.
+    """
+    client = await music.lidarr_client(db)
+    try:
+        album = await client.get_album(album_id)
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            raise HTTPException(status_code=404, detail="Album inconnu") from exc
+        raise _unreachable(exc) from exc
+    except (httpx.HTTPError, ValueError) as exc:
+        raise _unreachable(exc) from exc
+    finally:
+        await client.close()
+    return await music.album_tracks(db, album)
+
+
+@router.get("/stream/{item_id}")
+async def stream(item_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    """Piste d'origine relayée depuis Jellyfin (avance dans la piste par « Range »)."""
+    try:
+        status_code, headers, body = await tv_playback.open_audio(
+            db, item_id, request.headers.get("range")
+        )
+    except tv_playback.UpstreamError as exc:
+        raise HTTPException(exc.status_code, exc.detail) from exc
+    return StreamingResponse(body, status_code=status_code, headers=headers)
 
 
 @router.get("/queue")

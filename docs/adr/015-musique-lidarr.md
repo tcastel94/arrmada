@@ -33,6 +33,8 @@ Même partage des rôles que pour les films et les séries :
 | `GET /lookup?term=` | Recherche d'artiste (MusicBrainz via Lidarr), « déjà suivi » indiqué | oui |
 | `POST /artists` | Suivre un artiste (`{"mbid": …}`) et chercher ses albums | oui |
 | `GET /queue` | Albums en téléchargement | oui |
+| `GET /albums/{id}/tracks` | Pistes d'un album dans Jellyfin (par identifiant MusicBrainz, sinon titre + artiste) ; raison en clair si l'album manque | oui |
+| `GET /stream/{id}` | Piste d'origine relayée depuis Jellyfin | oui |
 
 Ajout d'un artiste : premier profil de qualité, premier profil de
 métadonnées et premier dossier racine de Lidarr (ceux posés par
@@ -45,7 +47,7 @@ film ou une série), jamais en supprimer ni en modifier.
 |---|---|
 | 1. API (ce document) | Routes ci-dessus, client Lidarr complété, vérification Jellyfin, tests |
 | 2. Web app (fait) | Page `/music` : artistes, recherche et « Suivre », file ; fiche `/music/{id}` avec albums complets / partiels / manquants ; conseil si Lidarr ou la bibliothèque Jellyfin manque |
-| 3. Appli TV | Écran Musique : artistes, albums, écoute via Jellyfin (lecteur audio avec pochette, piste suivante), recherche et demande d'un artiste |
+| 3. Appli TV (fait) | Onglet Musique : artistes, fiche avec albums, lecteur audio (pochette, progression, Précédent / Pause / Suivant, pistes), recherche et suivi d'un artiste ; routes `/albums/{id}/tracks` et `/stream/{id}` |
 
 ## Conséquences
 

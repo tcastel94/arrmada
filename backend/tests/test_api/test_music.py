@@ -109,6 +109,13 @@ LIDARR_ROUTES: list[tuple[str, Any]] = [
     (r"/api/v1/artist", lambda _p, _m: ARTISTS),
     (r"/api/v1/artist/(\d+)", lambda _p, m: next(a for a in ARTISTS if a["id"] == int(m[1]))),
     (r"/api/v1/album", lambda p, _m: [a for a in ALBUMS if str(a["artistId"]) == p["artistId"]]),
+    (
+        r"/api/v1/album/(\d+)",
+        lambda _p, m: {
+            **next(a for a in ALBUMS if a["id"] == int(m[1])),
+            "artist": {"artistName": "Radiohead"},
+        },
+    ),
     (r"/api/v1/qualityprofile", lambda _p, _m: [{"id": 1, "name": "Lossless"}]),
     (r"/api/v1/metadataprofile", lambda _p, _m: [{"id": 3, "name": "Standard"}]),
     (r"/api/v1/rootfolder", lambda _p, _m: [{"id": 1, "path": "/music"}]),
@@ -195,6 +202,9 @@ def test_queue_item_progress() -> None:
         ("GET", "/api/music/lookup", True),
         ("GET", "/api/music/queue", True),
         ("POST", "/api/music/artists", True),
+        ("GET", "/api/music/albums/11/tracks", True),
+        ("GET", "/api/music/stream/0123456789abcdef0123456789abcdef", True),
+        ("GET", "/api/music/stream/../../etc", False),
         ("DELETE", "/api/music/artists/2", False),
         ("PUT", "/api/music/artists/2", False),
     ],
@@ -313,3 +323,105 @@ async def test_lidarr_down(
     resp = await client.get("/api/music/artists", headers=lidarr)
     assert resp.status_code == 502
     assert resp.json()["detail"] == "Lidarr ne répond pas"
+
+
+# ── Écoute : albums Lidarr retrouvés dans Jellyfin ────────────
+
+JELLYFIN_ALBUMS = [
+    {
+        "Id": "a" * 32,
+        "Name": "Kid A",
+        "AlbumArtist": "Radiohead",
+        "ProviderIds": {"MusicBrainzReleaseGroup": "b1"},
+    },
+    {
+        "Id": "b" * 32,
+        "Name": "OK Computer (OKNOTOK)",
+        "AlbumArtist": "Radiohead",
+        "ProviderIds": {},
+    },
+    {
+        "Id": "c" * 32,
+        "Name": "Ok  Computer!",
+        "AlbumArtists": [{"Name": "RADIOHEAD"}],
+        "ProviderIds": {},
+    },
+]
+JELLYFIN_TRACKS = [
+    {
+        "Id": "d" * 32,
+        "Name": "Everything in Its Right Place",
+        "IndexNumber": 1,
+        "ParentIndexNumber": 1,
+        "RunTimeTicks": 251_000_0000,
+    },
+    {"Id": "e" * 32, "Name": "Kid A", "IndexNumber": 2, "ParentIndexNumber": 1, "RunTimeTicks": 0},
+]
+
+
+def test_pick_jellyfin_album() -> None:
+    # Identifiant MusicBrainz d'abord
+    assert (
+        music.pick_jellyfin_album(JELLYFIN_ALBUMS, "b1", "Autre titre", "Autre")["Id"] == "a" * 32
+    )
+    # Sinon titre + artiste, sans casse ni ponctuation (pas la réédition « OKNOTOK »)
+    assert (
+        music.pick_jellyfin_album(JELLYFIN_ALBUMS, "b2", "OK Computer", "Radiohead")["Id"]
+        == "c" * 32
+    )
+    # Bon titre, autre artiste : pas d'album
+    assert music.pick_jellyfin_album(JELLYFIN_ALBUMS, None, "Kid A", "Muse") is None
+
+
+def test_track_summary() -> None:
+    track = music.track_summary(JELLYFIN_TRACKS[0])
+    assert track == {
+        "id": "d" * 32,
+        "title": "Everything in Its Right Place",
+        "number": 1,
+        "disc": 1,
+        "duration": 251,
+        "stream": f"/api/music/stream/{'d' * 32}",
+    }
+
+
+def _jellyfin_items(params: dict[str, str], _m: Any) -> dict[str, Any]:
+    if params.get("includeItemTypes") == "MusicAlbum":
+        return {"Items": JELLYFIN_ALBUMS}
+    if params.get("parentId") == "a" * 32:
+        return {"Items": JELLYFIN_TRACKS}
+    return {"Items": []}
+
+
+async def test_album_tracks(
+    client: AsyncClient, lidarr: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(fake_arr.ROUTES, "jellyfin.test", [(r"/Items", _jellyfin_items)])
+    await _declare(client, lidarr, "lidarr", LIDARR_URL)
+    await _declare(client, lidarr, "jellyfin", JELLYFIN_URL)
+
+    kid_a = (await client.get("/api/music/albums/11/tracks", headers=lidarr)).json()
+    assert kid_a["available"] is True
+    assert (kid_a["title"], kid_a["artist"]) == ("Kid A", "Radiohead")
+    assert kid_a["cover"] == "https://img.test/kida.jpg"
+    assert [t["title"] for t in kid_a["tracks"]] == ["Everything in Its Right Place", "Kid A"]
+
+    # Album Lidarr absent de Jellyfin : raison en clair, pas d'erreur
+    creep = (await client.get("/api/music/albums/13/tracks", headers=lidarr)).json()
+    assert creep["available"] is False
+    assert "Jellyfin" in creep["reason"]
+    assert creep["tracks"] == []
+
+
+async def test_album_tracks_without_jellyfin(client: AsyncClient, lidarr: dict[str, str]) -> None:
+    await _declare(client, lidarr, "lidarr", LIDARR_URL)
+    body = (await client.get("/api/music/albums/11/tracks", headers=lidarr)).json()
+    assert body["available"] is False
+    assert body["reason"] == "Jellyfin n'est pas configuré"
+
+
+async def test_stream_refuses_unknown_ids(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    resp = await client.get("/api/music/stream/pas-un-identifiant", headers=auth_headers)
+    assert resp.status_code == 404

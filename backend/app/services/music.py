@@ -12,7 +12,10 @@ a bien une bibliothèque Musique.
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from typing import Any
+from urllib.parse import urlencode
 
 import httpx
 from fastapi import HTTPException
@@ -169,6 +172,123 @@ def queue_item(record: dict[str, Any]) -> dict[str, Any]:
         "status": record.get("trackedDownloadState") or record.get("status") or "",
         "progress": progress,
         "time_left": record.get("timeleft"),
+    }
+
+
+# ── Écoute : un album Lidarr retrouvé dans Jellyfin ───────────
+
+
+def _plain(text: str | None) -> str:
+    """« Kid A (Deluxe) » et « kid a (deluxe) » se comparent égaux : minuscules, sans accents ni ponctuation."""
+    decomposed = unicodedata.normalize("NFKD", text or "")
+    ascii_only = "".join(c for c in decomposed if not unicodedata.combining(c))
+    return re.sub(r"[^a-z0-9]+", " ", ascii_only.casefold()).strip()
+
+
+def pick_jellyfin_album(
+    items: list[dict[str, Any]], release_group: str | None, title: str, artist: str
+) -> dict[str, Any] | None:
+    """L'album Jellyfin d'un album Lidarr.
+
+    D'abord par l'identifiant MusicBrainz du groupe de parutions (le même
+    des deux côtés quand les fichiers sont étiquetés), sinon par le titre et
+    l'artiste, sans tenir compte de la casse, des accents ni de la ponctuation.
+    """
+    if release_group:
+        for item in items:
+            ids = item.get("ProviderIds") or {}
+            if release_group in (ids.get("MusicBrainzReleaseGroup"), ids.get("MusicBrainzAlbum")):
+                return item
+    wanted_title, wanted_artist = _plain(title), _plain(artist)
+    for item in items:
+        if _plain(item.get("Name")) != wanted_title:
+            continue
+        artists = [item.get("AlbumArtist"), *(item.get("AlbumArtists") or [])]
+        names = {_plain(a.get("Name") if isinstance(a, dict) else a) for a in artists if a}
+        if not wanted_artist or wanted_artist in names:
+            return item
+    return None
+
+
+def track_summary(item: dict[str, Any]) -> dict[str, Any]:
+    """Piste Jellyfin, avec l'adresse de lecture relayée par ArrMada."""
+    ticks = int(item.get("RunTimeTicks") or 0)
+    return {
+        "id": item.get("Id"),
+        "title": item.get("Name") or "",
+        "number": item.get("IndexNumber"),
+        "disc": item.get("ParentIndexNumber"),
+        "duration": ticks // 10_000_000,  # Jellyfin compte en « ticks » de 100 ns
+        "stream": f"/api/music/stream/{item.get('Id')}",
+    }
+
+
+async def album_tracks(db: AsyncSession, album: dict[str, Any]) -> dict[str, Any]:
+    """Pistes à écouter d'un album Lidarr, lues dans Jellyfin.
+
+    Rend ``available`` faux et une raison en clair si Jellyfin est absent ou
+    n'a pas (encore) cet album : la TV l'affiche au lieu d'une erreur.
+    """
+    title = album.get("title") or ""
+    artist = (album.get("artist") or {}).get("artistName") or ""
+    head = {
+        "title": title,
+        "artist": artist,
+        "cover": _image(album.get("images"), "cover", "poster"),
+    }
+    config = await jellyfin.get_config(db)
+    if config is None:
+        return {**head, "available": False, "reason": "Jellyfin n'est pas configuré", "tracks": []}
+    base, key = config
+    auth = jellyfin.auth_header(key)
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            found = await client.get(
+                f"{base}/Items?"
+                + urlencode(
+                    {
+                        "recursive": "true",
+                        "includeItemTypes": "MusicAlbum",
+                        "searchTerm": title,
+                        "fields": "ProviderIds",
+                        "limit": 50,
+                    }
+                ),
+                headers=auth,
+            )
+            found.raise_for_status()
+            match = pick_jellyfin_album(
+                found.json().get("Items", []), album.get("foreignAlbumId"), title, artist
+            )
+            if match is None:
+                return {
+                    **head,
+                    "available": False,
+                    "reason": "Cet album n'est pas encore dans la bibliothèque Musique de Jellyfin",
+                    "tracks": [],
+                }
+            listing = await client.get(
+                f"{base}/Items?"
+                + urlencode(
+                    {
+                        "parentId": match["Id"],
+                        "includeItemTypes": "Audio",
+                        "sortBy": "ParentIndexNumber,IndexNumber,SortName",
+                        "fields": "MediaSources",
+                    }
+                ),
+                headers=auth,
+            )
+            listing.raise_for_status()
+            tracks = [track_summary(t) for t in listing.json().get("Items", []) if t.get("Id")]
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.warning("Musique : Jellyfin ne répond pas (%s)", exc)
+        return {**head, "available": False, "reason": "Jellyfin ne répond pas", "tracks": []}
+    return {
+        **head,
+        "available": bool(tracks),
+        "reason": None if tracks else "Aucune piste",
+        "tracks": tracks,
     }
 
 

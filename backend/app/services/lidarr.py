@@ -30,6 +30,10 @@ class LidarrClient(ArrBaseClient):
         return await self.post("/artist", data=data)
 
     # ── Albums ────────────────────────────────────────────────
+    async def get_album(self, album_id: int) -> dict[str, Any]:
+        """Fetch one album (with its artist)."""
+        return await self.get(f"/album/{album_id}")
+
     async def get_albums(self, artist_id: int | None = None) -> list[dict[str, Any]]:
         """Fetch all albums, or only those of one artist."""
         params = {"artistId": artist_id} if artist_id is not None else None

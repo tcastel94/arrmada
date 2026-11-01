@@ -213,6 +213,8 @@ _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         # Musique : bibliothèque Lidarr, recherche, file ; demander un artiste
         # depuis la TV (comme un film ou une série), jamais le supprimer
         ("GET", r"/api/music/(status|artists|artists/\d+|lookup|queue)"),
+        ("GET", r"/api/music/albums/\d+/tracks"),
+        ("GET", r"/api/music/stream/[0-9a-f]{32}"),
         ("POST", r"/api/music/artists"),
     )
 )

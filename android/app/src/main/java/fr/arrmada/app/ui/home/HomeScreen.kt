@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
@@ -200,7 +202,7 @@ fun HomeScreen(viewModel: HomeViewModel, api: Api, actions: HomeActions) {
  * texte (les mêmes que dans le menu pause)…
  */
 val TOP_SECTIONS = listOf(
-    "home" to "Accueil", "movies" to "Films", "series" to "Séries", "tonight" to "Ce soir",
+    "home" to "Accueil", "movies" to "Films", "series" to "Séries", "music" to "Musique", "tonight" to "Ce soir",
     "videos" to "Vidéos", "discover" to "Découvrir",
 )
 
@@ -243,13 +245,18 @@ fun HomeContent(state: HomeState, absolute: (String?) -> String?, onRetry: () ->
                     Modifier.fillMaxWidth().zIndex(1f).padding(top = 20.dp).padding(horizontal = gutter),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    // Onglets : défilent si la place manque (le focus amène l'onglet à l'écran)
+                    Row(
+                        Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         TOP_SECTIONS.forEach { (route, label) ->
                             // OK ouvre la section ; on est sur l'accueil : son onglet est le « choisi »
                             GlassTab(label, selected = route == "home", current = route == "home", onClick = { if (route != "home") actions.go(route) })
                         }
                     }
-                    Spacer(Modifier.weight(1f))
+                    Spacer(Modifier.width(12.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                         TOP_TOOLS.forEach { tool ->
                             GlassIconButton(

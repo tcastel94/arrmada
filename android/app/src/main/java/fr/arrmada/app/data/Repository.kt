@@ -398,6 +398,24 @@ class Repository(private val api: Api) {
     /** Infos de lecture d'une vidéo de l'écran Vidéos (même format qu'un film). */
     suspend fun playFile(token: String): PlayInfo = api.get("/api/videos/play/$token")
 
+    // ── Musique (Lidarr + Jellyfin, ADR-015) ──
+
+    /** Lidarr déclaré ? Bibliothèque « Musique » dans Jellyfin ? */
+    suspend fun musicStatus(): MusicStatus = api.get("/api/music/status")
+
+    suspend fun musicArtists(): MusicArtists = api.get("/api/music/artists")
+
+    suspend fun musicArtist(id: Int): MusicArtistDetail = api.get("/api/music/artists/$id")
+
+    /** Recherche d'artiste (MusicBrainz via Lidarr). */
+    suspend fun musicLookup(term: String): MusicLookup = api.get("/api/music/lookup?term=${q(term)}", slow = true)
+
+    /** Suivre un artiste : Lidarr cherche aussitôt ses albums. */
+    suspend fun musicFollow(mbid: String): MusicArtist = api.post("/api/music/artists", MusicAddBody(mbid), slow = true)
+
+    /** Pistes d'un album à écouter (Jellyfin), dans l'ordre du disque. */
+    suspend fun musicAlbumTracks(albumId: Int): MusicAlbumTracks = api.get("/api/music/albums/$albumId/tracks")
+
     /** Version plus récente de l'appli sur le serveur (ADR-009) pour ce type d'APK. */
     suspend fun updateOffer(versionCode: Int, buildType: String): UpdateOffer =
         api.get("/api/android/update?version_code=$versionCode&build_type=${q(buildType)}")
