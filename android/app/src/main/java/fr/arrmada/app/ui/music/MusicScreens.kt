@@ -99,9 +99,9 @@ object MusicRules {
         else -> if (album.monitored) "Pas encore sur le NAS (recherché par Lidarr)" else "Pas sur le NAS (non suivi)"
     }
 
-    /** Action de récupération proposée, ou null pour un album complet. */
-    fun searchLabel(album: MusicAlbum): String? = when (album.status) {
-        "complete" -> null
+    /** Recherche automatique proposée : récupérer, compléter, ou meilleure version d'un album complet. */
+    fun searchLabel(album: MusicAlbum): String = when (album.status) {
+        "complete" -> "Chercher une meilleure version"
         "partial" -> "Récupérer les pistes manquantes"
         else -> "Récupérer cet album"
     }
@@ -254,17 +254,19 @@ fun MusicArtistScreen(
             onAlbum = { album -> if (album.listenable) onAlbum(album) else menu = album },
             onAlbumMenu = { menu = it },
             onSearchMissing = { runAction { repository.musicSearchArtist(current.id) } },
+            onRefresh = { runAction { repository.musicRefreshArtist(current.id) } },
         )
     }
 
-    // OK sur un album absent, ou appui long : récupérer l'album / ses pistes manquantes
+    // OK sur un album absent, ou appui long sur n'importe quel album :
+    // écouter, récupérer l'album / ses pistes manquantes, ou meilleure version
     menu?.let { album ->
         ChoiceDialog(
             title = album.title,
             subtitle = MusicRules.albumState(album),
             choices = listOfNotNull(
                 ("Écouter" to { menu = null; onAlbum(album) }).takeIf { album.listenable },
-                MusicRules.searchLabel(album)?.let { label -> label to { menu = null; runAction { repository.musicSearchAlbum(album.id) } } },
+                MusicRules.searchLabel(album) to { menu = null; runAction { repository.musicSearchAlbum(album.id) } },
             ),
             onDismiss = { menu = null },
         )
@@ -277,6 +279,7 @@ private fun ArtistContent(
     onAlbum: (MusicAlbum) -> Unit,
     onAlbumMenu: (MusicAlbum) -> Unit,
     onSearchMissing: () -> Unit,
+    onRefresh: () -> Unit,
 ) {
     val first = remember { FocusRequester() }
     KenBurnsBackdrop(url = artist.fanart ?: artist.poster) {
@@ -306,10 +309,18 @@ private fun ArtistContent(
                         artist.overview?.let {
                             Text(it, style = MaterialTheme.typography.bodyMedium, color = Dim, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
                         }
-                        // Des albums manquent ou sont incomplets : Lidarr les cherche tous
-                        if (artist.albumList.any { it.status != "complete" }) {
-                            ArrButton("Chercher les albums manquants", onSearchMissing, leading = "⇩", compact = true, modifier = Modifier.padding(top = 10.dp))
+                        // Toujours proposés, comme pour un film ou une série :
+                        // albums studio manquants (suivis au passage), discographie relue
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 10.dp)) {
+                            ArrButton("Chercher les albums manquants", onSearchMissing, leading = "⇩", compact = true)
+                            ArrButton("Actualiser", onRefresh, leading = "↻", compact = true)
                         }
+                        Text(
+                            "Appui long sur un album : le récupérer, compléter ses pistes ou chercher une meilleure version",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Dim,
+                            modifier = Modifier.padding(top = 6.dp),
+                        )
                     }
                 }
             }

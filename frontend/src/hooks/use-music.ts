@@ -203,3 +203,55 @@ export function useImportDownload() {
     });
 }
 
+
+/** Actualiser un artiste : discographie relue sur MusicBrainz, dossier relu sur le disque. */
+export function useRefreshArtist() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (artistId: number) =>
+            apiFetch<MusicActionResult>(`/api/music/artists/${artistId}/refresh`, { method: "POST" }),
+        // Lidarr met quelques dizaines de secondes : on relit la fiche un peu plus tard
+        onSuccess: () => setTimeout(() => qc.invalidateQueries({ queryKey: ["music", "artist"] }), 20_000),
+    });
+}
+
+/** Release proposée par un indexeur pour un album (recherche manuelle). */
+export interface AlbumRelease {
+    guid: string;
+    indexer_id: number;
+    indexer: string;
+    title: string;
+    size_bytes: number;
+    seeders: number | null;
+    age_days: number;
+    /** « FLAC », « MP3-320 »… */
+    quality: string;
+    protocol: string;
+    /** Refusée par le profil de Lidarr (raisons dans `rejections`). */
+    rejected: boolean;
+    rejections: string[];
+}
+
+/** Recherche manuelle d'un album : lancée seulement quand on la demande (lente). */
+export function useAlbumReleases(albumId: number, enabled: boolean) {
+    return useQuery({
+        queryKey: ["music", "releases", albumId],
+        queryFn: () => apiFetch<{ items: AlbumRelease[]; total: number }>(`/api/music/albums/${albumId}/releases`),
+        enabled,
+        staleTime: 5 * 60_000,
+        retry: false,
+    });
+}
+
+/** Télécharger la release choisie (Lidarr l'envoie à SABnzbd puis l'importe). */
+export function useGrabAlbumRelease() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({ albumId, guid, indexerId }: { albumId: number; guid: string; indexerId: number }) =>
+            apiFetch<MusicActionResult>(`/api/music/albums/${albumId}/grab`, {
+                method: "POST",
+                body: JSON.stringify({ guid, indexer_id: indexerId }),
+            }),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ["music", "queue"] }),
+    });
+}

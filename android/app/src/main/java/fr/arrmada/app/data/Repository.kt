@@ -421,6 +421,10 @@ class Repository(private val api: Api) {
     suspend fun musicSearchArtist(artistId: Int): MusicActionResult =
         api.post("/api/music/artists/$artistId/search", empty, slow = true)
 
+    /** Actualiser un artiste : discographie relue sur MusicBrainz, dossier relu sur le disque. */
+    suspend fun musicRefreshArtist(artistId: Int): MusicActionResult =
+        api.post("/api/music/artists/$artistId/refresh", empty)
+
     /** Musique restée dans le dossier de téléchargements, par album. */
     suspend fun musicDownloads(): MusicDownloads = api.get("/api/music/downloads", slow = true)
 
