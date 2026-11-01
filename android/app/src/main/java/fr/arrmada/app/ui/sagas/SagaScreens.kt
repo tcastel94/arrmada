@@ -332,6 +332,14 @@ fun SagaScreen(
             .onFailure { error = it.message ?: "Radarr ne répond pas" }
     }
 
+    fun follow(on: Boolean) {
+        scope.launch {
+            runCatching { repository.sagaFollow(id, on) }
+                .onSuccess { Toast.makeText(context, it.message, Toast.LENGTH_LONG).show(); reload++ }
+                .onFailure { Toast.makeText(context, it.message ?: "Radarr ne répond pas", Toast.LENGTH_LONG).show() }
+        }
+    }
+
     fun complete(tmdbIds: List<Long>?) {
         scope.launch {
             runCatching { repository.sagaComplete(id, tmdbIds) }
@@ -397,6 +405,12 @@ fun SagaScreen(
                             } else if (next == null) {
                                 Text(SagaRules.badge(current), style = MaterialTheme.typography.titleSmall, color = if (current.upcoming > 0) ArrColors.Warning else ArrColors.Seen)
                             }
+                            // Suivre : Radarr ajoutera seul les prochains films de la saga
+                            ArrButton(
+                                if (current.monitored) "Suivie ✓" else "Suivre les nouveaux films",
+                                { follow(!current.monitored) },
+                                leading = if (current.monitored) null else "☆",
+                            )
                         }
                     }
                 }
