@@ -22,7 +22,8 @@ class HomeLayoutLogicTest {
         )
         val text = HomeLayoutLogic.serialize(slots)
         assertEquals("recent,resume,-watchlist,foryou,-upcoming", text)
-        assertEquals(slots, HomeLayoutLogic.parse(text))
+        // Rangée absente du réglage enregistré (ajoutée depuis) : à la fin, visible
+        assertEquals(slots + Slot(Row.SAGAS), HomeLayoutLogic.parse(text))
         assertEquals(listOf(Row.RECENT, Row.RESUME, Row.FOR_YOU), HomeLayoutLogic.visible(slots))
     }
 
