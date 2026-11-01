@@ -40,6 +40,7 @@ import {
     PackageX,
     Activity,
     HeartPulse,
+    Library,
     Sofa,
     type LucideIcon,
 } from "lucide-react";
@@ -57,6 +58,8 @@ export interface NavItem {
     keywords?: string[];
     /** Clé de badge dynamique (compteur affiché dans la sidebar). */
     badge?: "downloads" | "notifications" | "missing";
+    /** Sous-entrée de l'entrée précédente (décalée dans la sidebar), ex : Sagas sous Médiathèque. */
+    child?: boolean;
     /** Couleur de la vignette d'icône (écran « Plus »), classe Tailwind de fond. */
     tint?: string;
     /**
@@ -106,6 +109,16 @@ export const NAV_GROUPS: NavGroup[] = [
                 description: "Films et séries de ta collection",
                 shortcut: "m",
                 keywords: ["films", "séries", "library", "bibliothèque"],
+            },
+            {
+                href: "/media/sagas",
+                label: "Sagas",
+                icon: Library,
+                tint: "bg-[#BF5AF2]",
+                description: "Films regroupés par saga, ce qui manque",
+                shortcut: "a",
+                keywords: ["saga", "collection", "trilogie", "films", "compléter", "suite"],
+                child: true,
             },
             {
                 href: "/music",
