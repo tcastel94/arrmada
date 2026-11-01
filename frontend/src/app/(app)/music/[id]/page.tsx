@@ -6,12 +6,17 @@
  * Fond flou tiré de son image, photo, genres, présentation, puis ses albums
  * en pochettes carrées : albums studio d'abord, puis EP et singles, chacun
  * marqué complet, partiel (« 10/12 pistes ») ou manquant (grisé).
+ *
+ * Actions, comme pour un film ou une série :
+ *  - « Chercher les albums manquants » (albums studio absents ou incomplets) ;
+ *  - « Actualiser » (discographie relue sur MusicBrainz) ;
+ *  - clic sur un album : recherche automatique ou manuelle (AlbumDialog).
  */
 /* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import type { ReactNode } from "react";
-import { ArrowLeft, Disc3, Download, Loader2 } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { ArrowLeft, Disc3, Download, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Header } from "@/components/layout/header";
 import { PageContainer } from "@/components/shared/page-container";
@@ -22,7 +27,8 @@ import { PosterCard } from "@/components/shared/poster-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatBytes } from "@/lib/format";
-import { useArtist, useSearchAlbum, useSearchArtist, type Album } from "@/hooks/use-music";
+import { AlbumDialog } from "@/components/music/album-dialog";
+import { useArtist, useRefreshArtist, useSearchArtist, type Album } from "@/hooks/use-music";
 
 const GRID = "grid grid-cols-3 gap-x-3 gap-y-5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7";
 
@@ -49,6 +55,7 @@ export default function ArtistPage() {
     const params = useParams<{ id: string }>();
     const id = Number(params.id);
     const { data: artist, isLoading, isError, error, refetch } = useArtist(id);
+    const [opened, setOpened] = useState<Album | null>(null);
 
     return (
         <>
@@ -75,7 +82,10 @@ export default function ArtistPage() {
                                 artist.size_bytes ? formatBytes(artist.size_bytes) : null,
                             ]}
                             action={
-                                artist.album_list.some((a) => a.status !== "complete") ? <SearchMissing artistId={artist.id} /> : undefined
+                                <div className="flex flex-wrap gap-2 pt-1">
+                                    <SearchMissing artistId={artist.id} />
+                                    <RefreshArtist artistId={artist.id} />
+                                </div>
                             }
                         />
                         {artist.album_list.length === 0 ? (
@@ -83,7 +93,7 @@ export default function ArtistPage() {
                                 <EmptyState
                                     icon={Disc3}
                                     title="Aucun album pour l'instant"
-                                    description="Lidarr récupère la discographie sur MusicBrainz : reviens dans quelques minutes."
+                                    description="Lidarr récupère la discographie sur MusicBrainz : reviens dans quelques minutes, ou « Actualiser »."
                                 />
                             </div>
                         ) : (
@@ -94,13 +104,14 @@ export default function ArtistPage() {
                                     <Panel key={title} title={title} bodyClassName="p-3 md:p-4">
                                         <div className={GRID}>
                                             {albums.map((album) => (
-                                                <AlbumCard key={album.id} album={album} />
+                                                <AlbumCard key={album.id} album={album} onOpen={() => setOpened(album)} />
                                             ))}
                                         </div>
                                     </Panel>
                                 );
                             })
                         )}
+                        <AlbumDialog album={opened} onClose={() => setOpened(null)} />
                     </>
                 )}
             </PageContainer>
@@ -163,7 +174,10 @@ function ArtistHero({
     );
 }
 
-/** « Chercher les albums manquants » : Lidarr cherche tous les albums absents ou incomplets. */
+/**
+ * « Chercher les albums manquants » : albums studio absents ou incomplets,
+ * suivis au passage s'ils ne l'étaient pas (EP et singles : album par album).
+ */
 function SearchMissing({ artistId }: { artistId: number }) {
     const run = useSearchArtist();
     return (
@@ -173,7 +187,10 @@ function SearchMissing({ artistId }: { artistId: number }) {
             disabled={run.isPending}
             onClick={() =>
                 run.mutate(artistId, {
-                    onSuccess: (r) => toast.success("Recherche lancée", { description: r.message }),
+                    onSuccess: (r) =>
+                        r.status === "empty"
+                            ? toast.info("Rien à chercher", { description: r.message })
+                            : toast.success("Recherche lancée", { description: r.message }),
                     onError: (e) => toast.error("Recherche impossible", { description: e.message }),
                 })
             }
@@ -184,14 +201,29 @@ function SearchMissing({ artistId }: { artistId: number }) {
     );
 }
 
-function AlbumCard({ album }: { album: Album }) {
-    const search = useSearchAlbum();
-    const label = album.status === "partial" ? "Récupérer les pistes manquantes" : "Récupérer cet album";
-    const fetchIt = () =>
-        search.mutate(album.id, {
-            onSuccess: (r) => toast.success("Recherche lancée", { description: r.message }),
-            onError: (e) => toast.error("Recherche impossible", { description: e.message }),
-        });
+/** « Actualiser » : Lidarr relit la discographie (nouveaux albums) et le dossier de l'artiste. */
+function RefreshArtist({ artistId }: { artistId: number }) {
+    const run = useRefreshArtist();
+    return (
+        <Button
+            size="sm"
+            variant="secondary"
+            disabled={run.isPending || run.isSuccess}
+            onClick={() =>
+                run.mutate(artistId, {
+                    onSuccess: (r) => toast.success("Actualisation lancée", { description: r.message }),
+                    onError: (e) => toast.error("Actualisation impossible", { description: e.message }),
+                })
+            }
+        >
+            {run.isPending ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+            Actualiser
+        </Button>
+    );
+}
+
+/** Pochette d'un album : un clic ouvre ses recherches (AlbumDialog). */
+function AlbumCard({ album, onOpen }: { album: Album; onOpen: () => void }) {
     const state =
         album.status === "complete"
             ? null
@@ -209,13 +241,7 @@ function AlbumCard({ album }: { album: Album }) {
             subtitle={state ?? (album.year ? String(album.year) : album.type)}
             posterUrl={album.cover}
             dimmed={album.status === "missing"}
-            action={
-                album.status !== "complete" ? (
-                    <Button size="icon-sm" onClick={fetchIt} disabled={search.isPending} aria-label={`${label} : ${album.title}`} title={label}>
-                        {search.isPending ? <Loader2 className="animate-spin" /> : <Download />}
-                    </Button>
-                ) : undefined
-            }
+            onClick={onOpen}
             badges={
                 album.status === "complete" ? (
                     <Badge variant="success">Complet</Badge>

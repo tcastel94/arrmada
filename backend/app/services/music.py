@@ -122,6 +122,38 @@ def album_summary(album: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def release_summary(r: dict[str, Any]) -> dict[str, Any]:
+    """Release proposée par un indexeur pour un album (même forme que pour les films)."""
+    quality = (r.get("quality") or {}).get("quality") or {}
+    return {
+        "guid": r.get("guid"),
+        "indexer_id": r.get("indexerId"),
+        "indexer": r.get("indexer") or "",
+        "title": r.get("title") or "",
+        "size_bytes": r.get("size") or 0,
+        "seeders": r.get("seeders"),
+        "age_days": r.get("age") or 0,
+        "quality": quality.get("name") or "Inconnue",
+        "protocol": r.get("protocol") or "unknown",
+        "rejected": bool(r.get("rejected")),
+        "rejections": [str(x) for x in r.get("rejections") or []],
+    }
+
+
+def sort_releases(releases: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Acceptées d'abord, puis les plus partagées, puis les plus récentes."""
+    return sorted(releases, key=lambda x: (x["rejected"], -(x["seeders"] or 0), x["age_days"]))
+
+
+def missing_studio_albums(albums: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Albums studio absents ou incomplets d'un artiste (EP et singles à part)."""
+    return [
+        a
+        for a in albums
+        if (a.get("albumType") or "Album") == "Album" and album_summary(a)["status"] != "complete"
+    ]
+
+
 def sort_albums(albums: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Albums studio d'abord, puis EP et singles ; du plus récent au plus ancien."""
     order = {"Album": 0, "EP": 1, "Single": 2}

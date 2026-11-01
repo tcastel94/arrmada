@@ -218,6 +218,7 @@ _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         # manquants d'un artiste ; importer la musique restée dans les
         # téléchargements (dossiers vérifiés côté serveur)
         ("POST", r"/api/music/(albums|artists)/\d+/search"),
+        ("POST", r"/api/music/artists/\d+/refresh"),
         ("GET", r"/api/music/downloads"),
         ("POST", r"/api/music/downloads/import"),
         ("GET", r"/api/music/stream/[0-9a-f]{32}"),

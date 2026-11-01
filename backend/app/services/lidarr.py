@@ -51,6 +51,15 @@ class LidarrClient(ArrBaseClient):
         """Lancer une commande Lidarr (AlbumSearch, ArtistSearch, ManualImport…)."""
         return await self.post("/command", data={"name": name, **body})
 
+    # ── Releases (recherche manuelle) ─────────────────────────
+    async def get_releases(self, album_id: int) -> list[dict[str, Any]]:
+        """Interroge les indexeurs pour un album (lent : jusqu'à 2 min)."""
+        return await self.get("/release", params={"albumId": album_id})
+
+    async def grab_release(self, guid: str, indexer_id: int) -> dict[str, Any]:
+        """Envoie une release choisie au client de téléchargement."""
+        return await self.post("/release", data={"guid": guid, "indexerId": indexer_id})
+
     # ── Quality Profiles ──────────────────────────────────────
     async def get_quality_profiles(self) -> list[dict[str, Any]]:
         """Fetch available quality profiles."""

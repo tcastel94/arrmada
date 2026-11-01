@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Musique : rechercher et télécharger depuis la fiche d'un artiste
+
+#### Added
+- **Fiche d'un artiste, comme pour un film ou une série** (web app et TV) : « Chercher les albums manquants » et « Actualiser » (discographie relue sur MusicBrainz) toujours proposés
+- **Recherche d'un album** : web app, clic sur la pochette (fenêtre de l'album) ; TV, appui long. Recherche automatique : récupérer l'album, compléter ses pistes, ou chercher une meilleure version d'un album complet
+- **Recherche manuelle d'un album** (web app) : releases des indexeurs avec qualité, taille, âge et indexeur, refusées repliées avec leur raison, « Télécharger » sur celle choisie
+- Serveur : `POST /api/music/artists/{id}/refresh` (ouverte aux TV), `GET /api/music/albums/{id}/releases` et `POST /api/music/albums/{id}/grab` (web app)
+
+#### Changed
+- « Chercher les albums manquants » vise les albums studio absents ou incomplets et les suit s'ils ne l'étaient pas : la commande `ArtistSearch` de Lidarr ignorait les albums non suivis (cas d'un artiste importé depuis un dossier existant). EP et singles : album par album
+
 ### Musique : bonus de films ignorés dans les téléchargements
 
 #### Changed
