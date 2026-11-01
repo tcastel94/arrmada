@@ -125,9 +125,16 @@ function SagaCard({ saga }: { saga: Saga }) {
                     </span>
                     {have}/{saga.total}
                 </div>
-                <span className={cn("inline-block rounded-md px-1.5 py-1 text-[11px] font-semibold leading-none", TONE[badge.tone])}>
-                    {badge.label}
-                </span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                    <span className={cn("inline-block rounded-md px-1.5 py-1 text-[11px] font-semibold leading-none", TONE[badge.tone])}>
+                        {badge.label}
+                    </span>
+                    {saga.seen > 0 && (
+                        <span className="text-[11.5px] text-muted-foreground">
+                            {saga.seen} vu{saga.seen > 1 ? "s" : ""}
+                        </span>
+                    )}
+                </div>
             </div>
         </Link>
     );

@@ -5,7 +5,10 @@ Mêmes routes pour la web app et l'appli TV :
 - ``GET  /api/sagas``                  sagas de la bibliothèque, avec compteurs ;
 - ``GET  /api/sagas/{id}``             une saga et tous ses films, dans l'ordre ;
 - ``GET  /api/sagas/movie/{movie_id}`` la saga d'un film de Radarr (fiche film) ;
-- ``POST /api/sagas/{id}/complete``    ajoute à Radarr les films manquants.
+- ``POST /api/sagas/{id}/complete``    ajoute à Radarr les films manquants ;
+- ``GET  /api/sagas/in-progress``      sagas commencées, pas finies (TV : accueil).
+
+Le « vu » et la reprise sont ceux du profil famille de l'appel (ADR-008).
 """
 
 from __future__ import annotations
@@ -29,9 +32,8 @@ def _unreachable(exc: Exception) -> HTTPException:
     return HTTPException(status_code=502, detail="Radarr ne répond pas")
 
 
-@router.get("")
-async def list_sagas(db: AsyncSession = Depends(get_db)) -> dict:
-    """Sagas dont au moins un film est dans Radarr, ordre alphabétique."""
+async def _all_sagas(db: AsyncSession, profile_id: int | None) -> list[dict]:
+    """Toutes les sagas (deux films au moins), avec le vu du profil, ordre alphabétique."""
     client = await sagas.radarr_client(db)
     try:
         collections, library = await sagas.load(client)
@@ -39,10 +41,19 @@ async def list_sagas(db: AsyncSession = Depends(get_db)) -> dict:
         raise _unreachable(exc) from exc
     finally:
         await client.close()
+    watch = await sagas.movie_watch(db, profile_id)
     year = sagas.this_year()
-    items = sagas.sort_sagas([sagas.saga_summary(c, library, year) for c in collections])
+    items = sagas.sort_sagas([sagas.saga_summary(c, library, year, watch) for c in collections])
     # Une « collection » d'un seul film n'est pas une saga
-    items = [s for s in items if s["total"] > 1]
+    return [s for s in items if s["total"] > 1]
+
+
+@router.get("")
+async def list_sagas(
+    db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)
+) -> dict:
+    """Sagas dont au moins un film est dans Radarr, ordre alphabétique."""
+    items = await _all_sagas(db, user.get("profile_id"))
     return {
         "sagas": items,
         "total": len(items),
@@ -51,18 +62,33 @@ async def list_sagas(db: AsyncSession = Depends(get_db)) -> dict:
     }
 
 
+@router.get("/in-progress")
+async def sagas_in_progress(
+    db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)
+) -> dict:
+    """Sagas commencées (un film vu ou en cours) et pas finies, la plus récente d'abord.
+
+    Accueil de la TV : « Reprendre la saga » et rangée « Sagas à terminer ».
+    """
+    items = sagas.in_progress(await _all_sagas(db, user.get("profile_id")))
+    return {"sagas": items, "total": len(items)}
+
+
 @router.get("/movie/{movie_id}")
-async def saga_of_movie(movie_id: int, db: AsyncSession = Depends(get_db)) -> dict:
+async def saga_of_movie(
+    movie_id: int, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)
+) -> dict:
     """La saga d'un film de Radarr et sa place dedans (bloc « Saga » de la fiche film).
 
-    ``saga`` vaut null si le film n'appartient à aucune saga.
+    ``saga`` vaut null si le film n'appartient à aucune saga. ``following`` :
+    le film suivant de la saga sur le NAS (fin d'un film sur la TV), ou null.
     """
     client = await sagas.radarr_client(db)
     try:
         movie = await client.get_movie_by_id(movie_id)
         tmdb = int((movie.get("collection") or {}).get("tmdbId") or 0)
         if not tmdb:
-            return {"saga": None, "position": None}
+            return {"saga": None, "position": None, "following": None}
         collections, library = await sagas.load(client)
     except httpx.HTTPStatusError as exc:
         if exc.response.status_code == 404:
@@ -74,18 +100,26 @@ async def saga_of_movie(movie_id: int, db: AsyncSession = Depends(get_db)) -> di
         await client.close()
     found = next((c for c in collections if int(c.get("tmdbId") or 0) == tmdb), None)
     if found is None:
-        return {"saga": None, "position": None}
-    detail = sagas.saga_detail(found, library, sagas.this_year())
+        return {"saga": None, "position": None, "following": None}
+    watch = await sagas.movie_watch(db, user.get("profile_id"))
+    detail = sagas.saga_detail(found, library, sagas.this_year(), watch)
     if detail["total"] < 2:
-        return {"saga": None, "position": None}
+        return {"saga": None, "position": None, "following": None}
     position = next(
         (i + 1 for i, f in enumerate(detail["films"]) if f["movie_id"] == movie_id), None
     )
-    return {"saga": detail, "position": position}
+    following = (
+        next((f for f in detail["films"][position:] if f["state"] == "available"), None)
+        if position
+        else None
+    )
+    return {"saga": detail, "position": position, "following": following}
 
 
 @router.get("/{saga_id}")
-async def get_saga(saga_id: int, db: AsyncSession = Depends(get_db)) -> dict:
+async def get_saga(
+    saga_id: int, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)
+) -> dict:
     """Une saga et tous ses films (sur le NAS, attendus, manquants, annoncés)."""
     client = await sagas.radarr_client(db)
     try:
@@ -99,7 +133,8 @@ async def get_saga(saga_id: int, db: AsyncSession = Depends(get_db)) -> dict:
         raise _unreachable(exc) from exc
     finally:
         await client.close()
-    return sagas.saga_detail(collection, library, sagas.this_year())
+    watch = await sagas.movie_watch(db, user.get("profile_id"))
+    return sagas.saga_detail(collection, library, sagas.this_year(), watch)
 
 
 class CompleteBody(BaseModel):

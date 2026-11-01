@@ -19,6 +19,14 @@ film, s'il est sur le NAS, attendu, manquant ou pas encore sorti.
   ajouté par « Compléter la saga ».
 
 Ordre : l'ordre de sortie (année, puis titre), le seul que TMDB donne.
+
+Films vus (étape 2)
+-------------------
+ArrMada garde déjà le « vu » et la reprise de chaque film, par profil
+famille, dans `watch_states` (partagés par les TV, ADR-004 et ADR-008).
+Une saga en tire : les films vus, le **prochain film à voir** (le premier
+sur le NAS, dans l'ordre, pas encore vu ; commencé : avec sa reprise) et
+l'heure du dernier film regardé (rangée « Sagas à terminer »).
 """
 
 from __future__ import annotations
@@ -31,6 +39,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.service import Service
+from app.models.watch_state import WatchState
+from app.services import watch_sync
 from app.services.encryption import decrypt_api_key
 from app.services.radarr import RadarrClient
 from app.utils.logger import get_logger
@@ -82,11 +92,17 @@ def _state(film: dict[str, Any], library: dict[int, dict[str, Any]], year_now: i
 
 
 def film_summary(
-    film: dict[str, Any], library: dict[int, dict[str, Any]], year_now: int
+    film: dict[str, Any],
+    library: dict[int, dict[str, Any]],
+    year_now: int,
+    watch: dict[int, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Un film d'une saga, avec son état et, s'il est dans Radarr, son identifiant."""
+    """Un film d'une saga : état, identifiant Radarr, vu / reprise du profil."""
     tmdb_id = int(film.get("tmdbId") or 0)
     movie = library.get(tmdb_id)
+    seen = (watch or {}).get(tmdb_id) or {}
+    watched = bool(seen.get("watched"))
+    position, total = int(seen.get("position") or 0), int(seen.get("total") or 0)
     return {
         "tmdb_id": tmdb_id,
         "movie_id": movie.get("id") if movie else None,
@@ -97,6 +113,13 @@ def film_summary(
         "poster": _image(film.get("images"), "poster")
         or (_image(movie.get("images"), "poster") if movie else None),
         "state": _state(film, library, year_now),
+        "watched": watched,
+        "position": 0 if watched else position,  # s : reprise d'un film commencé
+        # % (1-99) d'un film commencé, None sinon
+        "progress": None
+        if watched or position <= 0 or total <= 0
+        else max(1, min(99, round(position * 100 / total))),
+        "watched_at": seen.get("updated_at") or None,
     }
 
 
@@ -105,12 +128,34 @@ def _ordered(films: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(films, key=lambda f: (f["year"] or 9999, f["title"].casefold()))
 
 
+def _films(
+    collection: dict[str, Any],
+    library: dict[int, dict[str, Any]],
+    year_now: int,
+    watch: dict[int, dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
+    return _ordered(
+        [film_summary(f, library, year_now, watch) for f in collection.get("movies") or []]
+    )
+
+
+def next_film(films: list[dict[str, Any]], after: int = 0) -> dict[str, Any] | None:
+    """Prochain film à voir : le premier sur le NAS, pas encore vu, à partir de [after] (index)."""
+    return next((f for f in films[after:] if f["state"] == "available" and not f["watched"]), None)
+
+
 def saga_summary(
-    collection: dict[str, Any], library: dict[int, dict[str, Any]], year_now: int
+    collection: dict[str, Any],
+    library: dict[int, dict[str, Any]],
+    year_now: int,
+    watch: dict[int, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Une saga pour la grille : compteurs et trois affiches pour l'éventail."""
-    films = _ordered([film_summary(f, library, year_now) for f in collection.get("movies") or []])
+    """Une saga pour la grille : compteurs, trois affiches (éventail), films vus, suivant."""
+    films = _films(collection, library, year_now, watch)
     count = {s: sum(1 for f in films if f["state"] == s) for s in _STATES}
+    seen = sum(1 for f in films if f["watched"])
+    started = seen > 0 or any(f["progress"] for f in films)
+    upcoming_next = next_film(films)
     posters = [f["poster"] for f in films if f["poster"]][:3]
     return {
         "id": collection.get("id"),
@@ -129,15 +174,29 @@ def saga_summary(
         # Rien à ajouter : tous les films sortis sont dans Radarr
         "complete": count["missing"] == 0,
         "years": [y for y in (films[0]["year"], films[-1]["year"]) if y] if films else [],
+        "seen": seen,
+        "started": started,
+        # Prochain film à voir (« Reprendre la saga ») ; None : rien de prêt
+        "next": upcoming_next,
+        "last_watched_at": max((f["watched_at"] for f in films if f["watched_at"]), default=None),
     }
 
 
 def saga_detail(
-    collection: dict[str, Any], library: dict[int, dict[str, Any]], year_now: int
+    collection: dict[str, Any],
+    library: dict[int, dict[str, Any]],
+    year_now: int,
+    watch: dict[int, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Fiche d'une saga : le résumé et tous ses films, dans l'ordre de sortie."""
-    films = _ordered([film_summary(f, library, year_now) for f in collection.get("movies") or []])
-    return {**saga_summary(collection, library, year_now), "films": films}
+    films = _films(collection, library, year_now, watch)
+    return {**saga_summary(collection, library, year_now, watch), "films": films}
+
+
+def in_progress(sagas: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Sagas commencées et pas finies (un film prêt reste à voir), la plus récente d'abord."""
+    started = [s for s in sagas if s["started"] and s["next"] is not None]
+    return sorted(started, key=lambda s: s["last_watched_at"] or "", reverse=True)
 
 
 def sort_sagas(sagas: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -160,6 +219,31 @@ def library_by_tmdb(movies: list[dict[str, Any]]) -> dict[int, dict[str, Any]]:
 
 def this_year() -> int:
     return datetime.now(UTC).year
+
+
+async def movie_watch(db: AsyncSession, profile_id: int | None) -> dict[int, dict[str, Any]]:
+    """Vu / reprise des films du profil, par identifiant TMDB (`watch_states`)."""
+    rows = (
+        (
+            await db.execute(
+                select(WatchState).where(
+                    WatchState.media_type == "movie",
+                    WatchState.id_type == "tmdb",
+                    WatchState.profile_id.is_(None)
+                    if profile_id is None
+                    else WatchState.profile_id == profile_id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    out: dict[int, dict[str, Any]] = {}
+    for row in rows:
+        state = watch_sync.public(row)
+        if str(state["id"]).isdigit():
+            out[int(state["id"])] = state
+    return out
 
 
 # ── Appels à Radarr ───────────────────────────────────────────

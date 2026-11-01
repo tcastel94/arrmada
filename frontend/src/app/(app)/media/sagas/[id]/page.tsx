@@ -100,7 +100,9 @@ function SagaHero({ saga }: { saga: SagaDetail }) {
                 <div className="min-w-0 space-y-2">
                     <h1 className="break-words text-ios-large md:text-[2rem] md:leading-[2.375rem]">{saga.title}</h1>
                     <p className="text-[14px] text-muted-foreground">
-                        {[`${saga.total} films`, years, `${saga.available} sur le NAS`].filter(Boolean).join(" · ")}
+                        {[`${saga.total} films`, years, `${saga.available} sur le NAS`, saga.seen ? `${saga.seen} vu${saga.seen > 1 ? "s" : ""}` : null]
+                            .filter(Boolean)
+                            .join(" · ")}
                     </p>
                     <span className={cn("inline-block rounded-md px-1.5 py-1 text-[11px] font-semibold leading-none", SAGA_TONE[badge.tone])}>
                         {badge.label}
@@ -147,8 +149,11 @@ function FilmCard({ saga, film, index }: { saga: SagaDetail; film: SagaFilm; ind
             posterUrl={film.poster}
             href={film.movie_id ? `/media/movie/${film.movie_id}` : undefined}
             dimmed={film.state === "missing" || film.state === "upcoming" || film.state === "excluded"}
+            progress={film.progress ?? undefined}
             badges={
-                film.state === "wanted" ? (
+                film.watched ? (
+                    <Badge variant="success">✓ Vu</Badge>
+                ) : film.state === "wanted" ? (
                     <Badge variant="secondary">En recherche</Badge>
                 ) : film.state === "upcoming" ? (
                     <Badge variant="warning">Annoncé</Badge>

@@ -8,15 +8,18 @@ import { mockApi } from "./api-mock";
 
 const film = (tmdb: number, title: string, year: number, state: string, movie_id: number | null = null) => ({
     tmdb_id: tmdb, movie_id, title, year, overview: null, runtime: null, poster: null, state,
+    watched: false, progress: null,
 });
 
 const DUNE = {
     id: 2, tmdb_id: 726871, title: "Dune", overview: "La saga d'Arrakis.", poster: null, fanart: null, posters: [],
     monitored: false, total: 3, available: 1, wanted: 0, missing: 1, upcoming: 1, complete: false, years: [2021, 2026],
+    seen: 1, next: null,
 };
 const LOTR = {
     id: 1, tmdb_id: 119, title: "Le Seigneur des anneaux", overview: null, poster: null, fanart: null, posters: [],
     monitored: false, total: 3, available: 3, wanted: 0, missing: 0, upcoming: 0, complete: true, years: [2001, 2003],
+    seen: 0, next: null,
 };
 
 test("grille des sagas : compteurs, badges et filtres", async ({ page }) => {
@@ -40,7 +43,7 @@ test("fiche d'une saga : films dans l'ordre, compléter la saga, ajouter un film
             () => ({
                 ...DUNE,
                 films: [
-                    film(438631, "Dune", 2021, "available", 20),
+                    { ...film(438631, "Dune", 2021, "available", 20), watched: true },
                     film(693134, "Dune, deuxième partie", 2024, "missing"),
                     film(1170608, "Dune, troisième partie", 2026, "upcoming"),
                 ],
@@ -58,7 +61,8 @@ test("fiche d'une saga : films dans l'ordre, compléter la saga, ajouter un film
 
     await page.goto("/media/sagas/2");
     await expect(page.getByRole("heading", { name: "Dune", level: 1 })).toBeVisible();
-    await expect(page.getByText("3 films · 2021 – 2026 · 1 sur le NAS")).toBeVisible();
+    await expect(page.getByText("3 films · 2021 – 2026 · 1 sur le NAS · 1 vu")).toBeVisible();
+    await expect(page.getByText("✓ Vu")).toBeVisible();
     await expect(page.getByText(/2 · 2024 · Pas sur le NAS/)).toBeVisible();
     await expect(page.getByText(/3 · 2026 · Annoncé/)).toBeVisible();
     // Le film sur le NAS mène à sa fiche

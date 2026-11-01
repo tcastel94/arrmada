@@ -191,7 +191,7 @@ async def test_saga_of_movie(client: AsyncClient, radarr: dict[str, str]) -> Non
     assert body["saga"]["title"] == "Le Seigneur des anneaux"
     assert body["position"] == 2
     alone = (await client.get("/api/sagas/movie/40", headers=radarr)).json()
-    assert alone == {"saga": None, "position": None}
+    assert alone == {"saga": None, "position": None, "following": None}
 
 
 async def test_get_saga(client: AsyncClient, radarr: dict[str, str]) -> None:
@@ -248,3 +248,74 @@ async def test_no_radarr(client: AsyncClient, radarr: dict[str, str]) -> None:
 )
 def test_device_rights(method: str, path: str, allowed: bool) -> None:
     assert device_may_call(method, path) is allowed
+
+
+# ── Étape 2 : films vus (watch_states, par profil) ────────────
+
+
+async def _watch(
+    tmdb: int,
+    *,
+    watched: bool = False,
+    position: int = 0,
+    at: str = "2026-10-01",
+    profile_id: int | None = None,
+) -> None:
+    from datetime import datetime
+
+    from app.api.deps import get_db
+    from app.main import app
+    from app.models.watch_state import WatchState
+
+    # Même base que l'API pendant les tests (dépendance remplacée par conftest)
+    sessions = app.dependency_overrides[get_db]()
+    session = await anext(sessions)
+    try:
+        session.add(WatchState(
+            key=f"{'' if profile_id is None else f'p{profile_id}:'}movie:tmdb:{tmdb}",
+            media_type="movie", id_type="tmdb", external_id=str(tmdb), title="",
+            watched=watched, position=position, total=10_000, profile_id=profile_id,
+            updated_at=datetime.fromisoformat(at + "T20:00:00+00:00"),
+        ))  # fmt: skip
+        await session.commit()
+    finally:
+        await sessions.aclose()
+
+
+def test_next_film_and_seen() -> None:
+    library = sagas.library_by_tmdb(MOVIES)
+    watch = {120: {"watched": True, "updated_at": "2026-10-01T20:00:00+00:00"}}
+    lotr = sagas.saga_summary(COLLECTIONS[0], library, 2026, watch)
+    assert (lotr["seen"], lotr["started"]) == (1, True)
+    assert lotr["next"]["title"] == "Les Deux Tours"  # le premier pas encore vu, sur le NAS
+    assert lotr["last_watched_at"] == "2026-10-01T20:00:00+00:00"
+    fresh = sagas.saga_summary(COLLECTIONS[0], library, 2026)
+    assert (fresh["seen"], fresh["started"]) == (0, False)
+    assert fresh["next"]["title"] == "La Communauté de l'anneau"
+
+
+async def test_in_progress_and_watched_flags(client: AsyncClient, radarr: dict[str, str]) -> None:
+    await _declare_radarr(client, radarr)
+    await _watch(120, watched=True, at="2026-10-01")  # Seigneur des anneaux : 1 vu
+    await _watch(438631, position=5000, at="2026-10-20")  # Dune : commencé, plus récent
+    await _watch(121, watched=True, profile_id=7)  # autre profil : ignoré ici
+    body = (await client.get("/api/sagas/in-progress", headers=radarr)).json()
+    assert [s["title"] for s in body["sagas"]] == ["Dune", "Le Seigneur des anneaux"]
+    dune = body["sagas"][0]
+    assert dune["next"]["title"] == "Dune" and dune["next"]["progress"] == 50  # reprise
+
+    detail = (await client.get("/api/sagas/1", headers=radarr)).json()
+    assert [f["watched"] for f in detail["films"]] == [True, False, False]
+
+
+async def test_following_film_for_the_player(client: AsyncClient, radarr: dict[str, str]) -> None:
+    await _declare_radarr(client, radarr)
+    body = (await client.get("/api/sagas/movie/10", headers=radarr)).json()
+    assert body["position"] == 1
+    assert body["following"]["title"] == "Les Deux Tours"
+    last = (await client.get("/api/sagas/movie/11", headers=radarr)).json()
+    assert last["following"] is None  # Le Retour du roi n'est pas sur le NAS
+
+
+def test_in_progress_device_right() -> None:
+    assert device_may_call("GET", "/api/sagas/in-progress")
