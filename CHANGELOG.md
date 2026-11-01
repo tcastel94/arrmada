@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Musique (Lidarr) : API commune, étape 1
+
+#### Added
+- **API `/api/music`** pour la web app et l'appli TV ([ADR-015](docs/adr/015-musique-lidarr.md)) : état (`/status` : Lidarr déclaré, bibliothèque « Musique » dans Jellyfin, conseil en clair sinon), artistes suivis (`/artists`), fiche et albums complets / partiels / manquants (`/artists/{id}`), recherche MusicBrainz avec « déjà suivi » (`/lookup`), suivi d'un artiste avec recherche de ses albums (`POST /artists`), file de téléchargement (`/queue`)
+- Les TV appairées peuvent lire ces routes et demander un artiste, jamais en supprimer ni en modifier
+- Client Lidarr : fiche d'un artiste, albums d'un artiste, profils de métadonnées ; la file inclut l'artiste et l'album
+- 20 tests (mise en forme, droits des appareils, faux Lidarr et faux Jellyfin)
+
 ### Appli Android : « Rechercher une mise à jour » sans attendre l'heure
 
 #### Changed

@@ -17,6 +17,10 @@ class LidarrClient(ArrBaseClient):
         """Fetch all artists."""
         return await self.get("/artist")
 
+    async def get_artist(self, artist_id: int) -> dict[str, Any]:
+        """Fetch one artist."""
+        return await self.get(f"/artist/{artist_id}")
+
     async def lookup_artist(self, term: str) -> list[dict[str, Any]]:
         """Search for an artist."""
         return await self.get("/artist/lookup", params={"term": term})
@@ -26,14 +30,19 @@ class LidarrClient(ArrBaseClient):
         return await self.post("/artist", data=data)
 
     # ── Albums ────────────────────────────────────────────────
-    async def get_albums(self) -> list[dict[str, Any]]:
-        """Fetch all albums."""
-        return await self.get("/album")
+    async def get_albums(self, artist_id: int | None = None) -> list[dict[str, Any]]:
+        """Fetch all albums, or only those of one artist."""
+        params = {"artistId": artist_id} if artist_id is not None else None
+        return await self.get("/album", params=params)
 
     # ── Quality Profiles ──────────────────────────────────────
     async def get_quality_profiles(self) -> list[dict[str, Any]]:
         """Fetch available quality profiles."""
         return await self.get("/qualityprofile")
+
+    async def get_metadata_profiles(self) -> list[dict[str, Any]]:
+        """Fetch metadata profiles (which release types to follow: albums, EP, singles…)."""
+        return await self.get("/metadataprofile")
 
     # ── Root Folders ──────────────────────────────────────────
     async def get_root_folders(self) -> list[dict[str, Any]]:
@@ -43,4 +52,6 @@ class LidarrClient(ArrBaseClient):
     # ── Queue ─────────────────────────────────────────────────
     async def get_queue(self) -> dict[str, Any]:
         """Fetch the download queue."""
-        return await self.get("/queue", params={"pageSize": 50})
+        return await self.get(
+            "/queue", params={"pageSize": 50, "includeArtist": "true", "includeAlbum": "true"}
+        )
