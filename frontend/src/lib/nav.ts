@@ -26,6 +26,7 @@ import {
     LayoutDashboard,
     Film,
     History,
+    Music,
     Download,
     Search,
     BarChart3,
@@ -105,6 +106,15 @@ export const NAV_GROUPS: NavGroup[] = [
                 description: "Films et séries de ta collection",
                 shortcut: "m",
                 keywords: ["films", "séries", "library", "bibliothèque"],
+            },
+            {
+                href: "/music",
+                label: "Musique",
+                icon: Music,
+                tint: "bg-[#FF2D55]",
+                description: "Artistes et albums suivis par Lidarr",
+                shortcut: "u",
+                keywords: ["musique", "music", "lidarr", "artistes", "albums", "écouter"],
             },
             {
                 href: "/media/continue",

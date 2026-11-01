@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Musique (Lidarr) : pages de la web app, étape 2
+
+#### Added
+- **Page Musique** (menu Bibliothèque, raccourci `g` + `u`) : artistes suivis par Lidarr en pochettes carrées (« 3 albums · 20/30 pistes », grisés tant que rien n'est sur le NAS), albums en téléchargement avec progression, et **« Ajouter un artiste »** : recherche MusicBrainz, bouton « Suivre » (Lidarr cherche aussitôt ses albums), « Suivi » pour ceux déjà dans la bibliothèque
+- **Fiche d'un artiste** (`/music/{id}`) : photo sur fond flou, genres, présentation, taille sur le NAS ; albums puis EP puis singles, chacun marqué **Complet**, **Partiel** (« 10/12 pistes ») ou grisé (« Recherché », « Non suivi »)
+- Bandeau d'aide quand quelque chose manque : Lidarr non déclaré (lien vers les services) ou pas de bibliothèque « Musique » dans Jellyfin pour écouter
+- Carte affiche commune : format carré (`square`) et pictogramme disque pour la musique
+- Tests de bout en bout `e2e/music.spec.ts` (grille, conseil Jellyfin, ajout, fiche)
+
 ### Musique (Lidarr) : API commune, étape 1
 
 #### Added

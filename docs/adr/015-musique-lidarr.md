@@ -44,7 +44,7 @@ film ou une série), jamais en supprimer ni en modifier.
 | Étape | Contenu |
 |---|---|
 | 1. API (ce document) | Routes ci-dessus, client Lidarr complété, vérification Jellyfin, tests |
-| 2. Web app | Pages Musique : artistes, fiche avec albums, recherche et ajout, file ; conseil si la bibliothèque Jellyfin manque |
+| 2. Web app (fait) | Page `/music` : artistes, recherche et « Suivre », file ; fiche `/music/{id}` avec albums complets / partiels / manquants ; conseil si Lidarr ou la bibliothèque Jellyfin manque |
 | 3. Appli TV | Écran Musique : artistes, albums, écoute via Jellyfin (lecteur audio avec pochette, piste suivante), recherche et demande d'un artiste |
 
 ## Conséquences
