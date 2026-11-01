@@ -9,6 +9,8 @@ import android.content.pm.ActivityInfo
 import fr.arrmada.app.ui.components.LocalScreen
 import androidx.compose.foundation.layout.widthIn
 import fr.arrmada.app.ui.components.gutter
+import fr.arrmada.app.data.SagaRules
+import fr.arrmada.app.data.MovieSaga
 import fr.arrmada.app.data.Recap
 import fr.arrmada.app.data.RecapLogic
 import fr.arrmada.app.data.TrackLanguageLogic
@@ -167,6 +169,7 @@ fun PlayerScreen(request: PlayRequest, app: ArrMadaApplication, onExit: () -> Un
     var meta by remember { mutableStateOf<PlaybackMeta?>(null) }
     var series by remember { mutableStateOf<SeriesDetail?>(null) }
     var local by remember { mutableStateOf<LocalSeriesDetail?>(null) } // série maison
+    var movieSaga by remember(request) { mutableStateOf<MovieSaga?>(null) } // film d'une saga : le suivant
     var error by remember { mutableStateOf<String?>(null) }
     // « Précédemment dans… » : décidé en parallèle du chargement (2,5 s au plus)
     var recap by remember(request) { mutableStateOf<Recap?>(null) }
@@ -193,6 +196,15 @@ fun PlayerScreen(request: PlayRequest, app: ArrMadaApplication, onExit: () -> Un
         found?.let { repository.markRecapShown(request.id) }
         recap = found
         recapChecked = true
+    }
+
+    // Film d'une saga (ADR-016) : le film suivant sur le NAS, pour la carte
+    // de fin « Film suivant » (lu à côté, sans retarder la lecture)
+    LaunchedEffect(request) {
+        val radarrId = request.radarrId
+        if (request.kind == "movie" && !radarrId.isNullOrBlank()) {
+            movieSaga = runCatching { repository.movieSaga(radarrId) }.getOrNull()
+        }
     }
 
     /** Fiche du titre (film Radarr, série Sonarr ou série maison) → [meta]. */
@@ -278,8 +290,24 @@ fun PlayerScreen(request: PlayRequest, app: ArrMadaApplication, onExit: () -> Un
             )
         }
     }
+    // Film d'une saga : le film suivant de la saga, s'il est sur le NAS
+    val sagaUpNext = movieSaga?.let { ms ->
+        val saga = ms.saga
+        val next = ms.following
+        val nextId = next?.movieId
+        if (saga != null && next != null && nextId != null) {
+            UpNext(
+                request = PlayRequest("movie", next.tmdbId, radarrId = nextId.toString()),
+                code = SagaRules.upNextCode(saga, next),
+                title = next.title,
+                image = saga.fanart ?: next.poster,
+            )
+        } else {
+            null
+        }
+    }
     // Série maison : vidéo suivante de la série (dans l'arc, sinon l'arc suivant)
-    val upNext = seriesUpNext ?: local?.let { d ->
+    val upNext = seriesUpNext ?: sagaUpNext ?: local?.let { d ->
         LocalSeriesLogic.next(d, request.file.orEmpty())?.let { ep ->
             UpNext(
                 request = request.copy(file = ep.token, season = ep.seasonNumber, episode = ep.episodeNumber, startSeconds = 0),
@@ -1356,7 +1384,9 @@ fun UpNextCard(next: UpNext, countdown: Int, absolute: (String?) -> String?) {
     ) {
         ArtImage(absolute(next.image), next.title, Modifier.width(150.dp).height(84.dp).clip(RoundedCornerShape(8.dp)))
         Column(Modifier.weight(1f)) {
-            Text("Épisode suivant dans $countdown s", style = MaterialTheme.typography.labelLarge, color = ArrColors.AccentText)
+            // Film d'une saga : « Film suivant » (ADR-016), sinon « Épisode suivant »
+            val what = if (next.request.kind == "movie") "Film suivant" else "Épisode suivant"
+            Text("$what dans $countdown s", style = MaterialTheme.typography.labelLarge, color = ArrColors.AccentText)
             Text("${next.code} · ${next.title}", style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             ProgressBar(
                 1f - countdown.toFloat() / PlaybackLogic.UP_NEXT_SECONDS,

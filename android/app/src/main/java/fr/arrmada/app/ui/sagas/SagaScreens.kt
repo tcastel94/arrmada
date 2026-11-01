@@ -307,7 +307,13 @@ private fun SagaCard(
  * l'ajouter à Radarr.
  */
 @Composable
-fun SagaScreen(repository: Repository, id: Int, onMovie: (SagaFilm) -> Unit, onBack: () -> Unit) {
+fun SagaScreen(
+    repository: Repository,
+    id: Int,
+    onMovie: (SagaFilm) -> Unit,
+    onBack: () -> Unit,
+    onPlay: (SagaFilm) -> Unit = onMovie, // « Reprendre la saga » : lance le prochain film
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val motion = rememberMotion()
@@ -375,15 +381,20 @@ fun SagaScreen(repository: Repository, id: Int, onMovie: (SagaFilm) -> Unit, onB
                         Text(SagaRules.facts(current), style = MaterialTheme.typography.labelLarge, color = ArrColors.TextSecondary)
                         SagaBar(progress, Modifier.width(320.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 6.dp)) {
+                            // Prochain film à voir (vu partagé des TV) : le premier bouton
+                            val next = current.next
+                            val nextLabel = SagaRules.nextLabel(current)
+                            if (next != null && nextLabel != null) {
+                                ArrButton(nextLabel, { onPlay(next) }, leading = "▶", primary = true, modifier = Modifier.focusRequester(first))
+                            }
                             if (current.missing > 0) {
                                 ArrButton(
                                     "Compléter la saga (${current.missing})",
                                     { askComplete = true },
                                     leading = "+",
-                                    primary = true,
-                                    modifier = Modifier.focusRequester(first),
+                                    modifier = if (next == null) Modifier.focusRequester(first) else Modifier,
                                 )
-                            } else {
+                            } else if (next == null) {
                                 Text(SagaRules.badge(current), style = MaterialTheme.typography.titleSmall, color = if (current.upcoming > 0) ArrColors.Warning else ArrColors.Seen)
                             }
                         }
@@ -422,6 +433,8 @@ fun SagaScreen(repository: Repository, id: Int, onMovie: (SagaFilm) -> Unit, onB
                                 width = 128.dp,
                                 tag = SagaRules.tag(film),
                                 dimmed = SagaRules.dimmed(film),
+                                seen = film.watched,
+                                progress = film.progress?.let { it / 100f },
                                 onClick = {
                                     when (film.state) {
                                         "available", "wanted" -> onMovie(film)
@@ -430,7 +443,7 @@ fun SagaScreen(repository: Repository, id: Int, onMovie: (SagaFilm) -> Unit, onB
                                         else -> Toast.makeText(context, "Film écarté dans Radarr (liste d'exclusions)", Toast.LENGTH_SHORT).show()
                                     }
                                 },
-                                modifier = if (current.missing == 0 && index == 0) Modifier.focusRequester(first) else Modifier,
+                                modifier = if (current.missing == 0 && current.next == null && index == 0) Modifier.focusRequester(first) else Modifier,
                             )
                             Text(film.title, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(128.dp))
                         }

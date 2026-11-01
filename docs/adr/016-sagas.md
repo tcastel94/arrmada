@@ -59,7 +59,7 @@ Les TV peuvent compléter une saga comme elles peuvent demander un film.
 | Étape | Contenu |
 |---|---|
 | 1 (ce document) | API, page Sagas, fiche d'une saga et « Compléter », bloc Saga de la fiche film, vue Sagas de la TV |
-| 2 | Films vus (Jellyfin) : « Reprendre la saga », rangée « Sagas à terminer » de l'accueil TV, film suivant à la fin d'un film |
+| 2 (fait) | Films vus (vu partagé des TV, `watch_states`, par profil) : « Reprendre la saga », rangée « Sagas à terminer » de l'accueil TV, film suivant à la fin d'un film ; route `GET /in-progress` |
 | 3 | Suivi des nouveaux films d'une saga (collection surveillée par Radarr) avec notification, ordre chronologique modifiable, collections Jellyfin |
 
 ## Conséquences

@@ -48,6 +48,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import fr.arrmada.app.data.SagaRules
 import fr.arrmada.app.data.Api
 import fr.arrmada.app.data.CalendarEntry
 import fr.arrmada.app.data.CardTagLogic
@@ -97,6 +98,7 @@ data class HomeState(
     val recent: List<LibraryItem> = emptyList(),
     val forYou: List<TmdbItem> = emptyList(),
     val upcoming: List<CalendarEntry> = emptyList(),
+    val sagas: List<fr.arrmada.app.data.Saga> = emptyList(), // sagas commencées, pas finies (ADR-016)
     val downloads: Int = 0, // téléchargements en cours (file Radarr / Sonarr) : pastille de la barre du haut
 )
 
@@ -131,6 +133,7 @@ class HomeViewModel(private val repository: Repository) : ViewModel() {
             val upcoming = async { runCatching { repository.upcoming() } }
             val watchlist = async { runCatching { WatchlistLogic.ordered(repository.watchlist()) } }
             val downloads = async { runCatching { repository.board().queue.size } }
+            val sagas = async { runCatching { repository.sagasInProgress().sagas.take(20) } }
             val resume = async {
                 runCatching {
                     val states = repository.watchStates()
@@ -164,6 +167,7 @@ class HomeViewModel(private val repository: Repository) : ViewModel() {
                         .take(20)
                 } ?: emptyList(),
                 upcoming = upcoming.await().getOrNull()?.items.orEmpty().take(20),
+                sagas = sagas.await().getOrDefault(emptyList()),
                 downloads = downloads.await().getOrDefault(0),
             )
         }
@@ -178,6 +182,7 @@ class HomeActions(
     val open: (LibraryItem) -> Unit = {}, // fiche film ou écran Série
     val openMovieId: (Int) -> Unit = {}, // fiche film par identifiant Radarr
     val openSeriesId: (Int) -> Unit = {}, // écran Série par identifiant Sonarr
+    val openSaga: (Int) -> Unit = {}, // une saga (« Sagas à terminer »)
     val resume: (ResumeEntry) -> Unit = {},
     val openWatchlist: (WatchlistItem) -> Unit = {}, // « Ma liste » : fiche, ou feuille « Télécharger »
     val request: (TmdbItem) -> Unit = {}, // titre absent : feuille « Télécharger »
@@ -314,6 +319,18 @@ fun HomeContent(state: HomeState, absolute: (String?) -> String?, onRetry: () ->
                                     modifier = if (focusFirst && entry == state.resume.first()) Modifier.focusRequester(firstFocus) else Modifier,
                                 )
                             }
+                            HomeLayoutLogic.Row.SAGAS -> ContentRow(row.label, state.sagas, key = { "s" + it.id }) { saga ->
+                                // Affiche du prochain film à voir, « 3 vus sur 8 » en étiquette
+                                PosterCard(
+                                    imageUrl = saga.next?.poster ?: saga.poster,
+                                    title = saga.title,
+                                    onClick = { actions.openSaga(saga.id) },
+                                    onFocus = { hero = heroOf(saga) },
+                                    tag = SagaRules.seenLine(saga),
+                                    progress = SagaRules.progress(saga.copy(available = saga.seen)),
+                                    modifier = if (focusFirst && saga == state.sagas.first()) Modifier.focusRequester(firstFocus) else Modifier,
+                                )
+                            }
                             HomeLayoutLogic.Row.WATCHLIST -> ContentRow(row.label, state.watchlist, key = { "w" + it.key }) { item ->
                                 PosterCard(
                                     imageUrl = absolute(item.posterUrl),
@@ -374,6 +391,7 @@ fun HomeContent(state: HomeState, absolute: (String?) -> String?, onRetry: () ->
 /** Rangée sans carte : elle ne s'affiche pas (et ne peut pas prendre le focus de départ). */
 private fun rowIsEmpty(row: HomeLayoutLogic.Row, state: HomeState): Boolean = when (row) {
     HomeLayoutLogic.Row.RESUME -> state.resume.isEmpty()
+    HomeLayoutLogic.Row.SAGAS -> state.sagas.isEmpty()
     HomeLayoutLogic.Row.WATCHLIST -> state.watchlist.isEmpty()
     HomeLayoutLogic.Row.RECENT -> state.recent.isEmpty()
     HomeLayoutLogic.Row.FOR_YOU -> state.forYou.isEmpty()
@@ -430,6 +448,16 @@ private fun heroOf(entry: ResumeEntry, absolute: (String?) -> String?) = Hero(
     meta = meta(entry.item?.year, entry.item?.genres?.take(2)?.joinToString(", ")?.ifBlank { null }),
     overview = entry.item?.overview,
     note = if (entry.isEpisode) entry.subtitle + "  ·  reprendre à " + formatClock(entry.state.position.toLong()) else entry.subtitle,
+)
+
+/** Saga commencée : son fond, ce qui reste à voir. */
+private fun heroOf(saga: fr.arrmada.app.data.Saga) = Hero(
+    backdrop = saga.fanart ?: saga.next?.poster ?: saga.poster,
+    logo = null,
+    title = saga.title,
+    meta = SagaRules.facts(saga),
+    overview = saga.overview,
+    note = SagaRules.nextLabel(saga)?.let { "Prochain film · " + it.substringAfter(": ") },
 )
 
 private fun heroOf(item: WatchlistItem, absolute: (String?) -> String?) = Hero(
