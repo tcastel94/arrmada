@@ -9,11 +9,16 @@
  *  - manquant (sorti, pas dans Radarr) : grisé, bouton « Ajouter » ;
  *  - annoncé : grisé, « Annoncé » (pas encore de release à chercher).
  * « Compléter la saga » ajoute d'un coup tous les films sortis manquants.
+ *
+ * Étape 3 : « Suivre les nouveaux films » (Radarr les ajoute seul et
+ * ArrMada prévient), « Ordre des films » (ordre choisi à la main),
+ * « Collection Jellyfin » (la saga regroupée dans Jellyfin aussi).
  */
 /* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Library, Loader2, Plus } from "lucide-react";
+import { useState } from "react";
+import { ArrowLeft, ArrowUpDown, Bell, BellOff, Library, LibraryBig, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Header } from "@/components/layout/header";
 import { PageContainer } from "@/components/shared/page-container";
@@ -21,9 +26,18 @@ import { EmptyState, ErrorState } from "@/components/shared/empty-state";
 import { PosterGridSkeleton } from "@/components/shared/loading-skeleton";
 import { PosterCard } from "@/components/shared/poster-card";
 import { SAGA_TONE, SagaStack } from "@/components/sagas/saga-stack";
+import { SagaOrderEditor } from "@/components/sagas/saga-order";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { sagaBadge, useCompleteSaga, useSaga, type SagaDetail, type SagaFilm } from "@/hooks/use-sagas";
+import {
+    sagaBadge,
+    useCompleteSaga,
+    useFollowSaga,
+    useJellyfinCollection,
+    useSaga,
+    type SagaDetail,
+    type SagaFilm,
+} from "@/hooks/use-sagas";
 import { cn } from "@/lib/utils";
 
 const GRID = "grid grid-cols-3 gap-x-3 gap-y-5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8";
@@ -32,6 +46,7 @@ export default function SagaPage() {
     const params = useParams<{ id: string }>();
     const id = Number(params.id);
     const { data: saga, isLoading, isError, error, refetch } = useSaga(id);
+    const [ordering, setOrdering] = useState(false);
 
     return (
         <>
@@ -51,8 +66,10 @@ export default function SagaPage() {
                     <PosterGridSkeleton count={8} className={GRID} />
                 ) : (
                     <>
-                        <SagaHero saga={saga} />
-                        {saga.films.length === 0 ? (
+                        <SagaHero saga={saga} onOrder={() => setOrdering(true)} />
+                        {ordering ? (
+                            <SagaOrderEditor saga={saga} onDone={() => setOrdering(false)} />
+                        ) : saga.films.length === 0 ? (
                             <div className="rounded-2xl bg-card">
                                 <EmptyState icon={Library} title="Aucun film" description="Radarr ne connaît pas encore les films de cette saga." />
                             </div>
@@ -70,8 +87,26 @@ export default function SagaPage() {
     );
 }
 
-function SagaHero({ saga }: { saga: SagaDetail }) {
+function SagaHero({ saga, onOrder }: { saga: SagaDetail; onOrder: () => void }) {
     const complete = useCompleteSaga();
+    const follow = useFollowSaga();
+    const jellyfin = useJellyfinCollection();
+    const toggleFollow = () =>
+        follow.mutate(
+            { id: saga.id, follow: !saga.monitored },
+            {
+                onSuccess: (r) => toast.success(r.monitored ? "Saga suivie" : "Saga plus suivie", { description: r.message }),
+                onError: (e) => toast.error("Réglage impossible", { description: e.message }),
+            },
+        );
+    const toJellyfin = () =>
+        jellyfin.mutate(saga.id, {
+            onSuccess: (r) =>
+                r.status === "ok"
+                    ? toast.success("Collection Jellyfin", { description: r.message })
+                    : toast.info("Collection Jellyfin", { description: r.message }),
+            onError: (e) => toast.error("Collection impossible", { description: e.message }),
+        });
     const badge = sagaBadge(saga);
     const years = saga.years.length ? Array.from(new Set(saga.years)).join(" – ") : null;
     const completeAll = () =>
@@ -108,14 +143,30 @@ function SagaHero({ saga }: { saga: SagaDetail }) {
                         {badge.label}
                     </span>
                     {saga.overview && <p className="line-clamp-3 max-w-2xl text-[14px] leading-snug text-foreground/80">{saga.overview}</p>}
-                    {saga.missing > 0 && (
-                        <div className="pt-1">
+                    <div className="flex flex-wrap gap-2 pt-1">
+                        {saga.missing > 0 && (
                             <Button onClick={completeAll} disabled={complete.isPending}>
                                 {complete.isPending ? <Loader2 className="animate-spin" /> : <Plus />}
                                 Compléter la saga ({saga.missing} film{saga.missing > 1 ? "s" : ""})
                             </Button>
-                        </div>
-                    )}
+                        )}
+                        <Button variant={saga.monitored ? "tinted" : "secondary"} onClick={toggleFollow} disabled={follow.isPending}>
+                            {follow.isPending ? <Loader2 className="animate-spin" /> : saga.monitored ? <BellOff /> : <Bell />}
+                            {saga.monitored ? "Ne plus suivre" : "Suivre les nouveaux films"}
+                        </Button>
+                        <Button variant="secondary" onClick={onOrder}>
+                            <ArrowUpDown />
+                            Ordre des films
+                        </Button>
+                        <Button variant="secondary" onClick={toJellyfin} disabled={jellyfin.isPending}>
+                            {jellyfin.isPending ? <Loader2 className="animate-spin" /> : <LibraryBig />}
+                            Collection Jellyfin
+                        </Button>
+                    </div>
+                    <p className="text-[12.5px] text-muted-foreground">
+                        {saga.monitored ? "Suivie : Radarr ajoute ses nouveaux films et ArrMada te prévient." : "Non suivie."}
+                        {saga.custom_order ? " Ordre choisi à la main." : " Ordre de sortie."}
+                    </p>
                 </div>
             </div>
         </section>

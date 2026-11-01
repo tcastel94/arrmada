@@ -10,14 +10,16 @@
  */
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Library } from "lucide-react";
+import { Library, LibraryBig, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import { Header } from "@/components/layout/header";
 import { PageContainer } from "@/components/shared/page-container";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState, ErrorState } from "@/components/shared/empty-state";
 import { Shimmer } from "@/components/shared/loading-skeleton";
 import { SAGA_TONE as TONE, SagaStack } from "@/components/sagas/saga-stack";
-import { sagaBadge, useSagas, type Saga } from "@/hooks/use-sagas";
+import { sagaBadge, useJellyfinCollection, useSagas, type Saga } from "@/hooks/use-sagas";
 import { cn } from "@/lib/utils";
 
 type Filter = "all" | "incomplete" | "complete" | "upcoming";
@@ -34,6 +36,12 @@ const GRID = "grid grid-cols-2 gap-x-5 gap-y-7 sm:grid-cols-3 md:grid-cols-4 lg:
 export default function SagasPage() {
     const { data, isLoading, isError, error, refetch } = useSagas();
     const [filter, setFilter] = useState<Filter>("all");
+    const jellyfin = useJellyfinCollection();
+    const syncJellyfin = () =>
+        jellyfin.mutate(undefined, {
+            onSuccess: (r) => toast.success("Collections Jellyfin", { description: r.message }),
+            onError: (e) => toast.error("Collections impossibles", { description: e.message }),
+        });
     const shown = useMemo(
         () => (data?.sagas ?? []).filter(FILTERS.find((f) => f.value === filter)!.match),
         [data, filter],
@@ -50,6 +58,12 @@ export default function SagasPage() {
                         data
                             ? `${data.total} saga${data.total > 1 ? "s" : ""} dans ta bibliothèque · ${data.incomplete} incomplète${data.incomplete > 1 ? "s" : ""} · ${data.upcoming} film${data.upcoming > 1 ? "s" : ""} annoncé${data.upcoming > 1 ? "s" : ""}`
                             : "Les films regroupés par saga, d'après Radarr."
+                    }
+                    actions={
+                        <Button size="sm" variant="secondary" onClick={syncJellyfin} disabled={jellyfin.isPending}>
+                            {jellyfin.isPending ? <Loader2 className="animate-spin" /> : <LibraryBig />}
+                            Collections Jellyfin
+                        </Button>
                     }
                 />
 

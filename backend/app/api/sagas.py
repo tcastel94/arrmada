@@ -6,7 +6,10 @@ Mêmes routes pour la web app et l'appli TV :
 - ``GET  /api/sagas/{id}``             une saga et tous ses films, dans l'ordre ;
 - ``GET  /api/sagas/movie/{movie_id}`` la saga d'un film de Radarr (fiche film) ;
 - ``POST /api/sagas/{id}/complete``    ajoute à Radarr les films manquants ;
-- ``GET  /api/sagas/in-progress``      sagas commencées, pas finies (TV : accueil).
+- ``GET  /api/sagas/in-progress``      sagas commencées, pas finies (TV : accueil) ;
+- ``POST /api/sagas/{id}/follow``      suivre la saga (Radarr ajoute ses nouveaux films) ;
+- ``PUT|DELETE /api/sagas/{id}/order`` ordre choisi à la main / retour à l'ordre de sortie ;
+- ``POST /api/sagas/{id}/jellyfin``    collection Jellyfin de la saga (``/jellyfin`` : toutes).
 
 Le « vu » et la reprise sont ceux du profil famille de l'appel (ADR-008).
 """
@@ -42,8 +45,14 @@ async def _all_sagas(db: AsyncSession, profile_id: int | None) -> list[dict]:
     finally:
         await client.close()
     watch = await sagas.movie_watch(db, profile_id)
+    orders = await sagas.custom_orders(db)
     year = sagas.this_year()
-    items = sagas.sort_sagas([sagas.saga_summary(c, library, year, watch) for c in collections])
+    items = sagas.sort_sagas(
+        [
+            sagas.saga_summary(c, library, year, watch, orders.get(int(c.get("tmdbId") or 0)))
+            for c in collections
+        ]
+    )
     # Une « collection » d'un seul film n'est pas une saga
     return [s for s in items if s["total"] > 1]
 
@@ -102,7 +111,8 @@ async def saga_of_movie(
     if found is None:
         return {"saga": None, "position": None, "following": None}
     watch = await sagas.movie_watch(db, user.get("profile_id"))
-    detail = sagas.saga_detail(found, library, sagas.this_year(), watch)
+    order = (await sagas.custom_orders(db)).get(tmdb)
+    detail = sagas.saga_detail(found, library, sagas.this_year(), watch, order)
     if detail["total"] < 2:
         return {"saga": None, "position": None, "following": None}
     position = next(
@@ -134,7 +144,8 @@ async def get_saga(
     finally:
         await client.close()
     watch = await sagas.movie_watch(db, user.get("profile_id"))
-    return sagas.saga_detail(collection, library, sagas.this_year(), watch)
+    order = (await sagas.custom_orders(db)).get(int(collection.get("tmdbId") or 0))
+    return sagas.saga_detail(collection, library, sagas.this_year(), watch, order)
 
 
 class CompleteBody(BaseModel):
@@ -173,3 +184,121 @@ async def complete_saga(
         "added": added,
         "message": f"{count} film{s} ajouté{s} à Radarr, recherche lancée",
     }
+
+
+async def _collection(db: AsyncSession, saga_id: int) -> dict:
+    """La saga telle que Radarr la connaît (404 si inconnue)."""
+    client = await sagas.radarr_client(db)
+    try:
+        return await client.get_collection(saga_id)
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            raise HTTPException(status_code=404, detail="Saga inconnue") from exc
+        raise _unreachable(exc) from exc
+    except (httpx.HTTPError, ValueError) as exc:
+        raise _unreachable(exc) from exc
+    finally:
+        await client.close()
+
+
+class FollowBody(BaseModel):
+    follow: bool = True
+
+
+@router.post("/{saga_id}/follow")
+async def follow_saga(saga_id: int, body: FollowBody, db: AsyncSession = Depends(get_db)) -> dict:
+    """Suivre une saga : Radarr ajoute de lui-même ses nouveaux films (et prévient ArrMada)."""
+    client = await sagas.radarr_client(db, timeout=30)
+    try:
+        collection = await client.get_collection(saga_id)
+        await sagas.follow(client, collection, body.follow)
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            raise HTTPException(status_code=404, detail="Saga inconnue") from exc
+        raise _unreachable(exc) from exc
+    except (httpx.HTTPError, ValueError) as exc:
+        raise _unreachable(exc) from exc
+    finally:
+        await client.close()
+    title = collection.get("title") or "la saga"
+    return {
+        "status": "ok",
+        "monitored": body.follow,
+        "message": f"Nouveaux films de « {title} » ajoutés automatiquement"
+        if body.follow
+        else f"« {title} » n'est plus suivie",
+    }
+
+
+class OrderBody(BaseModel):
+    # Identifiants TMDB des films, dans l'ordre voulu
+    tmdb_ids: list[int] = Field(..., min_length=1, max_length=100)
+
+
+@router.put("/{saga_id}/order")
+async def set_saga_order(saga_id: int, body: OrderBody, db: AsyncSession = Depends(get_db)) -> dict:
+    """Ordre choisi à la main (ordre de l'histoire), pour tous les profils."""
+    collection = await _collection(db, saga_id)
+    await sagas.set_order(db, collection, body.tmdb_ids)
+    return {"status": "ok", "message": "Ordre enregistré"}
+
+
+@router.delete("/{saga_id}/order")
+async def reset_saga_order(saga_id: int, db: AsyncSession = Depends(get_db)) -> dict:
+    """Retour à l'ordre de sortie."""
+    collection = await _collection(db, saga_id)
+    await sagas.reset_order(db, int(collection.get("tmdbId") or 0))
+    return {"status": "ok", "message": "Ordre de sortie rétabli"}
+
+
+async def _jellyfin(db: AsyncSession, collection: dict, library: dict) -> dict:
+    order = (await sagas.custom_orders(db)).get(int(collection.get("tmdbId") or 0))
+    detail = sagas.saga_detail(collection, library, sagas.this_year(), None, order)
+    try:
+        return await sagas.jellyfin_collection(db, detail)
+    except httpx.HTTPError as exc:
+        logger.warning("Sagas : Jellyfin refuse la collection (%s)", exc)
+        raise HTTPException(status_code=502, detail="Jellyfin ne répond pas") from exc
+
+
+@router.post("/jellyfin")
+async def jellyfin_all(db: AsyncSession = Depends(get_db)) -> dict:
+    """Toutes les sagas (deux films au moins) recréées en collections Jellyfin."""
+    client = await sagas.radarr_client(db)
+    try:
+        collections, library = await sagas.load(client)
+    except (httpx.HTTPError, ValueError) as exc:
+        raise _unreachable(exc) from exc
+    finally:
+        await client.close()
+    done = 0
+    for collection in collections:
+        if len(collection.get("movies") or []) < 2:
+            continue
+        result = await _jellyfin(db, collection, library)
+        if result["status"] == "unavailable":
+            raise HTTPException(status_code=400, detail=result["message"])
+        done += 1 if result["status"] == "ok" else 0
+    s = "s" if done > 1 else ""
+    return {"status": "ok", "count": done, "message": f"{done} collection{s} Jellyfin à jour"}
+
+
+@router.post("/{saga_id}/jellyfin")
+async def jellyfin_one(saga_id: int, db: AsyncSession = Depends(get_db)) -> dict:
+    """La saga recréée en collection dans Jellyfin (films présents sur le NAS)."""
+    client = await sagas.radarr_client(db)
+    try:
+        collection = await client.get_collection(saga_id)
+        library = sagas.library_by_tmdb(await client.get_movies())
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            raise HTTPException(status_code=404, detail="Saga inconnue") from exc
+        raise _unreachable(exc) from exc
+    except (httpx.HTTPError, ValueError) as exc:
+        raise _unreachable(exc) from exc
+    finally:
+        await client.close()
+    result = await _jellyfin(db, collection, library)
+    if result["status"] == "unavailable":
+        raise HTTPException(status_code=400, detail=result["message"])
+    return result

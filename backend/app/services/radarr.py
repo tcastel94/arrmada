@@ -49,6 +49,10 @@ class RadarrClient(ArrBaseClient):
         """Une saga et tous ses films."""
         return await self.get(f"/collection/{collection_id}")
 
+    async def update_collection(self, collection_id: int, data: dict[str, Any]) -> dict[str, Any]:
+        """Modifie une saga (suivie ou non, profil, dossier) : ressource complète attendue."""
+        return await self.put(f"/collection/{collection_id}", data=data)
+
     # ── Quality Profiles ──────────────────────────────────────
     async def get_quality_profiles(self) -> list[dict[str, Any]]:
         """Fetch available quality profiles."""
