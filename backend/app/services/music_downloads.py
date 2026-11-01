@@ -36,11 +36,23 @@ Garde-fous (tout ou rien par dossier)
 - jamais de remplacement d'un fichier déjà dans la bibliothèque ;
 - l'import ne vise qu'un dossier situé sous l'un des dossiers passés en
   revue (un appareil ne peut pas faire importer n'importe quel chemin).
+
+Bonus de films ignorés
+----------------------
+Un film téléchargé arrive parfois avec sa bande originale ou des chansons
+dans ses bonus (« Movie Xtras/Soundtrack », « Featurettes »…). Lidarr les
+voit comme de l'audio, mais ce ne sont pas des albums : ces dossiers sont
+écartés de la liste (et refusés à l'import). Un dossier est un bonus de
+film si l'un de ses dossiers, sous le dossier passé en revue :
+- porte un nom de bonus (Extras, Xtras, Bonus, Featurettes, Trailers…) ;
+- ou a un nom de sortie vidéo (1080p, 4K, UHD, BluRay, WEB-DL, x265,
+  S01E02…).
 """
 
 from __future__ import annotations
 
 import posixpath
+import re
 from typing import Any
 
 import httpx
@@ -98,6 +110,64 @@ def is_under(folder: str, roots: list[str]) -> bool:
     """Vrai si ``folder`` est l'un des dossiers passés en revue ou se trouve dessous."""
     clean = posixpath.normpath(folder or "/")
     return any(clean == root or clean.startswith(root + "/") for root in roots)
+
+
+# ── Bonus de films (sans réseau) ──────────────────────────────
+
+# Noms de dossiers de bonus, comparés sans casse, espaces ni ponctuation
+# (« Movie Xtras » → « moviextras »). Conventions Plex / Jellyfin / Kodi.
+_EXTRA_DIRS = {
+    "extras",
+    "xtras",
+    "moviextras",
+    "movieextras",
+    "bonus",
+    "bonusfeatures",
+    "bonusmaterial",
+    "featurette",
+    "featurettes",
+    "behindthescenes",
+    "deletedscenes",
+    "interviews",
+    "trailer",
+    "trailers",
+    "makingof",
+    "sample",
+    "samples",
+}
+
+# Marques d'une sortie vidéo dans un nom de dossier : définition, source,
+# codec, épisode. Mot entier seulement (« 4K » oui, « 4Kids » non).
+_VIDEO_TOKEN = re.compile(
+    r"(?<![a-z0-9])("
+    r"2160p|1080p|720p|480p|4k|uhd|hdr|blu-?ray|bdrip|brrip|webrip|web-?dl|remux"
+    r"|[xh]\.?26[45]|hevc|dvdrip|hdtv|s\d{1,2}e\d{1,3}"
+    r")(?![a-z0-9])",
+    re.IGNORECASE,
+)
+
+
+def _plain(name: str) -> str:
+    """« Movie Xtras » → « moviextras »."""
+    return re.sub(r"[^a-z0-9]", "", name.casefold())
+
+
+def is_film_extra(folder: str, roots: list[str]) -> bool:
+    """Vrai si ``folder`` est (ou est rangé dans) un bonus de film.
+
+    Seuls les dossiers situés sous le dossier passé en revue comptent : le
+    nom des dossiers de téléchargements eux-mêmes n'entre pas en jeu.
+    """
+    clean = posixpath.normpath(folder or "/")
+    below = clean
+    for root in sorted(roots, key=len, reverse=True):
+        if clean == root or clean.startswith(root + "/"):
+            below = clean[len(root) :]
+            break
+    for part in (p for p in below.split("/") if p):
+        if _plain(part) in _EXTRA_DIRS or _VIDEO_TOKEN.search(part):
+            return True
+    return False
 
 
 # ── Regroupement par album (sans réseau) ──────────────────────
@@ -215,6 +285,8 @@ async def import_folder(client: LidarrClient, roots: list[str], folder: str) -> 
     """Importe un dossier d'album, tout ou rien. Rend {status, message}."""
     if not is_under(folder, roots):
         return {"status": "refused", "message": "Dossier hors des téléchargements"}
+    if is_film_extra(folder, roots):
+        return {"status": "refused", "message": "Bonus d'un film, pas un album"}
     try:
         items = await client.get(
             "/manualimport", params={"folder": folder, "filterExistingFiles": "true"}

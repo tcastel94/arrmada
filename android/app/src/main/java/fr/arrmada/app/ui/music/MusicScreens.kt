@@ -478,7 +478,8 @@ fun MusicDownloadsScreen(repository: Repository) {
             val ready = current.albums.count { it.ready }
             ScreenHeader(
                 "Musique à importer",
-                "${Fr.plural(current.albums.size, "album")} dans les téléchargements · ${Fr.plural(ready, "prêt")} à importer",
+                "${Fr.plural(current.albums.size, "album")} dans les téléchargements · ${Fr.plural(ready, "prêt")} à importer" +
+                    if (current.ignored > 0) " · ${Fr.plural(current.ignored, "bonus de film")} ignoré${if (current.ignored > 1) "s" else ""}" else "",
             ) {
                 ArrButton("Relire le dossier", { reload++ }, leading = "↻")
             }

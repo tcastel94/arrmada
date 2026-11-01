@@ -248,11 +248,13 @@ function PendingImports() {
     const albums = data?.albums ?? [];
     if (!albums.length) return null;
     const ready = albums.filter((a) => a.ready).length;
+    const ignored = data?.ignored ?? 0;
     return (
         <Panel title="Dans les téléchargements">
             <p className="mb-3 text-[13px] text-muted-foreground">
                 {albums.length} album{albums.length > 1 ? "s" : ""} pas encore dans la bibliothèque · {ready} prêt{ready > 1 ? "s" : ""} à
                 importer
+                {ignored > 0 && ` · ${ignored} bonus de film${ignored > 1 ? "s" : ""} ignoré${ignored > 1 ? "s" : ""}`}
             </p>
             <ul className="divide-y divide-white/[0.06]">
                 {albums.map((album) => (

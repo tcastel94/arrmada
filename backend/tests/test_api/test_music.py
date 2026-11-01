@@ -498,6 +498,13 @@ DOWNLOADED = [
             {"reason": "Album déjà dans la bibliothèque en meilleure qualité", "type": "permanent"}
         ],
     ),
+    # Bande originale rangée dans les bonus d'un film : ignorée
+    _file(
+        f"{COMPLETE}/Goodfellas (1990) 4K UHD MULTI/Movie Xtras/Soundtrack/01.mp3",
+        artist=None,
+        album=None,
+        tracks=0,
+    ),
 ]
 
 
@@ -512,8 +519,31 @@ def test_download_roots_and_is_under(monkeypatch: pytest.MonkeyPatch) -> None:
     assert not music_downloads.is_under("/data/usenet/complete-autre", roots)
 
 
+@pytest.mark.parametrize(
+    ("folder", "extra"),
+    [
+        (f"{COMPLETE}/Goodfellas (1990) 4K UHD MULTI/Movie Xtras/Soundtrack", True),
+        (f"{COMPLETE}/Film/Featurettes", True),
+        (f"{COMPLETE}/Some.Movie.2019.1080p.BluRay.x265/OST", True),
+        (f"{COMPLETE}/Serie.S01E02.WEB-DL", True),
+        (f"{COMPLETE}/music/Radiohead - Kid A", False),
+        (f"{COMPLETE}/music/Ninho - M.I.L.S 4 - 2026", False),
+        (f"{COMPLETE}/music/4Kids - Best Of", False),  # mot entier seulement
+        (f"{COMPLETE}/music/Bonus Track Collection", False),  # nom complet seulement
+    ],
+)
+def test_is_film_extra(folder: str, extra: bool) -> None:
+    assert music_downloads.is_film_extra(folder, [COMPLETE]) is extra
+
+
+def test_film_extra_ignores_root_names() -> None:
+    # Le nom du dossier de téléchargements lui-même ne compte pas
+    root = "/data/Downloads 4K/complete"
+    assert not music_downloads.is_film_extra(f"{root}/music/Album", [root])
+
+
 def test_group_candidates() -> None:
-    files = [f for f in DOWNLOADED if not f.get("additionalFile")]
+    files = [f for f in DOWNLOADED if not f.get("additionalFile") and "/music/" in f["path"]]
     albums = music_downloads.group_candidates(files)
     by_name = {a["name"]: a for a in albums}
     kid_a = by_name["Radiohead - Kid A"]  # CD1 et CD2 regroupés
@@ -559,6 +589,7 @@ async def test_downloads_listing(client: AsyncClient, downloads_stack: dict[str,
     names = [a["name"] for a in body["albums"]]
     assert names[0] == "Radiohead - Kid A"
     assert set(names) == {"Radiohead - Kid A", "Inconnu", "Daft Punk - RAM"}
+    assert body["ignored"] == 1  # la bande originale du film
 
 
 async def test_import_ready_folder(client: AsyncClient, downloads_stack: dict[str, str]) -> None:
@@ -594,4 +625,11 @@ async def test_import_refuses_unready_or_outside_folders(
         "/api/music/downloads/import", json={"folder": "/etc"}, headers=downloads_stack
     )
     assert outside.status_code == 400
+    extra = await client.post(
+        "/api/music/downloads/import",
+        json={"folder": f"{COMPLETE}/Goodfellas (1990) 4K UHD MULTI/Movie Xtras/Soundtrack"},
+        headers=downloads_stack,
+    )
+    assert extra.status_code == 400
+    assert "Bonus" in extra.json()["detail"]
     assert not [p for _h, p, _b in fake_arr.POSTS if p == "/api/v1/command"]
