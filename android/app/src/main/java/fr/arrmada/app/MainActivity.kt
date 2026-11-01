@@ -14,6 +14,7 @@ import fr.arrmada.app.home.HomeRowsWorker
 import fr.arrmada.app.home.TvHomeRows
 import fr.arrmada.app.update.UpdateDialog
 import fr.arrmada.app.ui.videos.VideosScreen
+import fr.arrmada.app.ui.sagas.SagaScreen
 import fr.arrmada.app.ui.music.MusicArtistScreen
 import fr.arrmada.app.ui.music.MusicDownloadsScreen
 import fr.arrmada.app.ui.music.MusicPlayerScreen
@@ -221,6 +222,7 @@ private object Routes {
     const val MUSIC_ALBUM = "music/album/{id}" // écoute d'un album (Jellyfin)
     const val MUSIC_SEARCH = "music/search" // suivre un nouvel artiste
     const val MUSIC_DOWNLOADS = "music/downloads" // musique restée dans les téléchargements, à importer
+    const val SAGA = "saga/{id}" // une saga de films (ADR-016), ouverte depuis la vue « Sagas » de Films
 
     fun library(type: String) = "library/$type"
     fun search(voice: Boolean) = "search?voice=$voice"
@@ -234,6 +236,7 @@ private object Routes {
     fun person(tmdbId: Long) = "person/$tmdbId"
     fun musicArtist(id: Int) = "music/artist/$id"
     fun musicAlbum(id: Int) = "music/album/$id"
+    fun saga(id: Int) = "saga/$id"
 }
 
 /** Intro à l'écran ([active]) et demande de la passer ([skip]), partagées avec l'activité. */
@@ -586,6 +589,15 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
             LibraryScreen(
                 entry.arguments?.getString("type") ?: "movie", app.repository, app.api, ::openItem, prefetcher::focus,
                 onMenu = { menu = MediaMenuLogic.of(it) },
+                onSaga = { nav.navigate(Routes.saga(it.id)) },
+            )
+        }
+        composable(Routes.SAGA, arguments = listOf(navArgument("id") { type = NavType.IntType })) { entry ->
+            SagaScreen(
+                repository = app.repository,
+                id = entry.arguments?.getInt("id") ?: 0,
+                onMovie = { film -> film.movieId?.let { nav.navigate(Routes.movie(it.toString(), film.tmdbId)) } },
+                onBack = { nav.popBackStack() },
             )
         }
         composable(Routes.DISCOVER) {

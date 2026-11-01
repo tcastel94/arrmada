@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Sagas de films, étape 1
+
+#### Added
+- **Sagas de films** ([ADR-016](docs/adr/016-sagas.md)) : les collections TMDB que Radarr connaît déjà, croisées avec la bibliothèque. Aucune nouvelle source ni clé
+- **Web app** : « Sagas » sous « Médiathèque » dans le menu (raccourci `g` + `a`). Grille des sagas avec affiches en éventail au survol, « 6/8 films », badge (manquants, en recherche, annoncés, complète) et filtres. Fiche d'une saga : films dans l'ordre de sortie, liens vers leurs fiches, **« Compléter la saga »** (films sortis manquants ajoutés à Radarr et cherchés) et « Ajouter » film par film
+- **Fiche d'un film** : bloc « Saga » (film N sur M, précédent, suivant, lien vers la saga)
+- **Appli TV** : « Sagas » est une vue de l'écran Films, à côté de Récents, A à Z, Année et 4K. Au focus, les affiches d'une saga s'ouvrent en éventail et le fond prend sa couleur ; à l'ouverture, les films se distribuent un par un ; au Retour, ils se rangent et le focus revient sur la saga. « Compléter la saga » et ajout d'un film manquant à la télécommande. Animations coupées si la TV demande de supprimer les animations
+- Serveur : `GET /api/sagas`, `GET /api/sagas/{id}`, `GET /api/sagas/movie/{id}`, `POST /api/sagas/{id}/complete`, ouvertes aux TV
+- Tests : serveur (14), appli (`SagaRulesTest`), e2e (grille, fiche, compléter)
+
 ### Musique : rechercher et télécharger depuis la fiche d'un artiste
 
 #### Added

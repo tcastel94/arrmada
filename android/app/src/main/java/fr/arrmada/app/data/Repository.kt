@@ -435,6 +435,18 @@ class Repository(private val api: Api) {
     /** Pistes d'un album à écouter (Jellyfin), dans l'ordre du disque. */
     suspend fun musicAlbumTracks(albumId: Int): MusicAlbumTracks = api.get("/api/music/albums/$albumId/tracks")
 
+    // ── Sagas de films (ADR-016) ──
+
+    /** Sagas de la bibliothèque (collections Radarr), avec compteurs. */
+    suspend fun sagas(): SagaList = api.get("/api/sagas")
+
+    /** Une saga et tous ses films, dans l'ordre de sortie. */
+    suspend fun saga(id: Int): Saga = api.get("/api/sagas/$id")
+
+    /** « Compléter la saga » : tous les films sortis manquants, ou ceux donnés. */
+    suspend fun sagaComplete(id: Int, tmdbIds: List<Long>? = null): SagaCompleteResult =
+        api.post("/api/sagas/$id/complete", SagaCompleteBody(tmdbIds), slow = true)
+
     /** Version plus récente de l'appli sur le serveur (ADR-009) pour ce type d'APK. */
     suspend fun updateOffer(versionCode: Int, buildType: String): UpdateOffer =
         api.get("/api/android/update?version_code=$versionCode&build_type=${q(buildType)}")
