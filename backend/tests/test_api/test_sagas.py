@@ -319,3 +319,119 @@ async def test_following_film_for_the_player(client: AsyncClient, radarr: dict[s
 
 def test_in_progress_device_right() -> None:
     assert device_may_call("GET", "/api/sagas/in-progress")
+
+
+# ── Étape 3 : suivre, ordre choisi, collections Jellyfin, notification ──
+
+
+def test_custom_order_applies_and_appends_unknown() -> None:
+    library = sagas.library_by_tmdb(MOVIES)
+    # Ordre choisi : Le Retour du roi d'abord ; Les Deux Tours absent → à la fin
+    lotr = sagas.saga_detail(COLLECTIONS[0], library, 2026, None, [122, 120])
+    assert [f["tmdb_id"] for f in lotr["films"]] == [122, 120, 121]
+    assert lotr["custom_order"] is True
+    assert sagas.saga_detail(COLLECTIONS[0], library, 2026)["custom_order"] is False
+
+
+async def test_order_put_then_reset(client: AsyncClient, radarr: dict[str, str]) -> None:
+    await _declare_radarr(client, radarr)
+    # 999 n'est pas un film de la saga : ignoré
+    resp = await client.put(
+        "/api/sagas/1/order", json={"tmdb_ids": [122, 999, 121, 120]}, headers=radarr
+    )
+    assert resp.status_code == 200, resp.text
+    films = (await client.get("/api/sagas/1", headers=radarr)).json()["films"]
+    assert [f["tmdb_id"] for f in films] == [122, 121, 120]
+    listed = (await client.get("/api/sagas", headers=radarr)).json()["sagas"]
+    assert next(s for s in listed if s["id"] == 1)["custom_order"] is True
+
+    assert (await client.delete("/api/sagas/1/order", headers=radarr)).status_code == 200
+    films = (await client.get("/api/sagas/1", headers=radarr)).json()["films"]
+    assert [f["tmdb_id"] for f in films] == [120, 121, 122]
+
+
+async def test_follow_sets_defaults(client: AsyncClient, radarr: dict[str, str]) -> None:
+    await _declare_radarr(client, radarr)
+    resp = await client.post("/api/sagas/1/follow", json={"follow": True}, headers=radarr)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["monitored"] is True
+    puts = [b for h, p, b in fake_arr.POSTS if p == "/api/v3/collection/1"]
+    assert len(puts) == 1
+    body = puts[0]
+    assert body["monitored"] is True and body["searchOnAdd"] is True
+    # La saga n'avait ni profil ni dossier : ceux par défaut de Radarr
+    assert (body["qualityProfileId"], body["rootFolderPath"]) == (1, "/films")
+    assert "movies" not in body
+
+    await client.post("/api/sagas/2/follow", json={"follow": False}, headers=radarr)
+    dune = [b for h, p, b in fake_arr.POSTS if p == "/api/v3/collection/2"][0]
+    assert dune["monitored"] is False and dune["qualityProfileId"] == 4
+
+
+async def test_new_film_of_followed_saga_notifies(
+    client: AsyncClient, radarr: dict[str, str]
+) -> None:
+    await _declare_radarr(client, radarr)
+    # Dune est suivie (monitored) ; Le Seigneur des anneaux ne l'est pas
+    from app.api.deps import get_db
+    from app.main import app
+
+    sessions = app.dependency_overrides[get_db]()
+    db = await anext(sessions)
+    try:
+        assert await sagas.notify_new_film(db, 20) == "Nouveau film dans la saga Dune"
+        assert await sagas.notify_new_film(db, 10) is None
+        assert await sagas.notify_new_film(db, 40) is None  # film sans saga
+        await db.commit()
+    finally:
+        await sessions.aclose()
+    notes = (await client.get("/api/notifications", headers=radarr)).json()
+    items = notes.get("items", notes) if isinstance(notes, dict) else notes
+    assert any("Nouveau film dans la saga Dune" in n["title"] for n in items)
+
+
+JELLYFIN_URL = "http://jellyfin.test:8096"
+
+
+async def test_jellyfin_collection(
+    client: AsyncClient, radarr: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def items(params: dict[str, str], _m: Any) -> dict:
+        if params.get("IncludeItemTypes") == "BoxSet":
+            return {"Items": []}  # pas encore de collection
+        return {
+            "Items": [
+                {"Id": "j120", "Name": "La Communauté", "ProviderIds": {"Tmdb": "120"}},
+                {"Id": "j121", "Name": "Les Deux Tours", "ProviderIds": {"Tmdb": "121"}},
+            ]
+        }
+
+    monkeypatch.setitem(fake_arr.ROUTES, "jellyfin.test", [(r"/Items", items)])
+    await _declare_radarr(client, radarr)
+    svc = {"name": "Jellyfin", "type": "jellyfin", "url": JELLYFIN_URL, "api_key": "jf-key"}
+    assert (await client.post("/api/services", json=svc, headers=radarr)).status_code == 201
+
+    resp = await client.post("/api/sagas/1/jellyfin", headers=radarr)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["count"] == 2
+    assert "créée" in resp.json()["message"]
+    assert [p for h, p, _b in fake_arr.POSTS if h == "jellyfin.test"] == ["/Collections"]
+
+
+async def test_jellyfin_missing(client: AsyncClient, radarr: dict[str, str]) -> None:
+    await _declare_radarr(client, radarr)
+    resp = await client.post("/api/sagas/1/jellyfin", headers=radarr)
+    assert resp.status_code == 400
+    assert "Jellyfin" in resp.json()["detail"]
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "allowed"),
+    [
+        ("POST", "/api/sagas/1/follow", True),
+        ("PUT", "/api/sagas/1/order", False),  # ordre : web app seulement
+        ("POST", "/api/sagas/1/jellyfin", False),
+    ],
+)
+def test_step3_device_rights(method: str, path: str, allowed: bool) -> None:
+    assert device_may_call(method, path) is allowed

@@ -449,6 +449,10 @@ class Repository(private val api: Api) {
     /** Saga d'un film de Radarr et film suivant sur le NAS (fin d'un film). */
     suspend fun movieSaga(radarrId: String): MovieSaga = api.get("/api/sagas/movie/$radarrId")
 
+    /** Suivre une saga : Radarr ajoute seul ses nouveaux films (notification à l'arrivée). */
+    suspend fun sagaFollow(id: Int, follow: Boolean): SagaFollowResult =
+        api.post("/api/sagas/$id/follow", SagaFollowBody(follow), slow = true)
+
     /** « Compléter la saga » : tous les films sortis manquants, ou ceux donnés. */
     suspend fun sagaComplete(id: Int, tmdbIds: List<Long>? = null): SagaCompleteResult =
         api.post("/api/sagas/$id/complete", SagaCompleteBody(tmdbIds), slow = true)

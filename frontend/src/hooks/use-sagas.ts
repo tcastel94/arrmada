@@ -56,6 +56,8 @@ export interface Saga {
     seen: number;
     /** Prochain film à voir (le premier sur le NAS pas encore vu), ou null. */
     next: SagaFilm | null;
+    /** Films rangés dans l'ordre choisi à la main (sinon : ordre de sortie). */
+    custom_order: boolean;
 }
 
 export interface SagaDetail extends Saga {
@@ -118,4 +120,42 @@ export function sagaBadge(s: Pick<Saga, "missing" | "upcoming" | "wanted">): { l
     if (s.wanted > 0) return { label: `${s.wanted} en recherche`, tone: "wanted" };
     if (s.upcoming > 0) return { label: `${s.upcoming} film${s.upcoming > 1 ? "s" : ""} annoncé${s.upcoming > 1 ? "s" : ""}`, tone: "soon" };
     return { label: "Complète", tone: "ok" };
+}
+
+interface ActionResult {
+    status: string;
+    message: string;
+}
+
+/** Suivre une saga : Radarr ajoute seul ses nouveaux films, ArrMada prévient. */
+export function useFollowSaga() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({ id, follow }: { id: number; follow: boolean }) =>
+            apiFetch<ActionResult & { monitored: boolean }>(`/api/sagas/${id}/follow`, {
+                method: "POST",
+                body: JSON.stringify({ follow }),
+            }),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ["sagas"] }),
+    });
+}
+
+/** Ordre choisi à la main (identifiants TMDB des films), ou null : retour à l'ordre de sortie. */
+export function useSagaOrder() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({ id, tmdbIds }: { id: number; tmdbIds: number[] | null }) =>
+            tmdbIds
+                ? apiFetch<ActionResult>(`/api/sagas/${id}/order`, { method: "PUT", body: JSON.stringify({ tmdb_ids: tmdbIds }) })
+                : apiFetch<ActionResult>(`/api/sagas/${id}/order`, { method: "DELETE" }),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ["sagas"] }),
+    });
+}
+
+/** Collection Jellyfin d'une saga (id), ou de toutes les sagas (id absent). */
+export function useJellyfinCollection() {
+    return useMutation({
+        mutationFn: (id?: number) =>
+            apiFetch<ActionResult & { count: number }>(id ? `/api/sagas/${id}/jellyfin` : "/api/sagas/jellyfin", { method: "POST" }),
+    });
 }

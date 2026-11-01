@@ -47,7 +47,15 @@ data class Saga(
     val films: List<SagaFilm> = emptyList(), // seulement dans la fiche d'une saga
     val seen: Int = 0, // films vus par le profil
     val next: SagaFilm? = null, // prochain film à voir (sur le NAS, pas encore vu)
+    val monitored: Boolean = false, // suivie : Radarr ajoute seul ses nouveaux films
+    @SerialName("custom_order") val customOrder: Boolean = false, // ordre choisi dans la web app
 )
+
+@Serializable
+data class SagaFollowBody(val follow: Boolean)
+
+@Serializable
+data class SagaFollowResult(val status: String = "", val monitored: Boolean = false, val message: String = "")
 
 /** Saga d'un film et le film suivant sur le NAS (fin d'un film dans le lecteur). */
 @Serializable
@@ -91,6 +99,7 @@ object SagaRules {
         s.years.distinct().joinToString(" – ").ifBlank { null },
         "${s.available} sur le NAS",
         Fr.plural(s.seen, "vu").takeIf { s.seen > 0 },
+        "ordre choisi".takeIf { s.customOrder }, // ordre de l'histoire, réglé dans la web app
     ).joinToString(" · ")
 
     /** Bouton du prochain film : « Reprendre : X » s'il est commencé, sinon « Regarder : X ». */

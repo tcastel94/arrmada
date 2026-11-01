@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Sagas de films, étape 3 : suivre, ordre choisi, collections Jellyfin
+
+#### Added
+- **Suivre une saga** (web app et TV) : Radarr surveille la saga et ajoute seul ses nouveaux films (recherchés dès leur sortie, profil et dossier de la saga ou ceux par défaut). À l'arrivée d'un film ainsi ajouté, **notification** « Nouveau film dans la saga … » (webhook Radarr « Film ajouté »)
+- **Ordre des films choisi à la main** (web app) : flèches pour monter ou descendre chaque film (ordre de l'histoire : Star Wars, Les Animaux fantastiques avant Harry Potter…), retour à l'ordre de sortie. L'ordre vaut pour tous les profils et sert partout : fiches, TV, « Reprendre la saga », film suivant (« ordre choisi » sur la TV)
+- **Collections Jellyfin** (web app) : une saga, ou toutes depuis la page Sagas, recréée en collection dans Jellyfin (créée ou complétée avec les films présents)
+- Serveur : `POST /api/sagas/{id}/follow` (ouverte aux TV), `PUT|DELETE /api/sagas/{id}/order`, `POST /api/sagas/{id}/jellyfin`, `POST /api/sagas/jellyfin` ; table `saga_orders` (créée au démarrage)
+- Tests : serveur, appli (`SagaRulesTest`), e2e
+
+#### Prérequis
+- Notification d'un nouveau film : le webhook Radarr vers ArrMada doit envoyer l'événement « On Movie Added » (Radarr › Settings › Connect)
+
 ### Sagas de films, étape 2 : regarder une saga
 
 #### Added

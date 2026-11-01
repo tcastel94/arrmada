@@ -33,6 +33,7 @@ class SagaRulesTest {
         assertNull(SagaRules.nextLabel(hp.copy(next = null)))
         assertEquals("3 vus sur 8", SagaRules.seenLine(hp))
         assertEquals("8 films · 6 sur le NAS · 3 vus", SagaRules.facts(hp))
+        assertEquals("8 films · 6 sur le NAS · 3 vus · ordre choisi", SagaRules.facts(hp.copy(customOrder = true)))
         val films = listOf(SagaFilm(tmdbId = 1), SagaFilm(tmdbId = 2))
         assertEquals("Harry Potter · film 2 sur 8", SagaRules.upNextCode(hp.copy(films = films), films[1]))
     }

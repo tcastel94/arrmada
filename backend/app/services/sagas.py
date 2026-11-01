@@ -27,6 +27,16 @@ famille, dans `watch_states` (partagés par les TV, ADR-004 et ADR-008).
 Une saga en tire : les films vus, le **prochain film à voir** (le premier
 sur le NAS, dans l'ordre, pas encore vu ; commencé : avec sa reprise) et
 l'heure du dernier film regardé (rangée « Sagas à terminer »).
+
+Étape 3
+-------
+- **Suivre une saga** : Radarr « surveille » la collection et ajoute de
+  lui-même tout nouveau film annoncé ; ArrMada prévient (notification) quand
+  un film arrive ainsi dans une saga suivie.
+- **Ordre personnalisé** (table `saga_orders`) : l'ordre de l'histoire
+  plutôt que celui de sortie, choisi à la main dans la web app.
+- **Collections Jellyfin** : la saga recréée en collection (« BoxSet ») dans
+  Jellyfin, pour la retrouver regroupée là aussi.
 """
 
 from __future__ import annotations
@@ -38,6 +48,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.saga_order import SagaOrder
 from app.models.service import Service
 from app.models.watch_state import WatchState
 from app.services import watch_sync
@@ -123,9 +134,17 @@ def film_summary(
     }
 
 
-def _ordered(films: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Ordre de sortie ; un film sans année (annoncé) en dernier."""
-    return sorted(films, key=lambda f: (f["year"] or 9999, f["title"].casefold()))
+def _ordered(films: list[dict[str, Any]], order: list[int] | None = None) -> list[dict[str, Any]]:
+    """Ordre de sortie (un film sans année en dernier), ou l'ordre choisi à la main.
+
+    Ordre choisi : les films qui n'y figurent pas (ajoutés depuis à la saga)
+    suivent, dans l'ordre de sortie.
+    """
+    by_release = sorted(films, key=lambda f: (f["year"] or 9999, f["title"].casefold()))
+    if not order:
+        return by_release
+    rank = {tmdb: i for i, tmdb in enumerate(order)}
+    return sorted(by_release, key=lambda f: rank.get(f["tmdb_id"], len(rank)))
 
 
 def _films(
@@ -133,9 +152,11 @@ def _films(
     library: dict[int, dict[str, Any]],
     year_now: int,
     watch: dict[int, dict[str, Any]] | None,
+    order: list[int] | None = None,
 ) -> list[dict[str, Any]]:
     return _ordered(
-        [film_summary(f, library, year_now, watch) for f in collection.get("movies") or []]
+        [film_summary(f, library, year_now, watch) for f in collection.get("movies") or []],
+        order,
     )
 
 
@@ -149,9 +170,10 @@ def saga_summary(
     library: dict[int, dict[str, Any]],
     year_now: int,
     watch: dict[int, dict[str, Any]] | None = None,
+    order: list[int] | None = None,
 ) -> dict[str, Any]:
     """Une saga pour la grille : compteurs, trois affiches (éventail), films vus, suivant."""
-    films = _films(collection, library, year_now, watch)
+    films = _films(collection, library, year_now, watch, order)
     count = {s: sum(1 for f in films if f["state"] == s) for s in _STATES}
     seen = sum(1 for f in films if f["watched"])
     started = seen > 0 or any(f["progress"] for f in films)
@@ -179,6 +201,8 @@ def saga_summary(
         # Prochain film à voir (« Reprendre la saga ») ; None : rien de prêt
         "next": upcoming_next,
         "last_watched_at": max((f["watched_at"] for f in films if f["watched_at"]), default=None),
+        # Ordre choisi à la main (sinon : ordre de sortie)
+        "custom_order": bool(order),
     }
 
 
@@ -187,10 +211,11 @@ def saga_detail(
     library: dict[int, dict[str, Any]],
     year_now: int,
     watch: dict[int, dict[str, Any]] | None = None,
+    order: list[int] | None = None,
 ) -> dict[str, Any]:
-    """Fiche d'une saga : le résumé et tous ses films, dans l'ordre de sortie."""
-    films = _films(collection, library, year_now, watch)
-    return {**saga_summary(collection, library, year_now, watch), "films": films}
+    """Fiche d'une saga : le résumé et tous ses films, dans l'ordre (de sortie ou choisi)."""
+    films = _films(collection, library, year_now, watch, order)
+    return {**saga_summary(collection, library, year_now, watch, order), "films": films}
 
 
 def in_progress(sagas: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -244,6 +269,42 @@ async def movie_watch(db: AsyncSession, profile_id: int | None) -> dict[int, dic
         if str(state["id"]).isdigit():
             out[int(state["id"])] = state
     return out
+
+
+# ── Ordre personnalisé (base ArrMada) ─────────────────────────
+
+
+async def custom_orders(db: AsyncSession) -> dict[int, list[int]]:
+    """Ordres choisis à la main : {TMDB de la saga → TMDB des films dans l'ordre}."""
+    rows = (await db.execute(select(SagaOrder))).scalars().all()
+    return {row.collection_tmdb: row.ids() for row in rows if row.ids()}
+
+
+async def set_order(db: AsyncSession, collection: dict[str, Any], tmdb_ids: list[int]) -> None:
+    """Enregistre l'ordre choisi (upsert) ; seuls les films de la saga sont gardés."""
+    known = {int(f.get("tmdbId") or 0) for f in collection.get("movies") or []}
+    ids = [i for i in dict.fromkeys(tmdb_ids) if i in known]  # sans doublon, dans la saga
+    tmdb = int(collection.get("tmdbId") or 0)
+    row = (
+        await db.execute(select(SagaOrder).where(SagaOrder.collection_tmdb == tmdb))
+    ).scalar_one_or_none()
+    if row is None:
+        row = SagaOrder(collection_tmdb=tmdb)
+        db.add(row)
+    row.title = str(collection.get("title") or "")[:300]
+    row.tmdb_ids = ",".join(str(i) for i in ids)
+    row.updated_at = datetime.now(UTC)
+    await db.flush()
+
+
+async def reset_order(db: AsyncSession, collection_tmdb: int) -> None:
+    """Revient à l'ordre de sortie."""
+    row = (
+        await db.execute(select(SagaOrder).where(SagaOrder.collection_tmdb == collection_tmdb))
+    ).scalar_one_or_none()
+    if row is not None:
+        await db.delete(row)
+        await db.flush()
 
 
 # ── Appels à Radarr ───────────────────────────────────────────
@@ -308,3 +369,130 @@ async def complete(
         added.append(str(film.get("title") or ""))
     logger.info("Saga « %s » : %d film(s) ajouté(s)", collection.get("title"), len(added))
     return added
+
+
+async def follow(client: RadarrClient, collection: dict[str, Any], monitored: bool) -> None:
+    """Suivre (ou ne plus suivre) une saga : Radarr ajoute seul ses nouveaux films.
+
+    Radarr a besoin d'un profil de qualité et d'un dossier pour ajouter un
+    film de lui-même : ceux de la saga s'ils existent, sinon les premiers.
+    Les films ajoutés ainsi sont cherchés tout de suite, une fois sortis.
+    """
+    data = dict(collection)
+    data.pop("movies", None)  # Radarr n'en a pas besoin pour modifier la saga
+    data["monitored"] = monitored
+    if monitored:
+        if not data.get("qualityProfileId"):
+            profiles = await client.get_quality_profiles()
+            data["qualityProfileId"] = profiles[0]["id"] if profiles else 0
+        if not data.get("rootFolderPath"):
+            folders = await client.get_root_folders()
+            data["rootFolderPath"] = folders[0]["path"] if folders else ""
+        if not data["qualityProfileId"] or not data["rootFolderPath"]:
+            raise HTTPException(
+                status_code=409, detail="Radarr n'a ni profil de qualité ni dossier racine"
+            )
+        data["searchOnAdd"] = True
+        data["minimumAvailability"] = data.get("minimumAvailability") or "released"
+    await client.update_collection(int(collection["id"]), data)
+    logger.info("Saga « %s » : suivie = %s", collection.get("title"), monitored)
+
+
+async def notify_new_film(db: AsyncSession, movie_id: int) -> str | None:
+    """Film ajouté à Radarr : s'il appartient à une saga suivie, une notification.
+
+    Appelé par le webhook « MovieAdded » de Radarr. Rend le titre de la
+    notification, ou None (pas de saga suivie, Radarr injoignable…).
+    """
+    from app.services.notification_service import create_notification
+
+    try:
+        client = await radarr_client(db)
+    except HTTPException:
+        return None
+    try:
+        movie = await client.get_movie_by_id(movie_id)
+        tmdb = int((movie.get("collection") or {}).get("tmdbId") or 0)
+        if not tmdb:
+            return None
+        collections = await client.get_collections()
+    except Exception as exc:  # une notification ne doit jamais casser le webhook
+        logger.info("Sagas : film %s non vérifié (%s)", movie_id, exc)
+        return None
+    finally:
+        await client.close()
+    saga = next((c for c in collections or [] if int(c.get("tmdbId") or 0) == tmdb), None)
+    if saga is None or not saga.get("monitored"):
+        return None
+    title = f"Nouveau film dans la saga {saga.get('title')}"
+    year = movie.get("year")
+    await create_notification(
+        db,
+        type="saga_new_film",
+        title=title,
+        message=f"{movie.get('title')}{f' ({year})' if year else ''} : ajouté par Radarr, recherché dès sa sortie.",
+        severity="info",
+        service_name="radarr",
+    )
+    return title
+
+
+# ── Collections Jellyfin ──────────────────────────────────────
+
+
+async def jellyfin_collection(db: AsyncSession, saga: dict[str, Any]) -> dict[str, Any]:
+    """Crée (ou complète) la collection Jellyfin d'une saga avec ses films sur le NAS.
+
+    Rend {status, message, count} ; status « ok », « empty » (aucun film de
+    la saga dans Jellyfin) ou « unavailable » (Jellyfin absent).
+    """
+    import httpx
+
+    from app.services import jellyfin
+
+    cfg = await jellyfin.get_config(db)
+    if cfg is None:
+        return {"status": "unavailable", "message": "Jellyfin n'est pas configuré", "count": 0}
+    base, key = cfg
+    ids: list[str] = []
+    for film in saga.get("films") or []:
+        if film.get("state") != "available":
+            continue
+        item = await jellyfin.find_movie_item(db, int(film["tmdb_id"]))
+        if item and item.get("id"):
+            ids.append(str(item["id"]))
+    if not ids:
+        return {"status": "empty", "message": "Aucun film de la saga dans Jellyfin", "count": 0}
+    name = str(saga.get("title") or "Saga")
+    headers = jellyfin.auth_header(key)
+    async with httpx.AsyncClient(base_url=base, headers=headers, timeout=30) as http:
+        # Collection du même nom déjà là : on la complète (Jellyfin ignore les doublons)
+        found = await http.get(
+            "/Items",
+            params={"IncludeItemTypes": "BoxSet", "Recursive": "true", "SearchTerm": name},
+        )
+        found.raise_for_status()
+        existing = next(
+            (
+                it
+                for it in (found.json() or {}).get("Items") or []
+                if str(it.get("Name") or "").casefold() == name.casefold()
+            ),
+            None,
+        )
+        if existing:
+            resp = await http.post(
+                f"/Collections/{existing['Id']}/Items", params={"Ids": ",".join(ids)}
+            )
+            resp.raise_for_status()
+            verb = "complétée"
+        else:
+            resp = await http.post("/Collections", params={"Name": name, "Ids": ",".join(ids)})
+            resp.raise_for_status()
+            verb = "créée"
+    count = len(ids)
+    return {
+        "status": "ok",
+        "message": f"Collection « {name} » {verb} dans Jellyfin ({count} film{'s' if count > 1 else ''})",
+        "count": count,
+    }
