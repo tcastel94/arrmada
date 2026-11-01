@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Musique (Lidarr) : téléchargements et albums manquants
+
+#### Added
+- **Musique restée dans les téléchargements** : le dossier « terminé » de SABnzbd (sinon `ARR_DOWNLOADS_PATH`) et ses sous-dossiers sont passés en revue par Lidarr ; un album par dossier (`CD1`, `CD2`… regroupés), prêt à importer ou avec la raison en clair (artiste non suivi, album non reconnu). Import dans la bibliothèque Lidarr d'un clic (web app, panneau « Dans les téléchargements ») ou d'un OK (TV, bouton « Téléchargements » de l'écran Musique)
+- **Récupérer un album absent ou ses pistes manquantes** : web app (bouton sur la pochette) et TV (OK sur un album absent, appui long sur les autres) ; l'album est suivi s'il ne l'était pas, puis Lidarr le cherche
+- **« Chercher les albums manquants »** d'un artiste (web app et TV)
+- Serveur : `POST /api/music/albums/{id}/search`, `POST /api/music/artists/{id}/search`, `GET /api/music/downloads`, `POST /api/music/downloads/import` (dossier limité aux dossiers de téléchargements), ouvertes aux TV
+- Tests : serveur (40 tests musique), appli (`MusicRulesTest`), e2e (import, récupération)
+
+### Musique (Lidarr) : écoute sur la TV, étape 3
+
+#### Added
+- **Écran Musique de l'appli TV** : onglet « Musique » dans la barre du haut (téléphone, tablette : « Plus › Musique »), artistes suivis en pochettes carrées, conseil en clair si la bibliothèque « Musique » de Jellyfin manque
+- **Fiche d'un artiste** : photo, genres, présentation, albums marqués « 10/12 » (partiel) ou « Absent » ; OK sur un album présent l'ouvre pour l'écouter
+- **Lecteur audio** : pochette, titre, artiste, barre de progression, Précédent / Lecture-Pause / Suivant, liste des pistes (la piste en cours en bleu, OK sur une piste la joue) ; l'album s'enchaîne piste après piste. Même moteur que les films (Media3), pistes relayées par ArrMada depuis Jellyfin
+- **Ajouter un artiste depuis la TV** : recherche MusicBrainz au clavier, OK pour suivre (Lidarr cherche ses albums)
+- Serveur : `GET /api/music/albums/{id}/tracks` (album Lidarr retrouvé dans Jellyfin par son identifiant MusicBrainz, sinon titre + artiste ; raison en clair s'il manque) et `GET /api/music/stream/{id}` (piste d'origine relayée, avance par « Range »), ouvertes aux TV
+- Tests : serveur (correspondance Lidarr ↔ Jellyfin, pistes, flux), appli (`MusicRulesTest`)
+
+#### Changed
+- Barre du haut de l'accueil TV : les onglets de sections défilent si la place manque (8 sections avec Musique)
+
+#### Notes
+- La musique s'arrête en quittant l'écran du lecteur (pas de lecture en arrière-plan)
+- APK non construite dans l'environnement de la modification (SDK Android non téléchargeable) : compilation à confirmer par la CI Android
+
+### Musique (Lidarr) : pages de la web app, étape 2
+
+#### Added
+- **Page Musique** (menu Bibliothèque, raccourci `g` + `u`) : artistes suivis par Lidarr en pochettes carrées (« 3 albums · 20/30 pistes », grisés tant que rien n'est sur le NAS), albums en téléchargement avec progression, et **« Ajouter un artiste »** : recherche MusicBrainz, bouton « Suivre » (Lidarr cherche aussitôt ses albums), « Suivi » pour ceux déjà dans la bibliothèque
+- **Fiche d'un artiste** (`/music/{id}`) : photo sur fond flou, genres, présentation, taille sur le NAS ; albums puis EP puis singles, chacun marqué **Complet**, **Partiel** (« 10/12 pistes ») ou grisé (« Recherché », « Non suivi »)
+- Bandeau d'aide quand quelque chose manque : Lidarr non déclaré (lien vers les services) ou pas de bibliothèque « Musique » dans Jellyfin pour écouter
+- Carte affiche commune : format carré (`square`) et pictogramme disque pour la musique
+- Tests de bout en bout `e2e/music.spec.ts` (grille, conseil Jellyfin, ajout, fiche)
+
+### Musique (Lidarr) : API commune, étape 1
+
+#### Added
+- **API `/api/music`** pour la web app et l'appli TV ([ADR-015](docs/adr/015-musique-lidarr.md)) : état (`/status` : Lidarr déclaré, bibliothèque « Musique » dans Jellyfin, conseil en clair sinon), artistes suivis (`/artists`), fiche et albums complets / partiels / manquants (`/artists/{id}`), recherche MusicBrainz avec « déjà suivi » (`/lookup`), suivi d'un artiste avec recherche de ses albums (`POST /artists`), file de téléchargement (`/queue`)
+- Les TV appairées peuvent lire ces routes et demander un artiste, jamais en supprimer ni en modifier
+- Client Lidarr : fiche d'un artiste, albums d'un artiste, profils de métadonnées ; la file inclut l'artiste et l'album
+- 20 tests (mise en forme, droits des appareils, faux Lidarr et faux Jellyfin)
+
 ### Appli Android : « Rechercher une mise à jour » sans attendre l'heure
 
 #### Changed

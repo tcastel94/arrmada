@@ -210,6 +210,18 @@ _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         ("GET", r"/api/videos/(play|stream|subtitle|image)/[A-Za-z0-9_-]{1,2000}"),
         # Séries maison (Naruto Kai, One Pace…) : grille, écran Série, Reprendre
         ("GET", r"/api/videos/series(/index|/\d+)?"),
+        # Musique : bibliothèque Lidarr, recherche, file ; demander un artiste
+        # depuis la TV (comme un film ou une série), jamais le supprimer
+        ("GET", r"/api/music/(status|artists|artists/\d+|lookup|queue)"),
+        ("GET", r"/api/music/albums/\d+/tracks"),
+        # Récupérer un album absent / ses pistes manquantes, les albums
+        # manquants d'un artiste ; importer la musique restée dans les
+        # téléchargements (dossiers vérifiés côté serveur)
+        ("POST", r"/api/music/(albums|artists)/\d+/search"),
+        ("GET", r"/api/music/downloads"),
+        ("POST", r"/api/music/downloads/import"),
+        ("GET", r"/api/music/stream/[0-9a-f]{32}"),
+        ("POST", r"/api/music/artists"),
     )
 )
 

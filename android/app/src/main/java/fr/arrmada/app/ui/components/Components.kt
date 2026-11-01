@@ -129,6 +129,7 @@ fun PosterCard(
     onFocus: () -> Unit = {},
     onLongClick: (() -> Unit)? = null, // appui long (OK maintenu) : menu du titre
     tag: String? = null, // étiquette en haut à gauche (« Hier », « Il y a 3 j »…)
+    square: Boolean = false, // pochette carrée (album, artiste) au lieu d'une affiche 2:3
 ) {
     var tint by remember(imageUrl) { mutableStateOf(PosterGlow.cached(imageUrl)) }
     Column(modifier.width(width)) {
@@ -137,7 +138,7 @@ fun PosterCard(
             onLongClick = onLongClick,
             modifier = Modifier
                 .width(width)
-                .height(width * 1.5f)
+                .height(if (square) width else width * 1.5f)
                 .tapToClick(onClick, onLongClick)
                 .onFocusChanged { if (it.isFocused) onFocus() },
             shape = ClickableSurfaceDefaults.shape(CardShape),

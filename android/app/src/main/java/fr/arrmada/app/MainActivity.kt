@@ -14,6 +14,11 @@ import fr.arrmada.app.home.HomeRowsWorker
 import fr.arrmada.app.home.TvHomeRows
 import fr.arrmada.app.update.UpdateDialog
 import fr.arrmada.app.ui.videos.VideosScreen
+import fr.arrmada.app.ui.music.MusicArtistScreen
+import fr.arrmada.app.ui.music.MusicDownloadsScreen
+import fr.arrmada.app.ui.music.MusicPlayerScreen
+import fr.arrmada.app.ui.music.MusicScreen
+import fr.arrmada.app.ui.music.MusicSearchScreen
 import fr.arrmada.app.ui.detail.LocalSeriesScreen
 import fr.arrmada.app.data.LocalSeriesLogic
 import fr.arrmada.app.ui.components.gutter
@@ -211,6 +216,11 @@ private object Routes {
     const val VIDEOS = "videos?path={path}" // écran Vidéos : un dossier (sans path : les dossiers déclarés)
     const val TRAILER = "trailer/{tmdb}?yt={yt}" // bande-annonce plein écran (NAS, sinon YouTube)
     const val PERSON = "person/{tmdb}" // acteur : biographie et filmographie
+    const val MUSIC = "music" // artistes suivis par Lidarr (ADR-015)
+    const val MUSIC_ARTIST = "music/artist/{id}"
+    const val MUSIC_ALBUM = "music/album/{id}" // écoute d'un album (Jellyfin)
+    const val MUSIC_SEARCH = "music/search" // suivre un nouvel artiste
+    const val MUSIC_DOWNLOADS = "music/downloads" // musique restée dans les téléchargements, à importer
 
     fun library(type: String) = "library/$type"
     fun search(voice: Boolean) = "search?voice=$voice"
@@ -222,6 +232,8 @@ private object Routes {
     fun videos(token: String? = null) = "videos?path=${token.orEmpty()}"
     fun trailer(tmdbId: Long, youtubeId: String?) = "trailer/$tmdbId?yt=${youtubeId.orEmpty()}"
     fun person(tmdbId: Long) = "person/$tmdbId"
+    fun musicArtist(id: Int) = "music/artist/$id"
+    fun musicAlbum(id: Int) = "music/album/$id"
 }
 
 /** Intro à l'écran ([active]) et demande de la passer ([skip]), partagées avec l'activité. */
@@ -331,6 +343,7 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
             "tonight" -> nav.navigate(Routes.TONIGHT)
             "apps" -> nav.navigate(Routes.APPS)
             "videos" -> nav.navigate(Routes.videos())
+            "music" -> nav.navigate(Routes.MUSIC)
             "queue" -> nav.navigate(Routes.DOWNLOADS)
             "board" -> nav.navigate(Routes.BOARD)
             "profiles" -> nav.navigate(Routes.PROFILES)
@@ -369,7 +382,8 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
         Routes.LIBRARY -> if (backStack?.arguments?.getString("type") == "series") "series" else "movies"
         Routes.SEARCH -> "search"
         Routes.DOWNLOADS -> "queue"
-        Routes.MORE, Routes.TONIGHT, Routes.DISCOVER, Routes.BOARD, Routes.SETTINGS, Routes.VIDEOS -> "more"
+        Routes.MORE, Routes.TONIGHT, Routes.DISCOVER, Routes.BOARD, Routes.SETTINGS, Routes.VIDEOS,
+        Routes.MUSIC, Routes.MUSIC_ARTIST, Routes.MUSIC_ALBUM, Routes.MUSIC_SEARCH, Routes.MUSIC_DOWNLOADS -> "more"
         else -> null
     }
 
@@ -710,6 +724,30 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
                 onFolder = { nav.navigate(Routes.videos(it)) },
                 onPlay = { file, start -> nav.navigate(Routes.play(PlayRequest(kind = "file", id = 0, startSeconds = start, file = file.token))) },
             )
+        }
+        composable(Routes.MUSIC) {
+            MusicScreen(
+                repository = app.repository,
+                onArtist = { nav.navigate(Routes.musicArtist(it)) },
+                onSearch = { nav.navigate(Routes.MUSIC_SEARCH) },
+                onDownloads = { nav.navigate(Routes.MUSIC_DOWNLOADS) },
+            )
+        }
+        composable(Routes.MUSIC_ARTIST, arguments = listOf(navArgument("id") { type = NavType.IntType })) { entry ->
+            MusicArtistScreen(
+                repository = app.repository,
+                id = entry.arguments?.getInt("id") ?: 0,
+                onAlbum = { nav.navigate(Routes.musicAlbum(it.id)) },
+            )
+        }
+        composable(Routes.MUSIC_ALBUM, arguments = listOf(navArgument("id") { type = NavType.IntType })) { entry ->
+            MusicPlayerScreen(app = app, albumId = entry.arguments?.getInt("id") ?: 0)
+        }
+        composable(Routes.MUSIC_SEARCH) {
+            MusicSearchScreen(repository = app.repository)
+        }
+        composable(Routes.MUSIC_DOWNLOADS) {
+            MusicDownloadsScreen(repository = app.repository)
         }
         composable(Routes.LOCAL_SHOW, arguments = listOf(navArgument("id") { type = NavType.IntType })) { entry ->
             val id = entry.arguments?.getInt("id") ?: 0
