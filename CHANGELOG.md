@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Musique : bonus de films ignorés dans les téléchargements
+
+#### Changed
+- La liste « Musique dans les téléchargements » (web app et TV) écarte les **bonus de films** : bande originale ou chansons rangées avec un film (« Movie Xtras », « Featurettes », « Trailers »… ou dossier au nom de sortie vidéo : 1080p, 4K, UHD, BluRay, WEB-DL, x265, S01E02). Leur nombre est indiqué (« 2 bonus de films ignorés ») et leur import est refusé
+- Tests : serveur (détection, nom du dossier de téléchargements sans effet), e2e
+
 ### Musique (Lidarr) : téléchargements et albums manquants
 
 #### Added

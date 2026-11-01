@@ -128,7 +128,12 @@ data class MusicDownloadAlbum(
 )
 
 @Serializable
-data class MusicDownloads(val folders: List<String> = emptyList(), val albums: List<MusicDownloadAlbum> = emptyList())
+data class MusicDownloads(
+    val folders: List<String> = emptyList(),
+    val albums: List<MusicDownloadAlbum> = emptyList(),
+    /** Dossiers de bonus de films écartés (bande originale rangée avec un film). */
+    val ignored: Int = 0,
+)
 
 @Serializable
 data class MusicImportBody(val folder: String)

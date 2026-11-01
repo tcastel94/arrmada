@@ -226,6 +226,8 @@ async def downloads(db: AsyncSession = Depends(get_db)) -> dict:
     """Musique restée dans le dossier de téléchargements (et ses sous-dossiers), par album.
 
     Chaque album est « prêt à importer » ou porte la raison donnée par Lidarr.
+    Les bonus de films (bande originale rangée avec un film) sont écartés ;
+    ``ignored`` dit combien.
     """
     roots = music_downloads.download_roots(await music_downloads.sabnzbd_complete_dir(db))
     client = await music.lidarr_client(db, timeout=60)
@@ -233,7 +235,9 @@ async def downloads(db: AsyncSession = Depends(get_db)) -> dict:
         items = await music_downloads.scan(client, roots)
     finally:
         await client.close()
-    return {"folders": roots, "albums": music_downloads.group_candidates(items)}
+    albums = music_downloads.group_candidates(items)
+    kept = [a for a in albums if not music_downloads.is_film_extra(a["folder"], roots)]
+    return {"folders": roots, "albums": kept, "ignored": len(albums) - len(kept)}
 
 
 class ImportFolder(BaseModel):

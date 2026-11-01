@@ -104,6 +104,7 @@ test("musique des téléchargements : importer un album prêt, raison affichée 
             /^\/api\/music\/downloads$/,
             () => ({
                 folders: ["/data/usenet/complete"],
+                ignored: 2,
                 albums: [
                     { folder: "/data/usenet/complete/music/Radiohead - Kid A", name: "Radiohead - Kid A", artist: "Radiohead", album: "Kid A", tracks: 10, size_bytes: 300_000_000, ready: true, reason: null },
                     { folder: "/data/usenet/complete/music/Inconnu", name: "Inconnu", artist: null, album: null, tracks: 1, size_bytes: 5_000_000, ready: false, reason: "Artiste non reconnu par Lidarr (suis-le d'abord, ou corrige les étiquettes)" },
@@ -120,6 +121,8 @@ test("musique des téléchargements : importer un album prêt, raison affichée 
     await expect(page.getByRole("heading", { name: "Dans les téléchargements" })).toBeVisible();
     await expect(page.getByText("Radiohead – Kid A")).toBeVisible();
     await expect(page.getByText(/Artiste non reconnu par Lidarr/)).toBeVisible();
+    // Bonus de films écartés par le serveur : seulement mentionnés
+    await expect(page.getByText(/2 bonus de films ignorés/)).toBeVisible();
     // Un seul bouton : l'album non reconnu ne s'importe pas
     await expect(page.getByRole("button", { name: "Importer" })).toHaveCount(1);
     await page.getByRole("button", { name: "Importer" }).click();

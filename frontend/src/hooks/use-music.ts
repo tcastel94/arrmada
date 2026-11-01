@@ -173,11 +173,15 @@ export function useSearchArtist() {
     });
 }
 
-/** Musique restée dans les téléchargements (Lidarr passe le dossier en revue : lent). */
+/**
+ * Musique restée dans les téléchargements (Lidarr passe le dossier en revue : lent).
+ * `ignored` : dossiers de bonus de films écartés (bande originale rangée avec un film).
+ */
 export function useMusicDownloads(enabled = true) {
     return useQuery({
         queryKey: ["music", "downloads"],
-        queryFn: () => apiFetch<{ folders: string[]; albums: MusicDownloadAlbum[] }>("/api/music/downloads"),
+        queryFn: () =>
+            apiFetch<{ folders: string[]; albums: MusicDownloadAlbum[]; ignored?: number }>("/api/music/downloads"),
         enabled,
         staleTime: 60_000,
     });
