@@ -39,6 +39,18 @@ class LidarrClient(ArrBaseClient):
         params = {"artistId": artist_id} if artist_id is not None else None
         return await self.get("/album", params=params)
 
+    async def monitor_albums(self, album_ids: list[int], monitored: bool = True) -> None:
+        """Suivre (ou ne plus suivre) des albums (Lidarr répond 202 sans corps)."""
+        resp = await self.client.put(
+            f"{self.API_PREFIX}/album/monitor",
+            json={"albumIds": album_ids, "monitored": monitored},
+        )
+        resp.raise_for_status()
+
+    async def command(self, name: str, **body: Any) -> dict[str, Any]:
+        """Lancer une commande Lidarr (AlbumSearch, ArtistSearch, ManualImport…)."""
+        return await self.post("/command", data={"name": name, **body})
+
     # ── Quality Profiles ──────────────────────────────────────
     async def get_quality_profiles(self) -> list[dict[str, Any]]:
         """Fetch available quality profiles."""

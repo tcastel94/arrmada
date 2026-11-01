@@ -10,7 +10,9 @@
 /* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Disc3 } from "lucide-react";
+import type { ReactNode } from "react";
+import { ArrowLeft, Disc3, Download, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { Header } from "@/components/layout/header";
 import { PageContainer } from "@/components/shared/page-container";
 import { Panel } from "@/components/shared/panel";
@@ -20,7 +22,7 @@ import { PosterCard } from "@/components/shared/poster-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatBytes } from "@/lib/format";
-import { useArtist, type Album } from "@/hooks/use-music";
+import { useArtist, useSearchAlbum, useSearchArtist, type Album } from "@/hooks/use-music";
 
 const GRID = "grid grid-cols-3 gap-x-3 gap-y-5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7";
 
@@ -72,6 +74,9 @@ export default function ArtistPage() {
                                 artist.tracks_total ? `${artist.tracks_have}/${artist.tracks_total} pistes sur le NAS` : null,
                                 artist.size_bytes ? formatBytes(artist.size_bytes) : null,
                             ]}
+                            action={
+                                artist.album_list.some((a) => a.status !== "complete") ? <SearchMissing artistId={artist.id} /> : undefined
+                            }
                         />
                         {artist.album_list.length === 0 ? (
                             <div className="rounded-2xl bg-card">
@@ -110,6 +115,7 @@ function ArtistHero({
     genres,
     overview,
     facts,
+    action,
 }: {
     name: string;
     image: string | null;
@@ -117,6 +123,7 @@ function ArtistHero({
     genres: string[];
     overview: string | null;
     facts: (string | null)[];
+    action?: ReactNode;
 }) {
     return (
         <section className="relative overflow-hidden rounded-2xl bg-card">
@@ -149,13 +156,42 @@ function ArtistHero({
                         </div>
                     )}
                     {overview && <p className="line-clamp-4 max-w-2xl text-[14px] leading-snug text-foreground/80">{overview}</p>}
+                    {action}
                 </div>
             </div>
         </section>
     );
 }
 
+/** « Chercher les albums manquants » : Lidarr cherche tous les albums absents ou incomplets. */
+function SearchMissing({ artistId }: { artistId: number }) {
+    const run = useSearchArtist();
+    return (
+        <Button
+            size="sm"
+            variant="tinted"
+            disabled={run.isPending}
+            onClick={() =>
+                run.mutate(artistId, {
+                    onSuccess: (r) => toast.success("Recherche lancée", { description: r.message }),
+                    onError: (e) => toast.error("Recherche impossible", { description: e.message }),
+                })
+            }
+        >
+            {run.isPending ? <Loader2 className="animate-spin" /> : <Download />}
+            Chercher les albums manquants
+        </Button>
+    );
+}
+
 function AlbumCard({ album }: { album: Album }) {
+    const search = useSearchAlbum();
+    const label = album.status === "partial" ? "Récupérer les pistes manquantes" : "Récupérer cet album";
+    const fetchIt = () =>
+        search.mutate(album.id, {
+            onSuccess: (r) => toast.success("Recherche lancée", { description: r.message }),
+            onError: (e) => toast.error("Recherche impossible", { description: e.message }),
+        });
     const state =
         album.status === "complete"
             ? null
@@ -173,6 +209,13 @@ function AlbumCard({ album }: { album: Album }) {
             subtitle={state ?? (album.year ? String(album.year) : album.type)}
             posterUrl={album.cover}
             dimmed={album.status === "missing"}
+            action={
+                album.status !== "complete" ? (
+                    <Button size="icon-sm" onClick={fetchIt} disabled={search.isPending} aria-label={`${label} : ${album.title}`} title={label}>
+                        {search.isPending ? <Loader2 className="animate-spin" /> : <Download />}
+                    </Button>
+                ) : undefined
+            }
             badges={
                 album.status === "complete" ? (
                     <Badge variant="success">Complet</Badge>

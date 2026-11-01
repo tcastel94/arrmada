@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Musique (Lidarr) : téléchargements et albums manquants
+
+#### Added
+- **Musique restée dans les téléchargements** : le dossier « terminé » de SABnzbd (sinon `ARR_DOWNLOADS_PATH`) et ses sous-dossiers sont passés en revue par Lidarr ; un album par dossier (`CD1`, `CD2`… regroupés), prêt à importer ou avec la raison en clair (artiste non suivi, album non reconnu). Import dans la bibliothèque Lidarr d'un clic (web app, panneau « Dans les téléchargements ») ou d'un OK (TV, bouton « Téléchargements » de l'écran Musique)
+- **Récupérer un album absent ou ses pistes manquantes** : web app (bouton sur la pochette) et TV (OK sur un album absent, appui long sur les autres) ; l'album est suivi s'il ne l'était pas, puis Lidarr le cherche
+- **« Chercher les albums manquants »** d'un artiste (web app et TV)
+- Serveur : `POST /api/music/albums/{id}/search`, `POST /api/music/artists/{id}/search`, `GET /api/music/downloads`, `POST /api/music/downloads/import` (dossier limité aux dossiers de téléchargements), ouvertes aux TV
+- Tests : serveur (40 tests musique), appli (`MusicRulesTest`), e2e (import, récupération)
+
 ### Musique (Lidarr) : écoute sur la TV, étape 3
 
 #### Added

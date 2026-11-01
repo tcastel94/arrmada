@@ -15,6 +15,7 @@ import fr.arrmada.app.home.TvHomeRows
 import fr.arrmada.app.update.UpdateDialog
 import fr.arrmada.app.ui.videos.VideosScreen
 import fr.arrmada.app.ui.music.MusicArtistScreen
+import fr.arrmada.app.ui.music.MusicDownloadsScreen
 import fr.arrmada.app.ui.music.MusicPlayerScreen
 import fr.arrmada.app.ui.music.MusicScreen
 import fr.arrmada.app.ui.music.MusicSearchScreen
@@ -219,6 +220,7 @@ private object Routes {
     const val MUSIC_ARTIST = "music/artist/{id}"
     const val MUSIC_ALBUM = "music/album/{id}" // écoute d'un album (Jellyfin)
     const val MUSIC_SEARCH = "music/search" // suivre un nouvel artiste
+    const val MUSIC_DOWNLOADS = "music/downloads" // musique restée dans les téléchargements, à importer
 
     fun library(type: String) = "library/$type"
     fun search(voice: Boolean) = "search?voice=$voice"
@@ -381,7 +383,7 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
         Routes.SEARCH -> "search"
         Routes.DOWNLOADS -> "queue"
         Routes.MORE, Routes.TONIGHT, Routes.DISCOVER, Routes.BOARD, Routes.SETTINGS, Routes.VIDEOS,
-        Routes.MUSIC, Routes.MUSIC_ARTIST, Routes.MUSIC_ALBUM, Routes.MUSIC_SEARCH -> "more"
+        Routes.MUSIC, Routes.MUSIC_ARTIST, Routes.MUSIC_ALBUM, Routes.MUSIC_SEARCH, Routes.MUSIC_DOWNLOADS -> "more"
         else -> null
     }
 
@@ -728,6 +730,7 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
                 repository = app.repository,
                 onArtist = { nav.navigate(Routes.musicArtist(it)) },
                 onSearch = { nav.navigate(Routes.MUSIC_SEARCH) },
+                onDownloads = { nav.navigate(Routes.MUSIC_DOWNLOADS) },
             )
         }
         composable(Routes.MUSIC_ARTIST, arguments = listOf(navArgument("id") { type = NavType.IntType })) { entry ->
@@ -742,6 +745,9 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
         }
         composable(Routes.MUSIC_SEARCH) {
             MusicSearchScreen(repository = app.repository)
+        }
+        composable(Routes.MUSIC_DOWNLOADS) {
+            MusicDownloadsScreen(repository = app.repository)
         }
         composable(Routes.LOCAL_SHOW, arguments = listOf(navArgument("id") { type = NavType.IntType })) { entry ->
             val id = entry.arguments?.getInt("id") ?: 0

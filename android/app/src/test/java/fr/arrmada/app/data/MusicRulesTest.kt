@@ -33,4 +33,20 @@ class MusicRulesTest {
         assertEquals(true, MusicAlbum(tracksHave = 1).listenable)
         assertEquals(false, MusicAlbum(tracksHave = 0).listenable)
     }
+
+    @Test
+    fun albumMenu() {
+        val partial = MusicAlbum(status = "partial", tracksHave = 10, tracksTotal = 12, monitored = true)
+        assertEquals("10 pistes sur 12 sur le NAS", MusicRules.albumState(partial))
+        assertEquals("Récupérer les pistes manquantes", MusicRules.searchLabel(partial))
+        assertEquals("Récupérer cet album", MusicRules.searchLabel(MusicAlbum(status = "missing")))
+        assertEquals("Pas sur le NAS (non suivi)", MusicRules.albumState(MusicAlbum(status = "missing")))
+        assertNull(MusicRules.searchLabel(MusicAlbum(status = "complete")))
+    }
+
+    @Test
+    fun downloadTitle() {
+        assertEquals("Radiohead – Kid A", MusicRules.downloadTitle(MusicDownloadAlbum(name = "dossier", artist = "Radiohead", album = "Kid A")))
+        assertEquals("dossier", MusicRules.downloadTitle(MusicDownloadAlbum(name = "dossier")))
+    }
 }

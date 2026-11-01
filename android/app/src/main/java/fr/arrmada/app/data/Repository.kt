@@ -413,6 +413,21 @@ class Repository(private val api: Api) {
     /** Suivre un artiste : Lidarr cherche aussitôt ses albums. */
     suspend fun musicFollow(mbid: String): MusicArtist = api.post("/api/music/artists", MusicAddBody(mbid), slow = true)
 
+    /** Récupérer un album absent, ou les pistes qui manquent à un album partiel. */
+    suspend fun musicSearchAlbum(albumId: Int): MusicActionResult =
+        api.post("/api/music/albums/$albumId/search", empty, slow = true)
+
+    /** Chercher tous les albums qui manquent à un artiste. */
+    suspend fun musicSearchArtist(artistId: Int): MusicActionResult =
+        api.post("/api/music/artists/$artistId/search", empty, slow = true)
+
+    /** Musique restée dans le dossier de téléchargements, par album. */
+    suspend fun musicDownloads(): MusicDownloads = api.get("/api/music/downloads", slow = true)
+
+    /** Importer dans Lidarr un dossier d'album des téléchargements. */
+    suspend fun musicImport(folder: String): MusicActionResult =
+        api.post("/api/music/downloads/import", MusicImportBody(folder), slow = true)
+
     /** Pistes d'un album à écouter (Jellyfin), dans l'ordre du disque. */
     suspend fun musicAlbumTracks(albumId: Int): MusicAlbumTracks = api.get("/api/music/albums/$albumId/tracks")
 

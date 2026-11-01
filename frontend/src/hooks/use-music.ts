@@ -134,3 +134,68 @@ export function useMusicQueue(enabled = true) {
         enabled,
     });
 }
+
+/** Réponse d'une action (recherche lancée, import lancé). */
+export interface MusicActionResult {
+    status: string;
+    message: string;
+}
+
+/** Album resté dans le dossier de téléchargements, vu par Lidarr. */
+export interface MusicDownloadAlbum {
+    folder: string;
+    name: string;
+    artist: string | null;
+    album: string | null;
+    tracks: number;
+    size_bytes: number;
+    /** Reconnu par Lidarr : peut être importé. */
+    ready: boolean;
+    /** Sinon, pourquoi (mots de Lidarr). */
+    reason: string | null;
+}
+
+/** Récupérer un album absent, ou les pistes manquantes d'un album partiel. */
+export function useSearchAlbum() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (albumId: number) =>
+            apiFetch<MusicActionResult>(`/api/music/albums/${albumId}/search`, { method: "POST" }),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ["music", "artist"] }),
+    });
+}
+
+/** Chercher tous les albums qui manquent à un artiste. */
+export function useSearchArtist() {
+    return useMutation({
+        mutationFn: (artistId: number) =>
+            apiFetch<MusicActionResult>(`/api/music/artists/${artistId}/search`, { method: "POST" }),
+    });
+}
+
+/** Musique restée dans les téléchargements (Lidarr passe le dossier en revue : lent). */
+export function useMusicDownloads(enabled = true) {
+    return useQuery({
+        queryKey: ["music", "downloads"],
+        queryFn: () => apiFetch<{ folders: string[]; albums: MusicDownloadAlbum[] }>("/api/music/downloads"),
+        enabled,
+        staleTime: 60_000,
+    });
+}
+
+/** Importer dans Lidarr un dossier d'album des téléchargements. */
+export function useImportDownload() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (folder: string) =>
+            apiFetch<MusicActionResult>("/api/music/downloads/import", {
+                method: "POST",
+                body: JSON.stringify({ folder }),
+            }),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ["music", "downloads"] });
+            qc.invalidateQueries({ queryKey: ["music", "artists"] });
+        },
+    });
+}
+

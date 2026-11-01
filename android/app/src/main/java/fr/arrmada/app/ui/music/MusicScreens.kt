@@ -48,14 +48,18 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import fr.arrmada.app.data.Fr
+import fr.arrmada.app.data.MusicActionResult
 import fr.arrmada.app.data.MusicAlbum
 import fr.arrmada.app.data.MusicArtist
 import fr.arrmada.app.data.MusicArtistDetail
 import fr.arrmada.app.data.MusicArtistHit
+import fr.arrmada.app.data.MusicDownloadAlbum
+import fr.arrmada.app.data.MusicDownloads
 import fr.arrmada.app.data.MusicStatus
 import fr.arrmada.app.data.Repository
 import fr.arrmada.app.ui.components.ArrButton
 import fr.arrmada.app.ui.components.ArtImage
+import fr.arrmada.app.ui.components.ChoiceDialog
 import fr.arrmada.app.ui.components.Dim
 import fr.arrmada.app.ui.components.FocusPanel
 import fr.arrmada.app.ui.components.KenBurnsBackdrop
@@ -88,6 +92,24 @@ object MusicRules {
         else -> "Absent"
     }
 
+    /** Sous-titre du menu d'un album : où il en est. */
+    fun albumState(album: MusicAlbum): String = when (album.status) {
+        "complete" -> "Complet sur le NAS"
+        "partial" -> "${album.tracksHave} pistes sur ${album.tracksTotal} sur le NAS"
+        else -> if (album.monitored) "Pas encore sur le NAS (recherché par Lidarr)" else "Pas sur le NAS (non suivi)"
+    }
+
+    /** Action de récupération proposée, ou null pour un album complet. */
+    fun searchLabel(album: MusicAlbum): String? = when (album.status) {
+        "complete" -> null
+        "partial" -> "Récupérer les pistes manquantes"
+        else -> "Récupérer cet album"
+    }
+
+    /** « Radiohead – Kid A » (sinon le nom du dossier). */
+    fun downloadTitle(item: MusicDownloadAlbum): String =
+        listOfNotNull(item.artist, item.album).joinToString(" – ").ifBlank { item.name }
+
     /** « Groupe · Electronic ». */
     fun hitLine(hit: MusicArtistHit): String = listOfNotNull(
         when (hit.type) {
@@ -105,6 +127,7 @@ fun MusicScreen(
     repository: Repository,
     onArtist: (Int) -> Unit,
     onSearch: () -> Unit,
+    onDownloads: () -> Unit,
 ) {
     var status by remember { mutableStateOf<MusicStatus?>(null) }
     var artists by remember { mutableStateOf<List<MusicArtist>?>(null) }
@@ -131,7 +154,7 @@ fun MusicScreen(
         error != null && current == null -> MessageScreen("Musique indisponible", error, "Réessayer") { reload++ }
         current == null -> MessageScreen("Chargement…")
         status?.lidarr != true -> MessageScreen("Musique", status?.hint ?: "Lidarr n'est pas configuré dans ArrMada.")
-        else -> MusicContent(current, status?.hint, onArtist, onSearch)
+        else -> MusicContent(current, status?.hint, onArtist, onSearch, onDownloads)
     }
 }
 
@@ -141,11 +164,14 @@ private fun MusicContent(
     hint: String?,
     onArtist: (Int) -> Unit,
     onSearch: () -> Unit,
+    onDownloads: () -> Unit,
 ) {
     val first = remember { FocusRequester() }
     Column(Modifier.fillMaxSize().background(ArrColors.Night)) {
         ScreenHeader("Musique", Fr.plural(artists.size, "artiste")) {
             ArrButton("Ajouter un artiste", onSearch, leading = "+", modifier = if (artists.isEmpty()) Modifier.focusRequester(first) else Modifier)
+            // Albums restés dans le dossier de téléchargements, à importer
+            ArrButton("Téléchargements", onDownloads, leading = "⇩")
         }
         // Conseil (bibliothèque Musique absente de Jellyfin…) : écouter sera impossible
         hint?.let {
@@ -198,9 +224,11 @@ fun MusicArtistScreen(
     onAlbum: (MusicAlbum) -> Unit,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var artist by remember { mutableStateOf<MusicArtistDetail?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var reload by remember { mutableStateOf(0) }
+    var menu by remember { mutableStateOf<MusicAlbum?>(null) }
 
     LaunchedEffect(id, reload) {
         runCatching { repository.musicArtist(id) }
@@ -208,22 +236,48 @@ fun MusicArtistScreen(
             .onFailure { error = it.message ?: "Lidarr ne répond pas" }
     }
 
+    // Lance une recherche Lidarr et dit en clair ce qui se passe
+    fun runAction(action: suspend () -> MusicActionResult) {
+        scope.launch {
+            runCatching { action() }
+                .onSuccess { Toast.makeText(context, it.message, Toast.LENGTH_LONG).show(); reload++ }
+                .onFailure { Toast.makeText(context, it.message ?: "Lidarr ne répond pas", Toast.LENGTH_LONG).show() }
+        }
+    }
+
     val current = artist
     when {
         current == null && error != null -> MessageScreen("Artiste indisponible", error, "Réessayer") { reload++ }
         current == null -> MessageScreen("Chargement…")
-        else -> ArtistContent(current) { album ->
-            if (album.listenable) {
-                onAlbum(album)
-            } else {
-                Toast.makeText(context, "« ${album.title} » n’est pas encore sur le NAS", Toast.LENGTH_SHORT).show()
-            }
-        }
+        else -> ArtistContent(
+            artist = current,
+            onAlbum = { album -> if (album.listenable) onAlbum(album) else menu = album },
+            onAlbumMenu = { menu = it },
+            onSearchMissing = { runAction { repository.musicSearchArtist(current.id) } },
+        )
+    }
+
+    // OK sur un album absent, ou appui long : récupérer l'album / ses pistes manquantes
+    menu?.let { album ->
+        ChoiceDialog(
+            title = album.title,
+            subtitle = MusicRules.albumState(album),
+            choices = listOfNotNull(
+                ("Écouter" to { menu = null; onAlbum(album) }).takeIf { album.listenable },
+                MusicRules.searchLabel(album)?.let { label -> label to { menu = null; runAction { repository.musicSearchAlbum(album.id) } } },
+            ),
+            onDismiss = { menu = null },
+        )
     }
 }
 
 @Composable
-private fun ArtistContent(artist: MusicArtistDetail, onAlbum: (MusicAlbum) -> Unit) {
+private fun ArtistContent(
+    artist: MusicArtistDetail,
+    onAlbum: (MusicAlbum) -> Unit,
+    onAlbumMenu: (MusicAlbum) -> Unit,
+    onSearchMissing: () -> Unit,
+) {
     val first = remember { FocusRequester() }
     KenBurnsBackdrop(url = artist.fanart ?: artist.poster) {
         LazyVerticalGrid(
@@ -252,6 +306,10 @@ private fun ArtistContent(artist: MusicArtistDetail, onAlbum: (MusicAlbum) -> Un
                         artist.overview?.let {
                             Text(it, style = MaterialTheme.typography.bodyMedium, color = Dim, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
                         }
+                        // Des albums manquent ou sont incomplets : Lidarr les cherche tous
+                        if (artist.albumList.any { it.status != "complete" }) {
+                            ArrButton("Chercher les albums manquants", onSearchMissing, leading = "⇩", compact = true, modifier = Modifier.padding(top = 10.dp))
+                        }
                     }
                 }
             }
@@ -264,6 +322,7 @@ private fun ArtistContent(artist: MusicArtistDetail, onAlbum: (MusicAlbum) -> Un
                         square = true,
                         tag = MusicRules.albumTag(album),
                         onClick = { onAlbum(album) },
+                        onLongClick = { onAlbumMenu(album) },
                         modifier = if (album == artist.albumList.firstOrNull { it.listenable } ?: artist.albumList.first()) Modifier.focusRequester(first) else Modifier,
                     )
                     Text(album.title, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
@@ -383,4 +442,101 @@ fun MusicSearchScreen(repository: Repository) {
 @Composable
 private fun Hint(text: String, color: Color = Dim) {
     Text(text, style = MaterialTheme.typography.bodyLarge, color = color, modifier = Modifier.padding(start = gutter, end = gutter, top = 14.dp))
+}
+
+/**
+ * Musique restée dans le dossier de téléchargements (SABnzbd) et ses
+ * sous-dossiers, vue par Lidarr : OK sur un album prêt l'importe dans la
+ * bibliothèque ; un album non reconnu montre la raison donnée par Lidarr.
+ */
+@Composable
+fun MusicDownloadsScreen(repository: Repository) {
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var listing by remember { mutableStateOf<MusicDownloads?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var reload by remember { mutableStateOf(0) }
+    val imported = remember { mutableStateListOf<String>() }
+    val first = remember { FocusRequester() }
+
+    LaunchedEffect(reload) {
+        runCatching { repository.musicDownloads() }
+            .onSuccess { listing = it; error = null }
+            .onFailure { error = it.message ?: "Lidarr ne répond pas" }
+    }
+
+    val current = listing
+    when {
+        current == null && error != null -> MessageScreen("Téléchargements indisponibles", error, "Réessayer") { reload++ }
+        current == null -> MessageScreen("Lidarr passe le dossier en revue…")
+        current.albums.isEmpty() -> MessageScreen(
+            "Rien à importer",
+            "Aucune musique en attente dans " + current.folders.joinToString(" ou ").ifBlank { "le dossier de téléchargements" },
+            "Relire le dossier",
+        ) { reload++ }
+        else -> Column(Modifier.fillMaxSize().background(ArrColors.Night)) {
+            val ready = current.albums.count { it.ready }
+            ScreenHeader(
+                "Musique à importer",
+                "${Fr.plural(current.albums.size, "album")} dans les téléchargements · ${Fr.plural(ready, "prêt")} à importer",
+            ) {
+                ArrButton("Relire le dossier", { reload++ }, leading = "↻")
+            }
+            LazyColumn(
+                contentPadding = PaddingValues(horizontal = gutter, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(current.albums, key = { it.folder }) { item ->
+                    DownloadRow(
+                        item = item,
+                        done = item.folder in imported,
+                        modifier = if (item == current.albums.first()) Modifier.focusRequester(first) else Modifier,
+                        onClick = {
+                            when {
+                                item.folder in imported -> Unit
+                                !item.ready -> Toast.makeText(context, item.reason ?: "Non reconnu par Lidarr", Toast.LENGTH_LONG).show()
+                                else -> scope.launch {
+                                    runCatching { repository.musicImport(item.folder) }
+                                        .onSuccess { imported += item.folder; Toast.makeText(context, it.message, Toast.LENGTH_LONG).show() }
+                                        .onFailure { Toast.makeText(context, it.message ?: "Import impossible", Toast.LENGTH_LONG).show() }
+                                }
+                            }
+                        },
+                    )
+                }
+            }
+            LaunchedEffect(current) { runCatching { first.requestFocus() } }
+        }
+    }
+}
+
+@Composable
+private fun DownloadRow(item: MusicDownloadAlbum, done: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    FocusPanel(onClick = onClick, modifier = modifier.fillMaxWidth().height(64.dp)) {
+        Row(Modifier.fillMaxSize().padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(Modifier.weight(1f)) {
+                Text(MusicRules.downloadTitle(item), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    if (item.ready) {
+                        "${Fr.plural(item.tracks, "piste")} · ${Fr.bytes(item.sizeBytes.toDouble())} · ${item.name}"
+                    } else {
+                        item.reason ?: "Non reconnu par Lidarr"
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (item.ready) Dim else ArrColors.Warning,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Text(
+                when {
+                    done -> "✓ Import lancé"
+                    item.ready -> "OK pour importer"
+                    else -> "À vérifier"
+                },
+                style = MaterialTheme.typography.labelLarge,
+                color = if (done) ArrColors.Seen else Dim,
+            )
+        }
+    }
 }

@@ -109,3 +109,27 @@ data class MusicAlbumTracks(
     val reason: String? = null, // pourquoi on ne peut pas écouter (Jellyfin absent…)
     val tracks: List<MusicTrack> = emptyList(),
 )
+
+/** Réponse d'une action (recherche lancée, import lancé). */
+@Serializable
+data class MusicActionResult(val status: String = "", val message: String = "")
+
+/** Album resté dans le dossier de téléchargements, vu par Lidarr. */
+@Serializable
+data class MusicDownloadAlbum(
+    val folder: String = "",
+    val name: String = "",
+    val artist: String? = null,
+    val album: String? = null,
+    val tracks: Int = 0,
+    @SerialName("size_bytes") val sizeBytes: Long = 0,
+    val ready: Boolean = false, // reconnu par Lidarr : peut être importé
+    val reason: String? = null, // sinon, pourquoi (mots de Lidarr)
+)
+
+@Serializable
+data class MusicDownloads(val folders: List<String> = emptyList(), val albums: List<MusicDownloadAlbum> = emptyList())
+
+@Serializable
+data class MusicImportBody(val folder: String)
+

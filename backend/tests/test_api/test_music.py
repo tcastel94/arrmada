@@ -12,7 +12,7 @@ from typing import Any
 import pytest
 from httpx import AsyncClient
 
-from app.services import music
+from app.services import music, music_downloads
 from app.services.devices import device_may_call
 from tests import fake_arr
 
@@ -205,6 +205,10 @@ def test_queue_item_progress() -> None:
         ("GET", "/api/music/albums/11/tracks", True),
         ("GET", "/api/music/stream/0123456789abcdef0123456789abcdef", True),
         ("GET", "/api/music/stream/../../etc", False),
+        ("POST", "/api/music/albums/13/search", True),
+        ("POST", "/api/music/artists/2/search", True),
+        ("GET", "/api/music/downloads", True),
+        ("POST", "/api/music/downloads/import", True),
         ("DELETE", "/api/music/artists/2", False),
         ("PUT", "/api/music/artists/2", False),
     ],
@@ -425,3 +429,169 @@ async def test_stream_refuses_unknown_ids(
 ) -> None:
     resp = await client.get("/api/music/stream/pas-un-identifiant", headers=auth_headers)
     assert resp.status_code == 404
+
+
+# ── Récupérer un album absent, les albums manquants d'un artiste ──
+
+
+async def test_search_album_monitors_then_searches(
+    client: AsyncClient, lidarr: dict[str, str]
+) -> None:
+    await _declare(client, lidarr, "lidarr", LIDARR_URL)
+    resp = await client.post("/api/music/albums/13/search", headers=lidarr)  # « Creep », non suivi
+    assert resp.status_code == 200, resp.text
+    assert "Creep" in resp.json()["message"]
+    writes = [(p, b) for h, p, b in fake_arr.POSTS if h == "lidarr.test"]
+    assert writes == [
+        ("/api/v1/album/monitor", {"albumIds": [13], "monitored": True}),
+        ("/api/v1/command", {"name": "AlbumSearch", "albumIds": [13]}),
+    ]
+
+
+async def test_search_partial_album_keeps_monitoring(
+    client: AsyncClient, lidarr: dict[str, str]
+) -> None:
+    await _declare(client, lidarr, "lidarr", LIDARR_URL)
+    assert (await client.post("/api/music/albums/12/search", headers=lidarr)).status_code == 200
+    paths = [p for h, p, _b in fake_arr.POSTS if h == "lidarr.test"]
+    assert paths == ["/api/v1/command"]  # déjà suivi : pas de changement de suivi
+
+
+async def test_search_artist(client: AsyncClient, lidarr: dict[str, str]) -> None:
+    await _declare(client, lidarr, "lidarr", LIDARR_URL)
+    assert (await client.post("/api/music/artists/2/search", headers=lidarr)).status_code == 200
+    assert [b for _h, p, b in fake_arr.POSTS if p == "/api/v1/command"] == [
+        {"name": "ArtistSearch", "artistId": 2}
+    ]
+
+
+# ── Musique restée dans les téléchargements ──────────────────
+
+SAB_URL = "http://sabnzbd.test:8080"
+COMPLETE = "/data/usenet/complete"
+
+
+def _file(
+    path: str, *, artist: int | None = 2, album: int | None = 11, tracks: int = 1, **extra: Any
+) -> dict[str, Any]:
+    return {
+        "path": path,
+        "size": 1000,
+        "artist": {"id": artist, "artistName": "Radiohead"} if artist else None,
+        "album": {"id": album, "title": "Kid A"} if album else None,
+        "albumReleaseId": 5,
+        "tracks": [{"id": tracks}] if tracks else [],
+        "quality": {"quality": {"name": "FLAC"}},
+        "rejections": [],
+        **extra,
+    }
+
+
+DOWNLOADED = [
+    _file(f"{COMPLETE}/music/Radiohead - Kid A/CD1/01.flac", tracks=1),
+    _file(f"{COMPLETE}/music/Radiohead - Kid A/CD2/01.flac", tracks=2),
+    _file(f"{COMPLETE}/music/Radiohead - Kid A/cover.jpg", additionalFile=True),
+    _file(f"{COMPLETE}/music/Inconnu/piste.mp3", artist=None, album=None, tracks=0),
+    _file(
+        f"{COMPLETE}/music/Daft Punk - RAM/01.flac",
+        rejections=[
+            {"reason": "Album déjà dans la bibliothèque en meilleure qualité", "type": "permanent"}
+        ],
+    ),
+]
+
+
+def test_download_roots_and_is_under(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(music_downloads.settings, "ARR_DOWNLOADS_PATH", "/data/usenet/complete/")
+    assert music_downloads.download_roots(COMPLETE) == [COMPLETE]  # sans doublon
+    assert music_downloads.download_roots(None) == [COMPLETE]
+    roots = [COMPLETE]
+    assert music_downloads.is_under(f"{COMPLETE}/music/Album", roots)
+    assert music_downloads.is_under(COMPLETE, roots)
+    assert not music_downloads.is_under(f"{COMPLETE}/../../etc", roots)  # chemin normalisé
+    assert not music_downloads.is_under("/data/usenet/complete-autre", roots)
+
+
+def test_group_candidates() -> None:
+    files = [f for f in DOWNLOADED if not f.get("additionalFile")]
+    albums = music_downloads.group_candidates(files)
+    by_name = {a["name"]: a for a in albums}
+    kid_a = by_name["Radiohead - Kid A"]  # CD1 et CD2 regroupés
+    assert (kid_a["ready"], kid_a["tracks"], kid_a["artist"], kid_a["album"]) == (
+        True,
+        2,
+        "Radiohead",
+        "Kid A",
+    )
+    assert albums[0] is kid_a  # prêts d'abord
+    assert by_name["Inconnu"]["ready"] is False
+    assert "Artiste non reconnu" in by_name["Inconnu"]["reason"]
+    assert (
+        by_name["Daft Punk - RAM"]["reason"]
+        == "Album déjà dans la bibliothèque en meilleure qualité"
+    )
+
+
+@pytest.fixture
+def downloads_stack(monkeypatch: pytest.MonkeyPatch, lidarr: dict[str, str]) -> dict[str, str]:
+    """Faux SABnzbd (dossier « terminés ») et faux import manuel de Lidarr."""
+    monkeypatch.setitem(
+        fake_arr.ROUTES,
+        "sabnzbd.test",
+        [(r"/api", lambda _p, _m: {"config": {"misc": {"complete_dir": COMPLETE + "/"}}})],
+    )
+
+    def manual_import(params: dict[str, str], _m: Any) -> list[dict[str, Any]]:
+        folder = params.get("folder", "")
+        return [f for f in DOWNLOADED if f["path"].startswith(folder + "/")]
+
+    monkeypatch.setitem(
+        fake_arr.ROUTES, "lidarr.test", [(r"/api/v1/manualimport", manual_import), *LIDARR_ROUTES]
+    )
+    return lidarr
+
+
+async def test_downloads_listing(client: AsyncClient, downloads_stack: dict[str, str]) -> None:
+    await _declare(client, downloads_stack, "lidarr", LIDARR_URL)
+    await _declare(client, downloads_stack, "sabnzbd", SAB_URL)
+    body = (await client.get("/api/music/downloads", headers=downloads_stack)).json()
+    assert body["folders"][0] == COMPLETE  # le dossier de SABnzbd d'abord
+    names = [a["name"] for a in body["albums"]]
+    assert names[0] == "Radiohead - Kid A"
+    assert set(names) == {"Radiohead - Kid A", "Inconnu", "Daft Punk - RAM"}
+
+
+async def test_import_ready_folder(client: AsyncClient, downloads_stack: dict[str, str]) -> None:
+    await _declare(client, downloads_stack, "lidarr", LIDARR_URL)
+    await _declare(client, downloads_stack, "sabnzbd", SAB_URL)
+    folder = f"{COMPLETE}/music/Radiohead - Kid A"
+    resp = await client.post(
+        "/api/music/downloads/import", json={"folder": folder}, headers=downloads_stack
+    )
+    assert resp.status_code == 200, resp.text
+    assert "Kid A" in resp.json()["message"]
+    commands = [b for _h, p, b in fake_arr.POSTS if p == "/api/v1/command"]
+    assert len(commands) == 1
+    assert commands[0]["name"] == "ManualImport"
+    assert commands[0]["replaceExistingFiles"] is False
+    assert [f["trackIds"] for f in commands[0]["files"]] == [[1], [2]]  # sans la pochette
+    assert {f["albumId"] for f in commands[0]["files"]} == {11}
+
+
+async def test_import_refuses_unready_or_outside_folders(
+    client: AsyncClient, downloads_stack: dict[str, str]
+) -> None:
+    await _declare(client, downloads_stack, "lidarr", LIDARR_URL)
+    await _declare(client, downloads_stack, "sabnzbd", SAB_URL)
+    unknown = await client.post(
+        "/api/music/downloads/import",
+        json={"folder": f"{COMPLETE}/music/Inconnu"},
+        headers=downloads_stack,
+    )
+    assert unknown.status_code == 409
+    assert "Artiste non reconnu" in unknown.json()["detail"]
+    outside = await client.post(
+        "/api/music/downloads/import", json={"folder": "/etc"}, headers=downloads_stack
+    )
+    assert outside.status_code == 400
+    assert not [p for _h, p, _b in fake_arr.POSTS if p == "/api/v1/command"]

@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
-from app.services import music, tv_playback
+from app.services import music, music_downloads, tv_playback
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -182,6 +182,82 @@ async def stream(item_id: str, request: Request, db: AsyncSession = Depends(get_
     except tv_playback.UpstreamError as exc:
         raise HTTPException(exc.status_code, exc.detail) from exc
     return StreamingResponse(body, status_code=status_code, headers=headers)
+
+
+@router.post("/albums/{album_id}/search")
+async def search_album(album_id: int, db: AsyncSession = Depends(get_db)) -> dict:
+    """Récupérer un album absent, ou les pistes qui manquent à un album partiel.
+
+    L'album est suivi s'il ne l'était pas, puis Lidarr le cherche (meilleure
+    version disponible, pistes manquantes comprises).
+    """
+    client = await music.lidarr_client(db, timeout=30)
+    try:
+        album = await client.get_album(album_id)
+        if not album.get("monitored"):
+            await client.monitor_albums([album_id])
+        await client.command("AlbumSearch", albumIds=[album_id])
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            raise HTTPException(status_code=404, detail="Album inconnu") from exc
+        raise _unreachable(exc) from exc
+    except (httpx.HTTPError, ValueError) as exc:
+        raise _unreachable(exc) from exc
+    finally:
+        await client.close()
+    return {"status": "ok", "message": f"Recherche lancée : {album.get('title') or 'album'}"}
+
+
+@router.post("/artists/{artist_id}/search")
+async def search_artist(artist_id: int, db: AsyncSession = Depends(get_db)) -> dict:
+    """Chercher tous les albums suivis qui manquent à un artiste."""
+    client = await music.lidarr_client(db, timeout=30)
+    try:
+        await client.command("ArtistSearch", artistId=artist_id)
+    except (httpx.HTTPError, ValueError) as exc:
+        raise _unreachable(exc) from exc
+    finally:
+        await client.close()
+    return {"status": "ok", "message": "Recherche des albums manquants lancée"}
+
+
+@router.get("/downloads")
+async def downloads(db: AsyncSession = Depends(get_db)) -> dict:
+    """Musique restée dans le dossier de téléchargements (et ses sous-dossiers), par album.
+
+    Chaque album est « prêt à importer » ou porte la raison donnée par Lidarr.
+    """
+    roots = music_downloads.download_roots(await music_downloads.sabnzbd_complete_dir(db))
+    client = await music.lidarr_client(db, timeout=60)
+    try:
+        items = await music_downloads.scan(client, roots)
+    finally:
+        await client.close()
+    return {"folders": roots, "albums": music_downloads.group_candidates(items)}
+
+
+class ImportFolder(BaseModel):
+    folder: str = Field(..., min_length=2, max_length=1000)
+
+
+@router.post("/downloads/import")
+async def import_download(body: ImportFolder, db: AsyncSession = Depends(get_db)) -> dict:
+    """Importer dans Lidarr un dossier d'album des téléchargements (tout ou rien)."""
+    roots = music_downloads.download_roots(await music_downloads.sabnzbd_complete_dir(db))
+    client = await music.lidarr_client(db, timeout=60)
+    try:
+        result = await music_downloads.import_folder(client, roots, body.folder)
+    except (httpx.HTTPError, ValueError) as exc:
+        raise _unreachable(exc) from exc
+    finally:
+        await client.close()
+    if result["status"] == "refused":
+        raise HTTPException(status_code=400, detail=result["message"])
+    if result["status"] == "error":
+        raise HTTPException(status_code=502, detail=result["message"])
+    if result["status"] != "ok":
+        raise HTTPException(status_code=409, detail=result["message"])
+    return result
 
 
 @router.get("/queue")

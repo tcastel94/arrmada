@@ -13,7 +13,7 @@
 /* eslint-disable @next/next/no-img-element */
 import { useState } from "react";
 import Link from "next/link";
-import { Check, Disc3, Info, Loader2, Plus, Search } from "lucide-react";
+import { Check, Disc3, FolderDown, Info, Loader2, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Header } from "@/components/layout/header";
 import { PageContainer } from "@/components/shared/page-container";
@@ -30,11 +30,15 @@ import {
     useAddArtist,
     useArtistLookup,
     useArtists,
+    useImportDownload,
+    useMusicDownloads,
     useMusicQueue,
     useMusicStatus,
     type Artist,
     type ArtistHit,
+    type MusicDownloadAlbum,
 } from "@/hooks/use-music";
+import { formatBytes } from "@/lib/format";
 
 const GRID = "grid grid-cols-3 gap-x-3 gap-y-5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8";
 
@@ -57,6 +61,7 @@ export default function MusicPage() {
 
                 {lidarr && <AddArtist />}
                 {lidarr && <Downloads />}
+                {lidarr && <PendingImports />}
 
                 {status.isError ? (
                     <div className="rounded-2xl bg-card">
@@ -230,5 +235,64 @@ function Downloads() {
                 ))}
             </ul>
         </Panel>
+    );
+}
+
+/**
+ * Musique restée dans le dossier de téléchargements (SABnzbd) et ses
+ * sous-dossiers : Lidarr dit, pour chaque album, s'il le reconnaît.
+ * « Importer » le range dans la bibliothèque (rien affiché s'il n'y a rien).
+ */
+function PendingImports() {
+    const { data } = useMusicDownloads();
+    const albums = data?.albums ?? [];
+    if (!albums.length) return null;
+    const ready = albums.filter((a) => a.ready).length;
+    return (
+        <Panel title="Dans les téléchargements">
+            <p className="mb-3 text-[13px] text-muted-foreground">
+                {albums.length} album{albums.length > 1 ? "s" : ""} pas encore dans la bibliothèque · {ready} prêt{ready > 1 ? "s" : ""} à
+                importer
+            </p>
+            <ul className="divide-y divide-white/[0.06]">
+                {albums.map((album) => (
+                    <PendingRow key={album.folder} album={album} />
+                ))}
+            </ul>
+        </Panel>
+    );
+}
+
+function PendingRow({ album }: { album: MusicDownloadAlbum }) {
+    const run = useImportDownload();
+    const title = [album.artist, album.album].filter(Boolean).join(" – ") || album.name;
+    const importIt = () =>
+        run.mutate(album.folder, {
+            onSuccess: (r) => toast.success("Import lancé", { description: r.message }),
+            onError: (e) => toast.error("Import impossible", { description: e.message }),
+        });
+    return (
+        <li className="flex items-center gap-3 py-2.5">
+            <FolderDown className="h-5 w-5 shrink-0 text-muted-foreground" />
+            <div className="min-w-0 flex-1">
+                <p className="truncate text-[15px] font-medium">{title}</p>
+                <p className={album.ready ? "truncate text-[13px] text-muted-foreground" : "truncate text-[13px] text-warning"}>
+                    {album.ready
+                        ? `${album.tracks} piste${album.tracks > 1 ? "s" : ""} · ${formatBytes(album.size_bytes)} · ${album.name}`
+                        : album.reason ?? "Non reconnu par Lidarr"}
+                </p>
+            </div>
+            {album.ready &&
+                (run.isSuccess ? (
+                    <span className="flex items-center gap-1 text-[13px] font-medium text-success">
+                        <Check className="h-4 w-4" /> Lancé
+                    </span>
+                ) : (
+                    <Button size="sm" variant="tinted" onClick={importIt} disabled={run.isPending}>
+                        {run.isPending ? <Loader2 className="animate-spin" /> : <FolderDown />}
+                        Importer
+                    </Button>
+                ))}
+        </li>
     );
 }

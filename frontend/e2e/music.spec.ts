@@ -93,3 +93,63 @@ test("fiche d'un artiste : albums puis singles, état de chaque album", async ({
     await expect(page.getByText("10/12 pistes")).toBeVisible();
     await expect(page.getByText("Non suivi")).toBeVisible();
 });
+
+test("musique des téléchargements : importer un album prêt, raison affichée sinon", async ({ page }) => {
+    const imported: string[] = [];
+    await mockApi(page, [
+        [/^\/api\/music\/status$/, () => ({ ...STATUS, jellyfin_libraries: ["Musique"], ready: true, hint: null })],
+        [/^\/api\/music\/artists$/, () => ({ artists: [RADIOHEAD], total: 1 })],
+        [/^\/api\/music\/queue$/, () => ({ items: [] })],
+        [
+            /^\/api\/music\/downloads$/,
+            () => ({
+                folders: ["/data/usenet/complete"],
+                albums: [
+                    { folder: "/data/usenet/complete/music/Radiohead - Kid A", name: "Radiohead - Kid A", artist: "Radiohead", album: "Kid A", tracks: 10, size_bytes: 300_000_000, ready: true, reason: null },
+                    { folder: "/data/usenet/complete/music/Inconnu", name: "Inconnu", artist: null, album: null, tracks: 1, size_bytes: 5_000_000, ready: false, reason: "Artiste non reconnu par Lidarr (suis-le d'abord, ou corrige les étiquettes)" },
+                ],
+            }),
+        ],
+    ]);
+    await page.route(/\/api\/music\/downloads\/import$/, async (route) => {
+        imported.push((route.request().postDataJSON() as { folder: string }).folder);
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: "ok", message: "Import lancé : Kid A (10 pistes)" }) });
+    });
+
+    await page.goto("/music");
+    await expect(page.getByRole("heading", { name: "Dans les téléchargements" })).toBeVisible();
+    await expect(page.getByText("Radiohead – Kid A")).toBeVisible();
+    await expect(page.getByText(/Artiste non reconnu par Lidarr/)).toBeVisible();
+    // Un seul bouton : l'album non reconnu ne s'importe pas
+    await expect(page.getByRole("button", { name: "Importer" })).toHaveCount(1);
+    await page.getByRole("button", { name: "Importer" }).click();
+    await expect.poll(() => imported).toEqual(["/data/usenet/complete/music/Radiohead - Kid A"]);
+});
+
+test("fiche d'un artiste : récupérer un album absent, chercher les albums manquants", async ({ page }) => {
+    const searched: string[] = [];
+    await mockApi(page, [
+        [
+            /^\/api\/music\/artists\/2$/,
+            () => ({
+                ...RADIOHEAD,
+                album_list: [
+                    { id: 11, mbid: "b1", title: "Kid A", year: 2000, type: "Album", cover: null, tracks_have: 10, tracks_total: 10, status: "complete", monitored: true },
+                    { id: 13, mbid: "b3", title: "Creep", year: 1992, type: "Single", cover: null, tracks_have: 0, tracks_total: 8, status: "missing", monitored: false },
+                ],
+            }),
+        ],
+    ]);
+    await page.route(/\/api\/music\/(albums|artists)\/\d+\/search$/, async (route) => {
+        searched.push(new URL(route.request().url()).pathname);
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: "ok", message: "Recherche lancée" }) });
+    });
+
+    await page.goto("/music/2");
+    // Un seul bouton d'album : l'album complet n'en a pas
+    await expect(page.getByRole("button", { name: /Récupérer cet album/ })).toHaveCount(1);
+    await page.getByRole("button", { name: /Récupérer cet album/ }).click();
+    await page.getByRole("button", { name: "Chercher les albums manquants" }).click();
+    await expect.poll(() => searched).toEqual(["/api/music/albums/13/search", "/api/music/artists/2/search"]);
+});
+
