@@ -130,6 +130,7 @@ fun PosterCard(
     onLongClick: (() -> Unit)? = null, // appui long (OK maintenu) : menu du titre
     tag: String? = null, // étiquette en haut à gauche (« Hier », « Il y a 3 j »…)
     square: Boolean = false, // pochette carrée (album, artiste) au lieu d'une affiche 2:3
+    dimmed: Boolean = false, // affiche grisée : titre absent du NAS (film manquant d'une saga)
 ) {
     var tint by remember(imageUrl) { mutableStateOf(PosterGlow.cached(imageUrl)) }
     Column(modifier.width(width)) {
@@ -151,6 +152,7 @@ fun PosterCard(
             ),
         ) {
             ArtImage(imageUrl, title, Modifier.fillMaxSize(), onColor = { tint = it })
+            if (dimmed) Box(Modifier.fillMaxSize().background(Color(0xA60A0E16)))
             if (tag != null) CardTag(tag, Modifier.align(Alignment.TopStart).padding(6.dp))
             if (seen) SeenBadge(Modifier.align(Alignment.TopEnd).padding(5.dp))
             if (progress != null && progress > 0f) {

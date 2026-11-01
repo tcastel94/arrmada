@@ -31,6 +31,7 @@ import { useMediaEditOptions, type MediaDetail } from "@/hooks/use-media";
 import { formatBytes, formatDuration, parseApiDate } from "@/lib/format";
 import { fadeUp, stagger } from "@/lib/motion";
 import { availabilityLabel, copyText, seriesTypeLabel, statusInfo } from "./labels";
+import { SagaBlock } from "./saga-block";
 
 function Item({ icon: Icon, label, value }: { icon: typeof Info; label: string; value?: React.ReactNode }) {
     if (value === undefined || value === null || value === "") return null;
@@ -72,6 +73,12 @@ export function InfoTab({ media, onMove }: { media: MediaDetail; onMove: () => v
 
     return (
         <motion.div variants={stagger(0, 0.07)} initial="hidden" animate="show" className="grid items-start gap-6 lg:grid-cols-3">
+            {/* Saga du film (rien si le film n'en fait pas partie) */}
+            {isMovie && (
+                <div className="empty:hidden lg:col-span-3">
+                    <SagaBlock movieId={media.id} />
+                </div>
+            )}
             <motion.div variants={fadeUp} className="lg:col-span-2">
                 <Panel title="Détails" icon={Info}>
                     <dl className="grid gap-5 sm:grid-cols-2">
