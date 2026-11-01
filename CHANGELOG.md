@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Sagas de films, étape 2 : regarder une saga
+
+#### Added
+- **Films vus dans les sagas** : le vu et la reprise que les TV partagent déjà (`watch_states`, par profil famille) s'affichent sur chaque film d'une saga (« ✓ Vu », barre de reprise, « 3 vus »), sur la web app comme sur la TV
+- **« Reprendre la saga »** (TV) : premier bouton de l'écran d'une saga, il lance le prochain film à voir (le premier sur le NAS pas encore vu), à sa reprise s'il est commencé (« Reprendre : … », « Continuer : … », « Regarder : … »)
+- **Rangée « Sagas à terminer »** sur l'accueil TV, après « Reprendre » : sagas commencées et pas finies, la plus récente d'abord, affiche du prochain film et « 3 vus sur 8 ». Rangée réglable comme les autres (Réglages › Rangées de l'accueil)
+- **Film suivant à la fin d'un film** (TV) : la carte de fin, celle de l'épisode suivant, propose le film suivant de la saga s'il est sur le NAS (« Film suivant dans 10 s », OK : maintenant, Retour : non merci)
+- Serveur : `GET /api/sagas/in-progress` (ouverte aux TV), vu / reprise / prochain film dans les réponses des sagas, film suivant (`following`) dans `/api/sagas/movie/{id}`
+- Tests : serveur, appli (`SagaRulesTest`, `HomeLayoutLogicTest`), e2e
+
 ### Sagas de films, étape 1
 
 #### Added

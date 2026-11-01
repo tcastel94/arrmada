@@ -567,6 +567,7 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
                     open = ::openItem,
                     openMovieId = { nav.navigate(Routes.movie(it.toString())) },
                     openSeriesId = { nav.navigate(Routes.show(it.toString())) },
+                    openSaga = { nav.navigate(Routes.saga(it)) },
                     resume = { entry -> nav.navigate(Routes.play(resumeRequest(entry))) },
                     openWatchlist = { item ->
                         when (val target = WatchlistLogic.open(item)) {
@@ -598,6 +599,12 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
                 id = entry.arguments?.getInt("id") ?: 0,
                 onMovie = { film -> film.movieId?.let { nav.navigate(Routes.movie(it.toString(), film.tmdbId)) } },
                 onBack = { nav.popBackStack() },
+                // « Reprendre la saga » : le prochain film, à sa reprise s'il est commencé
+                onPlay = { film ->
+                    film.movieId?.let {
+                        nav.navigate(Routes.play(PlayRequest("movie", film.tmdbId, radarrId = it.toString(), startSeconds = film.position)))
+                    }
+                },
             )
         }
         composable(Routes.DISCOVER) {

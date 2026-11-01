@@ -23,6 +23,9 @@ data class SagaFilm(
     val runtime: Int? = null,
     val poster: String? = null,
     val state: String = "missing",
+    val watched: Boolean = false, // vu par le profil qui regarde
+    val position: Int = 0, // s : reprise d'un film commencé
+    val progress: Int? = null, // % d'un film commencé
 )
 
 @Serializable
@@ -42,6 +45,16 @@ data class Saga(
     val complete: Boolean = false,
     val years: List<Int> = emptyList(),
     val films: List<SagaFilm> = emptyList(), // seulement dans la fiche d'une saga
+    val seen: Int = 0, // films vus par le profil
+    val next: SagaFilm? = null, // prochain film à voir (sur le NAS, pas encore vu)
+)
+
+/** Saga d'un film et le film suivant sur le NAS (fin d'un film dans le lecteur). */
+@Serializable
+data class MovieSaga(
+    val saga: Saga? = null,
+    val position: Int? = null,
+    val following: SagaFilm? = null,
 )
 
 @Serializable
@@ -72,12 +85,27 @@ object SagaRules {
         else -> "Complète"
     }
 
-    /** « 8 films · 2001 – 2011 · 6 sur le NAS ». */
+    /** « 8 films · 2001 – 2011 · 6 sur le NAS · 3 vus ». */
     fun facts(s: Saga): String = listOfNotNull(
         Fr.plural(s.total, "film"),
         s.years.distinct().joinToString(" – ").ifBlank { null },
         "${s.available} sur le NAS",
+        Fr.plural(s.seen, "vu").takeIf { s.seen > 0 },
     ).joinToString(" · ")
+
+    /** Bouton du prochain film : « Reprendre : X » s'il est commencé, sinon « Regarder : X ». */
+    fun nextLabel(s: Saga): String? = s.next?.let { f ->
+        (if ((f.progress ?: 0) > 0) "Reprendre : " else if (s.seen > 0) "Continuer : " else "Regarder : ") + f.title
+    }
+
+    /** Carte « Sagas à terminer » : « 3 vus sur 8 ». */
+    fun seenLine(s: Saga): String = "${Fr.plural(s.seen, "vu")} sur ${s.total}"
+
+    /** Code de la carte « Film suivant » du lecteur : « Film 3 sur 8 ». */
+    fun upNextCode(saga: Saga, following: SagaFilm): String {
+        val index = saga.films.indexOfFirst { it.tmdbId == following.tmdbId }
+        return if (index >= 0) "${saga.title} · film ${index + 1} sur ${saga.total}" else saga.title
+    }
 
     /** Part de la saga sur le NAS (barre de progression). */
     fun progress(s: Saga): Float = if (s.total > 0) s.available.toFloat() / s.total else 0f

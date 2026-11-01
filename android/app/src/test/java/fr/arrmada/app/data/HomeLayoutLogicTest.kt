@@ -22,7 +22,8 @@ class HomeLayoutLogicTest {
         )
         val text = HomeLayoutLogic.serialize(slots)
         assertEquals("recent,resume,-watchlist,foryou,-upcoming", text)
-        assertEquals(slots, HomeLayoutLogic.parse(text))
+        // Rangée absente du réglage enregistré (ajoutée depuis) : à la fin, visible
+        assertEquals(slots + Slot(Row.SAGAS), HomeLayoutLogic.parse(text))
         assertEquals(listOf(Row.RECENT, Row.RESUME, Row.FOR_YOU), HomeLayoutLogic.visible(slots))
     }
 
@@ -30,7 +31,7 @@ class HomeLayoutLogicTest {
     fun tolerantParsing() {
         val slots = HomeLayoutLogic.parse("upcoming, inconnu ,-resume,upcoming")
         assertEquals(
-            listOf(Slot(Row.UPCOMING), Slot(Row.RESUME, visible = false), Slot(Row.WATCHLIST), Slot(Row.RECENT), Slot(Row.FOR_YOU)),
+            listOf(Slot(Row.UPCOMING), Slot(Row.RESUME, visible = false), Slot(Row.SAGAS), Slot(Row.WATCHLIST), Slot(Row.RECENT), Slot(Row.FOR_YOU)),
             slots,
         )
     }
@@ -45,7 +46,7 @@ class HomeLayoutLogicTest {
     @Test
     fun moveUpButNotTheFirst() {
         val moved = HomeLayoutLogic.moveUp(HomeLayoutLogic.DEFAULT, Row.RECENT)
-        assertEquals(listOf(Row.RESUME, Row.RECENT, Row.WATCHLIST, Row.FOR_YOU, Row.UPCOMING), moved.map { it.row })
+        assertEquals(listOf(Row.RESUME, Row.SAGAS, Row.RECENT, Row.WATCHLIST, Row.FOR_YOU, Row.UPCOMING), moved.map { it.row })
         assertEquals(HomeLayoutLogic.DEFAULT, HomeLayoutLogic.moveUp(HomeLayoutLogic.DEFAULT, Row.RESUME))
     }
 }

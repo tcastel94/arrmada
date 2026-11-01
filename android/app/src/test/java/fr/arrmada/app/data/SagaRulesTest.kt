@@ -25,6 +25,19 @@ class SagaRulesTest {
     }
 
     @Test
+    fun watchedLabels() {
+        val hp = Saga(title = "Harry Potter", total = 8, available = 6, seen = 3, next = SagaFilm(title = "La Coupe de feu"))
+        assertEquals("Continuer : La Coupe de feu", SagaRules.nextLabel(hp))
+        assertEquals("Reprendre : La Coupe de feu", SagaRules.nextLabel(hp.copy(next = SagaFilm(title = "La Coupe de feu", progress = 40))))
+        assertEquals("Regarder : La Coupe de feu", SagaRules.nextLabel(hp.copy(seen = 0)))
+        assertNull(SagaRules.nextLabel(hp.copy(next = null)))
+        assertEquals("3 vus sur 8", SagaRules.seenLine(hp))
+        assertEquals("8 films · 6 sur le NAS · 3 vus", SagaRules.facts(hp))
+        val films = listOf(SagaFilm(tmdbId = 1), SagaFilm(tmdbId = 2))
+        assertEquals("Harry Potter · film 2 sur 8", SagaRules.upNextCode(hp.copy(films = films), films[1]))
+    }
+
+    @Test
     fun filmTags() {
         assertNull(SagaRules.tag(SagaFilm(state = "available")))
         assertEquals("+ Ajouter", SagaRules.tag(SagaFilm(state = "missing")))

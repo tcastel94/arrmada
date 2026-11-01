@@ -17,6 +17,7 @@ object HomeLayoutLogic {
     /** Rangées de l'accueil : identifiant stocké, titre affiché. */
     enum class Row(val id: String, val label: String) {
         RESUME("resume", "Reprendre"),
+        SAGAS("sagas", "Sagas à terminer"), // sagas commencées, pas finies (ADR-016)
         WATCHLIST("watchlist", "Ma liste"),
         RECENT("recent", "Ajouts récents"),
         FOR_YOU("foryou", "Pour toi"),

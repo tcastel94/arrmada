@@ -27,6 +27,10 @@ export interface SagaFilm {
     runtime: number | null;
     poster: string | null;
     state: SagaFilmState;
+    /** Vu par le profil (vu partagé des TV). */
+    watched: boolean;
+    /** Film commencé : % (1-99), sinon null. */
+    progress: number | null;
 }
 
 export interface Saga {
@@ -48,6 +52,10 @@ export interface Saga {
     complete: boolean;
     /** [première année, dernière année]. */
     years: number[];
+    /** Films vus par le profil. */
+    seen: number;
+    /** Prochain film à voir (le premier sur le NAS pas encore vu), ou null. */
+    next: SagaFilm | null;
 }
 
 export interface SagaDetail extends Saga {
