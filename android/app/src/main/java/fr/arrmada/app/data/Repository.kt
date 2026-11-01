@@ -402,6 +402,14 @@ class Repository(private val api: Api) {
     suspend fun updateOffer(versionCode: Int, buildType: String): UpdateOffer =
         api.get("/api/android/update?version_code=$versionCode&build_type=${q(buildType)}")
 
+    /**
+     * « Rechercher une mise à jour » : le serveur revérifie d'abord GitHub (au
+     * plus toutes les 2 min) au lieu d'attendre sa vérification horaire. Plus
+     * lent qu'[updateOffer] (le serveur peut télécharger l'APK avant de répondre).
+     */
+    suspend fun checkUpdateOffer(versionCode: Int, buildType: String): UpdateOffer =
+        api.post("/api/android/update/check?version_code=$versionCode&build_type=${q(buildType)}", empty, slow = true)
+
     suspend fun device(): Device = cached("me", 10 * 60_000L, false) { me() }
 
     companion object {
