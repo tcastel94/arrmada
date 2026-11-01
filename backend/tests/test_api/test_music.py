@@ -7,6 +7,7 @@ réponses HTTP sont simulées. Les écritures sont relevées dans `fake_arr.POST
 
 from __future__ import annotations
 
+import sys
 from typing import Any
 
 import pytest
@@ -207,6 +208,9 @@ def test_queue_item_progress() -> None:
         ("GET", "/api/music/stream/../../etc", False),
         ("POST", "/api/music/albums/13/search", True),
         ("POST", "/api/music/artists/2/search", True),
+        ("POST", "/api/music/artists/2/refresh", True),
+        ("GET", "/api/music/albums/13/releases", False),  # recherche manuelle : web app seulement
+        ("POST", "/api/music/albums/13/grab", False),
         ("GET", "/api/music/downloads", True),
         ("POST", "/api/music/downloads/import", True),
         ("DELETE", "/api/music/artists/2", False),
@@ -457,11 +461,123 @@ async def test_search_partial_album_keeps_monitoring(
     assert paths == ["/api/v1/command"]  # déjà suivi : pas de changement de suivi
 
 
-async def test_search_artist(client: AsyncClient, lidarr: dict[str, str]) -> None:
+async def test_search_artist_targets_missing_studio_albums(
+    client: AsyncClient, lidarr: dict[str, str]
+) -> None:
     await _declare(client, lidarr, "lidarr", LIDARR_URL)
-    assert (await client.post("/api/music/artists/2/search", headers=lidarr)).status_code == 200
+    resp = await client.post("/api/music/artists/2/search", headers=lidarr)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["message"] == "Recherche lancée : 1 album manquant"
+    # OK Computer (partiel, déjà suivi) ; pas Kid A (complet) ni Creep (single)
+    writes = [(p, b) for h, p, b in fake_arr.POSTS if h == "lidarr.test"]
+    assert writes == [("/api/v1/command", {"name": "AlbumSearch", "albumIds": [12]})]
+
+
+async def test_search_artist_monitors_unfollowed_albums(
+    client: AsyncClient, lidarr: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Artiste importé d'un dossier existant : l'album absent n'est pas suivi
+    amnesiac = {
+        **ALBUMS[1],
+        "id": 14,
+        "title": "Amnesiac",
+        "monitored": False,
+        "statistics": {"trackFileCount": 0, "trackCount": 11},
+    }
+    monkeypatch.setattr(sys.modules[__name__], "ALBUMS", [*ALBUMS, amnesiac])
+    await _declare(client, lidarr, "lidarr", LIDARR_URL)
+    resp = await client.post("/api/music/artists/2/search", headers=lidarr)
+    assert resp.json()["message"] == "Recherche lancée : 2 albums manquants"
+    writes = [(p, b) for h, p, b in fake_arr.POSTS if h == "lidarr.test"]
+    assert writes == [
+        ("/api/v1/album/monitor", {"albumIds": [14], "monitored": True}),
+        ("/api/v1/command", {"name": "AlbumSearch", "albumIds": [12, 14]}),
+    ]
+
+
+async def test_search_artist_nothing_missing(
+    client: AsyncClient, lidarr: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sys.modules[__name__], "ALBUMS", [ALBUMS[0], ALBUMS[2]])
+    await _declare(client, lidarr, "lidarr", LIDARR_URL)
+    resp = await client.post("/api/music/artists/2/search", headers=lidarr)
+    assert resp.json() == {"status": "empty", "message": "Aucun album studio ne manque"}
+    assert not [p for h, p, _b in fake_arr.POSTS if h == "lidarr.test"]
+
+
+async def test_refresh_artist(client: AsyncClient, lidarr: dict[str, str]) -> None:
+    await _declare(client, lidarr, "lidarr", LIDARR_URL)
+    assert (await client.post("/api/music/artists/2/refresh", headers=lidarr)).status_code == 200
     assert [b for _h, p, b in fake_arr.POSTS if p == "/api/v1/command"] == [
-        {"name": "ArtistSearch", "artistId": 2}
+        {"name": "RefreshArtist", "artistId": 2}
+    ]
+
+
+RELEASES = [
+    {
+        "guid": "g-rejected",
+        "indexerId": 1,
+        "indexer": "NZBgeek",
+        "title": "Radiohead-Creep-MP3",
+        "size": 50_000_000,
+        "age": 3,
+        "protocol": "usenet",
+        "rejected": True,
+        "rejections": ["Qualité non voulue"],
+        "quality": {"quality": {"name": "MP3-128"}},
+    },
+    {
+        "guid": "g-old",
+        "indexerId": 2,
+        "indexer": "DrunkenSlug",
+        "title": "Radiohead-Creep-FLAC",
+        "size": 300_000_000,
+        "age": 900,
+        "protocol": "usenet",
+        "rejected": False,
+        "rejections": [],
+        "quality": {"quality": {"name": "FLAC"}},
+    },
+    {
+        "guid": "g-new",
+        "indexerId": 2,
+        "indexer": "DrunkenSlug",
+        "title": "Radiohead-Creep-WEB-FLAC",
+        "size": 310_000_000,
+        "age": 10,
+        "protocol": "usenet",
+        "rejected": False,
+        "rejections": [],
+        "quality": {"quality": {"name": "FLAC"}},
+    },
+]
+
+
+async def test_album_releases_and_grab(
+    client: AsyncClient, lidarr: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(
+        fake_arr.ROUTES,
+        "lidarr.test",
+        [
+            (r"/api/v1/release", lambda p, _m: RELEASES if p.get("albumId") == "13" else []),
+            *LIDARR_ROUTES,
+        ],
+    )
+    await _declare(client, lidarr, "lidarr", LIDARR_URL)
+    body = (await client.get("/api/music/albums/13/releases", headers=lidarr)).json()
+    assert body["total"] == 3
+    # Acceptées d'abord (la plus récente en tête), rejetée en dernier avec sa raison
+    assert [r["guid"] for r in body["items"]] == ["g-new", "g-old", "g-rejected"]
+    assert body["items"][0]["quality"] == "FLAC"
+    assert body["items"][2]["rejections"] == ["Qualité non voulue"]
+
+    resp = await client.post(
+        "/api/music/albums/13/grab", json={"guid": "g-new", "indexer_id": 2}, headers=lidarr
+    )
+    assert resp.status_code == 200, resp.text
+    assert [b for _h, p, b in fake_arr.POSTS if p == "/api/v1/release"] == [
+        {"guid": "g-new", "indexerId": 2}
     ]
 
 

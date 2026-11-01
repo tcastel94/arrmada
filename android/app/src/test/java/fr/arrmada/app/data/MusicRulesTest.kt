@@ -41,7 +41,7 @@ class MusicRulesTest {
         assertEquals("Récupérer les pistes manquantes", MusicRules.searchLabel(partial))
         assertEquals("Récupérer cet album", MusicRules.searchLabel(MusicAlbum(status = "missing")))
         assertEquals("Pas sur le NAS (non suivi)", MusicRules.albumState(MusicAlbum(status = "missing")))
-        assertNull(MusicRules.searchLabel(MusicAlbum(status = "complete")))
+        assertEquals("Chercher une meilleure version", MusicRules.searchLabel(MusicAlbum(status = "complete")))
     }
 
     @Test

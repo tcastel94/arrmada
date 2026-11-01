@@ -129,8 +129,8 @@ test("musique des téléchargements : importer un album prêt, raison affichée 
     await expect.poll(() => imported).toEqual(["/data/usenet/complete/music/Radiohead - Kid A"]);
 });
 
-test("fiche d'un artiste : récupérer un album absent, chercher les albums manquants", async ({ page }) => {
-    const searched: string[] = [];
+test("fiche d'un artiste : recherche automatique d'un album, albums manquants, actualiser", async ({ page }) => {
+    const posted: string[] = [];
     await mockApi(page, [
         [
             /^\/api\/music\/artists\/2$/,
@@ -143,16 +143,67 @@ test("fiche d'un artiste : récupérer un album absent, chercher les albums manq
             }),
         ],
     ]);
-    await page.route(/\/api\/music\/(albums|artists)\/\d+\/search$/, async (route) => {
-        searched.push(new URL(route.request().url()).pathname);
-        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: "ok", message: "Recherche lancée" }) });
+    await page.route(/\/api\/music\/(albums|artists)\/\d+\/(search|refresh)$/, async (route) => {
+        posted.push(new URL(route.request().url()).pathname);
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: "ok", message: "Lancé" }) });
     });
 
     await page.goto("/music/2");
-    // Un seul bouton d'album : l'album complet n'en a pas
-    await expect(page.getByRole("button", { name: /Récupérer cet album/ })).toHaveCount(1);
-    await page.getByRole("button", { name: /Récupérer cet album/ }).click();
+    // Toujours proposés, même si tout est déjà là
     await page.getByRole("button", { name: "Chercher les albums manquants" }).click();
-    await expect.poll(() => searched).toEqual(["/api/music/albums/13/search", "/api/music/artists/2/search"]);
+    await page.getByRole("button", { name: "Actualiser" }).click();
+
+    // Album complet : « meilleure version » ; album absent : « Récupérer cet album »
+    await page.getByRole("button", { name: /Kid A/ }).click();
+    await expect(page.getByRole("button", { name: "Chercher une meilleure version" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: /^Creep/ }).click();
+    await page.getByRole("button", { name: "Récupérer cet album" }).click();
+    await expect(page.getByRole("button", { name: "Recherche lancée" })).toBeVisible();
+
+    await expect
+        .poll(() => posted)
+        .toEqual(["/api/music/artists/2/search", "/api/music/artists/2/refresh", "/api/music/albums/13/search"]);
 });
 
+test("fiche d'un artiste : recherche manuelle d'un album et téléchargement d'une release", async ({ page }) => {
+    const grabbed: unknown[] = [];
+    await mockApi(page, [
+        [
+            /^\/api\/music\/artists\/2$/,
+            () => ({
+                ...RADIOHEAD,
+                album_list: [
+                    { id: 13, mbid: "b3", title: "Creep", year: 1992, type: "Single", cover: null, tracks_have: 0, tracks_total: 8, status: "missing", monitored: false },
+                ],
+            }),
+        ],
+        [
+            /^\/api\/music\/albums\/13\/releases$/,
+            () => ({
+                total: 2,
+                items: [
+                    { guid: "g1", indexer_id: 2, indexer: "DrunkenSlug", title: "Radiohead-Creep-WEB-FLAC", size_bytes: 310_000_000, seeders: null, age_days: 10, quality: "FLAC", protocol: "usenet", rejected: false, rejections: [] },
+                    { guid: "g2", indexer_id: 1, indexer: "NZBgeek", title: "Radiohead-Creep-MP3", size_bytes: 50_000_000, seeders: null, age_days: 3, quality: "MP3-128", protocol: "usenet", rejected: true, rejections: ["Qualité non voulue"] },
+                ],
+            }),
+        ],
+    ]);
+    await page.route(/\/api\/music\/albums\/13\/grab$/, async (route) => {
+        grabbed.push(route.request().postDataJSON());
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: "ok", message: "Envoyé au téléchargement" }) });
+    });
+
+    await page.goto("/music/2");
+    await page.getByRole("button", { name: /^Creep/ }).click();
+    await page.getByRole("button", { name: "Recherche manuelle" }).click();
+    await expect(page.getByText("Radiohead-Creep-WEB-FLAC")).toBeVisible();
+    // Refusée par le profil : repliée par défaut
+    await expect(page.getByText("Radiohead-Creep-MP3")).toHaveCount(0);
+    await page.getByRole("button", { name: "voir les 1 refusée" }).click();
+    await expect(page.getByText("Qualité non voulue")).toBeVisible();
+
+    await page.getByRole("button", { name: "Télécharger Radiohead-Creep-WEB-FLAC" }).click();
+    await expect(page.getByText("Envoyé", { exact: true })).toBeVisible();
+    expect(grabbed).toEqual([{ guid: "g1", indexer_id: 2 }]);
+});

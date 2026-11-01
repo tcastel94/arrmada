@@ -210,15 +210,94 @@ async def search_album(album_id: int, db: AsyncSession = Depends(get_db)) -> dic
 
 @router.post("/artists/{artist_id}/search")
 async def search_artist(artist_id: int, db: AsyncSession = Depends(get_db)) -> dict:
-    """Chercher tous les albums suivis qui manquent à un artiste."""
+    """Chercher les albums studio qui manquent à un artiste (ou sont incomplets).
+
+    Pourquoi pas la commande ``ArtistSearch`` de Lidarr : elle ne cherche que
+    les albums **suivis**. Un artiste importé depuis un dossier existant n'a
+    souvent que ses albums présents de suivis ; les autres seraient ignorés.
+    Ici, les albums studio manquants sont suivis puis cherchés nommément.
+    Les EP et singles restent à la demande (album par album), pour ne pas
+    remplir la bibliothèque de dizaines de singles.
+    """
     client = await music.lidarr_client(db, timeout=30)
     try:
-        await client.command("ArtistSearch", artistId=artist_id)
+        targets = music.missing_studio_albums(await client.get_albums(artist_id))
+        if not targets:
+            return {"status": "empty", "message": "Aucun album studio ne manque"}
+        unmonitored = [a["id"] for a in targets if not a.get("monitored")]
+        if unmonitored:
+            await client.monitor_albums(unmonitored)
+        await client.command("AlbumSearch", albumIds=[a["id"] for a in targets])
     except (httpx.HTTPError, ValueError) as exc:
         raise _unreachable(exc) from exc
     finally:
         await client.close()
-    return {"status": "ok", "message": "Recherche des albums manquants lancée"}
+    count = len(targets)
+    return {
+        "status": "ok",
+        "message": f"Recherche lancée : {count} album{'s' if count > 1 else ''} manquant{'s' if count > 1 else ''}",
+    }
+
+
+@router.post("/artists/{artist_id}/refresh")
+async def refresh_artist(artist_id: int, db: AsyncSession = Depends(get_db)) -> dict:
+    """Actualiser un artiste : discographie relue sur MusicBrainz, dossier relu sur le disque."""
+    client = await music.lidarr_client(db, timeout=30)
+    try:
+        await client.command("RefreshArtist", artistId=artist_id)
+    except (httpx.HTTPError, ValueError) as exc:
+        raise _unreachable(exc) from exc
+    finally:
+        await client.close()
+    return {
+        "status": "ok",
+        "message": "Actualisation lancée : la discographie arrive dans une minute",
+    }
+
+
+@router.get("/albums/{album_id}/releases")
+async def album_releases(album_id: int, db: AsyncSession = Depends(get_db)) -> dict:
+    """Recherche manuelle : releases proposées par les indexeurs pour un album."""
+    client = await music.lidarr_client(db, timeout=150)
+    try:
+        raw = await client.get_releases(album_id)
+    except httpx.TimeoutException as exc:
+        raise HTTPException(
+            status_code=504,
+            detail="Les indexeurs ont mis trop de temps à répondre : réessaie, ou vérifie Prowlarr",
+        ) from exc
+    except (httpx.HTTPError, ValueError) as exc:
+        raise _unreachable(exc) from exc
+    finally:
+        await client.close()
+    items = music.sort_releases([music.release_summary(r) for r in raw if isinstance(r, dict)])
+    return {"items": items, "total": len(items)}
+
+
+class GrabRelease(BaseModel):
+    guid: str = Field(..., min_length=1, max_length=2000)
+    indexer_id: int
+
+
+@router.post("/albums/{album_id}/grab")
+async def grab_album_release(
+    album_id: int, body: GrabRelease, db: AsyncSession = Depends(get_db)
+) -> dict:
+    """Télécharger la release choisie : Lidarr l'envoie à SABnzbd puis l'importe."""
+    client = await music.lidarr_client(db, timeout=60)
+    try:
+        await client.grab_release(body.guid, body.indexer_id)
+    except httpx.HTTPStatusError as exc:
+        logger.warning("Musique : envoi refusé pour l'album %d (%s)", album_id, exc)
+        raise HTTPException(
+            status_code=502,
+            detail="Lidarr a refusé l'envoi (release expirée ? relance la recherche)",
+        ) from exc
+    except (httpx.HTTPError, ValueError) as exc:
+        raise _unreachable(exc) from exc
+    finally:
+        await client.close()
+    return {"status": "ok", "message": "Envoyé au téléchargement"}
 
 
 @router.get("/downloads")
