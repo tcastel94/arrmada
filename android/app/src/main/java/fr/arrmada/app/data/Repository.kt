@@ -230,6 +230,14 @@ class Repository(private val api: Api) {
      */
     suspend fun remote(after: Long): RemotePage = api.get("/api/tv/remote?after=$after", slow = true)
 
+    /** Dernier choix de pistes du profil pour ce titre (« series:tvdb:280619 »). */
+    suspend fun trackPreference(scope: String): TrackPreference = api.get("/api/tv/track-preference/$scope")
+
+    /** Piste changée dans le menu pause (ou depuis la tablette) : reprise à l'épisode suivant. */
+    suspend fun saveTrackPreference(scope: String, preference: TrackPreference) {
+        api.post<TrackPreference, TrackPreference>("/api/tv/track-preference/$scope", preference)
+    }
+
     /** Lecture en cours → écran d'appoint de la pièce (tablette sous la TV). */
     suspend fun scrobble(payload: Scrobble) {
         api.post<kotlinx.serialization.json.JsonObject, Scrobble>("/api/kodi/scrobble", payload)

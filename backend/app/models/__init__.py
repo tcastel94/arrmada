@@ -26,6 +26,7 @@ from app.models.recommendation import Recommendation  # noqa: E402, F401
 from app.models.request import MediaRequest  # noqa: E402, F401
 from app.models.saga_order import SagaOrder  # noqa: E402, F401
 from app.models.service import HealthEvent, Service  # noqa: E402, F401
+from app.models.track_preference import TrackPreference  # noqa: E402, F401
 from app.models.translation import MediaTranslation  # noqa: E402, F401
 from app.models.tv_request import TvRequest  # noqa: E402, F401
 from app.models.video_root import VideoRoot  # noqa: E402, F401
@@ -50,6 +51,7 @@ __all__ = [
     "MediaArtwork",
     "MediaTranslation",
     "TvRequest",
+    "TrackPreference",
     "FamilyProfile",
     "VideoRoot",
     "LocalSeries",

@@ -313,6 +313,20 @@ data class PlayInfo(
     @SerialName("embedded_subtitles") val embeddedSubtitles: List<SideSubtitle> = emptyList(),
 )
 
+/**
+ * Dernier choix de pistes du profil pour une série / un film
+ * (GET / POST /api/tv/track-preference/{scope}). [found] faux : rien de
+ * rangé, la règle automatique s'applique. [subtitleLanguage] « off » :
+ * sous-titres coupés.
+ */
+@Serializable
+data class TrackPreference(
+    val found: Boolean = false,
+    @SerialName("audio_language") val audioLanguage: String = "",
+    @SerialName("subtitle_language") val subtitleLanguage: String = "",
+    @SerialName("subtitle_forced") val subtitleForced: Boolean = false,
+)
+
 /** Menu pause → « Sous-titres FR » : ce que Bazarr doit chercher (TMDB du film, ou TVDB + numéros). */
 @Serializable
 data class SubtitleRequest(

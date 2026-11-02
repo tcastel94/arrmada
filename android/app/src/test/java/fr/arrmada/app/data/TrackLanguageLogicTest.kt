@@ -97,4 +97,66 @@ class TrackLanguageLogicTest {
         assertEquals(2, TrackLanguageLogic.plan("en", multi, texts).text)
         assertEquals(1, TrackLanguageLogic.plan("en", multi, texts.dropLast(1)).text)
     }
+
+    // ── Dernier choix du profil (épisode suivant, autre TV) ──
+
+    @Test
+    fun rememberedFrenchDubWithoutSubtitlesWinsOverRule() {
+        val remembered = TrackLanguageLogic.Remembered(audio = "fr", subtitle = TrackLanguageLogic.SUBTITLES_OFF)
+        val plan = TrackLanguageLogic.plan("en", multi, subs, remembered)
+        assertEquals(0, plan.audio) // VF, alors que la règle donnerait la VO
+        assertNull(plan.text)
+        assertNull(plan.textLanguage)
+    }
+
+    @Test
+    fun rememberedEnglishSubtitles() {
+        val remembered = TrackLanguageLogic.Remembered(audio = "en", subtitle = "en")
+        val plan = TrackLanguageLogic.plan("en", multi, subs, remembered)
+        assertEquals(1, plan.audio)
+        assertEquals(2, plan.text) // sous-titres anglais
+        assertEquals("en", plan.textLanguage)
+        assertEquals(listOf("en", "fr"), TrackLanguageLogic.preferredAudioLanguages(plan))
+    }
+
+    @Test
+    fun rememberedForcedOnlyAndMissingKindFallsBackToOther() {
+        val forced = TrackLanguageLogic.Remembered(audio = "fr", subtitle = "fr", subtitleForced = true)
+        assertEquals(0, TrackLanguageLogic.plan("en", multi, subs, forced).text)
+        // Cet épisode n'a pas de forcés : les français complets
+        val plan = TrackLanguageLogic.plan("en", multi, listOf(Text("fre"), Text("eng")), forced)
+        assertEquals(0, plan.text)
+        assertTrue(plan.fullSubtitles)
+    }
+
+    @Test
+    fun rememberedAudioMissingInThisFileUsesTheRule() {
+        val remembered = TrackLanguageLogic.Remembered(audio = "ja", subtitle = TrackLanguageLogic.SUBTITLES_OFF)
+        assertEquals(TrackLanguageLogic.plan("en", multi, subs), TrackLanguageLogic.plan("en", multi, subs, remembered))
+    }
+
+    @Test
+    fun rememberedSubtitleLanguageMissingKeepsRuleSubtitles() {
+        val remembered = TrackLanguageLogic.Remembered(audio = "en", subtitle = "de")
+        val plan = TrackLanguageLogic.plan("en", multi, subs, remembered)
+        assertEquals(1, plan.audio)
+        assertEquals(1, plan.text) // pas d'allemand : français complets de la règle
+    }
+
+    @Test
+    fun whatIsPlayingIsRemembered() {
+        assertEquals(
+            TrackLanguageLogic.Remembered("fr", TrackLanguageLogic.SUBTITLES_OFF, false),
+            TrackLanguageLogic.remember("fra", subtitlesOn = false, subtitleLanguage = "fre", subtitleForced = true),
+        )
+        assertEquals(TrackLanguageLogic.Remembered("en", "fr", true), TrackLanguageLogic.remember("eng", true, "fre", true))
+    }
+
+    @Test
+    fun scopeOfATitle() {
+        assertEquals("movie:tmdb:438631", TrackLanguageLogic.scope("movie", 438631, 0))
+        assertEquals("series:tvdb:280619", TrackLanguageLogic.scope("episode", 280619, 0))
+        assertEquals("local:12", TrackLanguageLogic.scope("file", 0, 12))
+        assertNull(TrackLanguageLogic.scope("file", 0, 0)) // vidéo isolée : rien à ranger
+    }
 }
