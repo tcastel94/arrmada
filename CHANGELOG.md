@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Appli TV : découpage du lecteur (`PlayerScreen.kt`, 1 587 lignes), passe 1
+
+#### Changed
+- **Aucun changement visible** : le lecteur est réparti en fichiers par rôle, comme on découpe un gros script en fonctions sourcées
+  - `PlayerScreen.kt` (~240 lignes) : préparation de la lecture (infos Jellyfin, fiche, saga, choix de pistes, « Précédemment dans… »)
+  - `PlayerSurface.kt` (~1 100 lignes) : le lecteur en cours (ExoPlayer, pistes, sous-titres, qualité, ampli, télécommande)
+  - `PlayerOverlays.kt` : « Passer l'intro », « Épisode suivant », carte de qualité
+  - `PlaybackErrors.kt` : erreurs de lecture (secours FFmpeg / remux, messages en clair)
+  - `PlayerMedia.kt` : outils Media3 (élément à lire, sous-titres posés à côté, piste vidéo en cours)
+  - `PlayRequest.kt` : ce qu'il faut lancer, épisode à enchaîner
+- Déplacements purs, vérifiés ligne à ligne (même code, seuls des `private` deviennent `internal` pour être vus d'un fichier à l'autre)
+- **Touches de la télécommande pendant la lecture** : la règle « quelle touche fait quoi » sort du lecteur dans `data/PlayerKeyLogic.kt`, testée sans écran (OK fait d'abord ce que l'écran propose : épisode suivant, puis 1080p, puis « Passer l'intro » ; sinon pause)
+
+#### Tests
+- 5 tests dans `PlayerKeyLogicTest`
+
+#### Notes
+- APK non construite dans l'environnement de la modification (SDK Android non téléchargeable) : compilation par la CI Android
+- Suite prévue : sortir de `PlayerSurface` les outils Sous-titres (Bazarr, décalage) et le choix des pistes dans des classes à part
+
 ### Lecteur TV : « Passer l'intro », « Épisode suivant » et carte de qualité en verre
 
 #### Changed
