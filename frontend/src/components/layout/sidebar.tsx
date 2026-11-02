@@ -52,6 +52,8 @@ export function Sidebar() {
                     "group relative flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-[13px] outline-none transition-colors duration-150",
                     "focus-visible:ring-2 focus-visible:ring-primary/60",
                     isActive ? "font-medium text-foreground" : "text-foreground/75 hover:bg-white/[0.05] hover:text-foreground",
+                    // Sous-entrée (Sagas sous Médiathèque) : décalée, un peu plus petite
+                    item.child && !collapsed && "ml-4 h-7 text-[12.5px]",
                     collapsed && "justify-center px-0",
                 )}
             >

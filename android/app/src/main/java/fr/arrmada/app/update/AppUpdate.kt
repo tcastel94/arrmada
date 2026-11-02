@@ -36,6 +36,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import fr.arrmada.app.ArrMadaApplication
 import fr.arrmada.app.BuildConfig
+import fr.arrmada.app.data.ApiException
 import fr.arrmada.app.data.Fr
 import fr.arrmada.app.data.UpdateOffer
 import fr.arrmada.app.ui.components.ArrButton
@@ -76,9 +77,13 @@ class UpdateCenter(private val app: ArrMadaApplication) {
         _offer.value = fetch().getOrNull()
     }
 
-    /** « Rechercher une mise à jour » (Réglages) : message à afficher si rien de neuf. */
+    /**
+     * « Rechercher une mise à jour » (Réglages) : message à afficher si rien de neuf.
+     * Le serveur revérifie GitHub avant de répondre : une version publiée il y a
+     * cinq minutes est proposée tout de suite, sans attendre l'heure suivante.
+     */
     suspend fun checkNow(): String? {
-        val result = fetch()
+        val result = fetch(askServerToCheck = true)
         _offer.value = result.getOrNull()
         return when {
             result.isFailure -> "Vérification impossible : ${result.exceptionOrNull()?.message ?: "serveur injoignable"}"
@@ -91,8 +96,20 @@ class UpdateCenter(private val app: ArrMadaApplication) {
         _offer.value = null
     }
 
-    private suspend fun fetch(): Result<UpdateOffer?> = runCatching {
-        app.repository.updateOffer(BuildConfig.VERSION_CODE, BuildConfig.BUILD_TYPE).takeIf { it.available && it.url.isNotBlank() }
+    private suspend fun fetch(askServerToCheck: Boolean = false): Result<UpdateOffer?> = runCatching {
+        val code = BuildConfig.VERSION_CODE
+        val type = BuildConfig.BUILD_TYPE
+        val offer = if (askServerToCheck) {
+            try {
+                app.repository.checkUpdateOffer(code, type)
+            } catch (e: ApiException) {
+                // Serveur d'avant cette version (route inconnue ou refusée) : ce qu'il a déjà
+                if (e.code == 403 || e.code == 404 || e.code == 405) app.repository.updateOffer(code, type) else throw e
+            }
+        } else {
+            app.repository.updateOffer(code, type)
+        }
+        offer.takeIf { it.available && it.url.isNotBlank() }
     }
 
     /**

@@ -31,6 +31,7 @@ from app.api.kodi_repo import router as kodi_repo_router
 from app.api.links import router as links_router
 from app.api.local_series import router as local_series_router
 from app.api.media import router as media_router
+from app.api.music import router as music_router
 from app.api.notifications import router as notifications_router
 from app.api.profile_overrides import router as profile_overrides_router
 from app.api.profiles import router as profiles_router
@@ -39,6 +40,7 @@ from app.api.quality import router as quality_router
 from app.api.recommendations import router as recommendations_router
 from app.api.requests import router as requests_router
 from app.api.sabnzbd_config import router as sabnzbd_config_router
+from app.api.sagas import router as sagas_router
 from app.api.search import router as search_router
 from app.api.services import router as services_router
 from app.api.settings import router as settings_router
@@ -108,3 +110,7 @@ api_router.include_router(android_router)  # Mises à jour de l'appli Android (A
 # Séries maison avant l'écran Vidéos : /api/videos/series/… ne doit pas tomber sur une autre route
 api_router.include_router(local_series_router)  # Séries maison (Naruto Kai, One Pace…)
 api_router.include_router(videos_router)  # Écran « Vidéos » : dossiers hors médiathèque
+api_router.include_router(
+    music_router
+)  # Musique : Lidarr (bibliothèque, demandes), Jellyfin (écoute)
+api_router.include_router(sagas_router)  # Sagas de films : collections Radarr (TMDB)

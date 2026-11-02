@@ -15,7 +15,7 @@
 /* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Check, Film, Tv } from "lucide-react";
+import { Check, Disc3, Film, Tv } from "lucide-react";
 import { useState, type ReactNode, type MouseEvent } from "react";
 import { cn } from "@/lib/utils";
 import { scaleIn } from "@/lib/motion";
@@ -48,6 +48,8 @@ export interface PosterCardProps {
     className?: string;
     /** Désactive l'animation d'entrée (si le parent n'utilise pas stagger). */
     noEntrance?: boolean;
+    /** Image carrée (pochette d'album, artiste) au lieu d'une affiche 2:3. */
+    square?: boolean;
 }
 
 export function PosterCard({
@@ -69,10 +71,11 @@ export function PosterCard({
     dimmed,
     className,
     noEntrance,
+    square,
 }: PosterCardProps) {
     const [loaded, setLoaded] = useState(false);
     const [failed, setFailed] = useState(false);
-    const Placeholder = type === "series" ? Tv : Film;
+    const Placeholder = type === "series" ? Tv : type === "music" ? Disc3 : Film;
 
     const handleClick = (e: MouseEvent) => {
         if (selectable) {
@@ -87,7 +90,8 @@ export function PosterCard({
         <div className="group/poster">
             <div
                 className={cn(
-                    "relative aspect-[2/3] overflow-hidden rounded-[10px] bg-white/[0.06] transition-[transform,box-shadow] duration-300 ease-smooth",
+                    "relative overflow-hidden rounded-[10px] bg-white/[0.06] transition-[transform,box-shadow] duration-300 ease-smooth",
+                    square ? "aspect-square" : "aspect-[2/3]",
                     "group-hover/poster:scale-[1.03] group-hover/poster:shadow-[0_16px_40px_-12px_rgb(0_0_0/0.9)] group-active/poster:scale-[0.98]",
                     selected && "ring-[3px] ring-primary ring-offset-2 ring-offset-background",
                 )}
@@ -193,9 +197,9 @@ export function PosterCard({
         <div className="relative">
             {wrapped}
             {action && !selectable && (
-                // Boîte calée sur l'affiche (même largeur, ratio 2:3) pour poser
+                // Boîte calée sur l'affiche (même largeur, même ratio) pour poser
                 // l'action dans son coin bas droit, quelle que soit la taille.
-                <div className="pointer-events-none absolute inset-x-0 top-0 z-[12] aspect-[2/3]">
+                <div className={cn("pointer-events-none absolute inset-x-0 top-0 z-[12]", square ? "aspect-square" : "aspect-[2/3]")}>
                     <div className="pointer-events-auto absolute bottom-1.5 right-1.5">{action}</div>
                 </div>
             )}

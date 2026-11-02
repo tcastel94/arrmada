@@ -201,8 +201,11 @@ _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         # Sous-titres externes (Bazarr) : lecture, et recherche depuis le menu pause
         ("GET", r"/api/tv/subtitle/[0-9a-f]{32}/\d+\.(srt|ass|vtt)"),
         ("POST", r"/api/tv/subtitles/[0-9a-f]{32}(/sync)?"),
-        # Mises à jour de l'appli Android (ADR-009) : version proposée, APK
+        # Mises à jour de l'appli Android (ADR-009) : version proposée, APK ;
+        # « Rechercher une mise à jour » fait revérifier GitHub (limité à une
+        # fois toutes les 2 minutes, jamais d'accès aux réglages du miroir)
         ("GET", r"/api/android/update"),
+        ("POST", r"/api/android/update/check"),
         ("GET", r"/api/android/apk/arrmada-[A-Za-z0-9.+_-]+\.apk"),
         # Écran « Vidéos » : parcourir les dossiers déclarés, lire (jetons
         # opaques confinés au dossier racine, lecture seule)
@@ -210,6 +213,23 @@ _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         ("GET", r"/api/videos/(play|stream|subtitle|image)/[A-Za-z0-9_-]{1,2000}"),
         # Séries maison (Naruto Kai, One Pace…) : grille, écran Série, Reprendre
         ("GET", r"/api/videos/series(/index|/\d+)?"),
+        # Musique : bibliothèque Lidarr, recherche, file ; demander un artiste
+        # depuis la TV (comme un film ou une série), jamais le supprimer
+        ("GET", r"/api/music/(status|artists|artists/\d+|lookup|queue)"),
+        ("GET", r"/api/music/albums/\d+/tracks"),
+        # Récupérer un album absent / ses pistes manquantes, les albums
+        # manquants d'un artiste ; importer la musique restée dans les
+        # téléchargements (dossiers vérifiés côté serveur)
+        ("POST", r"/api/music/(albums|artists)/\d+/search"),
+        ("POST", r"/api/music/artists/\d+/refresh"),
+        ("GET", r"/api/music/downloads"),
+        ("POST", r"/api/music/downloads/import"),
+        ("GET", r"/api/music/stream/[0-9a-f]{32}"),
+        ("POST", r"/api/music/artists"),
+        # Sagas de films : voir, compléter (ajouter des films, comme une demande)
+        ("GET", r"/api/sagas"),
+        ("GET", r"/api/sagas/(\d+|movie/\d+|in-progress)"),
+        ("POST", r"/api/sagas/\d+/(complete|follow)"),
     )
 )
 

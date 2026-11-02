@@ -34,12 +34,12 @@ export function TableSkeleton({ rows = 5 }: { rows?: number }) {
     );
 }
 
-export function PosterGridSkeleton({ count = 12, className }: { count?: number; className?: string }) {
+export function PosterGridSkeleton({ count = 12, className, square }: { count?: number; className?: string; square?: boolean }) {
     return (
         <div className={cn("grid grid-cols-3 gap-x-3 gap-y-5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8", className)}>
             {Array.from({ length: count }).map((_, i) => (
                 <div key={i} className="space-y-2">
-                    <Shimmer className="aspect-[2/3] w-full rounded-[10px]" />
+                    <Shimmer className={cn("w-full rounded-[10px]", square ? "aspect-square" : "aspect-[2/3]")} />
                     <Shimmer className="h-3 w-3/4 rounded-md" />
                 </div>
             ))}

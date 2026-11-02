@@ -45,10 +45,16 @@ Détails :
   (une APK de test, signée par une autre clé, échouerait).
 - **API** : `/api/android/update` et `/api/android/apk/{fichier}` ouverts aux
   jetons d'appareil (lecture seule, nom exact d'une APK du dossier) ;
+  `POST /api/android/update/check` aussi (bouton de l'appli, voir plus bas) ;
   `/api/android/status` et `/api/android/refresh` réservés à la web app.
 - **Appli** : vérification une fois par lancement (jamais pendant un film),
   « Plus tard » la repousse au lancement suivant, *Réglages › Rechercher une
-  mise à jour* force la vérification. La première fois, Android demande
+  mise à jour* force la vérification : le serveur revérifie alors GitHub avant
+  de répondre (`POST /api/android/update/check`), sans attendre sa
+  vérification horaire. Limité à une vérification GitHub toutes les 2 minutes
+  (quota de l'API GitHub sans jeton : 60 appels par heure) ; GitHub
+  injoignable = réponse avec l'APK déjà présente. Un serveur plus ancien
+  (route inconnue) répond comme avant. La première fois, Android demande
   d'autoriser ArrMada à installer des applis : l'appli ouvre l'écran voulu.
 
 ## Alternatives écartées

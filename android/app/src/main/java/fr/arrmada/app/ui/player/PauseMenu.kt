@@ -70,6 +70,15 @@ import fr.arrmada.app.data.SubtitleShiftLogic
 import fr.arrmada.app.data.Trickplay
 import fr.arrmada.app.data.TrickplayLogic
 import fr.arrmada.app.ui.components.Badge
+import fr.arrmada.app.ui.components.CardShape
+import fr.arrmada.app.ui.components.Dim
+import fr.arrmada.app.ui.components.Glass
+import fr.arrmada.app.ui.components.GlassButton
+import fr.arrmada.app.ui.components.GlassTab
+import fr.arrmada.app.ui.components.GlassStrong
+import fr.arrmada.app.ui.components.Ink
+import fr.arrmada.app.ui.components.PauseScrim
+import fr.arrmada.app.ui.components.PillShape
 import fr.arrmada.app.ui.components.LocalScreen
 import fr.arrmada.app.ui.components.formatClock
 import fr.arrmada.app.ui.components.gutter
@@ -109,7 +118,7 @@ private enum class PauseTab(val label: String) {
     CHAPTERS("Chapitres"), INFO("Infos"), CAST("Distribution"), SUBTITLES("Sous-titres")
 }
 
-// Palette « verre », boutons et voiles : GlassStyle.kt (partagés avec les sous-menus)
+// Palette « verre », boutons et voiles : ui/components/GlassStyle.kt (communs à toute l'appli)
 
 /**
  * Menu pause « façon Apple TV » : l'image figée reste visible, assombrie
@@ -375,26 +384,10 @@ private fun Scrubber(progress: Float, marks: List<Float>, modifier: Modifier) {
     }
 }
 
-/** Onglet texte : il s'active dès qu'il reçoit le focus (pas besoin de valider). */
+/** Onglet texte : il s'active dès qu'il reçoit le focus (pas besoin de valider). Style commun : [GlassTab]. */
 @Composable
 private fun TabPill(label: String, selected: Boolean, modifier: Modifier = Modifier, onFocus: () -> Unit) {
-    Surface(
-        onClick = onFocus,
-        modifier = modifier.height(36.dp).onFocusChanged { if (it.isFocused) onFocus() }.tapToClick(onFocus),
-        shape = ClickableSurfaceDefaults.shape(PillShape),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (selected) Color(0x24FFFFFF) else Color.Transparent,
-            contentColor = if (selected) Color.White else Dim,
-            focusedContainerColor = Color.White,
-            focusedContentColor = Ink,
-        ),
-    ) {
-        // Largeur = celle du texte (fillMaxSize étirerait l'onglet sur toute la rangée)
-        Box(Modifier.fillMaxHeight().padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
-            Text(label, style = MaterialTheme.typography.titleMedium, maxLines = 1)
-        }
-    }
+    GlassTab(label, selected, onClick = onFocus, modifier = modifier, onFocus = onFocus)
 }
 
 /**

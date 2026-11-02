@@ -70,6 +70,15 @@ import fr.arrmada.app.data.WatchState
 import fr.arrmada.app.data.WatchStateUpdate
 import fr.arrmada.app.data.shortDate
 import fr.arrmada.app.ui.components.ArrButton
+import fr.arrmada.app.ui.components.CardShape
+import fr.arrmada.app.ui.components.TechCard
+import fr.arrmada.app.data.TechSpecLogic
+import fr.arrmada.app.ui.components.PosterGlow
+import fr.arrmada.app.ui.components.focusGlow
+import fr.arrmada.app.ui.components.Glass
+import fr.arrmada.app.ui.components.GlassEdge
+import fr.arrmada.app.ui.components.GlassStrong
+import fr.arrmada.app.ui.components.Ink
 import fr.arrmada.app.ui.components.ArtImage
 import fr.arrmada.app.ui.components.Badge
 import fr.arrmada.app.ui.components.KenBurnsBackdrop
@@ -347,28 +356,33 @@ fun SeriesContent(
                 }
             }
 
-            // ── Épisode sélectionné : résumé ──
+            // ── Épisode sélectionné : résumé, et à droite la carte technique de son fichier ──
             val current = focused
             if (current != null) {
-                Column(Modifier.padding(horizontal = gutter).widthIn(max = 760.dp)) {
-                    Text(
-                        listOfNotNull(
-                            "${current.code} · ${current.title}",
-                            current.runtime.takeIf { it > 0 }?.let { formatDuration(it) },
-                            shortDate(current.airDate)?.let { "diffusé le $it" }.takeIf { current.status != EpisodeStatus.UPCOMING },
-                        ).joinToString("  ·  "),
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        current.overview.orEmpty(),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = ArrColors.TextSecondary,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 4.dp),
-                    )
+                Row(Modifier.padding(horizontal = gutter), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column(Modifier.weight(1f, fill = false).widthIn(max = 760.dp)) {
+                        Text(
+                            listOfNotNull(
+                                "${current.code} · ${current.title}",
+                                current.runtime.takeIf { it > 0 }?.let { formatDuration(it) },
+                                shortDate(current.airDate)?.let { "diffusé le $it" }.takeIf { current.status != EpisodeStatus.UPCOMING },
+                            ).joinToString("  ·  "),
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            current.overview.orEmpty(),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = ArrColors.TextSecondary,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
+                    // Épisode pas encore sur le disque : pas de fichier, pas de carte
+                    val spec = TechSpecLogic.lines(current.file)
+                    if (spec.isNotEmpty()) TechCard(spec, Modifier.widthIn(max = 380.dp))
                 }
             }
         }
@@ -391,20 +405,21 @@ fun SeriesContent(
 /** Pastille de saison : elle s'active dès qu'elle reçoit le focus. */
 @Composable
 private fun SeasonChip(label: String, subtitle: String, selected: Boolean, onFocus: () -> Unit) {
-    val shape = RoundedCornerShape(8.dp)
+    // Saison affichée : verre plus clair + liseré (comme un réglage choisi) ; focus blanc
+    val shape = RoundedCornerShape(14.dp)
     Surface(
         onClick = onFocus,
         modifier = Modifier.height(46.dp).onFocusChanged { if (it.isFocused) onFocus() }.tapToClick(onFocus),
         shape = ClickableSurfaceDefaults.shape(shape),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.06f),
         border = ClickableSurfaceDefaults.border(
-            border = if (selected) Border(BorderStroke(1.5.dp, ArrColors.AccentText), shape = shape) else Border.None,
+            border = if (selected) Border(BorderStroke(1.dp, GlassEdge), shape = shape) else Border.None,
         ),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (selected) ArrColors.Accent.copy(alpha = 0.22f) else Color(0x26FFFFFF),
-            contentColor = ArrColors.Text,
-            focusedContainerColor = ArrColors.Accent,
-            focusedContentColor = ArrColors.Night,
+            containerColor = if (selected) GlassStrong else Glass,
+            contentColor = Color.White,
+            focusedContainerColor = Color.White,
+            focusedContentColor = Ink,
         ),
     ) {
         Column(Modifier.fillMaxHeight().padding(horizontal = 14.dp), verticalArrangement = Arrangement.Center) {
@@ -423,8 +438,9 @@ private fun EpisodeCard(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
-    val shape = RoundedCornerShape(7.dp)
+    val shape = CardShape
     val dimmed = row.status != EpisodeStatus.AVAILABLE
+    var tint by remember(imageUrl) { mutableStateOf(PosterGlow.cached(imageUrl)) }
     Column(Modifier.width(200.dp)) {
         Surface(
             onClick = onClick,
@@ -432,12 +448,12 @@ private fun EpisodeCard(
             modifier = Modifier.width(200.dp).height(112.dp).onFocusChanged { if (it.isFocused) onFocus() }
                 .tapToClick(onClick, onLongClick),
             shape = ClickableSurfaceDefaults.shape(shape),
-            scale = ClickableSurfaceDefaults.scale(focusedScale = 1.08f),
-            border = ClickableSurfaceDefaults.border(focusedBorder = Border(BorderStroke(2.dp, ArrColors.Accent), shape = shape)),
-            glow = ClickableSurfaceDefaults.glow(focusedGlow = Glow(ArrColors.Accent.copy(alpha = 0.65f), 14.dp)),
+            scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
+            border = ClickableSurfaceDefaults.border(focusedBorder = Border(BorderStroke(3.dp, Color.White), shape = shape)),
+            glow = ClickableSurfaceDefaults.glow(focusedGlow = focusGlow(tint)),
             colors = ClickableSurfaceDefaults.colors(containerColor = ArrColors.Card, focusedContainerColor = ArrColors.Card),
         ) {
-            ArtImage(imageUrl, row.title, Modifier.fillMaxSize())
+            ArtImage(imageUrl, row.title, Modifier.fillMaxSize(), onColor = { tint = it })
             if (dimmed) Box(Modifier.fillMaxSize().background(Color(0xB30A0E16)))
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.6f to Color.Transparent, 1f to Color(0xCC0A0E16))))
             when {

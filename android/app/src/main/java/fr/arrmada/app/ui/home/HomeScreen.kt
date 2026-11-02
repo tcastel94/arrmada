@@ -11,9 +11,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -23,6 +21,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -35,6 +37,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -44,8 +48,11 @@ import androidx.lifecycle.viewModelScope
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import fr.arrmada.app.data.SagaRules
 import fr.arrmada.app.data.Api
 import fr.arrmada.app.data.CalendarEntry
+import fr.arrmada.app.data.CardTagLogic
+import fr.arrmada.app.data.HomeLayoutLogic
 import fr.arrmada.app.data.LibraryItem
 import fr.arrmada.app.data.LocalSeriesLogic
 import fr.arrmada.app.data.Repository
@@ -55,7 +62,11 @@ import fr.arrmada.app.data.RatingLogic
 import fr.arrmada.app.data.MediaMenuLogic
 import fr.arrmada.app.data.WatchlistItem
 import fr.arrmada.app.data.WatchlistLogic
-import fr.arrmada.app.ui.components.ArrButton
+import fr.arrmada.app.ui.components.Glass
+import fr.arrmada.app.ui.components.GlassIconButton
+import fr.arrmada.app.ui.components.GlassIcons
+import fr.arrmada.app.ui.components.GlassTab
+import fr.arrmada.app.ui.components.Ink
 import fr.arrmada.app.ui.components.ContentRow
 import fr.arrmada.app.ui.components.KenBurnsBackdrop
 import fr.arrmada.app.ui.components.LandscapeCard
@@ -64,6 +75,7 @@ import fr.arrmada.app.ui.components.PosterCard
 import fr.arrmada.app.ui.components.formatClock
 import fr.arrmada.app.ui.theme.ArrColors
 import kotlinx.coroutines.async
+import java.time.LocalDate
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -86,6 +98,8 @@ data class HomeState(
     val recent: List<LibraryItem> = emptyList(),
     val forYou: List<TmdbItem> = emptyList(),
     val upcoming: List<CalendarEntry> = emptyList(),
+    val sagas: List<fr.arrmada.app.data.Saga> = emptyList(), // sagas commencées, pas finies (ADR-016)
+    val downloads: Int = 0, // téléchargements en cours (file Radarr / Sonarr) : pastille de la barre du haut
 )
 
 /**
@@ -118,6 +132,8 @@ class HomeViewModel(private val repository: Repository) : ViewModel() {
             val forYou = async { runCatching { repository.recommendations() } }
             val upcoming = async { runCatching { repository.upcoming() } }
             val watchlist = async { runCatching { WatchlistLogic.ordered(repository.watchlist()) } }
+            val downloads = async { runCatching { repository.board().queue.size } }
+            val sagas = async { runCatching { repository.sagasInProgress().sagas.take(20) } }
             val resume = async {
                 runCatching {
                     val states = repository.watchStates()
@@ -151,6 +167,8 @@ class HomeViewModel(private val repository: Repository) : ViewModel() {
                         .take(20)
                 } ?: emptyList(),
                 upcoming = upcoming.await().getOrNull()?.items.orEmpty().take(20),
+                sagas = sagas.await().getOrDefault(emptyList()),
+                downloads = downloads.await().getOrDefault(0),
             )
         }
     }
@@ -164,6 +182,7 @@ class HomeActions(
     val open: (LibraryItem) -> Unit = {}, // fiche film ou écran Série
     val openMovieId: (Int) -> Unit = {}, // fiche film par identifiant Radarr
     val openSeriesId: (Int) -> Unit = {}, // écran Série par identifiant Sonarr
+    val openSaga: (Int) -> Unit = {}, // une saga (« Sagas à terminer »)
     val resume: (ResumeEntry) -> Unit = {},
     val openWatchlist: (WatchlistItem) -> Unit = {}, // « Ma liste » : fiche, ou feuille « Télécharger »
     val request: (TmdbItem) -> Unit = {}, // titre absent : feuille « Télécharger »
@@ -173,6 +192,7 @@ class HomeActions(
     val viewer: fr.arrmada.app.data.FamilyProfile? = null,
     val showMenu: Boolean = true, // téléphone / tablette : la barre de navigation le remplace
     val menu: (fr.arrmada.app.data.MenuTarget) -> Unit = {}, // appui long sur une carte : menu du titre
+    val rows: List<HomeLayoutLogic.Row> = HomeLayoutLogic.visible(HomeLayoutLogic.DEFAULT), // Réglages › Rangées de l'accueil
 )
 
 @Composable
@@ -181,11 +201,26 @@ fun HomeScreen(viewModel: HomeViewModel, api: Api, actions: HomeActions) {
     HomeContent(state, api::absolute, viewModel::load, actions)
 }
 
-/** Menu du haut, commun à l'accueil et aux grilles (comme la coquille de l'add-on). */
-val TOP_MENU = listOf(
-    "home" to "Accueil", "movies" to "Films", "series" to "Séries", "tonight" to "Ce soir",
-    "videos" to "Vidéos", "apps" to "Applis", "discover" to "Découvrir", "search" to "Rechercher", "queue" to "Téléchargements",
-    "board" to "Tableau de bord", "settings" to "Réglages",
+/**
+ * Barre du haut de l'accueil TV, en deux groupes, tout visible sur une
+ * ligne et sans sous-menu : à gauche les sections de contenu en onglets
+ * texte (les mêmes que dans le menu pause)…
+ */
+val TOP_SECTIONS = listOf(
+    "home" to "Accueil", "movies" to "Films", "series" to "Séries", "music" to "Musique", "tonight" to "Ce soir",
+    "videos" to "Vidéos", "discover" to "Découvrir",
+)
+
+/** Outil de la barre du haut : écran (nom utilisé par `go`), nom affiché au focus, pictogramme. */
+data class TopTool(val route: String, val label: String, val icon: ImageVector)
+
+/** …et à droite les outils, en pictogrammes (leur nom s'affiche au focus). */
+val TOP_TOOLS = listOf(
+    TopTool("search", "Rechercher", GlassIcons.Search),
+    TopTool("queue", "Téléchargements", GlassIcons.Download),
+    TopTool("apps", "Applis", GlassIcons.Apps),
+    TopTool("board", "Tableau de bord", GlassIcons.Board),
+    TopTool("settings", "Réglages", GlassIcons.Settings),
 )
 
 /** Affichage de l'accueil à partir d'un état (séparé pour les captures d'écran de test). */
@@ -208,18 +243,39 @@ fun HomeContent(state: HomeState, absolute: (String?) -> String?, onRetry: () ->
 
     KenBurnsBackdrop(url = shown?.backdrop) {
         Column(Modifier.fillMaxSize()) {
-            // ── Menu du haut (comme la coquille de l'add-on) ──
-            // Défile si besoin : l'entrée qui prend le focus est toujours amenée à l'écran
+            // ── Barre du haut : sections en texte à gauche, outils en pictogrammes à droite ──
+            // zIndex : le nom d'un outil au focus déborde sous la barre, par-dessus le héros
             if (actions.showMenu) {
                 Row(
-                    Modifier.padding(top = 20.dp).horizontalScroll(rememberScrollState()).padding(horizontal = gutter),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    Modifier.fillMaxWidth().zIndex(1f).padding(top = 20.dp).padding(horizontal = gutter),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    TOP_MENU.forEach { (route, label) ->
-                        ArrButton(label, { if (route != "home") actions.go(route) }, primary = route == "home", compact = true)
+                    // Onglets : défilent si la place manque (le focus amène l'onglet à l'écran)
+                    Row(
+                        Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        TOP_SECTIONS.forEach { (route, label) ->
+                            // OK ouvre la section ; on est sur l'accueil : son onglet est le « choisi »
+                            GlassTab(label, selected = route == "home", current = route == "home", onClick = { if (route != "home") actions.go(route) })
+                        }
                     }
-                    actions.viewer?.let { viewer -> ViewerChip(viewer) { actions.go("profiles") } }
+                    Spacer(Modifier.width(12.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        TOP_TOOLS.forEach { tool ->
+                            GlassIconButton(
+                                tool.icon,
+                                tool.label,
+                                onClick = { actions.go(tool.route) },
+                                badge = if (tool.route == "queue") state.downloads else null,
+                            )
+                        }
+                        actions.viewer?.let { viewer ->
+                            Spacer(Modifier.width(6.dp))
+                            ViewerChip(viewer) { actions.go("profiles") }
+                        }
+                    }
                 }
             } else {
                 // Tactile : le profil en haut à droite seulement
@@ -238,73 +294,88 @@ fun HomeContent(state: HomeState, absolute: (String?) -> String?, onRetry: () ->
                 if (current != null) HeroBlock(current)
             }
 
-            // ── Rangées ──
+            // ── Rangées, dans l'ordre choisi dans Réglages (rangées masquées absentes) ──
+            // Le focus de départ va sur la première carte de la première rangée non vide
+            val firstRow = actions.rows.firstOrNull { !rowIsEmpty(it, state) }
+            val today = remember { LocalDate.now() }
             LazyColumn(
                 contentPadding = PaddingValues(bottom = 40.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                item {
-                    ContentRow("Reprendre", state.resume, key = { it.state.mediaType + it.state.id + it.state.season + it.state.episode }) { entry ->
-                        LandscapeCard(
-                            imageUrl = absolute(entry.item?.fanartUrl ?: entry.item?.posterUrl),
-                            title = entry.title,
-                            subtitle = entry.subtitle,
-                            progress = entry.progress,
-                            onClick = { actions.resume(entry) },
-                            onFocus = { hero = heroOf(entry, absolute) },
-                            onLongClick = { actions.menu(MediaMenuLogic.of(entry)) },
-                            modifier = if (entry == state.resume.first()) Modifier.focusRequester(firstFocus) else Modifier,
-                        )
-                    }
-                }
-                item {
-                    ContentRow("Ma liste", state.watchlist, key = { "w" + it.key }) { item ->
-                        PosterCard(
-                            imageUrl = absolute(item.posterUrl),
-                            title = item.title,
-                            onClick = { actions.openWatchlist(item) },
-                            onFocus = { hero = heroOf(item, absolute) },
-                            onLongClick = { actions.menu(MediaMenuLogic.of(item)) },
-                            modifier = if (state.resume.isEmpty() && item == state.watchlist.first()) Modifier.focusRequester(firstFocus) else Modifier,
-                        )
-                    }
-                }
-                item {
-                    ContentRow("Ajouts récents", state.recent, key = { it.type + it.externalId }) { item ->
-                        PosterCard(
-                            imageUrl = absolute(item.posterUrl),
-                            title = item.title,
-                            onClick = { actions.open(item) },
-                            onFocus = {
-                                hero = heroOf(item, absolute)
-                                actions.prefetch(item)
-                            },
-                            onLongClick = { actions.menu(MediaMenuLogic.of(item)) },
-                            modifier = if (state.resume.isEmpty() && state.watchlist.isEmpty() && item == state.recent.first()) Modifier.focusRequester(firstFocus) else Modifier,
-                        )
-                    }
-                }
-                item {
-                    ContentRow("Pour toi", state.forYou, key = { "t" + it.tmdbId }) { item ->
-                        PosterCard(
-                            imageUrl = item.posterUrl,
-                            title = item.title,
-                            onClick = { actions.request(item) },
-                            onFocus = { hero = heroOf(item) },
-                        )
-                    }
-                }
-                item {
-                    ContentRow("Bientôt", state.upcoming, key = { it.id }) { entry ->
-                        PosterCard(
-                            imageUrl = absolute(entry.posterUrl),
-                            title = entry.title,
-                            onClick = {
-                                entry.movieId?.let(actions.openMovieId) ?: entry.seriesId?.let(actions.openSeriesId)
-                            },
-                            onFocus = { hero = heroOf(entry, absolute) },
-                        )
+                actions.rows.forEach { row ->
+                    item(key = row.id) {
+                        val focusFirst = row == firstRow
+                        when (row) {
+                            HomeLayoutLogic.Row.RESUME -> ContentRow(row.label, state.resume, key = { it.state.mediaType + it.state.id + it.state.season + it.state.episode }) { entry ->
+                                LandscapeCard(
+                                    imageUrl = absolute(entry.item?.fanartUrl ?: entry.item?.posterUrl),
+                                    title = entry.title,
+                                    subtitle = entry.subtitle,
+                                    progress = entry.progress,
+                                    onClick = { actions.resume(entry) },
+                                    onFocus = { hero = heroOf(entry, absolute) },
+                                    onLongClick = { actions.menu(MediaMenuLogic.of(entry)) },
+                                    modifier = if (focusFirst && entry == state.resume.first()) Modifier.focusRequester(firstFocus) else Modifier,
+                                )
+                            }
+                            HomeLayoutLogic.Row.SAGAS -> ContentRow(row.label, state.sagas, key = { "s" + it.id }) { saga ->
+                                // Affiche du prochain film à voir, « 3 vus sur 8 » en étiquette
+                                PosterCard(
+                                    imageUrl = saga.next?.poster ?: saga.poster,
+                                    title = saga.title,
+                                    onClick = { actions.openSaga(saga.id) },
+                                    onFocus = { hero = heroOf(saga) },
+                                    tag = SagaRules.seenLine(saga),
+                                    progress = SagaRules.progress(saga.copy(available = saga.seen)),
+                                    modifier = if (focusFirst && saga == state.sagas.first()) Modifier.focusRequester(firstFocus) else Modifier,
+                                )
+                            }
+                            HomeLayoutLogic.Row.WATCHLIST -> ContentRow(row.label, state.watchlist, key = { "w" + it.key }) { item ->
+                                PosterCard(
+                                    imageUrl = absolute(item.posterUrl),
+                                    title = item.title,
+                                    onClick = { actions.openWatchlist(item) },
+                                    onFocus = { hero = heroOf(item, absolute) },
+                                    onLongClick = { actions.menu(MediaMenuLogic.of(item)) },
+                                    modifier = if (focusFirst && item == state.watchlist.first()) Modifier.focusRequester(firstFocus) else Modifier,
+                                )
+                            }
+                            HomeLayoutLogic.Row.RECENT -> ContentRow(row.label, state.recent, key = { it.type + it.externalId }) { item ->
+                                PosterCard(
+                                    imageUrl = absolute(item.posterUrl),
+                                    title = item.title,
+                                    onClick = { actions.open(item) },
+                                    onFocus = {
+                                        hero = heroOf(item, absolute)
+                                        actions.prefetch(item)
+                                    },
+                                    onLongClick = { actions.menu(MediaMenuLogic.of(item)) },
+                                    tag = CardTagLogic.added(item.added, today), // « Hier », « Il y a 3 j »
+                                    modifier = if (focusFirst && item == state.recent.first()) Modifier.focusRequester(firstFocus) else Modifier,
+                                )
+                            }
+                            HomeLayoutLogic.Row.FOR_YOU -> ContentRow(row.label, state.forYou, key = { "t" + it.tmdbId }) { item ->
+                                PosterCard(
+                                    imageUrl = item.posterUrl,
+                                    title = item.title,
+                                    onClick = { actions.request(item) },
+                                    onFocus = { hero = heroOf(item) },
+                                    modifier = if (focusFirst && item == state.forYou.first()) Modifier.focusRequester(firstFocus) else Modifier,
+                                )
+                            }
+                            HomeLayoutLogic.Row.UPCOMING -> ContentRow(row.label, state.upcoming, key = { it.id }) { entry ->
+                                PosterCard(
+                                    imageUrl = absolute(entry.posterUrl),
+                                    title = entry.title,
+                                    onClick = {
+                                        entry.movieId?.let(actions.openMovieId) ?: entry.seriesId?.let(actions.openSeriesId)
+                                    },
+                                    onFocus = { hero = heroOf(entry, absolute) },
+                                    modifier = if (focusFirst && entry == state.upcoming.first()) Modifier.focusRequester(firstFocus) else Modifier,
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -312,9 +383,19 @@ fun HomeContent(state: HomeState, absolute: (String?) -> String?, onRetry: () ->
     }
 
     // Focus de départ sur la première carte (sinon la télécommande ne « voit » rien)
-    LaunchedEffect(state.resume.isNotEmpty() || state.watchlist.isNotEmpty() || state.recent.isNotEmpty()) {
+    LaunchedEffect(actions.rows.any { !rowIsEmpty(it, state) }) {
         runCatching { firstFocus.requestFocus() }
     }
+}
+
+/** Rangée sans carte : elle ne s'affiche pas (et ne peut pas prendre le focus de départ). */
+private fun rowIsEmpty(row: HomeLayoutLogic.Row, state: HomeState): Boolean = when (row) {
+    HomeLayoutLogic.Row.RESUME -> state.resume.isEmpty()
+    HomeLayoutLogic.Row.SAGAS -> state.sagas.isEmpty()
+    HomeLayoutLogic.Row.WATCHLIST -> state.watchlist.isEmpty()
+    HomeLayoutLogic.Row.RECENT -> state.recent.isEmpty()
+    HomeLayoutLogic.Row.FOR_YOU -> state.forYou.isEmpty()
+    HomeLayoutLogic.Row.UPCOMING -> state.upcoming.isEmpty()
 }
 
 @Composable
@@ -369,6 +450,16 @@ private fun heroOf(entry: ResumeEntry, absolute: (String?) -> String?) = Hero(
     note = if (entry.isEpisode) entry.subtitle + "  ·  reprendre à " + formatClock(entry.state.position.toLong()) else entry.subtitle,
 )
 
+/** Saga commencée : son fond, ce qui reste à voir. */
+private fun heroOf(saga: fr.arrmada.app.data.Saga) = Hero(
+    backdrop = saga.fanart ?: saga.next?.poster ?: saga.poster,
+    logo = null,
+    title = saga.title,
+    meta = SagaRules.facts(saga),
+    overview = saga.overview,
+    note = SagaRules.nextLabel(saga)?.let { "Prochain film · " + it.substringAfter(": ") },
+)
+
 private fun heroOf(item: WatchlistItem, absolute: (String?) -> String?) = Hero(
     backdrop = absolute(item.fanartUrl ?: item.posterUrl),
     logo = null,
@@ -405,10 +496,10 @@ private fun ViewerChip(viewer: fr.arrmada.app.data.FamilyProfile, onClick: () ->
         shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(RoundedCornerShape(17.dp)),
         scale = androidx.tv.material3.ClickableSurfaceDefaults.scale(focusedScale = 1.06f),
         colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
-            containerColor = Color(0x26FFFFFF),
-            contentColor = ArrColors.Text,
-            focusedContainerColor = ArrColors.Accent,
-            focusedContentColor = ArrColors.Night,
+            containerColor = Glass,
+            contentColor = Color.White,
+            focusedContainerColor = Color.White,
+            focusedContentColor = Ink,
         ),
     ) {
         Row(

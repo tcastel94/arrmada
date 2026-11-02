@@ -1,6 +1,7 @@
 """Mises à jour de l'appli Android (ADR-009) : version proposée et APK.
 
-Appareils (jeton d'appareil, réseau local ou VPN) : ``GET /update``, ``GET
+Appareils (jeton d'appareil, réseau local ou VPN) : ``GET /update``,
+``POST /update/check`` (bouton « Rechercher une mise à jour »), ``GET
 /apk/{fichier}``. Web app : état du miroir et vérification immédiate.
 """
 
@@ -28,6 +29,18 @@ async def update(
     if apk is None or apk.version_code <= version_code:
         return {"available": False}
     return {"available": True, **apk.as_dict()}
+
+
+@router.post("/update/check")
+async def check_update(
+    version_code: int = Query(..., ge=0),
+    build_type: str = Query("release", pattern="^(release|debug)$"),
+) -> dict:
+    """Bouton « Rechercher une mise à jour » d'un appareil : le serveur revérifie
+    d'abord la release GitHub (au plus toutes les 2 minutes, sans attendre la
+    vérification horaire), puis répond comme ``GET /update``."""
+    await android_update.refresh_for_device()
+    return await update(version_code, build_type)
 
 
 @router.get("/apk/{name}")

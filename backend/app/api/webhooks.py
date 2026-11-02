@@ -234,6 +234,15 @@ async def _handle_arr_webhook(
         },
     )
 
+    # Nouveau film d'une saga suivie (Radarr l'a ajouté seul) : notification
+    if event_type == "MovieAdded" and service_type == "radarr" and _obj.get("id"):
+        from app.services import sagas
+
+        try:
+            await sagas.notify_new_film(db, int(_obj["id"]))
+        except Exception as exc:  # jamais d'échec du webhook pour une notification
+            logger.info("Sagas : notification impossible (%s)", exc)
+
     # Demande lancée depuis la TV : priorité SABnzbd posée dans la seconde
     if event_type == "Grab" and service_type in ("radarr", "sonarr"):
         from app.services import tv_priority

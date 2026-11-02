@@ -678,6 +678,20 @@ async def open_stream(
     return await _relay(url, range_header, item_id)
 
 
+async def open_audio(
+    db: AsyncSession, item_id: str, range_header: str | None
+) -> tuple[int, dict[str, str], AsyncIterator[bytes]]:
+    """Piste de musique d'origine (FLAC, MP3, AAC…), relayée depuis Jellyfin."""
+    if not ITEM_ID.match(item_id):
+        raise UpstreamError(404, "Élément inconnu")
+    cfg = await jellyfin.get_config(db)
+    if not cfg:
+        raise UpstreamError(503, "Jellyfin non configuré")
+    base, key = cfg
+    url = f"{base}/Audio/{item_id}/stream?{urlencode({jellyfin.KEY_PARAM: key, 'static': 'true'})}"
+    return await _relay(url, range_header, item_id)
+
+
 # ── Remux HLS (formats que la TV ne lit pas directement) ─────────────────────
 
 

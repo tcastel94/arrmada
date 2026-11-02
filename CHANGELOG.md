@@ -22,6 +22,148 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Notes
 - APK non construite dans l'environnement de la modification (SDK Android non téléchargeable) : `TrackLanguageLogic` et ses tests y ont été compilés et passés ; compilation complète par la CI Android
 
+### Sagas de films, étape 3 : suivre, ordre choisi, collections Jellyfin
+
+#### Added
+- **Suivre une saga** (web app et TV) : Radarr surveille la saga et ajoute seul ses nouveaux films (recherchés dès leur sortie, profil et dossier de la saga ou ceux par défaut). À l'arrivée d'un film ainsi ajouté, **notification** « Nouveau film dans la saga … » (webhook Radarr « Film ajouté »)
+- **Ordre des films choisi à la main** (web app) : flèches pour monter ou descendre chaque film (ordre de l'histoire : Star Wars, Les Animaux fantastiques avant Harry Potter…), retour à l'ordre de sortie. L'ordre vaut pour tous les profils et sert partout : fiches, TV, « Reprendre la saga », film suivant (« ordre choisi » sur la TV)
+- **Collections Jellyfin** (web app) : une saga, ou toutes depuis la page Sagas, recréée en collection dans Jellyfin (créée ou complétée avec les films présents)
+- Serveur : `POST /api/sagas/{id}/follow` (ouverte aux TV), `PUT|DELETE /api/sagas/{id}/order`, `POST /api/sagas/{id}/jellyfin`, `POST /api/sagas/jellyfin` ; table `saga_orders` (créée au démarrage)
+- Tests : serveur, appli (`SagaRulesTest`), e2e
+
+#### Prérequis
+- Notification d'un nouveau film : le webhook Radarr vers ArrMada doit envoyer l'événement « On Movie Added » (Radarr › Settings › Connect)
+
+### Sagas de films, étape 2 : regarder une saga
+
+#### Added
+- **Films vus dans les sagas** : le vu et la reprise que les TV partagent déjà (`watch_states`, par profil famille) s'affichent sur chaque film d'une saga (« ✓ Vu », barre de reprise, « 3 vus »), sur la web app comme sur la TV
+- **« Reprendre la saga »** (TV) : premier bouton de l'écran d'une saga, il lance le prochain film à voir (le premier sur le NAS pas encore vu), à sa reprise s'il est commencé (« Reprendre : … », « Continuer : … », « Regarder : … »)
+- **Rangée « Sagas à terminer »** sur l'accueil TV, après « Reprendre » : sagas commencées et pas finies, la plus récente d'abord, affiche du prochain film et « 3 vus sur 8 ». Rangée réglable comme les autres (Réglages › Rangées de l'accueil)
+- **Film suivant à la fin d'un film** (TV) : la carte de fin, celle de l'épisode suivant, propose le film suivant de la saga s'il est sur le NAS (« Film suivant dans 10 s », OK : maintenant, Retour : non merci)
+- Serveur : `GET /api/sagas/in-progress` (ouverte aux TV), vu / reprise / prochain film dans les réponses des sagas, film suivant (`following`) dans `/api/sagas/movie/{id}`
+- Tests : serveur, appli (`SagaRulesTest`, `HomeLayoutLogicTest`), e2e
+
+### Sagas de films, étape 1
+
+#### Added
+- **Sagas de films** ([ADR-016](docs/adr/016-sagas.md)) : les collections TMDB que Radarr connaît déjà, croisées avec la bibliothèque. Aucune nouvelle source ni clé
+- **Web app** : « Sagas » sous « Médiathèque » dans le menu (raccourci `g` + `a`). Grille des sagas avec affiches en éventail au survol, « 6/8 films », badge (manquants, en recherche, annoncés, complète) et filtres. Fiche d'une saga : films dans l'ordre de sortie, liens vers leurs fiches, **« Compléter la saga »** (films sortis manquants ajoutés à Radarr et cherchés) et « Ajouter » film par film
+- **Fiche d'un film** : bloc « Saga » (film N sur M, précédent, suivant, lien vers la saga)
+- **Appli TV** : « Sagas » est une vue de l'écran Films, à côté de Récents, A à Z, Année et 4K. Au focus, les affiches d'une saga s'ouvrent en éventail et le fond prend sa couleur ; à l'ouverture, les films se distribuent un par un ; au Retour, ils se rangent et le focus revient sur la saga. « Compléter la saga » et ajout d'un film manquant à la télécommande. Animations coupées si la TV demande de supprimer les animations
+- Serveur : `GET /api/sagas`, `GET /api/sagas/{id}`, `GET /api/sagas/movie/{id}`, `POST /api/sagas/{id}/complete`, ouvertes aux TV
+- Tests : serveur (14), appli (`SagaRulesTest`), e2e (grille, fiche, compléter)
+
+### Musique : rechercher et télécharger depuis la fiche d'un artiste
+
+#### Added
+- **Fiche d'un artiste, comme pour un film ou une série** (web app et TV) : « Chercher les albums manquants » et « Actualiser » (discographie relue sur MusicBrainz) toujours proposés
+- **Recherche d'un album** : web app, clic sur la pochette (fenêtre de l'album) ; TV, appui long. Recherche automatique : récupérer l'album, compléter ses pistes, ou chercher une meilleure version d'un album complet
+- **Recherche manuelle d'un album** (web app) : releases des indexeurs avec qualité, taille, âge et indexeur, refusées repliées avec leur raison, « Télécharger » sur celle choisie
+- Serveur : `POST /api/music/artists/{id}/refresh` (ouverte aux TV), `GET /api/music/albums/{id}/releases` et `POST /api/music/albums/{id}/grab` (web app)
+
+#### Changed
+- « Chercher les albums manquants » vise les albums studio absents ou incomplets et les suit s'ils ne l'étaient pas : la commande `ArtistSearch` de Lidarr ignorait les albums non suivis (cas d'un artiste importé depuis un dossier existant). EP et singles : album par album
+
+### Musique : bonus de films ignorés dans les téléchargements
+
+#### Changed
+- La liste « Musique dans les téléchargements » (web app et TV) écarte les **bonus de films** : bande originale ou chansons rangées avec un film (« Movie Xtras », « Featurettes », « Trailers »… ou dossier au nom de sortie vidéo : 1080p, 4K, UHD, BluRay, WEB-DL, x265, S01E02). Leur nombre est indiqué (« 2 bonus de films ignorés ») et leur import est refusé
+- Tests : serveur (détection, nom du dossier de téléchargements sans effet), e2e
+
+### Musique (Lidarr) : téléchargements et albums manquants
+
+#### Added
+- **Musique restée dans les téléchargements** : le dossier « terminé » de SABnzbd (sinon `ARR_DOWNLOADS_PATH`) et ses sous-dossiers sont passés en revue par Lidarr ; un album par dossier (`CD1`, `CD2`… regroupés), prêt à importer ou avec la raison en clair (artiste non suivi, album non reconnu). Import dans la bibliothèque Lidarr d'un clic (web app, panneau « Dans les téléchargements ») ou d'un OK (TV, bouton « Téléchargements » de l'écran Musique)
+- **Récupérer un album absent ou ses pistes manquantes** : web app (bouton sur la pochette) et TV (OK sur un album absent, appui long sur les autres) ; l'album est suivi s'il ne l'était pas, puis Lidarr le cherche
+- **« Chercher les albums manquants »** d'un artiste (web app et TV)
+- Serveur : `POST /api/music/albums/{id}/search`, `POST /api/music/artists/{id}/search`, `GET /api/music/downloads`, `POST /api/music/downloads/import` (dossier limité aux dossiers de téléchargements), ouvertes aux TV
+- Tests : serveur (40 tests musique), appli (`MusicRulesTest`), e2e (import, récupération)
+
+### Musique (Lidarr) : écoute sur la TV, étape 3
+
+#### Added
+- **Écran Musique de l'appli TV** : onglet « Musique » dans la barre du haut (téléphone, tablette : « Plus › Musique »), artistes suivis en pochettes carrées, conseil en clair si la bibliothèque « Musique » de Jellyfin manque
+- **Fiche d'un artiste** : photo, genres, présentation, albums marqués « 10/12 » (partiel) ou « Absent » ; OK sur un album présent l'ouvre pour l'écouter
+- **Lecteur audio** : pochette, titre, artiste, barre de progression, Précédent / Lecture-Pause / Suivant, liste des pistes (la piste en cours en bleu, OK sur une piste la joue) ; l'album s'enchaîne piste après piste. Même moteur que les films (Media3), pistes relayées par ArrMada depuis Jellyfin
+- **Ajouter un artiste depuis la TV** : recherche MusicBrainz au clavier, OK pour suivre (Lidarr cherche ses albums)
+- Serveur : `GET /api/music/albums/{id}/tracks` (album Lidarr retrouvé dans Jellyfin par son identifiant MusicBrainz, sinon titre + artiste ; raison en clair s'il manque) et `GET /api/music/stream/{id}` (piste d'origine relayée, avance par « Range »), ouvertes aux TV
+- Tests : serveur (correspondance Lidarr ↔ Jellyfin, pistes, flux), appli (`MusicRulesTest`)
+
+#### Changed
+- Barre du haut de l'accueil TV : les onglets de sections défilent si la place manque (8 sections avec Musique)
+
+#### Notes
+- La musique s'arrête en quittant l'écran du lecteur (pas de lecture en arrière-plan)
+- APK non construite dans l'environnement de la modification (SDK Android non téléchargeable) : compilation à confirmer par la CI Android
+
+### Musique (Lidarr) : pages de la web app, étape 2
+
+#### Added
+- **Page Musique** (menu Bibliothèque, raccourci `g` + `u`) : artistes suivis par Lidarr en pochettes carrées (« 3 albums · 20/30 pistes », grisés tant que rien n'est sur le NAS), albums en téléchargement avec progression, et **« Ajouter un artiste »** : recherche MusicBrainz, bouton « Suivre » (Lidarr cherche aussitôt ses albums), « Suivi » pour ceux déjà dans la bibliothèque
+- **Fiche d'un artiste** (`/music/{id}`) : photo sur fond flou, genres, présentation, taille sur le NAS ; albums puis EP puis singles, chacun marqué **Complet**, **Partiel** (« 10/12 pistes ») ou grisé (« Recherché », « Non suivi »)
+- Bandeau d'aide quand quelque chose manque : Lidarr non déclaré (lien vers les services) ou pas de bibliothèque « Musique » dans Jellyfin pour écouter
+- Carte affiche commune : format carré (`square`) et pictogramme disque pour la musique
+- Tests de bout en bout `e2e/music.spec.ts` (grille, conseil Jellyfin, ajout, fiche)
+
+### Musique (Lidarr) : API commune, étape 1
+
+#### Added
+- **API `/api/music`** pour la web app et l'appli TV ([ADR-015](docs/adr/015-musique-lidarr.md)) : état (`/status` : Lidarr déclaré, bibliothèque « Musique » dans Jellyfin, conseil en clair sinon), artistes suivis (`/artists`), fiche et albums complets / partiels / manquants (`/artists/{id}`), recherche MusicBrainz avec « déjà suivi » (`/lookup`), suivi d'un artiste avec recherche de ses albums (`POST /artists`), file de téléchargement (`/queue`)
+- Les TV appairées peuvent lire ces routes et demander un artiste, jamais en supprimer ni en modifier
+- Client Lidarr : fiche d'un artiste, albums d'un artiste, profils de métadonnées ; la file inclut l'artiste et l'album
+- 20 tests (mise en forme, droits des appareils, faux Lidarr et faux Jellyfin)
+
+### Appli Android : « Rechercher une mise à jour » sans attendre l'heure
+
+#### Changed
+- **Le bouton *Réglages › Rechercher une mise à jour* fait revérifier GitHub au serveur** avant de répondre : une version publiée par la CI il y a cinq minutes est proposée tout de suite, au lieu d'attendre la vérification horaire du serveur
+- Nouvelle route `POST /api/android/update/check` (jetons d'appareil) : vérification GitHub limitée à une toutes les 2 minutes (quota de l'API GitHub), jamais d'erreur renvoyée à l'appareil (GitHub injoignable : réponse avec l'APK déjà présente). La vérification au lancement de l'appli reste sans appel à GitHub
+- Appli : repli sur l'ancienne route si le serveur n'est pas encore à jour (403 / 404 / 405)
+- ADR-009 à jour ; 3 tests (limite de 2 minutes, GitHub injoignable, route vue par une TV)
+
+### Appli TV : accueil réglable, étiquettes, carte technique (passe 3)
+
+#### Added
+- **Rangées de l'accueil réglables** (*Réglages › Rangées de l'accueil*, à la façon des skins Kodi) : OK affiche ou masque une rangée (✓ / ✕), ▲ la monte d'un cran. Enregistré tout de suite, l'accueil suit en y revenant. Le focus de départ va sur la première rangée non vide de l'ordre choisi
+- **Étiquettes « Aujourd’hui », « Hier », « Il y a 3 j »** sur les affiches des **Ajouts récents** pendant une semaine (date d'ajout Radarr / Sonarr)
+- **Pastille bleue sur le pictogramme Téléchargements** : nombre d'éléments dans la file Radarr / Sonarr (« Téléchargements · 2 en cours » au focus)
+- **Carte technique sur la fiche film**, en trois lignes : *Vidéo* (2160p · Dolby Vision · HEVC), *Audio* (TrueHD Atmos · 7.1 · Français, Anglais), *Sous-titres*. Codecs sous leur nom courant (x265 → HEVC, EAC3 → Dolby Digital Plus), langues en français
+
+- **Halo à la couleur de l'affiche** : au focus, une affiche, une vignette « Reprendre » ou une vignette d'épisode s'entoure d'un halo de sa teinte la plus vive (orange pour un coucher de soleil, bleu pour un film polaire…). Affiche grise, noire ou blanche : halo blanc discret. Calcul maison sur l'image réduite à 6 × 9 pixels (`PosterColorLogic`, sans bibliothèque), une seule fois par affiche (gardé en mémoire)
+
+- **Carte technique sur la fiche série**, pour l'épisode au focus, à droite de son résumé (chaque épisode a son propre fichier) ; rien pour un épisode pas encore sur le disque. La carte (`TechCard`) est commune aux deux fiches
+
+#### Changed
+- Fiche film : les pastilles 4K / Dolby Vision / Atmos laissent la place à la carte technique (les notes restent en pastilles)
+
+#### Notes
+- Passe 3 de la proposition « Salle obscure », construite sur la passe 2. Logique testée : `HomeLayoutLogicTest`, `CardTagLogicTest`, `TechSpecLogicTest`, `PosterColorLogicTest`
+- APK non construite dans l'environnement de la modification (SDK Android non téléchargeable) : compilation, tests et captures à confirmer par la CI Android
+
+### Appli TV : barre du haut en deux groupes (passe 2)
+
+#### Changed
+- **Menu du haut de l'accueil redessiné** : il tient maintenant sur une ligne, sans défiler ni sous-menu. À gauche, les **sections de contenu en onglets texte** (Accueil, Films, Séries, Ce soir, Vidéos, Découvrir), les mêmes que les onglets du menu pause ; un **petit trait bleu** marque la section où l'on est. À droite, les **outils en pictogrammes** (Rechercher, Téléchargements, Applis, Tableau de bord, Réglages) puis le profil : au focus, le pictogramme devient une pastille blanche et **son nom s'affiche dessous**
+- Onglet texte commun (`GlassTab`) et bouton à pictogramme (`GlassIconButton`) dans `ui/components/GlassStyle.kt` : le menu pause et l'accueil partagent le même onglet
+- Pictogrammes dessinés en vectoriel dans `ui/components/GlassIcons.kt` (aucune bibliothèque d'icônes ajoutée)
+
+#### Notes
+- Passe 2 de la proposition « Salle obscure », construite sur la passe 1. Pas encore de pastille « téléchargements en cours » sur le pictogramme : l'accueil n'a pas ce nombre aujourd'hui (à brancher en passe 3)
+- APK non construite dans l'environnement de la modification (SDK Android non téléchargeable) : compilation et capture de l'accueil à confirmer par la CI Android
+
+### Appli TV : style « verre » partout (passe 1 : le socle)
+
+#### Changed
+- **Une seule règle de focus dans toute l'appli**, celle du lecteur : **blanc = focus** (pastille blanche à texte sombre pour un bouton, contour blanc de 3 dp + zoom 105 % pour une affiche ou une vignette), **bleu = « en cours »** (barres de progression, réglage coché ✓). Fini le focus bleu qui grossit hérité du skin Kodi
+- Briques communes (`ui/components/Components.kt`) redessinées sans changer leur usage : `ArrButton` en pastille de verre (le `GlassButton` du lecteur l'appelle désormais : une seule définition), `PosterCard` / `LandscapeCard` aux coins de 12 dp avec contour blanc au focus, `Badge` en pastille de verre (liseré blanc pour 4K / Dolby Vision / Atmos au lieu du bleu), `ProgressBar` bleu uni comme dans le lecteur, `FocusPanel` à contour blanc (vert « prêt » et rouge « bloqué » gardés), menu de choix en panneau arrondi
+- Focus codés en dur alignés sur la même règle : pastille du profil (accueil), distribution (fiche film), saisons et vignettes d'épisodes (fiche série), choix et lignes d'épisodes (demande de téléchargement), file de téléchargements
+- `GlassStyle.kt` déplacé de `ui/player/` vers `ui/components/` : le style du verre est commun à toute l'appli. Le boîtier 4K, la police condensée et l'accent #4A9EFF restent
+
+#### Notes
+- Passe 1 de la proposition « Salle obscure » : la barre du haut en deux groupes (passe 2) et la carte technique / les étiquettes de cartes (passe 3) viendront ensuite
+- APK non construite dans l'environnement de la modification (SDK Android non téléchargeable) : compilation et captures Roborazzi à confirmer par la CI Android
+
 ### Lecteur TV : Réglages audio au style du menu pause
 
 #### Changed

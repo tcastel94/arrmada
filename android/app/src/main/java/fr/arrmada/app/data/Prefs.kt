@@ -81,6 +81,14 @@ class Prefs(context: Context) {
         set(value) = prefs.edit().putBoolean(KEY_AUTO_SOUND, value).apply()
 
     /** Rangées « À suivre » et chaîne ArrMada sur l'accueil Android TV (Réglages). */
+    /**
+     * Rangées de l'accueil de l'appli : ordre et rangées masquées
+     * (format : [HomeLayoutLogic.serialize]).
+     */
+    var homeLayout: List<HomeLayoutLogic.Slot>
+        get() = HomeLayoutLogic.parse(prefs.getString(KEY_HOME_LAYOUT, null))
+        set(value) = prefs.edit().putString(KEY_HOME_LAYOUT, HomeLayoutLogic.serialize(value)).apply()
+
     var homeRows: Boolean
         get() = prefs.getBoolean(KEY_HOME_ROWS, true)
         set(value) = prefs.edit().putBoolean(KEY_HOME_ROWS, value).apply()
@@ -120,6 +128,7 @@ class Prefs(context: Context) {
         const val KEY_DEVICE = "device_name"
         const val KEY_AUTO_SOUND = "auto_sound"
         const val KEY_HOME_ROWS = "home_rows"
+        const val KEY_HOME_LAYOUT = "home_layout"
         const val KEY_DEFAULT_QUALITY = "default_quality"
         const val KEY_QUALITY_ASKED = "quality_asked"
         const val KEY_AMP_VOLUME_KEYS = "amp_volume_keys"

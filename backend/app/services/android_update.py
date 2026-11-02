@@ -8,7 +8,10 @@ Circuit, comme un miroir de paquets :
    l'empreinte avant de la garder (fichier ``.part`` renommé à la fin : une
    APK coupée n'est jamais proposée) ;
 3. les TV et téléphones demandent ``/api/android/update`` au lancement et
-   téléchargent l'APK depuis le serveur, sur le réseau local.
+   téléchargent l'APK depuis le serveur, sur le réseau local. Le bouton
+   « Rechercher une mise à jour » d'un appareil passe par
+   ``/api/android/update/check`` : le serveur revérifie d'abord GitHub
+   (au plus toutes les 2 minutes), sans attendre la vérification horaire.
 
 Une APK compilée à la main (``./build-apk.sh``) peut aussi être déposée dans
 ``data/apk`` : son nom dit sa version (``arrmada-2.7.0-152-release.apk``).
@@ -19,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import re
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -66,8 +70,14 @@ class Apk:
         }
 
 
+# Vérification demandée par un appareil : au plus une toutes les 2 minutes,
+# pour ne pas épuiser le quota de l'API GitHub (60 appels / heure sans jeton)
+# si plusieurs TV appuient sur « Rechercher une mise à jour » à la suite.
+DEVICE_CHECK_INTERVAL = 120.0  # secondes
+
 # Dernière vérification GitHub (affichée dans la web app)
 _status: dict = {"checked_at": None, "error": None, "message": None}
+_device_check: dict[str, float | None] = {"at": None}  # horloge monotone (time.monotonic)
 _lock = asyncio.Lock()
 _hashes: dict[tuple[str, float], str] = {}  # (fichier, date de modif) → empreinte
 
@@ -160,6 +170,29 @@ async def refresh(client: httpx.AsyncClient | None = None, directory: Path | Non
         finally:
             if own:
                 await client.aclose()
+
+
+async def refresh_for_device(
+    client: httpx.AsyncClient | None = None,
+    directory: Path | None = None,
+    now: float | None = None,
+) -> str | None:
+    """Vérification GitHub demandée depuis un appareil (bouton de l'appli).
+
+    Limitée à une toutes les [DEVICE_CHECK_INTERVAL] secondes : renvoie None
+    si une vérification récente suffit. Ne lève jamais : si GitHub ne répond
+    pas, l'appareil reçoit quand même la meilleure APK déjà sur le serveur
+    (l'erreur reste visible dans la web app, via [status]).
+    """
+    moment = time.monotonic() if now is None else now
+    last = _device_check["at"]
+    if last is not None and moment - last < DEVICE_CHECK_INTERVAL:
+        return None
+    _device_check["at"] = moment
+    try:
+        return await refresh(client, directory)
+    except (httpx.HTTPError, OSError, ValueError):
+        return None  # déjà journalisé par refresh()
 
 
 async def _refresh(client: httpx.AsyncClient, repo: str, directory: Path) -> str:

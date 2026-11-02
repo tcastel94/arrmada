@@ -406,9 +406,76 @@ class Repository(private val api: Api) {
     /** Infos de lecture d'une vidéo de l'écran Vidéos (même format qu'un film). */
     suspend fun playFile(token: String): PlayInfo = api.get("/api/videos/play/$token")
 
+    // ── Musique (Lidarr + Jellyfin, ADR-015) ──
+
+    /** Lidarr déclaré ? Bibliothèque « Musique » dans Jellyfin ? */
+    suspend fun musicStatus(): MusicStatus = api.get("/api/music/status")
+
+    suspend fun musicArtists(): MusicArtists = api.get("/api/music/artists")
+
+    suspend fun musicArtist(id: Int): MusicArtistDetail = api.get("/api/music/artists/$id")
+
+    /** Recherche d'artiste (MusicBrainz via Lidarr). */
+    suspend fun musicLookup(term: String): MusicLookup = api.get("/api/music/lookup?term=${q(term)}", slow = true)
+
+    /** Suivre un artiste : Lidarr cherche aussitôt ses albums. */
+    suspend fun musicFollow(mbid: String): MusicArtist = api.post("/api/music/artists", MusicAddBody(mbid), slow = true)
+
+    /** Récupérer un album absent, ou les pistes qui manquent à un album partiel. */
+    suspend fun musicSearchAlbum(albumId: Int): MusicActionResult =
+        api.post("/api/music/albums/$albumId/search", empty, slow = true)
+
+    /** Chercher tous les albums qui manquent à un artiste. */
+    suspend fun musicSearchArtist(artistId: Int): MusicActionResult =
+        api.post("/api/music/artists/$artistId/search", empty, slow = true)
+
+    /** Actualiser un artiste : discographie relue sur MusicBrainz, dossier relu sur le disque. */
+    suspend fun musicRefreshArtist(artistId: Int): MusicActionResult =
+        api.post("/api/music/artists/$artistId/refresh", empty)
+
+    /** Musique restée dans le dossier de téléchargements, par album. */
+    suspend fun musicDownloads(): MusicDownloads = api.get("/api/music/downloads", slow = true)
+
+    /** Importer dans Lidarr un dossier d'album des téléchargements. */
+    suspend fun musicImport(folder: String): MusicActionResult =
+        api.post("/api/music/downloads/import", MusicImportBody(folder), slow = true)
+
+    /** Pistes d'un album à écouter (Jellyfin), dans l'ordre du disque. */
+    suspend fun musicAlbumTracks(albumId: Int): MusicAlbumTracks = api.get("/api/music/albums/$albumId/tracks")
+
+    // ── Sagas de films (ADR-016) ──
+
+    /** Sagas de la bibliothèque (collections Radarr), avec compteurs. */
+    suspend fun sagas(): SagaList = api.get("/api/sagas")
+
+    /** Une saga et tous ses films, dans l'ordre de sortie. */
+    suspend fun saga(id: Int): Saga = api.get("/api/sagas/$id")
+
+    /** Sagas commencées et pas finies, la plus récente d'abord (accueil : « Sagas à terminer »). */
+    suspend fun sagasInProgress(): SagaList = api.get("/api/sagas/in-progress")
+
+    /** Saga d'un film de Radarr et film suivant sur le NAS (fin d'un film). */
+    suspend fun movieSaga(radarrId: String): MovieSaga = api.get("/api/sagas/movie/$radarrId")
+
+    /** Suivre une saga : Radarr ajoute seul ses nouveaux films (notification à l'arrivée). */
+    suspend fun sagaFollow(id: Int, follow: Boolean): SagaFollowResult =
+        api.post("/api/sagas/$id/follow", SagaFollowBody(follow), slow = true)
+
+    /** « Compléter la saga » : tous les films sortis manquants, ou ceux donnés. */
+    suspend fun sagaComplete(id: Int, tmdbIds: List<Long>? = null): SagaCompleteResult =
+        api.post("/api/sagas/$id/complete", SagaCompleteBody(tmdbIds), slow = true)
+
     /** Version plus récente de l'appli sur le serveur (ADR-009) pour ce type d'APK. */
     suspend fun updateOffer(versionCode: Int, buildType: String): UpdateOffer =
         api.get("/api/android/update?version_code=$versionCode&build_type=${q(buildType)}")
+
+    /**
+     * « Rechercher une mise à jour » : le serveur revérifie d'abord GitHub (au
+     * plus toutes les 2 min) au lieu d'attendre sa vérification horaire. Plus
+     * lent qu'[updateOffer] (le serveur peut télécharger l'APK avant de répondre).
+     */
+    suspend fun checkUpdateOffer(versionCode: Int, buildType: String): UpdateOffer =
+        api.post("/api/android/update/check?version_code=$versionCode&build_type=${q(buildType)}", empty, slow = true)
 
     suspend fun device(): Device = cached("me", 10 * 60_000L, false) { me() }
 

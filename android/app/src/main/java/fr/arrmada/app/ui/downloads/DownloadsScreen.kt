@@ -304,7 +304,7 @@ private fun TonightCard(
     val ring = when (view.tone) {
         BoardLogic.Tone.READY -> ArrColors.Seen
         BoardLogic.Tone.BLOCKED -> ArrColors.Error
-        BoardLogic.Tone.NORMAL -> ArrColors.Accent
+        BoardLogic.Tone.NORMAL -> ArrColors.Text // focus ordinaire : blanc, comme partout
     }
     FocusPanel(
         onClick = onClick,

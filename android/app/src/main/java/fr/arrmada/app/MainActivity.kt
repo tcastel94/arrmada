@@ -7,12 +7,19 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import fr.arrmada.app.amp.AmpVolumeService
 import fr.arrmada.app.data.DefaultQuality
+import fr.arrmada.app.data.HomeLayoutLogic
 import fr.arrmada.app.data.HomeLink
 import fr.arrmada.app.data.HomeRowsLogic
 import fr.arrmada.app.home.HomeRowsWorker
 import fr.arrmada.app.home.TvHomeRows
 import fr.arrmada.app.update.UpdateDialog
 import fr.arrmada.app.ui.videos.VideosScreen
+import fr.arrmada.app.ui.sagas.SagaScreen
+import fr.arrmada.app.ui.music.MusicArtistScreen
+import fr.arrmada.app.ui.music.MusicDownloadsScreen
+import fr.arrmada.app.ui.music.MusicPlayerScreen
+import fr.arrmada.app.ui.music.MusicScreen
+import fr.arrmada.app.ui.music.MusicSearchScreen
 import fr.arrmada.app.ui.detail.LocalSeriesScreen
 import fr.arrmada.app.data.LocalSeriesLogic
 import fr.arrmada.app.ui.components.gutter
@@ -52,6 +59,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -61,6 +69,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -208,6 +217,12 @@ private object Routes {
     const val VIDEOS = "videos?path={path}" // écran Vidéos : un dossier (sans path : les dossiers déclarés)
     const val TRAILER = "trailer/{tmdb}?yt={yt}" // bande-annonce plein écran (NAS, sinon YouTube)
     const val PERSON = "person/{tmdb}" // acteur : biographie et filmographie
+    const val MUSIC = "music" // artistes suivis par Lidarr (ADR-015)
+    const val MUSIC_ARTIST = "music/artist/{id}"
+    const val MUSIC_ALBUM = "music/album/{id}" // écoute d'un album (Jellyfin)
+    const val MUSIC_SEARCH = "music/search" // suivre un nouvel artiste
+    const val MUSIC_DOWNLOADS = "music/downloads" // musique restée dans les téléchargements, à importer
+    const val SAGA = "saga/{id}" // une saga de films (ADR-016), ouverte depuis la vue « Sagas » de Films
 
     fun library(type: String) = "library/$type"
     fun search(voice: Boolean) = "search?voice=$voice"
@@ -219,6 +234,9 @@ private object Routes {
     fun videos(token: String? = null) = "videos?path=${token.orEmpty()}"
     fun trailer(tmdbId: Long, youtubeId: String?) = "trailer/$tmdbId?yt=${youtubeId.orEmpty()}"
     fun person(tmdbId: Long) = "person/$tmdbId"
+    fun musicArtist(id: Int) = "music/artist/$id"
+    fun musicAlbum(id: Int) = "music/album/$id"
+    fun saga(id: Int) = "saga/$id"
 }
 
 /** Intro à l'écran ([active]) et demande de la passer ([skip]), partagées avec l'activité. */
@@ -328,6 +346,7 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
             "tonight" -> nav.navigate(Routes.TONIGHT)
             "apps" -> nav.navigate(Routes.APPS)
             "videos" -> nav.navigate(Routes.videos())
+            "music" -> nav.navigate(Routes.MUSIC)
             "queue" -> nav.navigate(Routes.DOWNLOADS)
             "board" -> nav.navigate(Routes.BOARD)
             "profiles" -> nav.navigate(Routes.PROFILES)
@@ -366,7 +385,8 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
         Routes.LIBRARY -> if (backStack?.arguments?.getString("type") == "series") "series" else "movies"
         Routes.SEARCH -> "search"
         Routes.DOWNLOADS -> "queue"
-        Routes.MORE, Routes.TONIGHT, Routes.DISCOVER, Routes.BOARD, Routes.SETTINGS, Routes.VIDEOS -> "more"
+        Routes.MORE, Routes.TONIGHT, Routes.DISCOVER, Routes.BOARD, Routes.SETTINGS, Routes.VIDEOS,
+        Routes.MUSIC, Routes.MUSIC_ARTIST, Routes.MUSIC_ALBUM, Routes.MUSIC_SEARCH, Routes.MUSIC_DOWNLOADS -> "more"
         else -> null
     }
 
@@ -547,6 +567,7 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
                     open = ::openItem,
                     openMovieId = { nav.navigate(Routes.movie(it.toString())) },
                     openSeriesId = { nav.navigate(Routes.show(it.toString())) },
+                    openSaga = { nav.navigate(Routes.saga(it)) },
                     resume = { entry -> nav.navigate(Routes.play(resumeRequest(entry))) },
                     openWatchlist = { item ->
                         when (val target = WatchlistLogic.open(item)) {
@@ -561,6 +582,7 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
                     viewer = if (app.hasProfiles) viewer ?: FamilyProfile(name = "Famille", isDefault = true) else null,
                     showMenu = !LocalScreen.current.isTouch, // tactile : la barre de navigation remplace le menu
                     menu = { menu = it },
+                    rows = HomeLayoutLogic.visible(app.prefs.homeLayout), // relu à chaque retour sur l'accueil
                 ),
             )
         }
@@ -568,6 +590,21 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
             LibraryScreen(
                 entry.arguments?.getString("type") ?: "movie", app.repository, app.api, ::openItem, prefetcher::focus,
                 onMenu = { menu = MediaMenuLogic.of(it) },
+                onSaga = { nav.navigate(Routes.saga(it.id)) },
+            )
+        }
+        composable(Routes.SAGA, arguments = listOf(navArgument("id") { type = NavType.IntType })) { entry ->
+            SagaScreen(
+                repository = app.repository,
+                id = entry.arguments?.getInt("id") ?: 0,
+                onMovie = { film -> film.movieId?.let { nav.navigate(Routes.movie(it.toString(), film.tmdbId)) } },
+                onBack = { nav.popBackStack() },
+                // « Reprendre la saga » : le prochain film, à sa reprise s'il est commencé
+                onPlay = { film ->
+                    film.movieId?.let {
+                        nav.navigate(Routes.play(PlayRequest("movie", film.tmdbId, radarrId = it.toString(), startSeconds = film.position)))
+                    }
+                },
             )
         }
         composable(Routes.DISCOVER) {
@@ -706,6 +743,30 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
                 onFolder = { nav.navigate(Routes.videos(it)) },
                 onPlay = { file, start -> nav.navigate(Routes.play(PlayRequest(kind = "file", id = 0, startSeconds = start, file = file.token))) },
             )
+        }
+        composable(Routes.MUSIC) {
+            MusicScreen(
+                repository = app.repository,
+                onArtist = { nav.navigate(Routes.musicArtist(it)) },
+                onSearch = { nav.navigate(Routes.MUSIC_SEARCH) },
+                onDownloads = { nav.navigate(Routes.MUSIC_DOWNLOADS) },
+            )
+        }
+        composable(Routes.MUSIC_ARTIST, arguments = listOf(navArgument("id") { type = NavType.IntType })) { entry ->
+            MusicArtistScreen(
+                repository = app.repository,
+                id = entry.arguments?.getInt("id") ?: 0,
+                onAlbum = { nav.navigate(Routes.musicAlbum(it.id)) },
+            )
+        }
+        composable(Routes.MUSIC_ALBUM, arguments = listOf(navArgument("id") { type = NavType.IntType })) { entry ->
+            MusicPlayerScreen(app = app, albumId = entry.arguments?.getInt("id") ?: 0)
+        }
+        composable(Routes.MUSIC_SEARCH) {
+            MusicSearchScreen(repository = app.repository)
+        }
+        composable(Routes.MUSIC_DOWNLOADS) {
+            MusicDownloadsScreen(repository = app.repository)
         }
         composable(Routes.LOCAL_SHOW, arguments = listOf(navArgument("id") { type = NavType.IntType })) { entry ->
             val id = entry.arguments?.getInt("id") ?: 0
@@ -865,6 +926,7 @@ private fun SettingsScreen(app: ArrMadaApplication, onChangeServer: () -> Unit, 
             color = ArrColors.TextSecondary,
             modifier = Modifier.padding(top = 8.dp),
         )
+        HomeLayoutSetting(app)
         // Touches volume de la télécommande → ampli Yamaha de la pièce (ADR-013)
         if (LocalScreen.current.isTv) AmpVolumeKeysSetting(app)
         // Accueil Android TV : rangée « À suivre » et chaîne « ArrMada · Ajouts récents »
@@ -890,6 +952,39 @@ private fun SettingsScreen(app: ArrMadaApplication, onChangeServer: () -> Unit, 
         }
     }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+}
+
+/**
+ * Réglage « Rangées de l'accueil » : OK sur une rangée l'affiche ou la
+ * masque (✓ / ✕), ▲ la monte d'un cran. Enregistré tout de suite ; l'accueil
+ * le relit en y revenant.
+ */
+@Composable
+private fun HomeLayoutSetting(app: ArrMadaApplication) {
+    var layout by remember { mutableStateOf(app.prefs.homeLayout) }
+    fun save(next: List<HomeLayoutLogic.Slot>) {
+        layout = next
+        app.prefs.homeLayout = next
+    }
+    Text("Rangées de l’accueil", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 28.dp))
+    Text(
+        "OK affiche ou masque une rangée, ▲ la monte d’un cran.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = ArrColors.TextSecondary,
+        modifier = Modifier.padding(top = 4.dp),
+    )
+    layout.forEachIndexed { index, slot ->
+        Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            ArrButton(
+                slot.row.label,
+                { save(HomeLayoutLogic.toggle(layout, slot.row)) },
+                primary = slot.visible,
+                leading = if (slot.visible) "✓" else "✕",
+                modifier = Modifier.width(220.dp),
+            )
+            if (index > 0) ArrButton("▲", { save(HomeLayoutLogic.moveUp(layout, slot.row)) }, compact = true)
+        }
+    }
 }
 
 /**

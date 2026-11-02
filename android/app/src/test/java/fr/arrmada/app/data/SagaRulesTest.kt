@@ -1,0 +1,50 @@
+package fr.arrmada.app.data
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class SagaRulesTest {
+    private val dune = Saga(title = "Dune", total = 3, available = 1, missing = 1, upcoming = 1, years = listOf(2021, 2026))
+
+    @Test
+    fun badge() {
+        assertEquals("1 film manquant", SagaRules.badge(dune))
+        assertEquals("2 films annoncés", SagaRules.badge(Saga(total = 4, available = 2, upcoming = 2)))
+        assertEquals("1 en recherche", SagaRules.badge(Saga(total = 3, available = 2, wanted = 1)))
+        assertEquals("Complète", SagaRules.badge(Saga(total = 3, available = 3, complete = true)))
+    }
+
+    @Test
+    fun factsAndProgress() {
+        assertEquals("3 films · 2021 – 2026 · 1 sur le NAS", SagaRules.facts(dune))
+        assertEquals(1f / 3, SagaRules.progress(dune), 0.001f)
+        assertEquals(0f, SagaRules.progress(Saga()), 0f)
+    }
+
+    @Test
+    fun watchedLabels() {
+        val hp = Saga(title = "Harry Potter", total = 8, available = 6, seen = 3, next = SagaFilm(title = "La Coupe de feu"))
+        assertEquals("Continuer : La Coupe de feu", SagaRules.nextLabel(hp))
+        assertEquals("Reprendre : La Coupe de feu", SagaRules.nextLabel(hp.copy(next = SagaFilm(title = "La Coupe de feu", progress = 40))))
+        assertEquals("Regarder : La Coupe de feu", SagaRules.nextLabel(hp.copy(seen = 0)))
+        assertNull(SagaRules.nextLabel(hp.copy(next = null)))
+        assertEquals("3 vus sur 8", SagaRules.seenLine(hp))
+        assertEquals("8 films · 6 sur le NAS · 3 vus", SagaRules.facts(hp))
+        assertEquals("8 films · 6 sur le NAS · 3 vus · ordre choisi", SagaRules.facts(hp.copy(customOrder = true)))
+        val films = listOf(SagaFilm(tmdbId = 1), SagaFilm(tmdbId = 2))
+        assertEquals("Harry Potter · film 2 sur 8", SagaRules.upNextCode(hp.copy(films = films), films[1]))
+    }
+
+    @Test
+    fun filmTags() {
+        assertNull(SagaRules.tag(SagaFilm(state = "available")))
+        assertEquals("+ Ajouter", SagaRules.tag(SagaFilm(state = "missing")))
+        assertEquals("Annoncé 2026", SagaRules.tag(SagaFilm(state = "upcoming", year = 2026)))
+        assertTrue(SagaRules.dimmed(SagaFilm(state = "upcoming")))
+        assertFalse(SagaRules.dimmed(SagaFilm(state = "wanted")))
+        assertEquals("2 · 2002", SagaRules.position(1, SagaFilm(year = 2002)))
+    }
+}

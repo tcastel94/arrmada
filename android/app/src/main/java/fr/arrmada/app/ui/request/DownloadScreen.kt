@@ -57,6 +57,10 @@ import fr.arrmada.app.data.Repository
 import fr.arrmada.app.data.Scope
 import fr.arrmada.app.data.SeasonsInfo
 import fr.arrmada.app.ui.components.ArrButton
+import fr.arrmada.app.ui.components.Glass
+import fr.arrmada.app.ui.components.GlassEdge
+import fr.arrmada.app.ui.components.GlassStrong
+import fr.arrmada.app.ui.components.Ink
 import fr.arrmada.app.ui.components.ArtImage
 import fr.arrmada.app.ui.components.KenBurnsBackdrop
 import fr.arrmada.app.ui.theme.ArrColors
@@ -315,20 +319,21 @@ fun DownloadContent(
 /** Pastille à deux lignes (portée, saison, « Pour ce soir »). */
 @Composable
 private fun Chip(title: String, subtitle: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val shape = RoundedCornerShape(8.dp)
+    // Choix actuel : verre plus clair + liseré (comme un réglage choisi) ; focus blanc
+    val shape = RoundedCornerShape(14.dp)
     Surface(
         onClick = onClick,
         modifier = modifier.height(50.dp).widthIn(min = 120.dp).tapToClick(onClick),
         shape = ClickableSurfaceDefaults.shape(shape),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
         border = ClickableSurfaceDefaults.border(
-            border = if (selected) Border(BorderStroke(1.5.dp, ArrColors.AccentText), shape = shape) else Border.None,
+            border = if (selected) Border(BorderStroke(1.dp, GlassEdge), shape = shape) else Border.None,
         ),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (selected) ArrColors.Accent.copy(alpha = 0.22f) else Color(0x26FFFFFF),
-            contentColor = ArrColors.Text,
-            focusedContainerColor = ArrColors.Accent,
-            focusedContentColor = ArrColors.Night,
+            containerColor = if (selected) GlassStrong else Glass,
+            contentColor = Color.White,
+            focusedContainerColor = Color.White,
+            focusedContentColor = Ink,
         ),
     ) {
         Column(Modifier.fillMaxHeight().padding(horizontal = 14.dp), verticalArrangement = Arrangement.Center) {
@@ -350,8 +355,8 @@ private fun EpisodeLine(code: String, title: String, state: String, checkable: B
         colors = ClickableSurfaceDefaults.colors(
             containerColor = Color(0x14FFFFFF),
             contentColor = if (checkable) ArrColors.Text else ArrColors.TextSecondary,
-            focusedContainerColor = ArrColors.Accent,
-            focusedContentColor = ArrColors.Night,
+            focusedContainerColor = Color.White,
+            focusedContentColor = Ink,
         ),
     ) {
         Row(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
