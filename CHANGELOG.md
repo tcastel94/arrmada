@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Lecteur TV : « Passer l'intro », « Épisode suivant » et carte de qualité en verre
+
+#### Changed
+- **« Passer l'intro / le récap »** : pastille blanche à texte sombre (comme un bouton qui a le focus, puisque OK le déclenche), avec le rappel de touche **OK** à droite ; plus de rectangle bleu plein
+- **Carte « Épisode suivant » / « Film suivant »** : carte de verre sombre posée sur la vidéo (lisible même sur une scène claire), coins de 18 dp, liseré blanc discret, vignette arrondie, compte à rebours en barre fine bleue (« en cours »), rappels de touches en pastilles : **[OK] Maintenant** (blanc) et **[Retour] Non merci** (verre)
+- **Carte « Passer en 1080p ? »** : même carte de verre ; à la télécommande, rappels **[OK]** / **[Retour]** en pastilles ; au doigt, les boutons de verre de l'appli
+- `ui/components/GlassStyle.kt` : `GlassOverlay`, `GlassCard` (carte sur la vidéo) et `KeyHint` (rappel de touche), réutilisables
+
+#### Notes
+- Aucune logique touchée (OK / Retour, compte à rebours inchangés). APK non construite dans l'environnement de la modification : compilation et capture Roborazzi `lecteurIntroEtSuivant` par la CI Android
+
 ### Lecteur TV : le choix des pistes est retenu par série et par profil
 
 #### Added
