@@ -58,6 +58,9 @@ internal val GlassPanel = Color(0x1AFFFFFF) // fond d'une section (blanc 10 %)
 internal val GlassEdge = Color(0x66FFFFFF) // liseré d'une pastille choisie (blanc 40 %)
 internal val Dim = Color(0x99FFFFFF) // texte secondaire sur l'image (blanc 60 %)
 internal val Ink = Color(0xFF0B0F17) // texte sur une pastille blanche
+// Carte posée sur la vidéo qui défile (« Épisode suivant »…) : sombre et dense,
+// pour rester lisible même sur une scène claire
+internal val GlassOverlay = Color(0xD90B0F17)
 internal val Pressed = Color(0xE6FFFFFF) // pastille enfoncée (OK appuyé)
 internal val CardShape = RoundedCornerShape(12.dp)
 internal val PillShape = RoundedCornerShape(50)
@@ -254,5 +257,43 @@ internal fun GlassSection(title: String, modifier: Modifier = Modifier, content:
     ) {
         Text(title, style = MaterialTheme.typography.labelLarge, color = Dim, maxLines = 1)
         content()
+    }
+}
+
+/** Carte de verre posée sur la vidéo en lecture (épisode suivant, qualité). */
+@Composable
+internal fun GlassCard(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    Box(
+        modifier
+            .background(GlassOverlay, PanelShape)
+            .border(1.dp, Color(0x24FFFFFF), PanelShape)
+            .padding(14.dp),
+    ) { content() }
+}
+
+/**
+ * Rappel de touche « [OK] Maintenant » : la touche dans une petite
+ * pastille, puis ce qu'elle fait. [primary] : l'action principale, en
+ * blanc (comme un bouton qui a le focus) ; sinon en verre.
+ */
+@Composable
+internal fun KeyHint(key: String, label: String, primary: Boolean = false) {
+    Row(
+        Modifier
+            .background(if (primary) Color.White else Glass, PillShape)
+            .padding(start = 4.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            key,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (primary) Color.White else Ink,
+            maxLines = 1,
+            modifier = Modifier
+                .background(if (primary) Ink else Color(0xCCFFFFFF), PillShape)
+                .padding(horizontal = 8.dp, vertical = 2.dp),
+        )
+        Text(label, style = MaterialTheme.typography.labelLarge, color = if (primary) Ink else Color.White, maxLines = 1)
     }
 }
