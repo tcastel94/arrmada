@@ -835,15 +835,29 @@ async def open_subtitle(
     return content, f"{SUB_MIME[ext]}; charset=utf-8"
 
 
-async def _refresh_item(base: str, key: str, item_id: str) -> None:
-    """Demande à Jellyfin de relire le dossier de l'élément (nouveaux .srt)."""
-    params = {
+def refresh_params(key: str) -> dict[str, str]:
+    """Relecture d'un élément par Jellyfin, pour qu'il voie un .srt tout neuf.
+
+    « FullRefresh » sans rien remplacer (l'option « Rechercher les
+    métadonnées manquantes » de Jellyfin) : Jellyfin ré-analyse le fichier
+    vidéo et liste ses sous-titres externes. Avec « Default » (« fichiers
+    nouveaux ou modifiés »), il saute l'analyse d'une vidéo dont le fichier
+    n'a pas changé : le sous-titre posé à côté par Bazarr restait invisible
+    pour la TV, alors que la web app (qui interroge Bazarr) le voyait.
+    Métadonnées et images existantes ne sont pas touchées.
+    """
+    return {
         jellyfin.KEY_PARAM: key,
-        "MetadataRefreshMode": "Default",
+        "MetadataRefreshMode": "FullRefresh",
         "ImageRefreshMode": "None",
         "ReplaceAllMetadata": "false",
         "ReplaceAllImages": "false",
     }
+
+
+async def _refresh_item(base: str, key: str, item_id: str) -> None:
+    """Demande à Jellyfin de relire l'élément (nouveaux .srt, voir refresh_params)."""
+    params = refresh_params(key)
     async with httpx.AsyncClient(timeout=10) as client:
         await client.post(f"{base}/Items/{item_id}/Refresh?{urlencode(params)}")
 

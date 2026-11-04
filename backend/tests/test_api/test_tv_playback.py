@@ -799,6 +799,14 @@ async def test_download_subtitles_from_pause_menu(
     assert any(path == f"/Items/{MOVIE_ID}/Refresh" for _h, path, _b in fake_arr.POSTS)
 
 
+def test_refresh_reanalyses_the_file_without_replacing_metadata() -> None:
+    # « Default » ne ré-analyse pas une vidéo inchangée : le .srt de Bazarr restait invisible
+    params = tv_playback.refresh_params("j-key")
+    assert params["MetadataRefreshMode"] == "FullRefresh"
+    assert params["ReplaceAllMetadata"] == "false" and params["ReplaceAllImages"] == "false"
+    assert params["ImageRefreshMode"] == "None"
+
+
 async def test_download_subtitles_nothing_found(
     client: AsyncClient, jellyfin: dict[str, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
