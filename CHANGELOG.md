@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Appli TV : découpage du lecteur, passe 2 (outils Sous-titres)
+
+#### Changed
+- **Aucun changement visible** : les outils Sous-titres du lecteur (« Sous-titres FR » avec Bazarr, « Resynchro auto », décalage −/+ 0,5 s) sortent de `PlayerSurface.kt` dans **`ui/player/SubtitleTools.kt`**, une classe qui garde son propre état (sous-titres posés à côté du fichier, Bazarr au travail, dernier message, décalage en cours, piste à reprendre après rechargement)
+- `PlayerSurface.kt` passe de ~1 120 à ~1 020 lignes : il crée l'outil, l'appelle (menu pause, tablette du salon) et lui fournit `reloadSameStream()` (même flux, même position)
+- Code des trois actions repris à l'identique (vérifié ligne à ligne, seuls les noms changent)
+
+#### Notes
+- APK non construite dans l'environnement de la modification (SDK Android non téléchargeable) : compilation par la CI Android
+- Suite prévue (passe 3) : le choix et la mémorisation des pistes
+
 ### Appli TV : découpage du lecteur (`PlayerScreen.kt`, 1 587 lignes), passe 1
 
 #### Changed

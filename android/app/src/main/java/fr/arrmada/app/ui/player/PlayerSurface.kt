@@ -84,9 +84,6 @@ import fr.arrmada.app.data.ScrobbleLogic
 import fr.arrmada.app.data.ScrobbleSkip
 import fr.arrmada.app.data.ScrobbleTrack
 import fr.arrmada.app.ui.detail.techBadges
-import fr.arrmada.app.data.SubtitleRequest
-import fr.arrmada.app.data.SubtitleShiftLogic
-import fr.arrmada.app.data.SubtitleResult
 import fr.arrmada.app.data.PlaybackLogic
 import fr.arrmada.app.data.PlayerKeyLogic
 import fr.arrmada.app.data.Repository
@@ -250,13 +247,8 @@ internal fun PlayerSurface(
     var qualityCard by remember { mutableStateOf<QualityCardKind?>(null) }
     var dolbyVisionWarned by remember { mutableStateOf(false) }
     var source by remember { mutableStateOf(initialSource) }
-    // Sous-titres posés à côté du fichier (Bazarr…), complétés depuis le menu pause
-    var sideSubs by remember { mutableStateOf(info.subtitles) }
-    var subtitleBusy by remember { mutableStateOf(false) }
-    var subtitleNote by remember { mutableStateOf<String?>(null) }
-    // Décalage manuel des sous-titres, et piste à choisir une fois le flux rechargé
-    var subtitleShiftMs by remember { mutableIntStateOf(0) }
-    var pendingSubtitleLabel by remember { mutableStateOf<String?>(null) }
+    // Outils Sous-titres (Bazarr, resynchro, décalage) et leur état : SubtitleTools.kt
+    val subtitles = remember { SubtitleTools(info, request, player, repository, uiScope, context) }
     // Pistes choisies d'office (VO + sous-titres FR, ou VF + forcés) : une
     // fois, au premier jeu de pistes ; ensuite, c'est le choix de l'utilisateur
     var autoTracksDone by remember { mutableStateOf(false) }
@@ -368,9 +360,12 @@ internal fun PlayerSurface(
         // Le nouveau flux remplit sa mémoire tampon : ce n'est pas une coupure
         readyOnce = false
         lastSeekAt = System.currentTimeMillis()
-        player.setMediaItem(mediaItem(app.api.baseUrl + url, hls, sideSubtitles(sideSubs, app.api.baseUrl)), at)
+        player.setMediaItem(mediaItem(app.api.baseUrl + url, hls, sideSubtitles(subtitles.sideSubs, app.api.baseUrl)), at)
         player.prepare()
     }
+
+    /** Même flux, même position : relu après un changement de sous-titres (SubtitleTools). */
+    fun reloadSameStream() = load(source.first, source.second, player.currentPosition)
 
     /**
      * Menu pause › Qualité, ou carte « Passer en 1080p ? » : même position,
@@ -432,100 +427,6 @@ internal fun PlayerSurface(
         qualityCard = null
     }
 
-    // Menu pause → « Sous-titres FR » : film ou épisode de la médiathèque
-    // seulement (Bazarr ne connaît pas les vidéos de l'écran Vidéos)
-    val subtitleRequest = remember(request) {
-        when (request.kind) {
-            "movie" -> SubtitleRequest("movie", tmdbId = request.id)
-            "episode" -> SubtitleRequest("episode", tvdbId = request.id, season = request.season, episode = request.episode)
-            else -> null
-        }?.takeIf { info.itemId.isNotBlank() }
-    }
-
-    fun downloadSubtitles() {
-        val body = subtitleRequest ?: return
-        if (subtitleBusy) return
-        subtitleBusy = true
-        subtitleNote = null
-        uiScope.launch {
-            val result = runCatching { repository.downloadSubtitles(info.itemId, body) }
-                .getOrElse { SubtitleResult(message = subtitleError(it)) }
-            subtitleBusy = false
-            subtitleNote = result.message
-            result.message?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
-            if (result.subtitles.isNotEmpty() && result.subtitles.map { it.url } != sideSubs.map { it.url }) {
-                sideSubs = result.subtitles
-                // Même flux, sous-titres en plus ; la lecture reste en pause, le
-                // français est choisi d'office
-                load(source.first, source.second, player.currentPosition)
-                (player.trackSelector as? DefaultTrackSelector)?.let {
-                    // Réactivés : ils ont pu être coupés au lancement (VF sans forcés)
-                    it.setParameters(
-                        it.buildUponParameters()
-                            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                            .setPreferredTextLanguage("fr")
-                    )
-                }
-            }
-        }
-    }
-
-    // Menu pause › Sous-titres › « Resynchro auto » : Bazarr recale le .srt sur le son
-    fun syncSubtitles() {
-        val body = subtitleRequest ?: return
-        if (subtitleBusy) return
-        subtitleBusy = true
-        subtitleNote = null
-        uiScope.launch {
-            val result = runCatching { repository.syncSubtitles(info.itemId, body) }
-                .getOrElse { SubtitleResult(message = subtitleError(it)) }
-            subtitleBusy = false
-            subtitleNote = result.message
-            result.message?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
-            if (result.status == "ok" && result.subtitles.isNotEmpty()) {
-                // Même adresse, fichier réécrit par Bazarr : « ?v= » force le lecteur à le relire
-                val version = System.currentTimeMillis() / 1000
-                sideSubs = result.subtitles.map { it.copy(url = it.url + "?v=$version") }
-                subtitleShiftMs = 0
-                pendingSubtitleLabel = sideSubs.firstOrNull { it.language == "fr" }?.label
-                load(source.first, source.second, player.currentPosition)
-            }
-        }
-    }
-
-    // Menu pause › Sous-titres › −/+ 0,5 s : copie décalée servie par le serveur
-    fun shiftSubtitles(deltaMs: Int) {
-        val choice = trackChoices(tracks, C.TRACK_TYPE_TEXT).firstOrNull { it.selected }
-        val format = choice?.group?.getTrackFormat(choice.index)
-        if (format == null) {
-            Toast.makeText(context, "Choisis d’abord une piste de sous-titres", Toast.LENGTH_SHORT).show()
-            return
-        }
-        val forced = (format.selectionFlags and C.SELECTION_FLAG_FORCED) != 0
-        val src = SubtitleShiftLogic.source(format.label.orEmpty(), format.language, forced, sideSubs, info.embeddedSubtitles)
-        if (src == null) {
-            Toast.makeText(context, "Cette piste (image) ne peut pas être décalée", Toast.LENGTH_LONG).show()
-            return
-        }
-        val ms = (subtitleShiftMs + deltaMs).coerceIn(-600_000, 600_000)
-        subtitleShiftMs = ms
-        val shifted = if (ms == 0) {
-            null
-        } else {
-            src.copy(url = SubtitleShiftLogic.shiftedUrl(src.url, ms), label = SubtitleShiftLogic.shiftedLabel(src.label, ms))
-        }
-        sideSubs = sideSubs.filterNot { SubtitleShiftLogic.baseLabel(it.label) != it.label } + listOfNotNull(shifted)
-        // Après rechargement : la copie décalée, ou (retour à zéro) la piste d'origine
-        pendingSubtitleLabel = shifted?.label ?: src.label.takeIf { s -> sideSubs.any { it.label == s } }
-        if (pendingSubtitleLabel == null) {
-            (player.trackSelector as? DefaultTrackSelector)?.let {
-                it.setParameters(it.buildUponParameters().setPreferredTextLanguage(format.language))
-            }
-        }
-        load(source.first, source.second, player.currentPosition)
-        Toast.makeText(context, if (ms == 0) "Sous-titres d’origine" else "Sous-titres décalés de ${SubtitleShiftLogic.format(ms)}", Toast.LENGTH_SHORT).show()
-    }
-
     LaunchedEffect(Unit) {
         if (sdrAtStart) {
             Toast.makeText(context, DV_SDR_MESSAGE, Toast.LENGTH_LONG).show()
@@ -578,10 +479,10 @@ internal fun PlayerSurface(
                 subtitleTracks = textChoices.mapIndexed { i, c -> ScrobbleTrack(i, c.label, c.detail, c.selected) },
                 audioTracks = audioChoices.mapIndexed { i, c -> ScrobbleTrack(i, c.label, c.detail, c.selected) },
                 remote = true,
-                subtitleTools = subtitleRequest != null,
-                subtitleBusy = subtitleBusy,
-                subtitleNote = subtitleNote.orEmpty(),
-                subtitleShiftMs = subtitleShiftMs,
+                subtitleTools = subtitles.request != null,
+                subtitleBusy = subtitles.busy,
+                subtitleNote = subtitles.note.orEmpty(),
+                subtitleShiftMs = subtitles.shiftMs,
             )
             val payload = ScrobbleLogic.payload(
                 event, rich, positionS, total, paused = !player.playWhenReady, ended = ended,
@@ -668,7 +569,7 @@ internal fun PlayerSurface(
             override fun onTracksChanged(newTracks: Tracks) {
                 tracks = newTracks
                 // Premier jeu de pistes du fichier : langues choisies d'office
-                if (!autoTracksDone && pendingSubtitleLabel == null && newTracks.groups.any { it.type == C.TRACK_TYPE_AUDIO }) {
+                if (!autoTracksDone && subtitles.pendingLabel == null && newTracks.groups.any { it.type == C.TRACK_TYPE_AUDIO }) {
                     autoTracksDone = true
                     applyLanguagePlan(newTracks)
                 }
@@ -678,11 +579,11 @@ internal fun PlayerSurface(
                     saveTrackChoice(newTracks)
                 }
                 // Flux rechargé (décalage, resynchro) : la piste voulue, dès qu'elle apparaît
-                pendingSubtitleLabel?.let { wanted ->
+                subtitles.pendingLabel?.let { wanted ->
                     trackChoices(newTracks, C.TRACK_TYPE_TEXT)
                         .firstOrNull { it.group?.getTrackFormat(it.index)?.label == wanted }
                         ?.let {
-                            pendingSubtitleLabel = null
+                            subtitles.pendingLabel = null
                             selectTrack(player, C.TRACK_TYPE_TEXT, it)
                         }
                 }
@@ -863,9 +764,9 @@ internal fun PlayerSurface(
             }
             "next" -> if (upNext != null) playNext()
             // Outils sous-titres (feuille Sous-titres de la tablette)
-            "subtitle_download" -> downloadSubtitles()
-            "subtitle_sync" -> syncSubtitles()
-            "subtitle_shift" -> command.seconds?.let { shiftSubtitles(it) } // valeur en ms
+            "subtitle_download" -> subtitles.download(::reloadSameStream)
+            "subtitle_sync" -> subtitles.sync(::reloadSameStream)
+            "subtitle_shift" -> command.seconds?.let { subtitles.shift(it, tracks, ::reloadSameStream) } // valeur en ms
             "track" -> command.track?.let { (kind, index) ->
                 val type = if (kind == "audio") C.TRACK_TYPE_AUDIO else C.TRACK_TYPE_TEXT
                 if (index < 0) {
@@ -878,7 +779,7 @@ internal fun PlayerSurface(
         if (scrobbleStarted) sendScrobble("progress", false)
     }
     // Bazarr travaille / a répondu, décalage changé : la tablette suit aussitôt
-    LaunchedEffect(subtitleBusy, subtitleNote, subtitleShiftMs) {
+    LaunchedEffect(subtitles.busy, subtitles.note, subtitles.shiftMs) {
         if (scrobbleStarted) sendScrobble("progress", false)
     }
     LaunchedEffect(Unit) {
@@ -1086,12 +987,12 @@ internal fun PlayerSurface(
                 },
                 onApplyAdvice = { advice.program?.let { ampCommand("sound_program", JsonPrimitive(it)) } },
                 subtitleDownload = SubtitleDownload(
-                    busy = subtitleBusy,
-                    note = subtitleNote,
-                    onClick = subtitleRequest?.let { ::downloadSubtitles },
-                    onSync = subtitleRequest?.let { ::syncSubtitles },
-                    onShift = ::shiftSubtitles,
-                    shiftMs = subtitleShiftMs,
+                    busy = subtitles.busy,
+                    note = subtitles.note,
+                    onClick = subtitles.request?.let { { subtitles.download(::reloadSameStream) } },
+                    onSync = subtitles.request?.let { { subtitles.sync(::reloadSameStream) } },
+                    onShift = { deltaMs -> subtitles.shift(deltaMs, tracks, ::reloadSameStream) },
+                    shiftMs = subtitles.shiftMs,
                 ),
                 quality = QualityChoice(
                     options = QualityLogic.options(
