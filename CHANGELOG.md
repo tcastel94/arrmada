@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Appli TV : découpage du lecteur, passe 3 (choix des pistes)
+
+#### Changed
+- **Aucun changement visible** : le choix des pistes sort de `PlayerSurface.kt` dans **`ui/player/TrackChooser.kt`** : langues d'office au premier jeu de pistes (dernier choix du profil, sinon VO + sous-titres FR ou VF + forcés) et mémoire du choix fait par quelqu'un (menu pause, Réglages audio, tablette), rangé sur le serveur pour l'épisode suivant
+- `PlayerSurface.kt` passe de ~1 020 à ~960 lignes : il crée l'outil, lui transmet chaque jeu de pistes (`onTracksChanged`) et lui passe les choix de l'utilisateur (`select`)
+- Code repris à l'identique (vérifié ligne à ligne) ; seule nouveauté, la fonction d'entrée `onTracksChanged` qui regroupe les deux étapes appelées avant directement par le lecteur
+
+#### Notes
+- APK non construite dans l'environnement de la modification (SDK Android non téléchargeable) : compilation par la CI Android
+
 ### Appli TV : découpage du lecteur, passe 2 (outils Sous-titres)
 
 #### Changed
