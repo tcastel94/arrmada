@@ -12,13 +12,26 @@ object TechSpecLogic {
 
     data class Line(val label: String, val value: String)
 
-    fun lines(file: FileInfo?): List<Line> {
+    /**
+     * [external] : sous-titres connus de Bazarr pour ce fichier (posés à
+     * côté de la vidéo). Radarr / Sonarr n'analysent que les sous-titres
+     * INTÉGRÉS au fichier : sans Bazarr, un .srt téléchargé n'apparaissait
+     * pas sur la fiche. Les deux sont réunis, sans doublon.
+     */
+    fun lines(file: FileInfo?, external: List<BazarrSubtitle> = emptyList()): List<Line> {
         if (file == null) return emptyList()
         return listOfNotNull(
             line("Vidéo", listOfNotNull(resolution(file), dynamicRange(file), videoCodec(file.videoCodec))),
             line("Audio", listOfNotNull(audioCodec(file.audioCodec), channels(file.audioChannels), languages(file.audioLanguages))),
-            line("Sous-titres", listOfNotNull(languages(file.subtitleLanguages))),
+            line("Sous-titres", listOfNotNull(subtitleLanguages(file.subtitleLanguages, external))),
         )
+    }
+
+    /** Langues des sous-titres intégrés + ceux de Bazarr (« Français, Anglais »), sans doublon. */
+    fun subtitleLanguages(embedded: String?, external: List<BazarrSubtitle>): String? {
+        val fromBazarr = external.map { it.code2.ifBlank { it.language } }.filter { it.isNotBlank() }
+        val all = listOfNotNull(embedded?.takeIf { it.isNotBlank() }) + fromBazarr
+        return languages(all.joinToString("/"))
     }
 
     private fun line(label: String, parts: List<String>): Line? =

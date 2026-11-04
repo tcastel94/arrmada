@@ -335,7 +335,7 @@ fun MovieContent(
             }
 
             // ── Carte technique : Vidéo, Audio, Sous-titres (rien si le fichier n'est pas analysé) ──
-            val spec = TechSpecLogic.lines(m.file)
+            val spec = TechSpecLogic.lines(m.file, m.subtitles.flatMap { it.subtitles })
             if (spec.isNotEmpty()) TechCard(spec, Modifier.padding(top = 16.dp))
 
             // ── Distribution ──

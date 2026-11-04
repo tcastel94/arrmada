@@ -381,7 +381,10 @@ fun SeriesContent(
                         )
                     }
                     // Épisode pas encore sur le disque : pas de fichier, pas de carte
-                    val spec = TechSpecLogic.lines(current.file)
+                    val spec = TechSpecLogic.lines(
+                        current.file,
+                        series.subtitles.firstOrNull { it.season == current.season && it.episode == current.episode }?.subtitles.orEmpty(),
+                    )
                     if (spec.isNotEmpty()) TechCard(spec, Modifier.widthIn(max = 380.dp))
                 }
             }
