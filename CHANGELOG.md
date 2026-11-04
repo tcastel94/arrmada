@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Appli TV : découpage de `MainActivity.kt` (1 064 lignes)
+
+#### Changed
+- **Aucun changement visible** : le fichier qui portait la fenêtre de l'appli, toute la navigation et l'écran Réglages est réparti par rôle
+  - `MainActivity.kt` (~95 lignes) : la fenêtre unique (démarrage, touches, intro)
+  - `AppNavigation.kt` (~800 lignes) : la liste des écrans (`Routes`), le passage de l'un à l'autre, le menu d'appui long des titres, le préchargement des fiches
+  - `ui/settings/SettingsScreen.kt` (~200 lignes) : l'écran Réglages (accueil réglable, touches volume vers l'ampli…)
+- Déplacements purs, vérifiés ligne à ligne (même code ; seuls `IntroKeys`, `ArrMadaNavigation` et `SettingsScreen` passent de `private` à `internal` pour être vus d'un fichier à l'autre)
+
+#### Notes
+- APK non construite dans l'environnement de la modification (SDK Android non téléchargeable) : compilation par la CI Android
+
 ### Appli TV : barre d'icônes du menu pause, autres versions, sous-titres sur la fiche, photos d'acteurs
 
 #### Changed

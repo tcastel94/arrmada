@@ -1,0 +1,799 @@
+package fr.arrmada.app
+
+import fr.arrmada.app.ui.components.FormFactor
+import fr.arrmada.app.data.HomeLayoutLogic
+import fr.arrmada.app.data.HomeLink
+import fr.arrmada.app.data.HomeRowsLogic
+import fr.arrmada.app.update.UpdateDialog
+import fr.arrmada.app.ui.videos.VideosScreen
+import fr.arrmada.app.ui.sagas.SagaScreen
+import fr.arrmada.app.ui.music.MusicArtistScreen
+import fr.arrmada.app.ui.music.MusicDownloadsScreen
+import fr.arrmada.app.ui.music.MusicPlayerScreen
+import fr.arrmada.app.ui.music.MusicScreen
+import fr.arrmada.app.ui.music.MusicSearchScreen
+import fr.arrmada.app.ui.detail.LocalSeriesScreen
+import fr.arrmada.app.data.LocalSeriesLogic
+import androidx.navigation.compose.currentBackStackEntryAsState
+import fr.arrmada.app.ui.components.LocalScreen
+import fr.arrmada.app.ui.shell.MoreScreen
+import fr.arrmada.app.ui.shell.TouchShell
+import androidx.compose.foundation.layout.Box
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import fr.arrmada.app.data.FamilyProfile
+import fr.arrmada.app.data.PlayAnnounce
+import fr.arrmada.app.ui.profiles.ProfilesScreen
+import fr.arrmada.app.data.TonightLogic
+import fr.arrmada.app.notify.EventOverlays
+import fr.arrmada.app.ui.apps.AppsScreen
+import fr.arrmada.app.ui.board.DashboardScreen
+import fr.arrmada.app.ui.components.Motion
+import fr.arrmada.app.ui.downloads.DownloadsScreen
+import fr.arrmada.app.ui.home.TonightScreen
+import fr.arrmada.app.ui.intro.IntroAnimation
+import android.widget.Toast
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import fr.arrmada.app.data.DownloadTarget
+import fr.arrmada.app.data.LibraryItem
+import fr.arrmada.app.data.LookupItem
+import fr.arrmada.app.data.ResumeEntry
+import fr.arrmada.app.data.TmdbItem
+import fr.arrmada.app.ui.components.MessageScreen
+import fr.arrmada.app.ui.detail.MovieScreen
+import fr.arrmada.app.ui.detail.SeriesScreen
+import fr.arrmada.app.ui.detail.PersonScreen
+import fr.arrmada.app.ui.detail.TrailerScreen
+import fr.arrmada.app.data.CreditOpen
+import fr.arrmada.app.data.MediaMenuLogic
+import fr.arrmada.app.data.MenuAction
+import fr.arrmada.app.data.MenuTarget
+import fr.arrmada.app.data.Repository
+import fr.arrmada.app.ui.components.MediaMenu
+import fr.arrmada.app.ui.home.DiscoverScreen
+import fr.arrmada.app.ui.home.HomeActions
+import fr.arrmada.app.ui.home.HomeScreen
+import fr.arrmada.app.ui.home.HomeViewModel
+import fr.arrmada.app.ui.home.LibraryScreen
+import fr.arrmada.app.ui.player.PlayRequest
+import fr.arrmada.app.data.SubtitleSearchBody
+import fr.arrmada.app.data.WatchlistLogic
+import fr.arrmada.app.data.WatchlistOpen
+import fr.arrmada.app.ui.player.PlayerScreen
+import fr.arrmada.app.ui.request.DownloadScreen
+import fr.arrmada.app.ui.request.ReleasesScreen
+import fr.arrmada.app.ui.request.SearchScreen
+import fr.arrmada.app.ui.setup.PairScreen
+import fr.arrmada.app.ui.setup.ServerScreen
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import fr.arrmada.app.ui.settings.SettingsScreen
+
+// Navigation entre les écrans de l'appli (comme la pile de fenêtres de Kodi) :
+// liste des écrans (Routes), passage de l'un à l'autre, menus des titres.
+
+/** Les écrans et leurs adresses (« routes »). */
+private object Routes {
+    const val SERVER = "server"
+    const val PAIR = "pair"
+    const val HOME = "home"
+    const val LIBRARY = "library/{type}" // grille Films ou Séries
+    const val DISCOVER = "discover"
+    const val SEARCH = "search?voice={voice}"
+    const val DOWNLOAD = "download"
+    const val SETTINGS = "settings"
+    const val PROFILES = "profiles" // « Qui regarde ? » (ADR-008)
+    const val MORE = "more" // « Plus » (téléphone, tablette)
+    const val DOWNLOADS = "downloads" // écran Téléchargements (file, « Pour ce soir »)
+    const val BOARD = "board" // tableau de bord
+    const val APPS = "apps"
+    const val TONIGHT = "tonight"
+    const val MOVIE = "movie/{radarrId}?tmdb={tmdb}"
+    const val SHOW = "show/{sonarrId}"
+    const val PLAY = "play/{kind}/{id}/{season}/{episode}/{start}?radarr={radarr}&sonarr={sonarr}&file={file}&local={local}"
+    const val LOCAL_SHOW = "localshow/{id}" // série maison (Naruto Kai, One Pace…)
+    const val VIDEOS = "videos?path={path}" // écran Vidéos : un dossier (sans path : les dossiers déclarés)
+    const val TRAILER = "trailer/{tmdb}?yt={yt}" // bande-annonce plein écran (NAS, sinon YouTube)
+    const val PERSON = "person/{tmdb}" // acteur : biographie et filmographie
+    const val MUSIC = "music" // artistes suivis par Lidarr (ADR-015)
+    const val MUSIC_ARTIST = "music/artist/{id}"
+    const val MUSIC_ALBUM = "music/album/{id}" // écoute d'un album (Jellyfin)
+    const val MUSIC_SEARCH = "music/search" // suivre un nouvel artiste
+    const val MUSIC_DOWNLOADS = "music/downloads" // musique restée dans les téléchargements, à importer
+    const val SAGA = "saga/{id}" // une saga de films (ADR-016), ouverte depuis la vue « Sagas » de Films
+    const val RELEASES = "releases/{type}/{arrId}?title={title}" // « Trouver une autre version » (menu d'un titre)
+
+    fun library(type: String) = "library/$type"
+    fun search(voice: Boolean) = "search?voice=$voice"
+    fun movie(radarrId: String, tmdbId: Long? = null) = "movie/$radarrId" + (tmdbId?.let { "?tmdb=$it" } ?: "")
+    fun show(sonarrId: String) = "show/$sonarrId"
+    fun play(r: PlayRequest) = "play/${r.kind}/${r.id}/${r.season}/${r.episode}/${r.startSeconds}" +
+        "?radarr=${r.radarrId.orEmpty()}&sonarr=${r.sonarrId.orEmpty()}&file=${r.file.orEmpty()}&local=${r.localSeries}"
+    fun localShow(id: Int) = "localshow/$id"
+    fun videos(token: String? = null) = "videos?path=${token.orEmpty()}"
+    fun trailer(tmdbId: Long, youtubeId: String?) = "trailer/$tmdbId?yt=${youtubeId.orEmpty()}"
+    fun person(tmdbId: Long) = "person/$tmdbId"
+    fun musicArtist(id: Int) = "music/artist/$id"
+    fun musicAlbum(id: Int) = "music/album/$id"
+    fun saga(id: Int) = "saga/$id"
+    fun releases(type: String, arrId: String, title: String) = "releases/$type/$arrId?title=${android.net.Uri.encode(title)}"
+}
+
+private const val ENTER_MS = 180
+private const val EXIT_MS = 120
+
+/**
+ * Précharge la fiche du titre survolé dès que le focus s'y arrête un instant
+ * (0,35 s) : en appuyant sur OK, la fiche s'affiche sans attendre le serveur.
+ * Un défilement rapide le long d'une rangée ne déclenche rien.
+ */
+private class Prefetcher(private val app: ArrMadaApplication) {
+    private var pending: Job? = null
+
+    fun focus(item: LibraryItem) {
+        pending?.cancel()
+        pending = app.appScope.launch {
+            delay(350)
+            // Lancé à part : une fois partie, la requête va au bout (et remplit le cache)
+            app.appScope.launch { runCatching { app.repository.prefetch(item) } }
+        }
+    }
+}
+
+@Composable
+internal fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableStateFlow<Int>, intro: IntroKeys, links: MutableStateFlow<String?>) {
+    val screen = LocalScreen.current
+    app.repository.kindLabel = when (screen.form) {
+        FormFactor.TV -> " TV"
+        FormFactor.TABLET -> " (tablette)"
+        FormFactor.PHONE -> " (téléphone)"
+    }
+    val nav = rememberNavController()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val paired by app.prefs.paired.collectAsStateWithLifecycle()
+    val searchCount by searchRequests.collectAsStateWithLifecycle()
+    val viewer by app.prefs.profile.collectAsStateWithLifecycle()
+    val start = when {
+        app.prefs.serverUrl == null -> Routes.SERVER
+        !paired -> Routes.PAIR
+        else -> Routes.PROFILES // « Qui regarde ? », passé tout seul sans profils
+    }
+
+    // TV révoquée dans la web app (réponse 401) : retour à l'appairage
+    LaunchedEffect(paired) {
+        if (!paired && app.prefs.serverUrl != null && nav.currentDestination?.route !in listOf(Routes.PAIR, Routes.SERVER, null)) {
+            nav.navigate(Routes.PAIR) { popUpTo(0) }
+        }
+    }
+    // Touche recherche / micro de la télécommande
+    LaunchedEffect(searchCount) {
+        if (searchCount > 0 && paired) nav.navigate(Routes.search(voice = true)) { launchSingleTop = true }
+    }
+
+    fun openItem(item: LibraryItem) {
+        val local = LocalSeriesLogic.idOf(item.externalId) // série maison (Naruto Kai…)
+        nav.navigate(
+            when {
+                local != null -> Routes.localShow(local)
+                item.isMovie -> Routes.movie(item.externalId, item.tmdbId)
+                else -> Routes.show(item.externalId)
+            }
+        )
+    }
+
+    val prefetcher = remember { Prefetcher(app) }
+
+    fun openDownload(target: DownloadTarget) {
+        app.pendingDownload = target
+        nav.navigate(Routes.DOWNLOAD)
+    }
+
+    /** Titre TMDB (Pour toi, Découvrir) : sa fiche s'il est déjà là, sinon la feuille « Télécharger ». */
+    fun openTmdb(item: TmdbItem) {
+        if (!item.inLibrary) return openDownload(DownloadTarget.of(item))
+        scope.launch {
+            val found = runCatching {
+                if (item.type == "movie") app.repository.allLibrary("movie").firstOrNull { it.tmdbId == item.tmdbId }
+                else app.repository.allLibrary("series").firstOrNull { it.tmdbTvId == item.tmdbId }
+            }.getOrNull()
+            if (found != null) openItem(found) else openDownload(DownloadTarget.of(item))
+        }
+    }
+
+    fun openLookup(item: LookupItem) {
+        val arrId = item.arrId
+        when {
+            item.inLibrary && arrId != null && item.type == "movie" -> nav.navigate(Routes.movie(arrId.toString()))
+            item.inLibrary && arrId != null -> nav.navigate(Routes.show(arrId.toString()))
+            else -> openDownload(DownloadTarget.of(item))
+        }
+    }
+
+    fun go(route: String) {
+        when (route) {
+            "movies" -> nav.navigate(Routes.library("movie"))
+            "series" -> nav.navigate(Routes.library("series"))
+            "discover" -> nav.navigate(Routes.DISCOVER)
+            "search" -> nav.navigate(Routes.search(voice = false))
+            "settings" -> nav.navigate(Routes.SETTINGS)
+            "tonight" -> nav.navigate(Routes.TONIGHT)
+            "apps" -> nav.navigate(Routes.APPS)
+            "videos" -> nav.navigate(Routes.videos())
+            "music" -> nav.navigate(Routes.MUSIC)
+            "queue" -> nav.navigate(Routes.DOWNLOADS)
+            "board" -> nav.navigate(Routes.BOARD)
+            "profiles" -> nav.navigate(Routes.PROFILES)
+            "more" -> nav.navigate(Routes.MORE)
+            "home" -> nav.navigate(Routes.HOME) { popUpTo(Routes.HOME) { inclusive = false }; launchSingleTop = true }
+        }
+    }
+
+    /**
+     * Onglet de la barre tactile : un seul écran par onglet dans la pile
+     * (taper deux fois « Films » n'empile pas deux grilles), Retour ramène à
+     * l'accueil.
+     */
+    fun goTab(key: String) {
+        val route = when (key) {
+            "home" -> Routes.HOME
+            "movies" -> Routes.library("movie")
+            "series" -> Routes.library("series")
+            "search" -> Routes.search(voice = false)
+            "queue" -> Routes.DOWNLOADS
+            "more" -> Routes.MORE
+            else -> return go(key)
+        }
+        nav.navigate(route) {
+            popUpTo(Routes.HOME) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
+
+    // Écran affiché → onglet en surbrillance, barre visible ou non
+    val backStack by nav.currentBackStackEntryAsState()
+    val route = backStack?.destination?.route
+    val tab = when (route) {
+        Routes.HOME -> "home"
+        Routes.LIBRARY -> if (backStack?.arguments?.getString("type") == "series") "series" else "movies"
+        Routes.SEARCH -> "search"
+        Routes.DOWNLOADS -> "queue"
+        Routes.MORE, Routes.TONIGHT, Routes.DISCOVER, Routes.BOARD, Routes.SETTINGS, Routes.VIDEOS,
+        Routes.MUSIC, Routes.MUSIC_ARTIST, Routes.MUSIC_ALBUM, Routes.MUSIC_SEARCH, Routes.MUSIC_DOWNLOADS -> "more"
+        else -> null
+    }
+
+    /**
+     * « Prêt à regarder » / « Lire sur la TV » → ce qu'il faut lancer, avec
+     * la position de reprise partagée si on reprend.
+     */
+    suspend fun announced(a: PlayAnnounce): PlayRequest? {
+        // Série maison (web app › Séries) : le fichier lui-même, la reprise vient avec
+        a.file?.takeIf { a.mediaType == "file" && it.isNotBlank() }?.let { token ->
+            return PlayRequest(
+                kind = "file", id = 0, season = a.season ?: 0, episode = a.episode ?: 0,
+                startSeconds = if (a.resume) a.start else 0, file = token, localSeries = a.localSeries,
+            )
+        }
+        val id = a.externalId ?: return null
+        val season = a.season ?: 0
+        val episode = a.episode ?: 0
+        val start = if (!a.resume) {
+            0
+        } else {
+            runCatching {
+                if (a.isEpisode) app.repository.playEpisode(id, season, episode) else app.repository.playMovie(id, fresh = true)
+            }.getOrNull()?.resume?.takeIf { !it.watched }?.position ?: 0
+        }
+        return PlayRequest(
+            kind = if (a.isEpisode) "episode" else "movie",
+            id = id,
+            season = season,
+            episode = episode,
+            radarrId = a.arrId?.toString()?.takeIf { !a.isEpisode && a.serviceType != "sonarr" },
+            sonarrId = a.arrId?.toString()?.takeIf { a.isEpisode && a.serviceType == "sonarr" },
+            startSeconds = start,
+        )
+    }
+
+    // ── Appui long sur une carte : menu du titre (MediaMenu) ──
+    var menu by remember { mutableStateOf<MenuTarget?>(null) }
+
+    fun toast(text: String) = Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
+
+    fun runMenu(target: MenuTarget, action: MenuAction) {
+        val resume = target.resume
+        when (action) {
+            MenuAction.RESUME -> resume?.let { nav.navigate(Routes.play(resumeRequest(it))) }
+            MenuAction.FROM_START -> resume?.let { nav.navigate(Routes.play(resumeRequest(it).copy(startSeconds = 0))) }
+            MenuAction.PLAY -> target.tmdbId?.let { nav.navigate(Routes.play(PlayRequest("movie", it, radarrId = target.arrId))) }
+            MenuAction.OPEN -> {
+                val arr = target.arrId
+                when {
+                    target.localSeries != null -> nav.navigate(Routes.localShow(target.localSeries))
+                    arr != null && target.isMovie -> nav.navigate(Routes.movie(arr, target.tmdbId))
+                    arr != null -> nav.navigate(Routes.show(arr))
+                }
+            }
+            MenuAction.TRAILER -> target.tmdbId?.let { nav.navigate(Routes.trailer(it, null)) }
+            MenuAction.ADD_TO_LIST, MenuAction.REMOVE_FROM_LIST -> {
+                val item = target.watchlist ?: return
+                scope.launch {
+                    val adding = action == MenuAction.ADD_TO_LIST
+                    runCatching { if (adding) app.repository.addToWatchlist(item) else app.repository.removeFromWatchlist(item) }
+                        .onSuccess { toast(if (adding) "Ajouté à ma liste" else "Retiré de ma liste") }
+                        .onFailure { toast(it.message ?: "Liste injoignable") }
+                }
+            }
+            MenuAction.OTHER_RELEASE -> target.arrId?.let {
+                nav.navigate(Routes.releases(if (target.isMovie) "movie" else "series", it, target.title))
+            }
+            MenuAction.FIND_SUBTITLES -> scope.launch {
+                // Bazarr cherche (sur tous ses fournisseurs) ; la réponse dit si la recherche est lancée
+                runCatching { app.repository.searchSubtitles(SubtitleSearchBody("movie", target.tmdbId, target.title)) }
+                    .onSuccess { Toast.makeText(context, it.message ?: "Recherche de sous-titres lancée", Toast.LENGTH_LONG).show() }
+                    .onFailure { Toast.makeText(context, it.message ?: "Bazarr injoignable", Toast.LENGTH_LONG).show() }
+            }
+            MenuAction.MARK_WATCHED, MenuAction.MARK_UNWATCHED -> {
+                val watched = action == MenuAction.MARK_WATCHED
+                val update = MediaMenuLogic.watchedUpdate(target, watched, Repository.nowLastPlayed()) ?: return
+                scope.launch {
+                    runCatching { app.repository.saveWatchState(update) }
+                        .onSuccess {
+                            app.repository.notifyWatchChanged()
+                            toast(if (watched) "Marqué comme vu" else "Marqué comme non vu")
+                        }
+                        .onFailure { toast(it.message ?: "Échec") }
+                }
+            }
+        }
+    }
+
+    fun playAnnounced(a: PlayAnnounce) {
+        scope.launch {
+            val request = announced(a)
+            if (request == null) {
+                Toast.makeText(context, "Titre introuvable : lance-le depuis sa fiche", Toast.LENGTH_LONG).show()
+            } else {
+                nav.navigate(Routes.play(request))
+            }
+        }
+    }
+
+    // « Lire sur la TV » depuis la web app
+    LaunchedEffect(Unit) { app.events.playRequests.collect { playAnnounced(it) } }
+
+    // Nouvelle version de l'appli sur le serveur (ADR-009) : vérifiée une fois par lancement
+    LaunchedEffect(paired) { if (paired) app.updates.checkOnce() }
+    val update by app.updates.offer.collectAsStateWithLifecycle()
+
+    // Carte de l'accueil Android TV (« À suivre », chaîne ArrMada) : profil
+    // en cours (celui des rangées), l'accueil d'ArrMada dessous pour Retour
+    val link by links.collectAsStateWithLifecycle()
+    LaunchedEffect(link, paired) {
+        val target = HomeRowsLogic.parse(link) ?: return@LaunchedEffect
+        if (!paired) return@LaunchedEffect // l'appairage d'abord ; le lien attend
+        links.value = null
+        if (nav.currentDestination?.route in listOf(null, Routes.PROFILES)) nav.navigate(Routes.HOME) { popUpTo(0) }
+        when (target) {
+            is HomeLink.Play -> nav.navigate(
+                Routes.play(
+                    PlayRequest(
+                        kind = target.kind,
+                        id = target.id,
+                        season = target.season,
+                        episode = target.episode,
+                        radarrId = target.radarrId,
+                        sonarrId = target.sonarrId,
+                        startSeconds = target.startSeconds,
+                    )
+                )
+            )
+            is HomeLink.Movie -> nav.navigate(Routes.movie(target.radarrId, target.tmdbId))
+            is HomeLink.Show -> nav.navigate(Routes.show(target.sonarrId))
+            HomeLink.Home -> Unit
+        }
+    }
+
+    // Intro animée au lancement (une fois), seulement vers l'accueil
+    var showIntro by remember { mutableStateOf(!app.introSeen && start == Routes.PROFILES && Motion.enabled) }
+    val skipIntro by intro.skip.collectAsStateWithLifecycle()
+    LaunchedEffect(showIntro) { intro.active.value = showIntro }
+
+    // Passage d'un écran à l'autre : fondu court (le fondu par défaut dure
+    // 700 ms, ce qui donnait l'impression d'une appli lente)
+    Box(Modifier.fillMaxSize()) {
+    TouchShell(selected = tab, visible = tab != null, onGo = ::goTab) {
+    NavHost(
+        navController = nav,
+        startDestination = start,
+        enterTransition = { fadeIn(tween(ENTER_MS)) },
+        exitTransition = { fadeOut(tween(EXIT_MS)) },
+        popEnterTransition = { fadeIn(tween(ENTER_MS)) },
+        popExitTransition = { fadeOut(tween(EXIT_MS)) },
+    ) {
+        composable(Routes.SERVER) {
+            ServerScreen(app.prefs) { nav.navigate(Routes.PAIR) { popUpTo(0) } }
+        }
+        composable(Routes.PAIR) {
+            PairScreen(
+                prefs = app.prefs,
+                repository = app.repository,
+                onPaired = { nav.navigate(Routes.PROFILES) { popUpTo(0) } },
+                onChangeServer = { nav.navigate(Routes.SERVER) { popUpTo(0) } },
+            )
+        }
+        composable(Routes.PROFILES) {
+            ProfilesScreen(
+                repository = app.repository,
+                current = viewer,
+                onHasProfiles = { app.hasProfiles = it },
+                onChosen = { chosen ->
+                    scope.launch {
+                        // Autre spectateur : son vu / reprise, son « Pour toi », ses demandes
+                        if (chosen?.id != app.prefs.profileId) {
+                            app.prefs.setProfile(chosen)
+                            app.repository.forgetViewer()
+                        }
+                        nav.navigate(Routes.HOME) { popUpTo(0) }
+                    }
+                },
+            )
+        }
+        composable(Routes.HOME) {
+            val viewModel: HomeViewModel = viewModel { HomeViewModel(app.repository) }
+            HomeScreen(
+                viewModel = viewModel,
+                api = app.api,
+                actions = HomeActions(
+                    open = ::openItem,
+                    openMovieId = { nav.navigate(Routes.movie(it.toString())) },
+                    openSeriesId = { nav.navigate(Routes.show(it.toString())) },
+                    openSaga = { nav.navigate(Routes.saga(it)) },
+                    resume = { entry -> nav.navigate(Routes.play(resumeRequest(entry))) },
+                    openWatchlist = { item ->
+                        when (val target = WatchlistLogic.open(item)) {
+                            is WatchlistOpen.Movie -> nav.navigate(Routes.movie(target.radarrId, target.tmdbId))
+                            is WatchlistOpen.Show -> nav.navigate(Routes.show(target.sonarrId))
+                            is WatchlistOpen.Download -> openDownload(target.target)
+                        }
+                    },
+                    request = ::openTmdb,
+                    go = ::go,
+                    prefetch = prefetcher::focus,
+                    viewer = if (app.hasProfiles) viewer ?: FamilyProfile(name = "Famille", isDefault = true) else null,
+                    showMenu = !LocalScreen.current.isTouch, // tactile : la barre de navigation remplace le menu
+                    menu = { menu = it },
+                    rows = HomeLayoutLogic.visible(app.prefs.homeLayout), // relu à chaque retour sur l'accueil
+                ),
+            )
+        }
+        composable(Routes.LIBRARY, arguments = listOf(navArgument("type") { type = NavType.StringType })) { entry ->
+            LibraryScreen(
+                entry.arguments?.getString("type") ?: "movie", app.repository, app.api, ::openItem, prefetcher::focus,
+                onMenu = { menu = MediaMenuLogic.of(it) },
+                onSaga = { nav.navigate(Routes.saga(it.id)) },
+            )
+        }
+        composable(Routes.SAGA, arguments = listOf(navArgument("id") { type = NavType.IntType })) { entry ->
+            SagaScreen(
+                repository = app.repository,
+                id = entry.arguments?.getInt("id") ?: 0,
+                onMovie = { film -> film.movieId?.let { nav.navigate(Routes.movie(it.toString(), film.tmdbId)) } },
+                onBack = { nav.popBackStack() },
+                // « Reprendre la saga » : le prochain film, à sa reprise s'il est commencé
+                onPlay = { film ->
+                    film.movieId?.let {
+                        nav.navigate(Routes.play(PlayRequest("movie", film.tmdbId, radarrId = it.toString(), startSeconds = film.position)))
+                    }
+                },
+            )
+        }
+        composable(Routes.DISCOVER) {
+            DiscoverScreen(app.repository, ::openTmdb)
+        }
+        composable(Routes.SEARCH, arguments = listOf(navArgument("voice") { type = NavType.BoolType; defaultValue = false })) { entry ->
+            SearchScreen(
+                repository = app.repository,
+                absolute = app.api::absolute,
+                startWithVoice = entry.arguments?.getBoolean("voice") == true,
+                onOpen = ::openItem,
+                onOpenTracked = ::openLookup,
+                onRequest = ::openLookup,
+            )
+        }
+        composable(Routes.DOWNLOAD) {
+            val target = remember { app.pendingDownload }
+            if (target == null) {
+                MessageScreen("Rien à télécharger", null, "Retour") { nav.popBackStack() }
+            } else {
+                DownloadScreen(target, app.repository, app.api::absolute) { nav.popBackStack() }
+            }
+        }
+        composable(
+            Routes.MOVIE,
+            arguments = listOf(
+                navArgument("radarrId") { type = NavType.StringType },
+                navArgument("tmdb") { type = NavType.LongType; defaultValue = -1L },
+            ),
+        ) { entry ->
+            val radarrId = entry.arguments?.getString("radarrId").orEmpty()
+            MovieScreen(
+                radarrId = radarrId,
+                tmdbId = entry.arguments?.getLong("tmdb")?.takeIf { it > 0 },
+                repository = app.repository,
+                api = app.api,
+                onPlay = { movie, start ->
+                    val tmdb = movie.tmdbId
+                    if (tmdb == null) {
+                        Toast.makeText(context, "Film sans identifiant TMDB", Toast.LENGTH_SHORT).show()
+                    } else {
+                        nav.navigate(Routes.play(PlayRequest("movie", tmdb, radarrId = radarrId, startSeconds = start)))
+                    }
+                },
+                onDownload = { openDownload(DownloadTarget.of(it)) },
+                onTrailer = { tmdb, youtube -> nav.navigate(Routes.trailer(tmdb, youtube)) },
+                onPerson = { nav.navigate(Routes.person(it)) },
+            )
+        }
+        composable(Routes.PERSON, arguments = listOf(navArgument("tmdb") { type = NavType.LongType })) { entry ->
+            PersonScreen(
+                personId = entry.arguments?.getLong("tmdb") ?: 0L,
+                repository = app.repository,
+                onOpen = { credit ->
+                    when (credit) {
+                        is CreditOpen.Movie -> nav.navigate(Routes.movie(credit.radarrId, credit.tmdbId))
+                        is CreditOpen.Download -> openDownload(credit.target)
+                    }
+                },
+            )
+        }
+        composable(
+            Routes.TRAILER,
+            arguments = listOf(
+                navArgument("tmdb") { type = NavType.LongType },
+                navArgument("yt") { type = NavType.StringType; defaultValue = "" },
+            ),
+        ) { entry ->
+            TrailerScreen(
+                tmdbId = entry.arguments?.getLong("tmdb") ?: 0L,
+                radarrYoutubeId = entry.arguments?.getString("yt")?.takeIf { it.isNotBlank() },
+                repository = app.repository,
+                api = app.api,
+                onClose = { nav.popBackStack() },
+            )
+        }
+        composable(Routes.SHOW, arguments = listOf(navArgument("sonarrId") { type = NavType.StringType })) { entry ->
+            val sonarrId = entry.arguments?.getString("sonarrId").orEmpty()
+            SeriesScreen(
+                sonarrId = sonarrId,
+                repository = app.repository,
+                absolute = app.api::absolute,
+                onPlay = { series, season, episode, start ->
+                    val tvdb = series.tvdbId
+                    if (tvdb == null) {
+                        Toast.makeText(context, "Série sans identifiant TVDB", Toast.LENGTH_SHORT).show()
+                    } else {
+                        nav.navigate(Routes.play(PlayRequest("episode", tvdb, season, episode, sonarrId = sonarrId, startSeconds = start)))
+                    }
+                },
+                onDownload = { openDownload(DownloadTarget.of(it)) },
+            )
+        }
+        composable(
+            Routes.PLAY,
+            arguments = listOf(
+                navArgument("kind") { type = NavType.StringType },
+                navArgument("id") { type = NavType.LongType },
+                navArgument("season") { type = NavType.IntType },
+                navArgument("episode") { type = NavType.IntType },
+                navArgument("start") { type = NavType.IntType },
+                navArgument("radarr") { type = NavType.StringType; defaultValue = "" },
+                navArgument("sonarr") { type = NavType.StringType; defaultValue = "" },
+                navArgument("file") { type = NavType.StringType; defaultValue = "" },
+                navArgument("local") { type = NavType.IntType; defaultValue = 0 },
+            ),
+        ) { entry ->
+            val args = requireNotNull(entry.arguments)
+            val request = PlayRequest(
+                kind = args.getString("kind").orEmpty(),
+                id = args.getLong("id"),
+                season = args.getInt("season"),
+                episode = args.getInt("episode"),
+                radarrId = args.getString("radarr")?.takeIf { it.isNotBlank() },
+                sonarrId = args.getString("sonarr")?.takeIf { it.isNotBlank() },
+                startSeconds = args.getInt("start"),
+                file = args.getString("file")?.takeIf { it.isNotBlank() },
+                localSeries = args.getInt("local"),
+            )
+            PlayerScreen(
+                request = request,
+                app = app,
+                onExit = { nav.popBackStack() },
+                // Épisode suivant : remplace le lecteur (Retour ramène à l'écran Série)
+                onPlayNext = { next ->
+                    nav.navigate(Routes.play(next)) {
+                        popUpTo(Routes.PLAY) { inclusive = true }
+                    }
+                },
+            )
+        }
+        composable(Routes.VIDEOS, arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" })) { entry ->
+            VideosScreen(
+                repository = app.repository,
+                token = entry.arguments?.getString("path")?.takeIf { it.isNotBlank() },
+                onFolder = { nav.navigate(Routes.videos(it)) },
+                onPlay = { file, start -> nav.navigate(Routes.play(PlayRequest(kind = "file", id = 0, startSeconds = start, file = file.token))) },
+            )
+        }
+        composable(
+            Routes.RELEASES,
+            arguments = listOf(
+                navArgument("type") { type = NavType.StringType },
+                navArgument("arrId") { type = NavType.StringType },
+                navArgument("title") { type = NavType.StringType; defaultValue = "" },
+            ),
+        ) { entry ->
+            ReleasesScreen(
+                repository = app.repository,
+                type = entry.arguments?.getString("type") ?: "movie",
+                arrId = entry.arguments?.getString("arrId").orEmpty(),
+                title = entry.arguments?.getString("title").orEmpty(),
+                onDone = { nav.popBackStack() },
+            )
+        }
+        composable(Routes.MUSIC) {
+            MusicScreen(
+                repository = app.repository,
+                onArtist = { nav.navigate(Routes.musicArtist(it)) },
+                onSearch = { nav.navigate(Routes.MUSIC_SEARCH) },
+                onDownloads = { nav.navigate(Routes.MUSIC_DOWNLOADS) },
+            )
+        }
+        composable(Routes.MUSIC_ARTIST, arguments = listOf(navArgument("id") { type = NavType.IntType })) { entry ->
+            MusicArtistScreen(
+                repository = app.repository,
+                id = entry.arguments?.getInt("id") ?: 0,
+                onAlbum = { nav.navigate(Routes.musicAlbum(it.id)) },
+            )
+        }
+        composable(Routes.MUSIC_ALBUM, arguments = listOf(navArgument("id") { type = NavType.IntType })) { entry ->
+            MusicPlayerScreen(app = app, albumId = entry.arguments?.getInt("id") ?: 0)
+        }
+        composable(Routes.MUSIC_SEARCH) {
+            MusicSearchScreen(repository = app.repository)
+        }
+        composable(Routes.MUSIC_DOWNLOADS) {
+            MusicDownloadsScreen(repository = app.repository)
+        }
+        composable(Routes.LOCAL_SHOW, arguments = listOf(navArgument("id") { type = NavType.IntType })) { entry ->
+            val id = entry.arguments?.getInt("id") ?: 0
+            LocalSeriesScreen(
+                id = id,
+                repository = app.repository,
+                absolute = app.api::absolute,
+                onPlay = { ep, start ->
+                    nav.navigate(
+                        Routes.play(
+                            PlayRequest(
+                                kind = "file", id = 0, season = ep.seasonNumber, episode = ep.episodeNumber,
+                                startSeconds = start, file = ep.token, localSeries = id,
+                            )
+                        )
+                    )
+                },
+            )
+        }
+        composable(Routes.DOWNLOADS) {
+            DownloadsScreen(
+                repository = app.repository,
+                absolute = app.api::absolute,
+                onOpenMovie = { nav.navigate(Routes.movie(it.toString())) },
+                onOpenSeries = { nav.navigate(Routes.show(it.toString())) },
+            )
+        }
+        composable(Routes.BOARD) {
+            DashboardScreen(app.repository, app.api::absolute, ::openItem, onDownloads = { nav.navigate(Routes.DOWNLOADS) })
+        }
+        composable(Routes.APPS) {
+            AppsScreen()
+        }
+        composable(Routes.TONIGHT) {
+            TonightScreen(app.repository, app.api::absolute) { row -> nav.navigate(Routes.play(tonightRequest(row))) }
+        }
+        composable(Routes.SETTINGS) {
+            SettingsScreen(
+                app = app,
+                onChangeServer = { nav.navigate(Routes.SERVER) { popUpTo(0) } },
+                onRepair = {
+                    app.prefs.forgetPairing()
+                    nav.navigate(Routes.PAIR) { popUpTo(0) }
+                },
+            )
+        }
+        composable(Routes.MORE) {
+            MoreScreen(viewer = if (app.hasProfiles) viewer ?: FamilyProfile(name = "Famille", isDefault = true) else null, onGo = ::go)
+        }
+    }
+    }
+
+    // Mise à jour proposée : pas pendant un film, l'intro ou la mise en route
+    update?.let { offer ->
+        if (!showIntro && route !in listOf(Routes.PLAY, Routes.SERVER, Routes.PAIR)) UpdateDialog(app.updates, offer)
+    }
+
+    menu?.let { target ->
+        MediaMenu(target, app.repository, onDismiss = { menu = null }) { action -> runMenu(target, action) }
+    }
+
+    // Par-dessus tous les écrans : bulles, « Prêt à regarder », caméra
+    if (paired) EventOverlays(app.events, app.api::absolute, onWatch = ::playAnnounced)
+
+    if (showIntro) {
+        IntroAnimation(BuildConfig.VERSION_NAME, skip = skipIntro) {
+            if (showIntro) {
+                showIntro = false
+                app.introSeen = true
+            }
+        }
+    }
+    }
+}
+
+/** « Ce soir » : reprise du titre commencé, ou film depuis le début. */
+private fun tonightRequest(row: TonightLogic.Row): PlayRequest {
+    val s = row.state
+    if (s == null) return PlayRequest("movie", row.item?.tmdbId ?: 0, radarrId = row.item?.externalId)
+    val episode = s.mediaType == "episode"
+    return PlayRequest(
+        kind = if (episode) "episode" else "movie",
+        id = s.id.toLongOrNull() ?: 0,
+        season = s.season ?: 0,
+        episode = s.episode ?: 0,
+        radarrId = row.item?.externalId?.takeIf { !episode },
+        sonarrId = row.item?.externalId?.takeIf { episode },
+        startSeconds = s.position,
+    )
+}
+
+/** « Reprendre » : relance le film ou l'épisode là où il s'était arrêté. */
+private fun resumeRequest(entry: ResumeEntry): PlayRequest {
+    val state = entry.state
+    // Épisode d'une série maison : la vidéo elle-même
+    entry.file?.let { token ->
+        return PlayRequest(
+            kind = "file", id = 0, season = state.season ?: 0, episode = state.episode ?: 0,
+            startSeconds = state.position, file = token, localSeries = entry.localSeries,
+        )
+    }
+    return PlayRequest(
+        kind = if (entry.isEpisode) "episode" else "movie",
+        id = state.id.toLongOrNull() ?: 0,
+        season = state.season ?: 0,
+        episode = state.episode ?: 0,
+        radarrId = entry.item?.externalId?.takeIf { !entry.isEpisode },
+        sonarrId = entry.item?.externalId?.takeIf { entry.isEpisode },
+        startSeconds = state.position,
+    )
+}
