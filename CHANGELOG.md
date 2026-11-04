@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Lecteur TV : « Sous-titres FR » trouve enfin les sous-titres téléchargés par Bazarr
+
+#### Fixed
+- **Menu pause › « Sous-titres FR » répondait toujours « aucun nouveau sous-titre »**, alors que la même recherche depuis la web app les trouvait. Bazarr téléchargeait bien le `.srt`, mais la TV le cherche via Jellyfin, et la relecture demandée à Jellyfin (`MetadataRefreshMode=Default`, « fichiers nouveaux ou modifiés ») saute l'analyse d'une vidéo dont le fichier n'a pas changé : le sous-titre posé à côté restait invisible. La relecture passe en **`FullRefresh` sans rien remplacer** (« Rechercher les métadonnées manquantes ») : Jellyfin ré-analyse le fichier et liste le nouveau sous-titre ; métadonnées et images inchangées
+- Corrige aussi le cas « Bazarr cherche encore » : au nouvel essai, le sous-titre déjà téléchargé est maintenant vu
+
+#### Tests
+- `test_refresh_reanalyses_the_file_without_replacing_metadata` ; 88 tests verts dans `test_tv_playback.py`
+
+#### Notes
+- Côté serveur uniquement : à déployer (`git pull && ./deploy.sh`), pas de mise à jour de l'appli nécessaire
+
 ### Lecteur TV : le panneau « Qualité » du menu pause est de nouveau atteignable à la télécommande
 
 #### Fixed
