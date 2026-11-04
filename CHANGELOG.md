@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Écran d'appoint (tablette) : moins de « Hors ligne » qui clignote
+
+#### Fixed
+- **La tablette affichait « Hors ligne » par intermittence** (« l'écran bagotte »). Trois causes cumulées ces derniers jours : le serveur saturé par les sagas (corrigé juste avant : listes Radarr en cache), les nombreux redémarrages d'ArrMada (la tablette recharge sa page à chaque nouvelle version, c'est voulu), et une tolérance nulle : **un seul relevé raté** suffisait au bandeau, et un relevé sans réponse restait pendu
+- `/ecran` : chaque relevé est **abandonné au bout de 8 s**, puis **un nouvel essai 2 s plus tard** avant d'afficher « Hors ligne » (jamais pour un jeton refusé, 401 / 403). L'affichage garde toujours les dernières données pendant ce temps
+
+#### Notes
+- Côté interface web uniquement (déploiement habituel) ; la tablette se recharge seule sur la nouvelle version
+
 ### Chargements très lents (et délais dépassés) depuis les sagas de films
 
 #### Fixed
