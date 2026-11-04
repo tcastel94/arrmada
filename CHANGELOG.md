@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Lecteur TV : le panneau « Qualité » du menu pause est de nouveau atteignable à la télécommande
+
+#### Fixed
+- **Menu pause › Qualité : impossible d'aller sur un choix** (Original, 1080p…). Depuis le menu pause façon Apple TV, les onglets sont entre les boutons et le panneau : en descendant, le focus passait par un onglet, qui referme le panneau Qualité pour afficher son contenu. Désormais, appuyer sur **Qualité** met directement le focus sur la qualité en cours, et **Retour** referme le panneau en revenant sur le bouton (sans quitter la lecture)
+- Le panneau est une rangée simple (2 ou 3 choix, tous affichés d'emblée) pour que le focus s'y pose dès l'ouverture
+
+#### Notes
+- APK non construite dans l'environnement de la modification (SDK Android non téléchargeable) : compilation par la CI Android ; à vérifier sur la Shield
+
 ### Appli TV : découpage du lecteur, passe 3 (choix des pistes)
 
 #### Changed

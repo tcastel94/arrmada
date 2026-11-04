@@ -33,6 +33,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -197,9 +198,15 @@ fun PauseMenu(
     // Un « point d'accroche » par onglet : en descendant des boutons, le focus
     // arrive sur l'onglet affiché (et non sur le plus proche à l'écran)
     val tabFocus = remember { PauseTab.entries.associateWith { FocusRequester() } }
-    // Bouton « Qualité » : son panneau remplace celui de l'onglet, jusqu'au prochain onglet visité
+    // Bouton « Qualité » : son panneau remplace celui de l'onglet, jusqu'au prochain onglet visité.
+    // Les onglets sont entre le bouton et le panneau : en descendant, le focus
+    // passerait par un onglet, qui referme le panneau. Le focus saute donc
+    // directement sur la qualité en cours, et Retour ramène sur le bouton.
     var showQuality by remember { mutableStateOf(false) }
+    var backFromQuality by remember { mutableStateOf(false) }
     val qualityChoice = quality?.takeIf { it.options.size > 1 }
+    val qualityFocus = remember { FocusRequester() } // choix en cours dans le panneau
+    val qualityButtonFocus = remember { FocusRequester() }
     val resumeFocus = remember { FocusRequester() }
     val remaining = ((duration - position) / 1000).coerceAtLeast(0)
     val endsAt = LocalTime.now().plusSeconds(remaining).format(DateTimeFormatter.ofPattern("HH:mm"))
@@ -235,7 +242,15 @@ fun PauseMenu(
                     GlassButton("Reprendre", onResume, glyph = "▶", primary = true, modifier = Modifier.focusRequester(resumeFocus))
                     if (touch) GlassButton("30 s", onClick = { onSkip(30) }, glyph = "↻")
                     GlassButton("Audio", { showAudio = true }, glyph = "♪", modifier = Modifier.focusRequester(audioFocus))
-                    if (qualityChoice != null) GlassButton("Qualité", { showQuality = true }, glyph = "◐", selected = showQuality)
+                    if (qualityChoice != null) {
+                        GlassButton(
+                            "Qualité",
+                            { showQuality = true },
+                            glyph = "◐",
+                            selected = showQuality,
+                            modifier = Modifier.focusRequester(qualityButtonFocus),
+                        )
+                    }
                     if (touch) GlassButton("Quitter", onQuit, glyph = "✕")
                 }
             }
@@ -316,7 +331,7 @@ fun PauseMenu(
             // ── Contenu de l'onglet ──
             Box(Modifier.fillMaxWidth().height(if (phone) 112.dp else 158.dp).padding(top = if (phone) 6.dp else 12.dp)) {
                 if (showQuality && qualityChoice != null) {
-                    QualityPanel(qualityChoice)
+                    QualityPanel(qualityChoice, qualityFocus)
                 } else when (tab) {
                     PauseTab.CHAPTERS -> ChaptersPanel(info.chapters, info.trickplay, position, duration, absolute, onSeek)
                     PauseTab.INFO -> InfoPanel(meta, info)
@@ -325,6 +340,23 @@ fun PauseMenu(
                         onSelectTrack(C.TRACK_TYPE_TEXT, it)
                     }
                 }
+            }
+        }
+    }
+    // Panneau Qualité ouvert : Retour le referme (sans quitter la lecture)
+    BackHandler(enabled = showQuality && qualityChoice != null) {
+        showQuality = false
+        backFromQuality = true
+    }
+    // Ouverture : focus sur la qualité en cours ; fermeture par Retour : focus sur « Qualité ».
+    // Une image d'attente : le panneau (ou le bouton) doit être affiché pour recevoir le focus.
+    LaunchedEffect(showQuality) {
+        withFrameNanos { }
+        when {
+            showQuality -> runCatching { qualityFocus.requestFocus() }
+            backFromQuality -> {
+                backFromQuality = false
+                runCatching { qualityButtonFocus.requestFocus() }
             }
         }
     }
@@ -633,21 +665,28 @@ internal fun TracksPanel(
     }
 }
 
-/** Panneau du bouton « Qualité » : la qualité lue est cochée, l'indisponible grisée. */
-@OptIn(ExperimentalComposeUiApi::class)
+/**
+ * Panneau du bouton « Qualité » : la qualité lue est cochée, l'indisponible
+ * grisée. [focus] se pose sur la qualité en cours (sinon la première
+ * disponible) : c'est là qu'arrive le focus à l'ouverture. Rangée simple
+ * (2 ou 3 choix) : tous les choix existent dès l'affichage, le focus peut
+ * s'y poser tout de suite.
+ */
 @Composable
-private fun QualityPanel(choice: QualityChoice) {
-    LazyRow(
-        modifier = Modifier.focusRestorer(),
-        contentPadding = PaddingValues(horizontal = gutter, vertical = 4.dp),
+private fun QualityPanel(choice: QualityChoice, focus: FocusRequester) {
+    val target = choice.options.firstOrNull { it.quality == choice.current && it.available }
+        ?: choice.options.firstOrNull { it.available }
+    Row(
+        Modifier.padding(horizontal = gutter, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        items(choice.options, key = { it.quality }) { option ->
+        choice.options.forEach { option ->
             OptionChip(
                 option.title,
                 option.detail,
                 selected = option.quality == choice.current,
                 supported = option.available,
+                modifier = if (option == target) Modifier.focusRequester(focus) else Modifier,
             ) { if (option.available) choice.onSelect(option.quality) }
         }
     }
@@ -655,10 +694,17 @@ private fun QualityPanel(choice: QualityChoice) {
 
 /** Carte de choix « verre » : coche ✓ sur le choix en cours, blanche au focus. */
 @Composable
-private fun OptionChip(title: String, detail: String, selected: Boolean, supported: Boolean, onClick: () -> Unit) {
+private fun OptionChip(
+    title: String,
+    detail: String,
+    selected: Boolean,
+    supported: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
     Surface(
         onClick = onClick,
-        modifier = Modifier.width(230.dp).height(66.dp).tapToClick(onClick),
+        modifier = modifier.width(230.dp).height(66.dp).tapToClick(onClick),
         shape = ClickableSurfaceDefaults.shape(CardShape),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.06f),
         colors = ClickableSurfaceDefaults.colors(
