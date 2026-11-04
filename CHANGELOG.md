@@ -12,9 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Changed
 - **Aucun changement visible** : le fichier qui portait la fenêtre de l'appli, toute la navigation et l'écran Réglages est réparti par rôle
   - `MainActivity.kt` (~95 lignes) : la fenêtre unique (démarrage, touches, intro)
-  - `AppNavigation.kt` (~800 lignes) : la liste des écrans (`Routes`), le passage de l'un à l'autre, le menu d'appui long des titres, le préchargement des fiches
+  - `AppNavigation.kt` (~740 lignes) : la liste des écrans (`Routes`), le passage de l'un à l'autre, le préchargement des fiches
+  - `TitleMenu.kt` (~100 lignes) : le menu d'appui long des titres (titre visé, et ce que fait chaque action), sur le modèle de `SubtitleTools` et `TrackChooser` pour le lecteur
   - `ui/settings/SettingsScreen.kt` (~200 lignes) : l'écran Réglages (accueil réglable, touches volume vers l'ampli…)
-- Déplacements purs, vérifiés ligne à ligne (même code ; seuls `IntroKeys`, `ArrMadaNavigation` et `SettingsScreen` passent de `private` à `internal` pour être vus d'un fichier à l'autre)
+- Déplacements purs, vérifiés ligne à ligne (même code ; seuls `IntroKeys`, `ArrMadaNavigation`, `SettingsScreen`, `Routes` et `resumeRequest` passent de `private` à `internal` pour être vus d'un fichier à l'autre)
 
 #### Notes
 - APK non construite dans l'environnement de la modification (SDK Android non téléchargeable) : compilation par la CI Android

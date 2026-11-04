@@ -64,9 +64,6 @@ import fr.arrmada.app.ui.detail.PersonScreen
 import fr.arrmada.app.ui.detail.TrailerScreen
 import fr.arrmada.app.data.CreditOpen
 import fr.arrmada.app.data.MediaMenuLogic
-import fr.arrmada.app.data.MenuAction
-import fr.arrmada.app.data.MenuTarget
-import fr.arrmada.app.data.Repository
 import fr.arrmada.app.ui.components.MediaMenu
 import fr.arrmada.app.ui.home.DiscoverScreen
 import fr.arrmada.app.ui.home.HomeActions
@@ -74,7 +71,6 @@ import fr.arrmada.app.ui.home.HomeScreen
 import fr.arrmada.app.ui.home.HomeViewModel
 import fr.arrmada.app.ui.home.LibraryScreen
 import fr.arrmada.app.ui.player.PlayRequest
-import fr.arrmada.app.data.SubtitleSearchBody
 import fr.arrmada.app.data.WatchlistLogic
 import fr.arrmada.app.data.WatchlistOpen
 import fr.arrmada.app.ui.player.PlayerScreen
@@ -93,7 +89,7 @@ import fr.arrmada.app.ui.settings.SettingsScreen
 // liste des écrans (Routes), passage de l'un à l'autre, menus des titres.
 
 /** Les écrans et leurs adresses (« routes »). */
-private object Routes {
+internal object Routes {
     const val SERVER = "server"
     const val PAIR = "pair"
     const val HOME = "home"
@@ -317,58 +313,8 @@ internal fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableS
         )
     }
 
-    // ── Appui long sur une carte : menu du titre (MediaMenu) ──
-    var menu by remember { mutableStateOf<MenuTarget?>(null) }
-
-    fun toast(text: String) = Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
-
-    fun runMenu(target: MenuTarget, action: MenuAction) {
-        val resume = target.resume
-        when (action) {
-            MenuAction.RESUME -> resume?.let { nav.navigate(Routes.play(resumeRequest(it))) }
-            MenuAction.FROM_START -> resume?.let { nav.navigate(Routes.play(resumeRequest(it).copy(startSeconds = 0))) }
-            MenuAction.PLAY -> target.tmdbId?.let { nav.navigate(Routes.play(PlayRequest("movie", it, radarrId = target.arrId))) }
-            MenuAction.OPEN -> {
-                val arr = target.arrId
-                when {
-                    target.localSeries != null -> nav.navigate(Routes.localShow(target.localSeries))
-                    arr != null && target.isMovie -> nav.navigate(Routes.movie(arr, target.tmdbId))
-                    arr != null -> nav.navigate(Routes.show(arr))
-                }
-            }
-            MenuAction.TRAILER -> target.tmdbId?.let { nav.navigate(Routes.trailer(it, null)) }
-            MenuAction.ADD_TO_LIST, MenuAction.REMOVE_FROM_LIST -> {
-                val item = target.watchlist ?: return
-                scope.launch {
-                    val adding = action == MenuAction.ADD_TO_LIST
-                    runCatching { if (adding) app.repository.addToWatchlist(item) else app.repository.removeFromWatchlist(item) }
-                        .onSuccess { toast(if (adding) "Ajouté à ma liste" else "Retiré de ma liste") }
-                        .onFailure { toast(it.message ?: "Liste injoignable") }
-                }
-            }
-            MenuAction.OTHER_RELEASE -> target.arrId?.let {
-                nav.navigate(Routes.releases(if (target.isMovie) "movie" else "series", it, target.title))
-            }
-            MenuAction.FIND_SUBTITLES -> scope.launch {
-                // Bazarr cherche (sur tous ses fournisseurs) ; la réponse dit si la recherche est lancée
-                runCatching { app.repository.searchSubtitles(SubtitleSearchBody("movie", target.tmdbId, target.title)) }
-                    .onSuccess { Toast.makeText(context, it.message ?: "Recherche de sous-titres lancée", Toast.LENGTH_LONG).show() }
-                    .onFailure { Toast.makeText(context, it.message ?: "Bazarr injoignable", Toast.LENGTH_LONG).show() }
-            }
-            MenuAction.MARK_WATCHED, MenuAction.MARK_UNWATCHED -> {
-                val watched = action == MenuAction.MARK_WATCHED
-                val update = MediaMenuLogic.watchedUpdate(target, watched, Repository.nowLastPlayed()) ?: return
-                scope.launch {
-                    runCatching { app.repository.saveWatchState(update) }
-                        .onSuccess {
-                            app.repository.notifyWatchChanged()
-                            toast(if (watched) "Marqué comme vu" else "Marqué comme non vu")
-                        }
-                        .onFailure { toast(it.message ?: "Échec") }
-                }
-            }
-        }
-    }
+    // ── Appui long sur une carte : menu du titre (MediaMenu, actions dans TitleMenu.kt) ──
+    val titleMenu = remember { TitleMenu(app.repository, context, scope) { nav.navigate(it) } }
 
     fun playAnnounced(a: PlayAnnounce) {
         scope.launch {
@@ -484,7 +430,7 @@ internal fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableS
                     prefetch = prefetcher::focus,
                     viewer = if (app.hasProfiles) viewer ?: FamilyProfile(name = "Famille", isDefault = true) else null,
                     showMenu = !LocalScreen.current.isTouch, // tactile : la barre de navigation remplace le menu
-                    menu = { menu = it },
+                    menu = { titleMenu.target = it },
                     rows = HomeLayoutLogic.visible(app.prefs.homeLayout), // relu à chaque retour sur l'accueil
                 ),
             )
@@ -492,7 +438,7 @@ internal fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableS
         composable(Routes.LIBRARY, arguments = listOf(navArgument("type") { type = NavType.StringType })) { entry ->
             LibraryScreen(
                 entry.arguments?.getString("type") ?: "movie", app.repository, app.api, ::openItem, prefetcher::focus,
-                onMenu = { menu = MediaMenuLogic.of(it) },
+                onMenu = { titleMenu.target = MediaMenuLogic.of(it) },
                 onSaga = { nav.navigate(Routes.saga(it.id)) },
             )
         }
@@ -743,8 +689,8 @@ internal fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableS
         if (!showIntro && route !in listOf(Routes.PLAY, Routes.SERVER, Routes.PAIR)) UpdateDialog(app.updates, offer)
     }
 
-    menu?.let { target ->
-        MediaMenu(target, app.repository, onDismiss = { menu = null }) { action -> runMenu(target, action) }
+    titleMenu.target?.let { target ->
+        MediaMenu(target, app.repository, onDismiss = titleMenu::close) { action -> titleMenu.run(target, action) }
     }
 
     // Par-dessus tous les écrans : bulles, « Prêt à regarder », caméra
@@ -778,7 +724,7 @@ private fun tonightRequest(row: TonightLogic.Row): PlayRequest {
 }
 
 /** « Reprendre » : relance le film ou l'épisode là où il s'était arrêté. */
-private fun resumeRequest(entry: ResumeEntry): PlayRequest {
+internal fun resumeRequest(entry: ResumeEntry): PlayRequest {
     val state = entry.state
     // Épisode d'une série maison : la vidéo elle-même
     entry.file?.let { token ->

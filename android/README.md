@@ -310,7 +310,8 @@ android/
 └── app/src/
     ├── main/java/fr/arrmada/app/
     │   ├── MainActivity.kt         # fenêtre unique (démarrage, touches, intro)
-    │   ├── AppNavigation.kt        # écrans (Routes) et navigation entre eux, menus des titres
+    │   ├── AppNavigation.kt        # écrans (Routes) et navigation entre eux
+    │   ├── TitleMenu.kt            # menu d'appui long des titres (actions)
     │   ├── ArrMadaApplication.kt   # objets partagés (réglages, client HTTP, images)
     │   ├── data/                   # API (client, modèles JSON, appels, caches) + règles en Kotlin pur :
     │   │                           #   SeriesLogic (Lire la suite), PlaybackLogic (intro, générique),
