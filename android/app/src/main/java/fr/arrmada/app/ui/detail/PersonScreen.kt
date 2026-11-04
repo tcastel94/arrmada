@@ -87,7 +87,14 @@ fun PersonContent(data: Filmography, onOpen: (CreditOpen) -> Unit) {
             Row(Modifier.padding(start = gutter, end = gutter, top = 28.dp), verticalAlignment = Alignment.Top) {
                 Box(Modifier.size(if (phone) 84.dp else 112.dp).clip(CircleShape).background(ArrColors.Card)) {
                     if (person.photo != null) {
-                        AsyncImage(model = person.photo, contentDescription = person.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                        // Portrait calé en haut : le visage n'est pas coupé par le rond
+                        AsyncImage(
+                            model = person.photo,
+                            contentDescription = person.name,
+                            contentScale = ContentScale.Crop,
+                            alignment = Alignment.TopCenter,
+                            modifier = Modifier.fillMaxSize(),
+                        )
                     }
                 }
                 Column(Modifier.padding(start = 20.dp).widthIn(max = 720.dp)) {

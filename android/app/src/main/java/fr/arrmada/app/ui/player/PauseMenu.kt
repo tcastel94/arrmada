@@ -602,7 +602,7 @@ private fun InfoPanel(meta: PlaybackMeta?, info: PlayInfo) {
 private fun CastPanel(meta: PlaybackMeta?) {
     LazyRow(
         modifier = Modifier.focusRestorer(),
-        contentPadding = PaddingValues(horizontal = gutter, vertical = 4.dp),
+        contentPadding = PaddingValues(horizontal = gutter, vertical = 8.dp), // rond grossi au focus non coupé
         horizontalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         items(meta?.cast.orEmpty().take(20)) { person ->
@@ -617,7 +617,14 @@ private fun CastPanel(meta: PlaybackMeta?) {
                     colors = ClickableSurfaceDefaults.colors(containerColor = ArrColors.Card, focusedContainerColor = ArrColors.Card),
                 ) {
                     if (person.photo != null) {
-                        AsyncImage(model = person.photo, contentDescription = person.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().clip(CircleShape))
+                        // Portrait calé en haut : le visage n'est pas coupé par le rond
+                        AsyncImage(
+                            model = person.photo,
+                            contentDescription = person.name,
+                            contentScale = ContentScale.Crop,
+                            alignment = Alignment.TopCenter,
+                            modifier = Modifier.fillMaxSize().clip(CircleShape),
+                        )
                     } else {
                         // Pas de photo : initiales
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -625,7 +632,7 @@ private fun CastPanel(meta: PlaybackMeta?) {
                         }
                     }
                 }
-                Text(person.name, style = MaterialTheme.typography.labelLarge, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp))
+                Text(person.name, style = MaterialTheme.typography.labelLarge, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp))
                 Text(person.character, style = MaterialTheme.typography.labelMedium, color = Dim, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
             }
         }
