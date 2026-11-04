@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.tv.material3.Border
@@ -185,18 +186,26 @@ internal fun GlassTab(
  * rien.
  */
 @Composable
-internal fun GlassIconButton(icon: ImageVector, label: String, onClick: () -> Unit, modifier: Modifier = Modifier, badge: Int? = null) {
+internal fun GlassIconButton(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    badge: Int? = null,
+    size: Dp = 36.dp, // menu pause : plus grand (lu de loin)
+    selected: Boolean = false, // panneau du bouton ouvert (menu pause) : fond de verre
+) {
     var focused by remember { mutableStateOf(false) }
     // zIndex : le nom, qui déborde sous le bouton, passe au-dessus du contenu de l'écran
-    Box(modifier.size(36.dp).zIndex(if (focused) 1f else 0f)) {
+    Box(modifier.size(size).zIndex(if (focused) 1f else 0f)) {
         Surface(
             onClick = onClick,
             modifier = Modifier.fillMaxSize().onFocusChanged { focused = it.isFocused }.tapToClick(onClick),
             shape = ClickableSurfaceDefaults.shape(PillShape),
             scale = ClickableSurfaceDefaults.scale(focusedScale = 1.1f),
             colors = ClickableSurfaceDefaults.colors(
-                containerColor = Color.Transparent,
-                contentColor = Dim,
+                containerColor = if (selected) GlassStrong else Color.Transparent,
+                contentColor = if (selected) Color.White else Dim,
                 focusedContainerColor = Color.White,
                 focusedContentColor = Ink,
                 pressedContainerColor = Pressed,
@@ -208,7 +217,7 @@ internal fun GlassIconButton(icon: ImageVector, label: String, onClick: () -> Un
                     imageVector = icon,
                     contentDescription = if (badge != null && badge > 0) "$label, $badge en cours" else label,
                     colorFilter = ColorFilter.tint(LocalContentColor.current),
-                    modifier = Modifier.size(19.dp),
+                    modifier = Modifier.size(size * 0.53f),
                 )
             }
         }
@@ -235,7 +244,7 @@ internal fun GlassIconButton(icon: ImageVector, label: String, onClick: () -> Un
                 maxLines = 1,
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .offset(y = 44.dp)
+                    .offset(y = size + 8.dp)
                     .wrapContentWidth(unbounded = true)
                     .background(Color(0xEBFFFFFF), PillShape)
                     .padding(horizontal = 9.dp, vertical = 3.dp),

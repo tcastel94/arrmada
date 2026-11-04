@@ -48,6 +48,47 @@ object GlassIcons {
         "M5.6,5.6l2.1,2.1M16.3,16.3l2.1,2.1M5.6,18.4l2.1,-2.1M16.3,7.7l2.1,-2.1",
     )
 
+
+    // ── Barre du menu pause (façon tvOS) ──
+    val Play: ImageVector = stroke(
+        "play",
+        "M8,5L19,12L8,19Z",
+    )
+    val Back10: ImageVector = stroke( // flèche en arc vers l'arrière (−10 s)
+        "back10",
+        "M4,12a8,8 0 1,0 2.3,-5.6",
+        "M4,4v5h5",
+    )
+    val Forward30: ImageVector = stroke( // flèche en arc vers l'avant (+30 s)
+        "forward30",
+        "M20,12a8,8 0 1,1 -2.3,-5.6",
+        "M20,4v5h-5",
+    )
+    val Audio: ImageVector = stroke( // haut-parleur et ondes
+        "audio",
+        "M4,9h4l5,-4v14l-5,-4h-4z",
+        "M16,9a4,4 0 0,1 0,6",
+        "M18.5,6.5a7.5,7.5 0 0,1 0,11",
+    )
+    val Subtitles: ImageVector = stroke( // bulle avec deux lignes de texte
+        "subtitles",
+        "M4,5h16v11h-9l-4,3v-3h-3z",
+        "M7,9h10",
+        "M7,12h6",
+    )
+    val Quality: ImageVector = stroke( // deux curseurs de réglage
+        "quality",
+        "M4,7h10M18,7h2",
+        "M14,7a2,2 0 1,0 4,0a2,2 0 1,0 -4,0",
+        "M4,17h4M12,17h8",
+        "M8,17a2,2 0 1,0 4,0a2,2 0 1,0 -4,0",
+    )
+    val Close: ImageVector = stroke(
+        "close",
+        "M6,6L18,18",
+        "M18,6L6,18",
+    )
+
     /** Pictogramme 24 × 24 fait de traits arrondis de 2 d'épaisseur, sans remplissage. */
     private fun stroke(name: String, vararg paths: String): ImageVector {
         val builder = ImageVector.Builder(
