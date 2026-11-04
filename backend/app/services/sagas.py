@@ -317,6 +317,39 @@ async def load(client: RadarrClient) -> tuple[list[dict[str, Any]], dict[int, di
     return (collections if isinstance(collections, list) else []), library_by_tmdb(movies)
 
 
+# Collections + bibliothèque de Radarr gardées en mémoire : sur une grosse
+# médiathèque, ces deux listes complètes coûtent plusieurs secondes à Radarr
+# (parfois des dizaines), et l'accueil, chaque fiche film et chaque film
+# lancé les demandaient en même temps → Radarr saturé, tout ralentissait
+# (fiches, lecture), jusqu'aux délais dépassés. Comme un cache DNS : une
+# copie de 5 min, et les demandes simultanées attendent le même appel au
+# lieu d'en lancer chacune un. Le « vu » des profils, lui, est relu à chaque
+# fois (base locale, instantané). Vidé quand une saga change (forget).
+LOAD_TTL = 300
+_LOAD_KEY = "sagas:radarr"
+
+
+async def load_cached(db: AsyncSession) -> tuple[list[dict[str, Any]], dict[int, dict[str, Any]]]:
+    """Comme [load], via le cache de 5 min (un seul appel à Radarr à la fois)."""
+    from app.utils.cache import cache
+
+    async def fetch() -> tuple[list[dict[str, Any]], dict[int, dict[str, Any]]]:
+        client = await radarr_client(db)
+        try:
+            return await load(client)
+        finally:
+            await client.close()
+
+    return await cache.get_or_set(_LOAD_KEY, fetch, ttl_seconds=LOAD_TTL)
+
+
+def forget() -> None:
+    """Saga ou bibliothèque modifiée (compléter, suivre, film ajouté) : relire Radarr."""
+    from app.utils.cache import cache
+
+    cache.invalidate(_LOAD_KEY)
+
+
 async def complete(
     client: RadarrClient,
     collection: dict[str, Any],

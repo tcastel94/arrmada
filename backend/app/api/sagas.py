@@ -37,13 +37,10 @@ def _unreachable(exc: Exception) -> HTTPException:
 
 async def _all_sagas(db: AsyncSession, profile_id: int | None) -> list[dict]:
     """Toutes les sagas (deux films au moins), avec le vu du profil, ordre alphabétique."""
-    client = await sagas.radarr_client(db)
     try:
-        collections, library = await sagas.load(client)
+        collections, library = await sagas.load_cached(db)
     except (httpx.HTTPError, ValueError) as exc:
         raise _unreachable(exc) from exc
-    finally:
-        await client.close()
     watch = await sagas.movie_watch(db, profile_id)
     orders = await sagas.custom_orders(db)
     year = sagas.this_year()
@@ -98,7 +95,7 @@ async def saga_of_movie(
         tmdb = int((movie.get("collection") or {}).get("tmdbId") or 0)
         if not tmdb:
             return {"saga": None, "position": None, "following": None}
-        collections, library = await sagas.load(client)
+        collections, library = await sagas.load_cached(db)
     except httpx.HTTPStatusError as exc:
         if exc.response.status_code == 404:
             raise HTTPException(status_code=404, detail="Film inconnu") from exc
@@ -134,7 +131,7 @@ async def get_saga(
     client = await sagas.radarr_client(db)
     try:
         collection = await client.get_collection(saga_id)
-        library = sagas.library_by_tmdb(await client.get_movies())
+        _collections, library = await sagas.load_cached(db)  # bibliothèque : cache de 5 min
     except httpx.HTTPStatusError as exc:
         if exc.response.status_code == 404:
             raise HTTPException(status_code=404, detail="Saga inconnue") from exc
@@ -163,6 +160,7 @@ async def complete_saga(
         collection = await client.get_collection(saga_id)
         library = sagas.library_by_tmdb(await client.get_movies())
         added = await sagas.complete(client, collection, library, body.tmdb_ids if body else None)
+        sagas.forget()
     except httpx.HTTPStatusError as exc:
         if exc.response.status_code == 404:
             raise HTTPException(status_code=404, detail="Saga inconnue") from exc
@@ -212,6 +210,7 @@ async def follow_saga(saga_id: int, body: FollowBody, db: AsyncSession = Depends
     try:
         collection = await client.get_collection(saga_id)
         await sagas.follow(client, collection, body.follow)
+        sagas.forget()
     except httpx.HTTPStatusError as exc:
         if exc.response.status_code == 404:
             raise HTTPException(status_code=404, detail="Saga inconnue") from exc

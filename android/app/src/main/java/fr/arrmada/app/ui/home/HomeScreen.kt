@@ -133,6 +133,8 @@ class HomeViewModel(private val repository: Repository) : ViewModel() {
             val upcoming = async { runCatching { repository.upcoming() } }
             val watchlist = async { runCatching { WatchlistLogic.ordered(repository.watchlist()) } }
             val downloads = async { runCatching { repository.board().queue.size } }
+            // Sagas à terminer : le serveur interroge Radarr (lent sur une grosse
+            // médiathèque) ; l'accueil s'affiche sans attendre, la rangée arrive ensuite
             val sagas = async { runCatching { repository.sagasInProgress().sagas.take(20) } }
             val resume = async {
                 runCatching {
@@ -167,9 +169,10 @@ class HomeViewModel(private val repository: Repository) : ViewModel() {
                         .take(20)
                 } ?: emptyList(),
                 upcoming = upcoming.await().getOrNull()?.items.orEmpty().take(20),
-                sagas = sagas.await().getOrDefault(emptyList()),
+                sagas = _state.value.sagas, // celles du chargement précédent, en attendant
                 downloads = downloads.await().getOrDefault(0),
             )
+            sagas.await().getOrNull()?.let { list -> _state.value = _state.value.copy(sagas = list) }
         }
     }
 }

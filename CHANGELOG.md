@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Chargements très lents (et délais dépassés) depuis les sagas de films
+
+#### Fixed
+- **Accueil, fiches et lancement d'un film très lents, souvent jusqu'au délai dépassé.** Chaque appel « sagas » (rangée « Sagas à terminer » de l'accueil, bloc Saga de la fiche, « Film suivant » au lancement d'un film, écran Sagas) redemandait à Radarr **toutes ses collections et toute sa bibliothèque**. Sur une grosse médiathèque, plusieurs secondes à chaque fois, et ces appels partaient ensemble : Radarr saturé, tout ce qui passe par lui ralentissait
+- Serveur : ces deux listes de Radarr sont gardées **5 min en mémoire** (`sagas.load_cached`), et les demandes simultanées attendent le même appel au lieu d'en lancer chacune un. Le « vu » des profils reste relu à chaque fois. Cache vidé quand on complète ou suit une saga, et à chaque webhook Radarr (film ajouté, téléchargé…)
+- Appli TV : l'accueil s'affiche **sans attendre** la rangée « Sagas à terminer », qui arrive ensuite
+
+#### Tests
+- `test_radarr_lists_cached_between_screens` : un seul appel aux collections pour l'accueil, la liste et la fiche ; relu après un webhook Radarr. 874 tests serveur verts
+
+#### Notes
+- À déployer côté serveur (`git pull && ./deploy.sh`) ; mise à jour de l'appli pour l'accueil (APK après fusion). APK non construite dans l'environnement de la modification : compilation par la CI Android
+
 ### Lecteur TV : « Sous-titres FR » trouve enfin les sous-titres téléchargés par Bazarr
 
 #### Fixed

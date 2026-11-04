@@ -234,6 +234,13 @@ async def _handle_arr_webhook(
         },
     )
 
+    # Bibliothèque Radarr changée (film ajouté, téléchargé, supprimé) : les
+    # sagas relisent Radarr au prochain appel (cache de 5 min vidé)
+    if service_type == "radarr":
+        from app.services import sagas
+
+        sagas.forget()
+
     # Nouveau film d'une saga suivie (Radarr l'a ajouté seul) : notification
     if event_type == "MovieAdded" and service_type == "radarr" and _obj.get("id"):
         from app.services import sagas
