@@ -238,6 +238,20 @@ class Repository(private val api: Api) {
         api.post<TrackPreference, TrackPreference>("/api/tv/track-preference/$scope", preference)
     }
 
+    // ── Menu d'un titre : autre version, sous-titres ──
+
+    /** Versions proposées par les indexeurs : un film, ou une saison d'une série (lent : tous les indexeurs). */
+    suspend fun releases(type: String, arrId: String, season: Int? = null): ReleaseList =
+        api.get("/api/kodi/media/$type/$arrId/releases" + (season?.let { "?season=$it" } ?: ""), slow = true)
+
+    /** Télécharger la version choisie (elle passe en tête de file). */
+    suspend fun grabRelease(type: String, arrId: String, body: GrabBody): ActionResult =
+        api.post("/api/kodi/media/$type/$arrId/grab", body, slow = true)
+
+    /** Bazarr cherche et télécharge des sous-titres pour un film (la réponse arrive avant la fin de sa recherche). */
+    suspend fun searchSubtitles(body: SubtitleSearchBody): ActionResult =
+        api.post("/api/kodi/actions/subtitles", body, slow = true)
+
     /** Lecture en cours → écran d'appoint de la pièce (tablette sous la TV). */
     suspend fun scrobble(payload: Scrobble) {
         api.post<kotlinx.serialization.json.JsonObject, Scrobble>("/api/kodi/scrobble", payload)

@@ -1258,7 +1258,7 @@ function InfoSheet({ playing, onPerson }: { playing: AmbientPlaying; onPerson: (
                         >
                             {person.photo ? (
                                 // eslint-disable-next-line @next/next/no-img-element
-                                <img src={person.photo} alt="" className="rounded-full object-cover" style={{ width: u(14), height: u(14) }} />
+                                <img src={person.photo} alt="" className="rounded-full object-cover object-top" style={{ width: u(14), height: u(14) }} />
                             ) : (
                                 <span className="rounded-full bg-white/10" style={{ width: u(14), height: u(14) }} />
                             )}

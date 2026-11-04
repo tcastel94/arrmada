@@ -216,6 +216,30 @@ data class FileInfo(
     val height: Int? get() = (resolution as? JsonPrimitive)?.intOrNull
 }
 
+/**
+ * Sous-titre connu de Bazarr (fiche film / série) : sa vraie langue, même
+ * quand le fichier posé à côté de la vidéo n'en dit rien (« Film.srt »).
+ */
+@Serializable
+data class BazarrSubtitle(
+    val language: String = "", // « French »
+    val code2: String = "", // « fr »
+    val forced: Boolean = false,
+    val hi: Boolean = false, // pour sourds et malentendants
+)
+
+/** Sous-titres Bazarr d'un film (fiche film : une entrée). */
+@Serializable
+data class BazarrMovieSubtitles(val subtitles: List<BazarrSubtitle> = emptyList())
+
+/** Sous-titres Bazarr d'un épisode (fiche série : une entrée par épisode). */
+@Serializable
+data class BazarrEpisodeSubtitles(
+    val season: Int? = null,
+    val episode: Int? = null,
+    val subtitles: List<BazarrSubtitle> = emptyList(),
+)
+
 @Serializable
 data class Person(
     val name: String = "",
@@ -245,6 +269,8 @@ data class MovieDetail(
     val file: FileInfo? = null,
     val cast: List<Person> = emptyList(),
     val crew: List<Person> = emptyList(),
+    // Sous-titres connus de Bazarr (posés à côté du fichier) : carte technique
+    val subtitles: List<BazarrMovieSubtitles> = emptyList(),
 )
 
 // ─── Lecture (routes /api/tv, ADR-007) ──────────────────────────────────────
@@ -406,6 +432,8 @@ data class SeriesDetail(
     val ratings: SeriesRatings = SeriesRatings(),
     val images: Images = Images(),
     val seasons: List<SeasonInfo> = emptyList(),
+    // Sous-titres connus de Bazarr, par épisode : carte technique de l'épisode au focus
+    val subtitles: List<BazarrEpisodeSubtitles> = emptyList(),
 )
 
 /** Épisode présent dans Jellyfin (GET /api/tv/series/{tvdb}/season/{n}). */
@@ -429,6 +457,52 @@ data class SeasonEpisodes(
 )
 
 /** Réponse générique des actions (« status » ok / error + message à afficher). */
+/**
+ * Version proposée par les indexeurs pour un film ou une saison (choix à la
+ * main : « Trouver une autre version »). [rejected] : Radarr / Sonarr ne la
+ * prendraient pas d'eux-mêmes ([rejections] dit pourquoi), on peut la forcer.
+ */
+@Serializable
+data class Release(
+    val guid: String? = null,
+    @SerialName("indexer_id") val indexerId: Int? = null,
+    val indexer: String = "",
+    val title: String = "",
+    val protocol: String = "", // « usenet » ou « torrent »
+    val quality: String = "",
+    @SerialName("size_human") val size: String = "",
+    val seeders: Int? = null,
+    val rejected: Boolean = false,
+    val rejections: List<String> = emptyList(),
+)
+
+@Serializable
+data class ReleaseList(
+    val status: String = "error",
+    val message: String? = null,
+    val releases: List<Release> = emptyList(),
+)
+
+/** Télécharger la version choisie (POST /api/kodi/media/{type}/{id}/grab). */
+@Serializable
+data class GrabBody(
+    val guid: String,
+    @SerialName("indexer_id") val indexerId: Int?,
+    @SerialName("release_title") val releaseTitle: String,
+    @SerialName("media_title") val mediaTitle: String,
+    val season: Int? = null,
+)
+
+/** « Chercher des sous-titres FR » depuis le menu d'un film (Bazarr, POST /api/kodi/actions/subtitles). */
+@Serializable
+data class SubtitleSearchBody(
+    @SerialName("media_type") val mediaType: String,
+    @SerialName("tmdb_id") val tmdbId: Long?,
+    val title: String,
+    val language: String = "fr",
+    val origin: String = "android",
+)
+
 @Serializable
 data class ActionResult(
     val status: String = "error",

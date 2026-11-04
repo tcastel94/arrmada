@@ -53,4 +53,17 @@ class TechSpecLogicTest {
         assertEquals("Français, Tagalog", TechSpecLogic.languages("fre/tagalog"))
         assertNull(TechSpecLogic.languages(" "))
     }
+
+    @Test
+    fun bazarrSubtitlesShownNextToEmbeddedOnes() {
+        // Radarr ne voit que les sous-titres intégrés ; le .srt de Bazarr s'ajoute, sans doublon
+        val file = FileInfo(videoCodec = "x265", subtitleLanguages = "English")
+        val bazarr = listOf(BazarrSubtitle("French", "fr"), BazarrSubtitle("English", "en"))
+        val lines = TechSpecLogic.lines(file, bazarr)
+        assertEquals("Anglais, Français", lines.first { it.label == "Sous-titres" }.value)
+        // Aucun sous-titre intégré : la ligne existe quand même grâce à Bazarr
+        val only = TechSpecLogic.lines(FileInfo(videoCodec = "x265"), listOf(BazarrSubtitle("French", "fr")))
+        assertEquals("Français", only.first { it.label == "Sous-titres" }.value)
+        assertNull(TechSpecLogic.subtitleLanguages(null, emptyList()))
+    }
 }

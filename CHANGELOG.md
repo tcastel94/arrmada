@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Appli TV : barre d'icônes du menu pause, autres versions, sous-titres sur la fiche, photos d'acteurs
+
+#### Changed
+- **Menu pause façon tvOS** : les gros boutons texte deviennent une **barre d'icônes rondes** (Reprendre, Audio, Sous-titres, Qualité ; −10 s, +30 s et Quitter au doigt), avec le nom de l'icône sous elle au focus. Les **réglages** sont des icônes, les **onglets** ne gardent que le contenu (Chapitres, Infos, Distribution) : le menu reste lisible même quand les réglages se multiplient. Sous-titres devient un panneau ouvert par son icône, comme Qualité (focus directement dans le panneau, Retour revient sur l'icône)
+
+#### Added
+- **Menu d'appui long d'un film ou d'une série** (accueil, Films, Séries…) :
+  - **« Trouver une autre version »** (film déjà sur le disque ; « Choisir une version » sinon) : nouvel écran **Versions disponibles**, avec les versions proposées par les indexeurs (qualité, taille, indexeur, Usenet / sources torrent). Celles que Radarr / Sonarr refuseraient d'eux-mêmes sont grisées, avec la raison. OK puis confirmation : téléchargement en tête de file. Série : une saison à la fois (pastilles)
+  - **« Chercher des sous-titres FR »** (film sur le disque) : Bazarr cherche et télécharge
+- **Grille Musique** : appui long sur un artiste → l'ouvrir, chercher les albums manquants, actualiser l'artiste
+
+#### Fixed
+- **Sous-titres de Bazarr absents de la fiche** : la carte technique (fiche film, épisode au focus) ne montrait que les sous-titres *intégrés* au fichier (seuls connus de Radarr / Sonarr). Elle ajoute ceux de Bazarr, posés à côté, avec leur vraie langue
+- **Photos des acteurs coupées** : portraits recadrés au centre dans un rond (visage coupé) → calés en haut ; rangées avec une marge pour que la carte grossie au focus ne soit plus rognée ; noms longs sur deux lignes (fiche film, page acteur, menu pause, tablette)
+
+#### Notes
+- Sous-titres affichés « inconnu » dans le lecteur : Bazarr enregistre alors `Film.srt` sans code de langue (option **Single Language** dans *Bazarr › Settings › Languages*). La décocher : les fichiers suivants s'appellent `Film.fr.srt` et Jellyfin connaît leur langue (et la règle VO + sous-titres FR les retrouve)
+- APK non construite dans l'environnement de la modification (SDK Android non téléchargeable) : `TechSpecLogic` et ses tests y ont été compilés et passés ; le reste par la CI Android
+
 ### Écran d'appoint (tablette) : moins de « Hors ligne » qui clignote
 
 #### Fixed

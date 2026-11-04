@@ -335,13 +335,14 @@ fun MovieContent(
             }
 
             // ── Carte technique : Vidéo, Audio, Sous-titres (rien si le fichier n'est pas analysé) ──
-            val spec = TechSpecLogic.lines(m.file)
+            val spec = TechSpecLogic.lines(m.file, m.subtitles.flatMap { it.subtitles })
             if (spec.isNotEmpty()) TechCard(spec, Modifier.padding(top = 16.dp))
 
             // ── Distribution ──
             if (m.cast.isNotEmpty()) {
                 Text("Distribution", style = MaterialTheme.typography.titleMedium, color = ArrColors.TextSecondary, modifier = Modifier.padding(top = 22.dp, bottom = 8.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(end = gutter)) {
+                // Marge haute / basse : la carte grossie au focus n'est pas coupée par la rangée
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(end = gutter, top = 8.dp, bottom = 8.dp)) {
                     items(m.cast.take(15)) { person -> // pas de clé : deux rôles peuvent avoir le même nom
                         // OK sur un acteur : sa filmographie (comme la web app)
                         val tmdb = person.tmdbId
@@ -358,13 +359,21 @@ fun MovieContent(
 @Composable
 private fun CastCard(person: fr.arrmada.app.data.Person, onClick: (() -> Unit)?) {
     val content = @Composable {
-        Column(Modifier.width(76.dp).padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(Modifier.size(60.dp).clip(CircleShape).background(ArrColors.Card)) {
+        Column(Modifier.width(84.dp).padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(Modifier.size(68.dp).clip(CircleShape).background(ArrColors.Card)) {
                 if (person.photo != null) {
-                    AsyncImage(model = person.photo, contentDescription = person.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                    // Portrait vertical recadré dans un rond : calé en haut, le visage n'est pas coupé
+                    AsyncImage(
+                        model = person.photo,
+                        contentDescription = person.name,
+                        contentScale = ContentScale.Crop,
+                        alignment = Alignment.TopCenter,
+                        modifier = Modifier.fillMaxSize(),
+                    )
                 }
             }
-            Text(person.name, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp))
+            // Nom sur deux lignes au besoin (plus de « Timothée Chal… »)
+            Text(person.name, style = MaterialTheme.typography.labelMedium, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp))
             Text(person.character, style = MaterialTheme.typography.labelSmall, color = ArrColors.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
         }
     }

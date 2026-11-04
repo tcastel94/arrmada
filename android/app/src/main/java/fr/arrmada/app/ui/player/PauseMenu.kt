@@ -74,7 +74,8 @@ import fr.arrmada.app.ui.components.Badge
 import fr.arrmada.app.ui.components.CardShape
 import fr.arrmada.app.ui.components.Dim
 import fr.arrmada.app.ui.components.Glass
-import fr.arrmada.app.ui.components.GlassButton
+import fr.arrmada.app.ui.components.GlassIconButton
+import fr.arrmada.app.ui.components.GlassIcons
 import fr.arrmada.app.ui.components.GlassTab
 import fr.arrmada.app.ui.components.GlassStrong
 import fr.arrmada.app.ui.components.Ink
@@ -114,23 +115,35 @@ data class QualityChoice(
     val onSelect: (Quality) -> Unit,
 )
 
-/** Onglets du menu pause ; le contenu suit l'onglet qui a le focus. */
+/**
+ * Onglets du menu pause : le CONTENU du titre (le contenu suit l'onglet qui
+ * a le focus). Les RÉGLAGES (audio, sous-titres, qualité) sont des icônes
+ * de la barre du haut, comme sur tvOS : le menu reste lisible même quand
+ * les réglages se multiplient.
+ */
 private enum class PauseTab(val label: String) {
-    CHAPTERS("Chapitres"), INFO("Infos"), CAST("Distribution"), SUBTITLES("Sous-titres")
+    CHAPTERS("Chapitres"), INFO("Infos"), CAST("Distribution")
 }
+
+/** Panneau ouvert par une icône de la barre, à la place du contenu de l'onglet. */
+private enum class PausePanel { NONE, SUBTITLES, QUALITY }
+
+/** Libellé de test (captures) qui ouvre d'emblée le panneau Sous-titres. */
+private const val SUBTITLES_TAB = "Sous-titres"
 
 // Palette « verre », boutons et voiles : ui/components/GlassStyle.kt (communs à toute l'appli)
 
 /**
  * Menu pause « façon Apple TV » : l'image figée reste visible, assombrie
  * vers le bas. De haut en bas, tout en bas de l'écran :
- *  - le titre (logo) et l'épisode, avec les boutons à droite ;
+ *  - le titre (logo) et l'épisode, avec à droite la barre d'icônes
+ *    (Reprendre, Audio, Sous-titres, Qualité ; nom affiché au focus) ;
  *  - la barre de lecture fine et blanche, repères de chapitres, temps
  *    écoulé, temps restant et heure de fin ;
  *  - les onglets (texte, pastille blanche au focus) ;
  *  - la rangée de l'onglet : chapitres en vignettes (image du chapitre,
  *    sinon l'aperçu « trickplay » de Jellyfin à cet instant), résumé,
- *    distribution, sous-titres.
+ *    distribution ; ou le panneau Sous-titres / Qualité de l'icône choisie.
  *
  * Télécommande : le focus part sur « Reprendre » ; ↓ descend vers les
  * onglets puis la rangée, ↑ remonte. En revenant sur une rangée, le focus
@@ -198,15 +211,18 @@ fun PauseMenu(
     // Un « point d'accroche » par onglet : en descendant des boutons, le focus
     // arrive sur l'onglet affiché (et non sur le plus proche à l'écran)
     val tabFocus = remember { PauseTab.entries.associateWith { FocusRequester() } }
-    // Bouton « Qualité » : son panneau remplace celui de l'onglet, jusqu'au prochain onglet visité.
-    // Les onglets sont entre le bouton et le panneau : en descendant, le focus
-    // passerait par un onglet, qui referme le panneau. Le focus saute donc
-    // directement sur la qualité en cours, et Retour ramène sur le bouton.
-    var showQuality by remember { mutableStateOf(false) }
-    var backFromQuality by remember { mutableStateOf(false) }
+    // Icônes Sous-titres / Qualité : leur panneau remplace celui de l'onglet,
+    // jusqu'au prochain onglet visité. Les onglets sont entre la barre et le
+    // panneau : en descendant, le focus passerait par un onglet, qui referme
+    // le panneau. Le focus saute donc directement dans le panneau, et Retour
+    // le referme en revenant sur l'icône.
+    var panel by remember { mutableStateOf(if (initialTab == SUBTITLES_TAB) PausePanel.SUBTITLES else PausePanel.NONE) }
+    var closedPanel by remember { mutableStateOf(PausePanel.NONE) } // refermé par Retour : focus à rendre à son icône
     val qualityChoice = quality?.takeIf { it.options.size > 1 }
     val qualityFocus = remember { FocusRequester() } // choix en cours dans le panneau
     val qualityButtonFocus = remember { FocusRequester() }
+    val subtitlesFocus = remember { FocusRequester() } // premier choix du panneau Sous-titres
+    val subtitlesButtonFocus = remember { FocusRequester() }
     val resumeFocus = remember { FocusRequester() }
     val remaining = ((duration - position) / 1000).coerceAtLeast(0)
     val endsAt = LocalTime.now().plusSeconds(remaining).format(DateTimeFormatter.ofPattern("HH:mm"))
@@ -228,30 +244,40 @@ fun PauseMenu(
         }
 
         Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(bottom = if (phone) 12.dp else 26.dp)) {
-            // ── Titre + boutons ──
+            // ── Titre + barre d'icônes (nom de l'icône affiché sous elle au focus) ──
+            val iconSize = if (phone) 40.dp else 46.dp
             val buttons: @Composable () -> Unit = {
                 Row(
                     Modifier
                         .focusRestorer { resumeFocus }
                         .focusGroup()
                         .then(if (touch) Modifier.horizontalScroll(rememberScrollState()) else Modifier),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (touch) GlassButton("10 s", onClick = { onSkip(-10) }, glyph = "↺")
-                    GlassButton("Reprendre", onResume, glyph = "▶", primary = true, modifier = Modifier.focusRequester(resumeFocus))
-                    if (touch) GlassButton("30 s", onClick = { onSkip(30) }, glyph = "↻")
-                    GlassButton("Audio", { showAudio = true }, glyph = "♪", modifier = Modifier.focusRequester(audioFocus))
+                    if (touch) GlassIconButton(GlassIcons.Back10, "−10 s", { onSkip(-10) }, size = iconSize)
+                    GlassIconButton(GlassIcons.Play, "Reprendre", onResume, Modifier.focusRequester(resumeFocus), size = iconSize)
+                    if (touch) GlassIconButton(GlassIcons.Forward30, "+30 s", { onSkip(30) }, size = iconSize)
+                    GlassIconButton(GlassIcons.Audio, "Audio", { showAudio = true }, Modifier.focusRequester(audioFocus), size = iconSize)
+                    GlassIconButton(
+                        GlassIcons.Subtitles,
+                        "Sous-titres",
+                        { panel = PausePanel.SUBTITLES },
+                        Modifier.focusRequester(subtitlesButtonFocus),
+                        size = iconSize,
+                        selected = panel == PausePanel.SUBTITLES,
+                    )
                     if (qualityChoice != null) {
-                        GlassButton(
+                        GlassIconButton(
+                            GlassIcons.Quality,
                             "Qualité",
-                            { showQuality = true },
-                            glyph = "◐",
-                            selected = showQuality,
-                            modifier = Modifier.focusRequester(qualityButtonFocus),
+                            { panel = PausePanel.QUALITY },
+                            Modifier.focusRequester(qualityButtonFocus),
+                            size = iconSize,
+                            selected = panel == PausePanel.QUALITY,
                         )
                     }
-                    if (touch) GlassButton("Quitter", onQuit, glyph = "✕")
+                    if (touch) GlassIconButton(GlassIcons.Close, "Quitter", onQuit, size = iconSize)
                 }
             }
             if (phone) {
@@ -318,11 +344,11 @@ fun PauseMenu(
                 tabs.forEach { option ->
                     TabPill(
                         option.label,
-                        selected = option == tab && !showQuality,
+                        selected = option == tab && panel == PausePanel.NONE,
                         modifier = Modifier.focusRequester(tabFocus.getValue(option)),
                         onFocus = {
                             tab = option
-                            showQuality = false
+                            panel = PausePanel.NONE
                         },
                     )
                 }
@@ -330,33 +356,45 @@ fun PauseMenu(
 
             // ── Contenu de l'onglet ──
             Box(Modifier.fillMaxWidth().height(if (phone) 112.dp else 158.dp).padding(top = if (phone) 6.dp else 12.dp)) {
-                if (showQuality && qualityChoice != null) {
-                    QualityPanel(qualityChoice, qualityFocus)
-                } else when (tab) {
-                    PauseTab.CHAPTERS -> ChaptersPanel(info.chapters, info.trickplay, position, duration, absolute, onSeek)
-                    PauseTab.INFO -> InfoPanel(meta, info)
-                    PauseTab.CAST -> CastPanel(meta)
-                    PauseTab.SUBTITLES -> TracksPanel(trackChoices(tracks, C.TRACK_TYPE_TEXT), allowOff = true, download = subtitleDownload) {
+                when {
+                    panel == PausePanel.QUALITY && qualityChoice != null -> QualityPanel(qualityChoice, qualityFocus)
+                    panel == PausePanel.SUBTITLES -> TracksPanel(
+                        trackChoices(tracks, C.TRACK_TYPE_TEXT),
+                        allowOff = true,
+                        download = subtitleDownload,
+                        modifier = Modifier.focusRequester(subtitlesFocus),
+                    ) {
                         onSelectTrack(C.TRACK_TYPE_TEXT, it)
+                    }
+                    else -> when (tab) {
+                        PauseTab.CHAPTERS -> ChaptersPanel(info.chapters, info.trickplay, position, duration, absolute, onSeek)
+                        PauseTab.INFO -> InfoPanel(meta, info)
+                        PauseTab.CAST -> CastPanel(meta)
                     }
                 }
             }
         }
     }
-    // Panneau Qualité ouvert : Retour le referme (sans quitter la lecture)
-    BackHandler(enabled = showQuality && qualityChoice != null) {
-        showQuality = false
-        backFromQuality = true
+    // Panneau Sous-titres / Qualité ouvert : Retour le referme (sans quitter la lecture)
+    BackHandler(enabled = panel != PausePanel.NONE) {
+        closedPanel = panel
+        panel = PausePanel.NONE
     }
-    // Ouverture : focus sur la qualité en cours ; fermeture par Retour : focus sur « Qualité ».
-    // Une image d'attente : le panneau (ou le bouton) doit être affiché pour recevoir le focus.
-    LaunchedEffect(showQuality) {
+    // Ouverture : focus dans le panneau ; fermeture par Retour : focus sur son icône.
+    // Une image d'attente : le panneau (ou l'icône) doit être affiché pour recevoir le focus.
+    LaunchedEffect(panel) {
         withFrameNanos { }
-        when {
-            showQuality -> runCatching { qualityFocus.requestFocus() }
-            backFromQuality -> {
-                backFromQuality = false
-                runCatching { qualityButtonFocus.requestFocus() }
+        when (panel) {
+            PausePanel.QUALITY -> runCatching { qualityFocus.requestFocus() }
+            PausePanel.SUBTITLES -> runCatching { subtitlesFocus.requestFocus() }
+            PausePanel.NONE -> {
+                val back = when (closedPanel) {
+                    PausePanel.QUALITY -> qualityButtonFocus
+                    PausePanel.SUBTITLES -> subtitlesButtonFocus
+                    PausePanel.NONE -> null
+                }
+                closedPanel = PausePanel.NONE
+                back?.let { runCatching { it.requestFocus() } }
             }
         }
     }
@@ -564,7 +602,7 @@ private fun InfoPanel(meta: PlaybackMeta?, info: PlayInfo) {
 private fun CastPanel(meta: PlaybackMeta?) {
     LazyRow(
         modifier = Modifier.focusRestorer(),
-        contentPadding = PaddingValues(horizontal = gutter, vertical = 4.dp),
+        contentPadding = PaddingValues(horizontal = gutter, vertical = 8.dp), // rond grossi au focus non coupé
         horizontalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         items(meta?.cast.orEmpty().take(20)) { person ->
@@ -579,7 +617,14 @@ private fun CastPanel(meta: PlaybackMeta?) {
                     colors = ClickableSurfaceDefaults.colors(containerColor = ArrColors.Card, focusedContainerColor = ArrColors.Card),
                 ) {
                     if (person.photo != null) {
-                        AsyncImage(model = person.photo, contentDescription = person.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().clip(CircleShape))
+                        // Portrait calé en haut : le visage n'est pas coupé par le rond
+                        AsyncImage(
+                            model = person.photo,
+                            contentDescription = person.name,
+                            contentScale = ContentScale.Crop,
+                            alignment = Alignment.TopCenter,
+                            modifier = Modifier.fillMaxSize().clip(CircleShape),
+                        )
                     } else {
                         // Pas de photo : initiales
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -587,7 +632,7 @@ private fun CastPanel(meta: PlaybackMeta?) {
                         }
                     }
                 }
-                Text(person.name, style = MaterialTheme.typography.labelLarge, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp))
+                Text(person.name, style = MaterialTheme.typography.labelLarge, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp))
                 Text(person.character, style = MaterialTheme.typography.labelMedium, color = Dim, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
             }
         }
@@ -605,6 +650,7 @@ internal fun TracksPanel(
     allowOff: Boolean,
     sidePadding: Dp = gutter,
     download: SubtitleDownload? = null,
+    modifier: Modifier = Modifier, // menu pause : point d'accroche du focus (premier choix)
     onSelect: (TrackChoice?) -> Unit,
 ) {
     if (choices.isEmpty() && !allowOff) {
@@ -612,7 +658,7 @@ internal fun TracksPanel(
         return
     }
     LazyRow(
-        modifier = Modifier.focusRestorer(),
+        modifier = modifier.focusRestorer(),
         contentPadding = PaddingValues(horizontal = sidePadding, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
