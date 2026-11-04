@@ -104,11 +104,13 @@ import fr.arrmada.app.ui.home.HomeScreen
 import fr.arrmada.app.ui.home.HomeViewModel
 import fr.arrmada.app.ui.home.LibraryScreen
 import fr.arrmada.app.ui.player.PlayRequest
+import fr.arrmada.app.data.SubtitleSearchBody
 import fr.arrmada.app.data.WatchlistLogic
 import fr.arrmada.app.data.WatchlistOpen
 import fr.arrmada.app.ui.player.PlayerScreen
 import fr.arrmada.app.ui.player.ScreenCapabilities
 import fr.arrmada.app.ui.request.DownloadScreen
+import fr.arrmada.app.ui.request.ReleasesScreen
 import fr.arrmada.app.ui.request.SearchScreen
 import fr.arrmada.app.ui.setup.PairScreen
 import fr.arrmada.app.ui.setup.ServerScreen
@@ -223,6 +225,7 @@ private object Routes {
     const val MUSIC_SEARCH = "music/search" // suivre un nouvel artiste
     const val MUSIC_DOWNLOADS = "music/downloads" // musique restée dans les téléchargements, à importer
     const val SAGA = "saga/{id}" // une saga de films (ADR-016), ouverte depuis la vue « Sagas » de Films
+    const val RELEASES = "releases/{type}/{arrId}?title={title}" // « Trouver une autre version » (menu d'un titre)
 
     fun library(type: String) = "library/$type"
     fun search(voice: Boolean) = "search?voice=$voice"
@@ -237,6 +240,7 @@ private object Routes {
     fun musicArtist(id: Int) = "music/artist/$id"
     fun musicAlbum(id: Int) = "music/album/$id"
     fun saga(id: Int) = "saga/$id"
+    fun releases(type: String, arrId: String, title: String) = "releases/$type/$arrId?title=${android.net.Uri.encode(title)}"
 }
 
 /** Intro à l'écran ([active]) et demande de la passer ([skip]), partagées avec l'activité. */
@@ -451,6 +455,15 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
                         .onSuccess { toast(if (adding) "Ajouté à ma liste" else "Retiré de ma liste") }
                         .onFailure { toast(it.message ?: "Liste injoignable") }
                 }
+            }
+            MenuAction.OTHER_RELEASE -> target.arrId?.let {
+                nav.navigate(Routes.releases(if (target.isMovie) "movie" else "series", it, target.title))
+            }
+            MenuAction.FIND_SUBTITLES -> scope.launch {
+                // Bazarr cherche (sur tous ses fournisseurs) ; la réponse dit si la recherche est lancée
+                runCatching { app.repository.searchSubtitles(SubtitleSearchBody("movie", target.tmdbId, target.title)) }
+                    .onSuccess { Toast.makeText(context, it.message ?: "Recherche de sous-titres lancée", Toast.LENGTH_LONG).show() }
+                    .onFailure { Toast.makeText(context, it.message ?: "Bazarr injoignable", Toast.LENGTH_LONG).show() }
             }
             MenuAction.MARK_WATCHED, MenuAction.MARK_UNWATCHED -> {
                 val watched = action == MenuAction.MARK_WATCHED
@@ -742,6 +755,22 @@ private fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableSt
                 token = entry.arguments?.getString("path")?.takeIf { it.isNotBlank() },
                 onFolder = { nav.navigate(Routes.videos(it)) },
                 onPlay = { file, start -> nav.navigate(Routes.play(PlayRequest(kind = "file", id = 0, startSeconds = start, file = file.token))) },
+            )
+        }
+        composable(
+            Routes.RELEASES,
+            arguments = listOf(
+                navArgument("type") { type = NavType.StringType },
+                navArgument("arrId") { type = NavType.StringType },
+                navArgument("title") { type = NavType.StringType; defaultValue = "" },
+            ),
+        ) { entry ->
+            ReleasesScreen(
+                repository = app.repository,
+                type = entry.arguments?.getString("type") ?: "movie",
+                arrId = entry.arguments?.getString("arrId").orEmpty(),
+                title = entry.arguments?.getString("title").orEmpty(),
+                onDone = { nav.popBackStack() },
             )
         }
         composable(Routes.MUSIC) {

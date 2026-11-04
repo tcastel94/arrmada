@@ -28,7 +28,11 @@ data class MenuTarget(
 }
 
 /** Actions proposées, dans l'ordre du menu. */
-enum class MenuAction { RESUME, PLAY, FROM_START, OPEN, TRAILER, ADD_TO_LIST, REMOVE_FROM_LIST, MARK_WATCHED, MARK_UNWATCHED }
+enum class MenuAction {
+    RESUME, PLAY, FROM_START, OPEN, TRAILER, ADD_TO_LIST, REMOVE_FROM_LIST, MARK_WATCHED, MARK_UNWATCHED,
+    OTHER_RELEASE, // « Trouver une autre version » : choix à la main parmi les versions des indexeurs
+    FIND_SUBTITLES, // « Chercher des sous-titres FR » (Bazarr)
+}
 
 /** Menu de l'appui long (testé sans écran). */
 object MediaMenuLogic {
@@ -87,6 +91,11 @@ object MediaMenuLogic {
         // Vu / pas vu : un film sur le disque, ou l'épisode d'une carte « Reprendre »
         val markable = (resume != null && resume.file == null) || (target.isMovie && target.hasFile && target.tmdbId != null)
         if (markable) add(if (watched == true) MenuAction.MARK_UNWATCHED else MenuAction.MARK_WATCHED)
+        // Outils du fichier, en fin de menu : titre de Radarr / Sonarr (pas une série maison)
+        if (target.arrId != null && target.localSeries == null && target.resume?.isEpisode != true) {
+            if (target.isMovie && target.hasFile && target.tmdbId != null) add(MenuAction.FIND_SUBTITLES)
+            add(MenuAction.OTHER_RELEASE)
+        }
     }
 
     fun label(action: MenuAction, target: MenuTarget): String = when (action) {
@@ -99,6 +108,8 @@ object MediaMenuLogic {
         MenuAction.REMOVE_FROM_LIST -> "Retirer de ma liste"
         MenuAction.MARK_WATCHED -> if (target.resume?.isEpisode == true) "Marquer l’épisode comme vu" else "Marquer comme vu"
         MenuAction.MARK_UNWATCHED -> "Marquer comme non vu"
+        MenuAction.OTHER_RELEASE -> if (target.isMovie && target.hasFile) "Trouver une autre version" else "Choisir une version"
+        MenuAction.FIND_SUBTITLES -> "Chercher des sous-titres FR"
     }
 
     /** Ligne sous le titre du menu : « Film · 2021 », « S04E03 · La traque ». */

@@ -457,6 +457,52 @@ data class SeasonEpisodes(
 )
 
 /** Réponse générique des actions (« status » ok / error + message à afficher). */
+/**
+ * Version proposée par les indexeurs pour un film ou une saison (choix à la
+ * main : « Trouver une autre version »). [rejected] : Radarr / Sonarr ne la
+ * prendraient pas d'eux-mêmes ([rejections] dit pourquoi), on peut la forcer.
+ */
+@Serializable
+data class Release(
+    val guid: String? = null,
+    @SerialName("indexer_id") val indexerId: Int? = null,
+    val indexer: String = "",
+    val title: String = "",
+    val protocol: String = "", // « usenet » ou « torrent »
+    val quality: String = "",
+    @SerialName("size_human") val size: String = "",
+    val seeders: Int? = null,
+    val rejected: Boolean = false,
+    val rejections: List<String> = emptyList(),
+)
+
+@Serializable
+data class ReleaseList(
+    val status: String = "error",
+    val message: String? = null,
+    val releases: List<Release> = emptyList(),
+)
+
+/** Télécharger la version choisie (POST /api/kodi/media/{type}/{id}/grab). */
+@Serializable
+data class GrabBody(
+    val guid: String,
+    @SerialName("indexer_id") val indexerId: Int?,
+    @SerialName("release_title") val releaseTitle: String,
+    @SerialName("media_title") val mediaTitle: String,
+    val season: Int? = null,
+)
+
+/** « Chercher des sous-titres FR » depuis le menu d'un film (Bazarr, POST /api/kodi/actions/subtitles). */
+@Serializable
+data class SubtitleSearchBody(
+    @SerialName("media_type") val mediaType: String,
+    @SerialName("tmdb_id") val tmdbId: Long?,
+    val title: String,
+    val language: String = "fr",
+    val origin: String = "android",
+)
+
 @Serializable
 data class ActionResult(
     val status: String = "error",

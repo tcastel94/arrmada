@@ -129,10 +129,22 @@ fun MusicScreen(
     onSearch: () -> Unit,
     onDownloads: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var status by remember { mutableStateOf<MusicStatus?>(null) }
     var artists by remember { mutableStateOf<List<MusicArtist>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var reload by remember { mutableStateOf(0) }
+    var menu by remember { mutableStateOf<MusicArtist?>(null) } // appui long sur un artiste
+
+    // Action Lidarr depuis la grille, dite en clair (comme sur la fiche de l'artiste)
+    fun runAction(action: suspend () -> MusicActionResult) {
+        scope.launch {
+            runCatching { action() }
+                .onSuccess { Toast.makeText(context, it.message, Toast.LENGTH_LONG).show(); reload++ }
+                .onFailure { Toast.makeText(context, it.message ?: "Lidarr ne répond pas", Toast.LENGTH_LONG).show() }
+        }
+    }
 
     // Relu à chaque retour (un artiste ajouté depuis la recherche apparaît)
     LaunchedEffect(reload) {
@@ -154,7 +166,21 @@ fun MusicScreen(
         error != null && current == null -> MessageScreen("Musique indisponible", error, "Réessayer") { reload++ }
         current == null -> MessageScreen("Chargement…")
         status?.lidarr != true -> MessageScreen("Musique", status?.hint ?: "Lidarr n'est pas configuré dans ArrMada.")
-        else -> MusicContent(current, status?.hint, onArtist, onSearch, onDownloads)
+        else -> MusicContent(current, status?.hint, onArtist, { menu = it }, onSearch, onDownloads)
+    }
+
+    // Appui long sur un artiste : l'ouvrir, chercher ce qui manque, relire sa discographie
+    menu?.let { artist ->
+        ChoiceDialog(
+            title = artist.name,
+            subtitle = MusicRules.artistLine(artist),
+            choices = listOf(
+                "Ouvrir" to { menu = null; onArtist(artist.id) },
+                "Chercher les albums manquants" to { menu = null; runAction { repository.musicSearchArtist(artist.id) } },
+                "Actualiser l'artiste" to { menu = null; runAction { repository.musicRefreshArtist(artist.id) } },
+            ),
+            onDismiss = { menu = null },
+        )
     }
 }
 
@@ -163,6 +189,7 @@ private fun MusicContent(
     artists: List<MusicArtist>,
     hint: String?,
     onArtist: (Int) -> Unit,
+    onArtistMenu: (MusicArtist) -> Unit,
     onSearch: () -> Unit,
     onDownloads: () -> Unit,
 ) {
@@ -204,6 +231,7 @@ private fun MusicContent(
                             width = 120.dp,
                             square = true,
                             onClick = { onArtist(artist.id) },
+                            onLongClick = { onArtistMenu(artist) },
                             modifier = if (artist == artists.first()) Modifier.focusRequester(first) else Modifier,
                         )
                         Text(artist.name, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))

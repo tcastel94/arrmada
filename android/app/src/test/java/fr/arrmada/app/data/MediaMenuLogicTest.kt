@@ -16,14 +16,22 @@ class MediaMenuLogicTest {
         assertEquals(438631L, target.tmdbId)
         assertNull(target.tvdbId)
         assertEquals(
-            listOf(MenuAction.PLAY, MenuAction.OPEN, MenuAction.TRAILER, MenuAction.ADD_TO_LIST, MenuAction.MARK_WATCHED),
+            listOf(
+                MenuAction.PLAY, MenuAction.OPEN, MenuAction.TRAILER, MenuAction.ADD_TO_LIST, MenuAction.MARK_WATCHED,
+                MenuAction.FIND_SUBTITLES, MenuAction.OTHER_RELEASE,
+            ),
             MediaMenuLogic.actions(target, inList = false, watched = false),
         )
         assertEquals(
-            listOf(MenuAction.PLAY, MenuAction.OPEN, MenuAction.TRAILER, MenuAction.REMOVE_FROM_LIST, MenuAction.MARK_UNWATCHED),
+            listOf(
+                MenuAction.PLAY, MenuAction.OPEN, MenuAction.TRAILER, MenuAction.REMOVE_FROM_LIST, MenuAction.MARK_UNWATCHED,
+                MenuAction.FIND_SUBTITLES, MenuAction.OTHER_RELEASE,
+            ),
             MediaMenuLogic.actions(target, inList = true, watched = true),
         )
         assertEquals("Film · 2021", MediaMenuLogic.subtitle(target))
+        assertEquals("Trouver une autre version", MediaMenuLogic.label(MenuAction.OTHER_RELEASE, target))
+        assertEquals("Chercher des sous-titres FR", MediaMenuLogic.label(MenuAction.FIND_SUBTITLES, target))
     }
 
     @Test
@@ -32,8 +40,13 @@ class MediaMenuLogicTest {
         assertEquals(280619L, target.tvdbId) // « tmdb_id » d'une série = TVDB
         assertNull(target.tmdbId)
         assertEquals("series:tvdb:280619", target.watchlist?.key)
-        assertEquals(listOf(MenuAction.OPEN, MenuAction.ADD_TO_LIST), MediaMenuLogic.actions(target, inList = false, watched = null))
+        // Série : pas de sous-titres (un épisode précis est nécessaire), mais le choix d'une version de saison
+        assertEquals(
+            listOf(MenuAction.OPEN, MenuAction.ADD_TO_LIST, MenuAction.OTHER_RELEASE),
+            MediaMenuLogic.actions(target, inList = false, watched = null),
+        )
         assertEquals("Ouvrir la série", MediaMenuLogic.label(MenuAction.OPEN, target))
+        assertEquals("Choisir une version", MediaMenuLogic.label(MenuAction.OTHER_RELEASE, target))
     }
 
     @Test
