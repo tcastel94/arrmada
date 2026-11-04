@@ -104,6 +104,14 @@ import { RatingBadge } from "@/components/shared/rating-badge";
 const POLL_MS = 10_000;
 /** Pendant une lecture : relevé plus serré (pistes, « Passer l'intro »). */
 const POLL_PLAYING_MS = 5_000;
+/**
+ * Relevé qui ne répond pas : abandonné au bout de 8 s (sinon il reste
+ * pendu et le suivant attend derrière), puis un nouvel essai 2 s plus tard
+ * avant d'afficher « Hors ligne ». Un hoquet du réseau ou du serveur (Wi-Fi
+ * de la tablette, redémarrage d'ArrMada) ne fait plus clignoter le bandeau.
+ */
+const AMBIENT_TIMEOUT_MS = 8_000;
+const AMBIENT_RETRY_DELAY_MS = 2_000;
 /** Après une commande : le temps que la TV l'applique et renvoie son état. */
 const AFTER_COMMAND_MS = 1_200;
 /** Toucher l'écran pendant un film : luminosité de repos pendant ce temps. */
@@ -132,9 +140,20 @@ async function fetchJson<T>(auth: Auth, path: string): Promise<T> {
 
 async function fetchAmbient(auth: Auth, room: string): Promise<Ambient> {
     const query = auth.kind === "admin" ? `?room=${room}` : "";
-    const response = await fetch(`${API_URL}/api/ambient${query}`, { headers: authHeaders(auth), cache: "no-store" });
-    if (!response.ok) throw new HttpError(response.status, `HTTP ${response.status}`);
-    return response.json();
+    // AbortController plutôt qu'AbortSignal.timeout : la WebView de Fully Kiosk peut être ancienne
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), AMBIENT_TIMEOUT_MS);
+    try {
+        const response = await fetch(`${API_URL}/api/ambient${query}`, {
+            headers: authHeaders(auth),
+            cache: "no-store",
+            signal: controller.signal,
+        });
+        if (!response.ok) throw new HttpError(response.status, `HTTP ${response.status}`);
+        return await response.json();
+    } finally {
+        clearTimeout(timer);
+    }
 }
 
 /** Télécommande tactile : la TV de la pièce reçoit la commande en moins d'une seconde. */
@@ -404,7 +423,9 @@ function AmbientView({
         queryFn: () => fetchAmbient(auth, room),
         refetchInterval: (query) => (query.state.data?.playing ? POLL_PLAYING_MS : POLL_MS),
         refetchIntervalInBackground: true,
-        retry: false,
+        // Un nouvel essai avant « Hors ligne » (pas pour un jeton refusé : 401 / 403)
+        retry: (failures, err) => failures < 1 && !(err instanceof HttpError && (err.status === 401 || err.status === 403)),
+        retryDelay: AMBIENT_RETRY_DELAY_MS,
         // Une panne réseau garde le dernier affichage (avec un petit avertissement)
         placeholderData: (previous) => previous,
     });
