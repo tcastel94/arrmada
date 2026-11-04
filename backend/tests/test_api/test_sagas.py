@@ -185,6 +185,37 @@ async def test_list_sagas(client: AsyncClient, radarr: dict[str, str]) -> None:
     assert body["upcoming"] >= 1
 
 
+async def test_radarr_lists_cached_between_screens(
+    client: AsyncClient, radarr: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Accueil, liste, fiche film : un seul appel à Radarr pour ses collections
+    # (avant : un par écran, Radarr saturé sur une grosse médiathèque)
+    await _declare_radarr(client, radarr)
+    calls: list[int] = []
+
+    def counted(_p: dict[str, str], _m: Any) -> list[dict]:
+        calls.append(1)
+        return COLLECTIONS
+
+    monkeypatch.setitem(
+        fake_arr.ROUTES, "radarr.test", [(r"/api/v3/collection", counted), *ROUTES[1:]]
+    )
+    assert (await client.get("/api/sagas/in-progress", headers=radarr)).status_code == 200
+    assert (await client.get("/api/sagas", headers=radarr)).status_code == 200
+    assert (await client.get("/api/sagas/movie/11", headers=radarr)).json()["position"] == 2
+    assert len(calls) == 1
+
+    # Webhook de Radarr (film téléchargé) : relu au prochain appel
+    payload = {
+        "eventType": "Download",
+        "movie": {"id": 1, "title": "Dune", "year": 2021},
+        "movieFile": {"quality": {"quality": {"name": "Bluray-2160p"}}},
+    }
+    assert (await client.post("/api/webhooks/radarr", json=payload)).status_code == 200
+    await client.get("/api/sagas", headers=radarr)
+    assert len(calls) == 2
+
+
 async def test_saga_of_movie(client: AsyncClient, radarr: dict[str, str]) -> None:
     await _declare_radarr(client, radarr)
     body = (await client.get("/api/sagas/movie/11", headers=radarr)).json()
