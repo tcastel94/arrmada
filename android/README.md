@@ -309,7 +309,8 @@ android/
 ├── app/build.gradle.kts            # versions figées des bibliothèques
 └── app/src/
     ├── main/java/fr/arrmada/app/
-    │   ├── MainActivity.kt         # fenêtre unique + navigation entre écrans + Réglages
+    │   ├── MainActivity.kt         # fenêtre unique (démarrage, touches, intro)
+    │   ├── AppNavigation.kt        # écrans (Routes) et navigation entre eux, menus des titres
     │   ├── ArrMadaApplication.kt   # objets partagés (réglages, client HTTP, images)
     │   ├── data/                   # API (client, modèles JSON, appels, caches) + règles en Kotlin pur :
     │   │                           #   SeriesLogic (Lire la suite), PlaybackLogic (intro, générique),
