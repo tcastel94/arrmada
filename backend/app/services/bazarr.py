@@ -59,6 +59,37 @@ class BazarrClient(ArrBaseClient):
         except Exception:
             return {"status": "ok"}
 
+    async def request_raw(
+        self, method: str, endpoint: str, params: dict[str, Any] | None = None
+    ) -> tuple[int, Any]:
+        """Comme _request_params, sans lever d'exception sur un code d'erreur.
+
+        Bazarr répond « No subtitles found » avec un code 500 quand ses
+        fournisseurs n'ont rien : ce n'est pas une panne, juste « rien
+        trouvé ». On renvoie donc (code HTTP, corps décodé) et c'est
+        l'appelant qui interprète (voir subtitle_jobs.classify).
+        """
+        url = f"{self.API_PREFIX}{endpoint}"
+        norm = {
+            k: (str(v) if isinstance(v, bool) else v)
+            for k, v in (params or {}).items()
+            if v is not None
+        }
+        resp = await self.client.request(method, url, params=norm)
+        if not resp.content:
+            return resp.status_code, ""
+        try:
+            return resp.status_code, resp.json()
+        except Exception:
+            return resp.status_code, resp.text
+
+    # ── Fournisseurs bloqués (quota, panne, captcha…) ───────────
+    async def get_throttled_providers(self) -> list[dict[str, Any]]:
+        """Fournisseurs que Bazarr a mis en pause : [{name, status, retry}]."""
+        data = await self.get("/providers")
+        rows = data.get("data") if isinstance(data, dict) else data
+        return [r for r in rows or [] if isinstance(r, dict)]
+
     # ── Series Subtitles ──────────────────────────────────────
     async def get_series(self, length: int = -1) -> dict[str, Any]:
         """Fetch all series with subtitle info (length=-1 → all)."""

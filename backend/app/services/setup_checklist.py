@@ -283,6 +283,87 @@ async def _check_jellyfin(client: httpx.AsyncClient, svc: Service) -> dict[str, 
     )
 
 
+# Fournisseurs Bazarr utiles pour des sous-titres FRANÇAIS (films, séries,
+# animes). « embeddedsubtitles » lit les sous-titres déjà présents DANS le
+# fichier : beaucoup d'animes (« MULTi », « VOSTFR ») en ont, sans rien télécharger.
+BAZARR_FR_PROVIDERS = (
+    "embeddedsubtitles",
+    "opensubtitlescom",
+    "podnapisi",
+    "subdl",
+    "gestdown",
+    "addic7ed",
+)
+
+
+async def _check_bazarr(client: httpx.AsyncClient, svc: Service) -> dict[str, Any]:
+    """Sous-titres : fournisseurs actifs, profil « français », réglage Single Language.
+
+    Les trois causes de « Bazarr ne trouve jamais rien » vues en vrai : un seul
+    fournisseur (souvent bloqué par son quota), aucun profil de langues avec
+    le français, et « Single Language » coché (fichiers .srt sans code de
+    langue, que la TV affiche « inconnu »).
+    """
+    why = (
+        "Bazarr trouve les sous-titres français tout seul, avant la séance : il lui faut "
+        "plusieurs fournisseurs et un profil de langues avec le français."
+    )
+    base = svc.url.rstrip("/")
+    headers = {"X-API-KEY": _key(svc)}
+    try:
+        settings_json = await _get_json(client, f"{base}/api/system/settings", headers=headers)
+        profiles = await _get_json(client, f"{base}/api/system/languages/profiles", headers=headers)
+    except Exception as exc:  # noqa: BLE001
+        return _item(
+            "bazarr", "Sous-titres français (Bazarr)", why, status="error",
+            detail=f"Bazarr ne répond pas ({type(exc).__name__})", service=svc,
+        )  # fmt: skip
+    general = (settings_json or {}).get("general") or {} if isinstance(settings_json, dict) else {}
+    enabled = [str(p) for p in general.get("enabled_providers") or []]
+    has_fr = any(
+        str(i.get("language") or "").casefold() == "fr"
+        for p in profiles if isinstance(profiles, list) and isinstance(p, dict)
+        for i in p.get("items") or [] if isinstance(i, dict)
+    )  # fmt: skip
+    problems, how = [], []
+    if len(enabled) < 3:
+        problems.append(
+            f"{len(enabled)} fournisseur{'s' if len(enabled) > 1 else ''} actif{'s' if len(enabled) > 1 else ''}"
+        )
+        missing = [p for p in BAZARR_FR_PROVIDERS if p not in enabled]
+        how.append(
+            "Bazarr › Settings › Providers : active au moins 3 fournisseurs, par exemple "
+            + ", ".join(missing[:5])
+            + " (OpenSubtitles.com demande un compte gratuit)."
+        )
+    if not has_fr:
+        problems.append("aucun profil de langues avec le français")
+        how.append(
+            "Bazarr › Settings › Languages : ajoute le français aux langues, crée un profil "
+            "« Français » et coche-le comme profil par défaut des séries et des films."
+        )
+    if general.get("single_language"):
+        problems.append("« Single Language » coché")
+        how.append(
+            "Bazarr › Settings › Languages : décoche « Single Language » (sinon les .srt n'ont "
+            "pas de code de langue et la TV les affiche « inconnu »)."
+        )
+    if "embeddedsubtitles" not in enabled and len(enabled) >= 3:
+        how.append(
+            "Conseil animes : active aussi « Embedded Subtitles » (sous-titres déjà dans le fichier)."
+        )
+    detail = (
+        " · ".join(problems)
+        if problems
+        else f"{len(enabled)} fournisseurs actifs, profil français présent"
+    )
+    return _item(
+        "bazarr", "Sous-titres français (Bazarr)", why,
+        status="todo" if problems else "done", detail=detail, how=" ".join(how),
+        service=svc, path="/settings/providers" if len(enabled) < 3 else "/settings/languages",
+    )  # fmt: skip
+
+
 async def _check_first_request(
     client: httpx.AsyncClient, managers: list[Service]
 ) -> dict[str, Any]:
@@ -360,6 +441,8 @@ async def build_checklist(db: AsyncSession) -> dict[str, Any]:
         tasks.extend(_check_manager(client, svc) for svc in managers)
         for svc in by_type.get("jellyfin", [])[:1]:
             tasks.append(_check_jellyfin(client, svc))
+        for svc in by_type.get("bazarr", [])[:1]:
+            tasks.append(_check_bazarr(client, svc))
         if managers:
             tasks.append(_check_first_request(client, managers))
         for result in await asyncio.gather(*tasks):

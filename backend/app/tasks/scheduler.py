@@ -19,6 +19,7 @@ def start_scheduler() -> None:
     from app.tasks.health_check_task import register as register_health_check
     from app.tasks.kodi_playback_task import register as register_kodi_playback
     from app.tasks.request_sync_task import register as register_request_sync
+    from app.tasks.subtitle_guardian_task import register as register_subtitle_guardian
     from app.tasks.translation_task import register as register_translation
     from app.tasks.trash_sync_task import register as register_trash_sync
     from app.tasks.tv_priority_task import register as register_tv_priority
@@ -32,6 +33,7 @@ def start_scheduler() -> None:
     register_translation(scheduler)
     register_tv_priority(scheduler)
     register_android_update(scheduler)
+    register_subtitle_guardian(scheduler)
 
     scheduler.start()
     logger.info("Scheduler started with %d jobs", len(scheduler.get_jobs()))

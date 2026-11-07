@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Sous-titres : recherche en arrière-plan, recherche élargie pour les animes, gardien qui cherche avant la séance
+
+#### Fixed
+- **« Sous-titres FR » qui échouait depuis l'appli TV, et parfois depuis la web app (animes surtout)**. Bazarr cherche de façon *synchrone* : il ne répond qu'après avoir interrogé tous ses fournisseurs, souvent plus d'une minute pour un anime. Chaque écran l'attendait lui-même (menu pause 25 s, fiche TV 45 s, web app 60 s) puis abandonnait ; Bazarr trouvait parfois après coup, mais plus personne ne demandait à Jellyfin de relire le dossier : le `.srt` restait invisible pour la TV. « Réessayer » relançait une 2ᵉ recherche complète, qui faisait bloquer les fournisseurs (quotas)
+- **« Erreur Bazarr : Server error 500 »** quand rien n'était trouvé : Bazarr répond `500 « No subtitles found »` dans ce cas. C'est désormais « Aucun sous-titre FR pour l'instant », avec les fournisseurs en pause (quota, panne) nommés
+- **Titres sans profil de langues dans Bazarr** (beaucoup d'animes ajoutés directement dans Sonarr) : Bazarr ne les cherchait **jamais** de lui-même. Le profil « français » y est posé
+- Sous-titre choisi à la main dans la web app : Jellyfin relit l'élément, la TV le propose tout de suite
+- Recherche manuelle (liste des fournisseurs) : 3 min d'attente au lieu de 60 s
+
+#### Added
+- **File des sous-titres** (`services/subtitle_jobs.py`) : chaque demande devient une recherche qui vit sur le serveur, pas dans l'écran (comme un job Control-M)
+  - **une seule recherche par titre** : redemander, depuis la TV, la web app ou Kodi, *rejoint* celle en cours ;
+  - attendue aussi longtemps qu'il faut (5 min) ; **Jellyfin relit le dossier à la fin**, quel que soit l'écran qui l'a lancée ;
+  - **recherche élargie** quand Bazarr ne trouve rien en automatique (son score minimal, 90 % pour un épisode, est rarement atteint par les animes : numérotation absolue, groupes de fansub) : meilleure version française *non forcée* qui correspond **au bon épisode de la bonne série** (ou au bon film, ou au même fichier), téléchargée puis **recalée sur le son** (ffsubsync). Réglable : `SUBTITLE_FALLBACK_ENABLED`, `SUBTITLE_FALLBACK_MIN_SCORE` (50 %) ;
+  - deux files : une demande faite devant la TV passe **toujours** devant les recherches de fond (gardien, « toute la série »)
+- **Gardien des sous-titres** (`services/subtitle_guardian.py`, toutes les 30 min) : cherche **avant la séance** les sous-titres français qui manquent, **les épisodes des séries en cours d'abord** (vues ces 30 jours), puis les films, puis le reste ; 5 recherches par passage ; essais **espacés** pour un même titre (1 h, 3 h, 6 h, 12 h, 24 h, 2 j, 4 j puis 7 j : le sous-titre d'un fansub arrive souvent quelques jours après l'épisode). Nouvelle table `subtitle_searches` (créée au démarrage). Réglages : `SUBTITLE_GUARDIAN_ENABLED`, `SUBTITLE_GUARDIAN_INTERVAL_MINUTES`, `SUBTITLE_GUARDIAN_BATCH`, `SUBTITLE_GUARDIAN_ASSIGN_PROFILES`
+- **Préchargement** : ouvrir la fiche d'un film ou lancer un épisode **sans sous-titre français complet** (intégré ou à côté) lance la recherche en fond, et celle de **l'épisode suivant** pendant qu'on regarde
+- **« Ce qu'il te reste à faire »** : ligne *Sous-titres français (Bazarr)* qui vérifie les 3 causes de « Bazarr ne trouve jamais rien » : moins de 3 fournisseurs actifs, aucun profil avec le français, « Single Language » coché. Conseil animes : activer **Embedded Subtitles** (sous-titres déjà dans le fichier « MULTi » / « VOSTFR »)
+- `GET /api/subtitles/jobs/{job_id}` : avancement d'une recherche (`status` found / none / error / pending, `phase`, `message`, `added`)
+
+#### Changed
+- **Appli TV, menu pause › Sous-titres FR** : la TV **suit la recherche jusqu'au bout** (≈ 4 min, étape affichée sous le bouton : « Bazarr : recherche élargie… ») au lieu de dire « réessaie dans une minute ». La lecture reste possible pendant ce temps ; si on quitte, le sous-titre est là au prochain lancement. Ancienne APK : elle rejoint la même recherche quand on réessaie (aucune recherche en double)
+- **Fiche TV › « Chercher des sous-titres FR »** et add-on Kodi : réponse en 20 s au plus (« les sous-titres arriveront tout seuls »), la recherche continue sur le serveur
+- **Web app** : « Rechercher » (film, épisode) affiche un toast qui suit les étapes jusqu'au résultat (trouvé / rien / panne) au lieu d'une erreur au bout de 60 s ; « Toute la série » répond tout de suite et passe les épisodes un par un en arrière-plan
+- `POST /api/tv/subtitles/{id}` : mêmes statuts (ok, none, pending, error), plus `job_id` et `phase`
+
+#### Notes
+- Bazarr : pour les animes en français, activer plusieurs fournisseurs (*Settings › Providers*) : **Embedded Subtitles**, OpenSubtitles.com (compte gratuit), Podnapisi, SubDL, Gestdown, Addic7ed. Un seul fournisseur = bloqué dès son quota atteint
+- APK non construite dans l'environnement de la modification (SDK Android non téléchargeable) : compilation et tests JVM (`SubtitleFollowLogicTest`) par la CI Android
+- Tests serveur : 29 nouveaux (file des sous-titres, recherche élargie, rejoindre une recherche, priorité TV sur la file de fond, gardien et essais espacés, préchargement, contrôle Bazarr)
+
 ### Appli TV : découpage de `MainActivity.kt` (1 064 lignes)
 
 #### Changed

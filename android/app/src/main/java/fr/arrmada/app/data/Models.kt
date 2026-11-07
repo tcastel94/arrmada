@@ -366,14 +366,18 @@ data class SubtitleRequest(
 
 /**
  * Réponse de la recherche : ok (nouveau sous-titre), none (rien trouvé),
- * pending (Bazarr cherche encore), error ; plus la liste à jour des
- * sous-titres posés à côté du fichier.
+ * pending (la recherche continue sur le serveur : redemander la rejoint),
+ * error ; plus la liste à jour des sous-titres posés à côté du fichier.
  */
 @Serializable
 data class SubtitleResult(
     val status: String = "error",
     val message: String? = null,
     val subtitles: List<SideSubtitle> = emptyList(),
+    /** Recherche côté serveur (la redemander la rejoint) ; vide : ancien serveur. */
+    @SerialName("job_id") val jobId: String? = null,
+    /** Étape en cours (« Recherche chez les fournisseurs (Bazarr) »…). */
+    val phase: String? = null,
 )
 
 /** Sous-titre externe (« Ep01.fr.srt » à côté de la vidéo), servi en UTF-8 par le serveur. */

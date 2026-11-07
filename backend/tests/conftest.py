@@ -25,6 +25,8 @@ from app.services import (
     fully_kiosk,
     jellyfin,
     media_aggregator,
+    subtitle_guardian,
+    subtitle_jobs,
     translations,
     tv_priority,
 )
@@ -71,6 +73,20 @@ def _clear_cache():
 
 
 @pytest.fixture(autouse=True)
+def _clear_subtitle_jobs():
+    """Recherches de sous-titres (registre en mémoire) : vides à chaque test.
+
+    Les files d'attente (sémaphores) appartiennent à la boucle asyncio du
+    test qui les a créées : recréées à chaque test.
+    """
+    for registry in (subtitle_jobs._jobs, subtitle_jobs._by_key, subtitle_jobs._slots):
+        registry.clear()
+    yield
+    for registry in (subtitle_jobs._jobs, subtitle_jobs._by_key, subtitle_jobs._slots):
+        registry.clear()
+
+
+@pytest.fixture(autouse=True)
 def _clear_jellyfin_indexes():
     """Index Jellyfin (films par TMDB, séries par TVDB) : vides à chaque test."""
     jellyfin._movie_cache.clear()
@@ -114,6 +130,9 @@ artwork.session_factory = TestSessionFactory
 translations.session_factory = TestSessionFactory
 # Gardien de priorité des demandes TV (services/tv_priority.py) : idem
 tv_priority.session_factory = TestSessionFactory
+# Recherches de sous-titres en arrière-plan (services/subtitle_jobs.py) : idem
+subtitle_jobs.session_factory = TestSessionFactory
+subtitle_guardian.session_factory = TestSessionFactory
 
 # Le login est limité à 5 essais/minute (anti brute-force). Chaque test qui
 # utilise `auth_headers` se reconnecte : sans ça, le 6e test prend un 429

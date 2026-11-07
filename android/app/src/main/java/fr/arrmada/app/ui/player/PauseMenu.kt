@@ -668,7 +668,7 @@ internal fun TracksPanel(
                 item {
                     OptionChip(
                         if (download.busy) "Bazarr…" else "⬇ Sous-titres FR",
-                        download.note ?: if (download.busy) "Bazarr travaille (30 s à 1 min)" else "Chercher avec Bazarr",
+                        download.note ?: if (download.busy) "Bazarr cherche (jusqu’à 2-3 min, la lecture continue)" else "Chercher avec Bazarr",
                         selected = false,
                         supported = !download.busy,
                     ) { if (!download.busy) onClick() }

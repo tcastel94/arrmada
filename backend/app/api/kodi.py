@@ -265,10 +265,37 @@ async def delete_kodi_setting(service_id: int, db: AsyncSession = Depends(get_db
 
 
 # ── Kodi Add-on Endpoints ─────────────────────────────────────
+# Attente d'une recherche de sous-titres avant de répondre (l'add-on Kodi
+# coupe à 30 s, la fiche de l'appli TV à 45 s) ; au-delà elle continue sur le
+# serveur et Jellyfin relit le dossier dès qu'elle aboutit.
+ACTION_SUBTITLES_WAIT = 20.0
+
+
 @router.post("/actions/subtitles")
 async def addon_subtitles_action(data: dict, db: AsyncSession = Depends(get_db)):
-    """Trigger Bazarr subtitle search & download from Kodi add-on."""
-    return await kodi_service.handle_addon_subtitles(db, data)
+    """Sous-titres demandés depuis l'add-on Kodi ou la fiche de l'appli TV.
+
+    Recherche en arrière-plan (services/subtitle_jobs.py) : une seule par
+    titre, attendue aussi longtemps qu'il faut par le serveur. Réponse :
+    {status: ok | none | error, message, title}. « ok » pendant que la
+    recherche continue : le sous-titre arrivera tout seul.
+    """
+    from app.services import subtitle_jobs, tv_playback
+
+    data = data or {}
+    target = tv_playback.subtitle_target("", data)
+    # Ancien add-on (titre ou IMDb seulement) : ancienne recherche directe
+    known = target.tmdb_id if target.kind == "movie" else target.tvdb_id
+    if not known:
+        return await kodi_service.handle_addon_subtitles(db, data)
+    job = subtitle_jobs.start(target, origin="kodi")
+    await subtitle_jobs.wait(job, ACTION_SUBTITLES_WAIT)
+    title = job.target.title or data.get("title")
+    if job.status == "running":
+        message = f"Recherche lancée ({job.phase.lower()}) : les sous-titres arriveront tout seuls"
+        return {"status": "ok", "message": message, "title": title, "job_id": job.id}
+    status = "ok" if job.status == "found" else job.status
+    return {"status": status, "message": job.message, "title": title, "job_id": job.id}
 
 
 @router.post("/actions/subtitles/sync")

@@ -141,6 +141,27 @@ class Settings(BaseSettings):
     # Demande sans aucun téléchargement trouvé au bout de N heures : abandonnée.
     TV_REQUEST_TTL_HOURS: int = 24
 
+    # ── Sous-titres (services/subtitle_jobs.py, subtitle_guardian.py) ─
+    # Langue cherchée par défaut (code ISO à 2 lettres).
+    SUBTITLE_LANGUAGE: str = "fr"
+    # Rien en recherche automatique (score minimal de Bazarr non atteint,
+    # fréquent pour les animes) : meilleure version française qui correspond
+    # au bon épisode / film, puis recalage sur le son (ffsubsync).
+    SUBTITLE_FALLBACK_ENABLED: bool = True
+    # Score minimal (en %, celui affiché par Bazarr) de cette version.
+    SUBTITLE_FALLBACK_MIN_SCORE: int = 50
+    # Gardien : cherche à l'avance les sous-titres qui manquent (épisodes des
+    # séries en cours d'abord), avec des essais espacés (1 h, 3 h, 6 h…), et
+    # pose le profil de langues « français » sur les titres qui n'en ont pas.
+    SUBTITLE_GUARDIAN_ENABLED: bool = True
+    SUBTITLE_GUARDIAN_INTERVAL_MINUTES: int = 30
+    # Recherches lancées par passage (au-delà, au passage suivant) : assez
+    # peu pour ne pas épuiser les quotas des fournisseurs.
+    SUBTITLE_GUARDIAN_BATCH: int = 5
+    # Pose le profil de langues Bazarr contenant le français sur les séries et
+    # films qui n'en ont pas (sans profil, Bazarr ne les cherche jamais seul).
+    SUBTITLE_GUARDIAN_ASSIGN_PROFILES: bool = True
+
     # ── Caméras Eufy (via le conteneur eufy-security-ws) ──────
     # Ex. ws://192.168.2.3:8424 (EUFY_WS_PORT du pont) ; vide = pas de caméras. Détections relayées
     # vers la TV : person, ring, motion, pet, vehicle, package (virgules).

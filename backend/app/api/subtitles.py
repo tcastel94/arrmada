@@ -144,6 +144,26 @@ async def subtitle_languages(
 
 
 # ── Automatic (one-click) download ────────────────────────────
+#
+# Bazarr cherche de façon synchrone (tous ses fournisseurs avant de répondre) :
+# plus d'une minute pour un anime. La recherche tourne donc en arrière-plan
+# (services/subtitle_jobs.py) ; la route attend JOB_WAIT secondes puis répond
+# « pending » avec un job_id que la web app suit (GET /jobs/{job_id}).
+
+JOB_WAIT = 20.0  # s
+PROVIDERS_TIMEOUT = 180  # s : recherche manuelle (tous les fournisseurs)
+
+
+async def _job_answer(target: Any, origin: str = "web") -> dict[str, Any]:
+    from app.services import subtitle_jobs
+
+    job = subtitle_jobs.start(target, origin=origin)
+    await subtitle_jobs.wait(job, JOB_WAIT)
+    if job.status != "running":
+        _invalidate_status()
+    return job.public()
+
+
 @router.post("/movie/{radarr_id}/search")
 async def auto_download_movie(
     radarr_id: int,
@@ -152,31 +172,16 @@ async def auto_download_movie(
     hi: bool = Query(False),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """Let Bazarr automatically search & download the best subtitle for a movie."""
-    bazarr = await _get_bazarr(db)
-    try:
-        res = await bazarr.download_movie_subtitle(
-            radarr_id, language.lower(), forced=forced, hi=hi
-        )
-        # Nudge Bazarr to re-index so Arrmada reflects the new subtitle promptly.
-        try:
-            await bazarr.scan_movie_disk(radarr_id)
-        except Exception as exc:
-            logger.debug("scan-disk after movie sub download failed: %s", exc)
-    finally:
-        await bazarr.close()
-    _invalidate_status()
-    from app.services.activity_log import log_event
+    """Bazarr cherche et télécharge le meilleur sous-titre d'un film.
 
-    await log_event(
-        category="subtitle",
-        action="sub_download",
-        source="arrmada",
-        media_type="movie",
-        media_id=radarr_id,
-        subtitle=language.upper(),
-    )
-    return {"status": "ok", "result": res}
+    Réponse : {job_id, status: found | none | error | pending, phase,
+    message, added}. « pending » : suivre GET /api/subtitles/jobs/{job_id}.
+    """
+    from app.services.subtitle_jobs import Target
+
+    if forced or hi:  # variantes rares : appel direct, comme avant
+        return await _direct_movie(db, radarr_id, language, forced, hi)
+    return await _job_answer(Target(kind="movie", language=language, radarr_id=radarr_id))
 
 
 @router.post("/episode/{series_id}/{episode_id}/search")
@@ -188,26 +193,75 @@ async def auto_download_episode(
     hi: bool = Query(False),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """Let Bazarr automatically search & download the best subtitle for an episode."""
+    """Comme pour un film, pour un épisode (même réponse, même suivi)."""
+    from app.services.subtitle_jobs import Target
+
+    if forced or hi:
+        return await _direct_episode(db, series_id, episode_id, language, forced, hi)
+    target = Target(kind="episode", language=language, series_id=series_id, episode_id=episode_id)
+    return await _job_answer(target)
+
+
+@router.get("/jobs/{job_id}")
+async def subtitle_job(job_id: str) -> dict[str, Any]:
+    """Avancement d'une recherche lancée plus haut (gardée 15 min après la fin)."""
+    from app.services import subtitle_jobs
+
+    job = subtitle_jobs.get(job_id)
+    if job is None:
+        raise HTTPException(
+            status_code=404, detail="Recherche inconnue (terminée depuis longtemps ?)"
+        )
+    if job.status != "running":
+        _invalidate_status()
+    return job.public()
+
+
+async def _direct_movie(
+    db: AsyncSession, radarr_id: int, language: str, forced: bool, hi: bool
+) -> dict[str, Any]:
+    from app.services.subtitle_jobs import classify
+
     bazarr = await _get_bazarr(db)
+    bazarr.timeout = PROVIDERS_TIMEOUT
     try:
-        res = await bazarr.download_episode_subtitle(
-            series_id, episode_id, language.lower(), forced=forced, hi=hi
+        code, body = await bazarr.request_raw(
+            "PATCH",
+            "/movies/subtitles",
+            {"radarrid": radarr_id, "language": language.lower(), "forced": forced, "hi": hi},
         )
     finally:
         await bazarr.close()
     _invalidate_status()
-    from app.services.activity_log import log_event
+    return _direct_answer(*classify(code, body), language)
 
-    await log_event(
-        category="subtitle",
-        action="sub_download",
-        source="arrmada",
-        media_type="series",
-        media_id=series_id,
-        subtitle=f"{language.upper()} · ep {episode_id}",
-    )
-    return {"status": "ok", "result": res}
+
+async def _direct_episode(
+    db: AsyncSession, series_id: int, episode_id: int, language: str, forced: bool, hi: bool
+) -> dict[str, Any]:
+    from app.services.subtitle_jobs import classify
+
+    bazarr = await _get_bazarr(db)
+    bazarr.timeout = PROVIDERS_TIMEOUT
+    try:
+        code, body = await bazarr.request_raw(
+            "PATCH",
+            "/episodes/subtitles",
+            {"seriesid": series_id, "episodeid": episode_id, "language": language.lower(),
+             "forced": forced, "hi": hi},
+        )  # fmt: skip
+    finally:
+        await bazarr.close()
+    _invalidate_status()
+    return _direct_answer(*classify(code, body), language)
+
+
+def _direct_answer(outcome: str, detail: str, language: str) -> dict[str, Any]:
+    if outcome == "ok":
+        return {"status": "found", "message": f"Sous-titres {language.upper()} trouvés"}
+    if outcome in ("none", "throttled"):
+        return {"status": "none", "message": f"Aucun sous-titre {language.upper()} trouvé"}
+    return {"status": "error", "message": detail or "Bazarr ne connaît pas ce titre"}
 
 
 @router.post("/series/{series_id}/search")
@@ -218,32 +272,37 @@ async def auto_download_series(
     hi: bool = Query(False),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """Trigger an automatic download for every episode of *series_id* that is
-    missing a subtitle in *language* (per Bazarr's wanted list)."""
+    """Tous les épisodes de la série sans sous-titre dans *language* (liste
+    « wanted » de Bazarr) passent dans la file de fond, un par un.
+
+    Réponse immédiate (avant : une recherche après l'autre dans la requête,
+    plusieurs minutes, coupée en route). Un « Sous-titres FR » demandé devant
+    la TV passe toujours devant cette file.
+    """
+    from app.services import subtitle_jobs
+    from app.services.subtitle_jobs import Target
+
     code2 = language.lower()
     bazarr = await _get_bazarr(db)
-    triggered = 0
     try:
         wanted = await bazarr.get_wanted_series()
-        eps = wanted.get("data", []) if isinstance(wanted, dict) else []
-        targets = [
-            ep
-            for ep in eps
-            if ep.get("sonarrSeriesId") == series_id
-            and _has_lang(ep.get("missing_subtitles", []), code2)
-        ]
-        for ep in targets:
-            try:
-                await bazarr.download_episode_subtitle(
-                    series_id, ep.get("sonarrEpisodeId"), code2, forced=forced, hi=hi
-                )
-                triggered += 1
-            except Exception as exc:
-                logger.debug("Episode sub download failed: %s", exc)
     finally:
         await bazarr.close()
-    _invalidate_status()
-    return {"status": "ok", "triggered": triggered}
+    eps = wanted.get("data", []) if isinstance(wanted, dict) else []
+    targets = [
+        ep
+        for ep in eps
+        if ep.get("sonarrSeriesId") == series_id
+        and _has_lang(ep.get("missing_subtitles", []), code2)
+        and ep.get("sonarrEpisodeId")
+    ]
+    for ep in targets:
+        subtitle_jobs.start(
+            Target(kind="episode", language=code2, series_id=series_id,
+                   episode_id=int(ep["sonarrEpisodeId"]), title=str(ep.get("seriesTitle") or "")),
+            origin="bulk",
+        )  # fmt: skip
+    return {"status": "ok", "triggered": len(targets)}
 
 
 # ── Interactive provider search ───────────────────────────────
@@ -253,15 +312,7 @@ async def movie_providers(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """List candidate subtitles from providers for a movie."""
-    bazarr = await _get_bazarr(db)
-    try:
-        raw = await bazarr.get_movie_provider_subtitles(radarr_id)
-    finally:
-        await bazarr.close()
-    if isinstance(raw, str):  # Bazarr returns a plain error string on failure
-        raise HTTPException(status_code=502, detail=raw)
-    items = raw.get("data", []) if isinstance(raw, dict) else []
-    return {"items": [_normalize_provider(s) for s in items], "total": len(items)}
+    return await _providers(db, "/providers/movies", {"radarrid": radarr_id})
 
 
 @router.get("/episode/{episode_id}/providers")
@@ -270,13 +321,30 @@ async def episode_providers(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """List candidate subtitles from providers for an episode."""
+    return await _providers(db, "/providers/episodes", {"episodeid": episode_id})
+
+
+async def _providers(db: AsyncSession, endpoint: str, params: dict[str, Any]) -> dict[str, Any]:
+    """Recherche manuelle chez tous les fournisseurs (lente pour un anime :
+    jusqu'à PROVIDERS_TIMEOUT secondes au lieu de 60)."""
+    import httpx
+
     bazarr = await _get_bazarr(db)
+    bazarr.timeout = PROVIDERS_TIMEOUT
     try:
-        raw = await bazarr.get_episode_provider_subtitles(episode_id)
+        code, raw = await bazarr.request_raw("GET", endpoint, params)
+    except httpx.TimeoutException as exc:
+        raise HTTPException(
+            status_code=504,
+            detail="Les fournisseurs de Bazarr n'ont pas répondu à temps : essaie « Rechercher » "
+            "(automatique), qui continue en arrière-plan",
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Bazarr injoignable ({exc})") from exc
     finally:
         await bazarr.close()
-    if isinstance(raw, str):
-        raise HTTPException(status_code=502, detail=raw)
+    if code >= 300 or isinstance(raw, str):  # Bazarr répond par un texte d'erreur
+        raise HTTPException(status_code=502, detail=str(raw or f"Bazarr : erreur {code}")[:300])
     items = raw.get("data", []) if isinstance(raw, dict) else []
     return {"items": [_normalize_provider(s) for s in items], "total": len(items)}
 
@@ -316,7 +384,10 @@ async def download_movie_provider(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Download a specific provider subtitle (from /providers) for a movie."""
+    from app.services import subtitle_jobs
+
     bazarr = await _get_bazarr(db)
+    bazarr.timeout = PROVIDERS_TIMEOUT
     try:
         res = await bazarr.download_movie_provider_subtitle(
             radarr_id,
@@ -333,6 +404,8 @@ async def download_movie_provider(
     finally:
         await bazarr.close()
     _invalidate_status()
+    # Jellyfin relit le film : la TV propose le sous-titre sans attendre
+    subtitle_jobs.refresh_soon(subtitle_jobs.Target(kind="movie", radarr_id=radarr_id))
     return {"status": "ok", "result": res}
 
 
@@ -344,7 +417,10 @@ async def download_episode_provider(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Download a specific provider subtitle (from /providers) for an episode."""
+    from app.services import subtitle_jobs
+
     bazarr = await _get_bazarr(db)
+    bazarr.timeout = PROVIDERS_TIMEOUT
     try:
         res = await bazarr.download_episode_provider_subtitle(
             series_id,
@@ -358,6 +434,9 @@ async def download_episode_provider(
     finally:
         await bazarr.close()
     _invalidate_status()
+    subtitle_jobs.refresh_soon(
+        subtitle_jobs.Target(kind="episode", series_id=series_id, episode_id=episode_id)
+    )
     return {"status": "ok", "result": res}
 
 
