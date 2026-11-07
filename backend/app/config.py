@@ -158,6 +158,11 @@ class Settings(BaseSettings):
     # Recherches lancées par passage (au-delà, au passage suivant) : assez
     # peu pour ne pas épuiser les quotas des fournisseurs.
     SUBTITLE_GUARDIAN_BATCH: int = 5
+    # « useful » : seulement les titres qu'on risque de regarder bientôt
+    # (séries en cours, « Ma liste », importés ces 14 jours, films commencés),
+    # pour garder le quota des fournisseurs pour la séance. « all » : toute
+    # la liste « wanted » de Bazarr.
+    SUBTITLE_GUARDIAN_SCOPE: str = "useful"
     # Pose le profil de langues Bazarr contenant le français sur les séries et
     # films qui n'en ont pas (sans profil, Bazarr ne les cherche jamais seul).
     SUBTITLE_GUARDIAN_ASSIGN_PROFILES: bool = True

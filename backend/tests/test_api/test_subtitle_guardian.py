@@ -33,12 +33,23 @@ def wanted(bazarr: dict[str, str]) -> dict[str, str]:  # noqa: F811
     return bazarr
 
 
+async def _on_my_list() -> None:
+    """Dune dans « Ma liste » : le gardien le prend en charge."""
+    from app.models.watchlist import WatchlistItem
+
+    async with sg.session_factory() as db:
+        db.add(WatchlistItem(key="movie:tmdb:438631", media_type="movie", id_type="tmdb",
+                             external_id="438631", title="Dune", added_at=datetime.now(UTC)))  # fmt: skip
+        await db.commit()
+
+
 async def _rows() -> list[SubtitleSearch]:
     async with sg.session_factory() as db:  # base de test (conftest)
         return list((await db.execute(select(SubtitleSearch))).scalars().all())
 
 
 async def test_pass_sets_profiles_and_finds_ahead(wanted: dict[str, str]) -> None:
+    await _on_my_list()
     summary = await sg.run_once()
     assert summary["status"] == "ok", summary
     assert summary["profiles_set"] == 1 and summary["searched"] == 1 and summary["found"] == 1
@@ -46,7 +57,28 @@ async def test_pass_sets_profiles_and_finds_ahead(wanted: dict[str, str]) -> Non
     assert await _rows() == []  # trouvé : rien à retenter
 
 
+async def test_titles_nobody_will_watch_keep_the_quota(wanted: dict[str, str]) -> None:
+    """Hors séries en cours, « Ma liste », imports récents, films commencés :
+    laissé à Bazarr (le quota des fournisseurs reste pour la séance)."""
+    summary = await sg.run_once()
+    assert summary["wanted"] == 1 and summary["in_scope"] == 0 and summary["searched"] == 0
+    assert not [p for _m, p, _q in BAZ["params"] if p == "/api/movies/subtitles"]
+
+
+async def test_recent_import_is_in_scope(wanted: dict[str, str]) -> None:
+    from app.models.activity import ActivityEvent
+
+    # Ligne écrite par le webhook « Download » de Radarr (api/webhooks.py)
+    async with sg.session_factory() as db:
+        db.add(ActivityEvent(category="download", action="imported", source="radarr",
+                             media_type="movie", media_id="1", tmdb_id=438631, title="Dune"))  # fmt: skip
+        await db.commit()
+    series, movies = await sg._interest([])
+    assert movies == {1} and series == set()
+
+
 async def test_nothing_found_is_retried_later_not_now(wanted: dict[str, str]) -> None:
+    await _on_my_list()
     BAZ["auto"] = "none"
     await sg.run_once()
     rows = await _rows()
@@ -106,6 +138,11 @@ def test_series_in_progress_first_then_films() -> None:
         "episode:sonarr:11:fr", "episode:sonarr:12:fr",  # série en cours : épisode suivant d'abord
         "movie:radarr:5:fr", "movie:radarr:1:fr",  # puis les films, récents d'abord
         "episode:sonarr:500:fr",
+    ]  # fmt: skip
+    # Périmètre « utile » : série 1 hors liste, film 5 hors liste → laissés à Bazarr
+    scoped = sg.wanted_targets(episodes, movies, "fr", {2}, series_scope=set(), movie_scope={1})
+    assert [t.dedup_keys()[0] for t in scoped] == [
+        "episode:sonarr:11:fr", "episode:sonarr:12:fr", "movie:radarr:1:fr",
     ]  # fmt: skip
 
 

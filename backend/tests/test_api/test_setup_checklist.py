@@ -97,6 +97,7 @@ class TestChecklist:
             (r"/api/system/languages/profiles",
              lambda _p, _m: [{"profileId": 1, "items": [{"language": state["profile_lang"]}]}]),
             (r"/api/system/status", lambda _p, _m: {"data": {"bazarr_version": "1.5"}}),
+            (r"/api/providers", lambda _p, _m: {"data": state.get("paused", [])}),
         ]  # fmt: skip
         monkeypatch.setattr(fake_arr, "ROUTES", routes)
         svc = {"name": "Bazarr", "type": "bazarr", "url": "http://bazarr.test:6767", "api_key": "b"}
@@ -115,6 +116,12 @@ class TestChecklist:
                      profile_lang="fr")  # fmt: skip
         item = bazarr_item((await client.get("/api/setup/checklist", headers=arr_stack)).json())
         assert item["status"] == "done", item
+
+        # subdl a atteint son quota du jour : dit, sans bloquer
+        state["paused"] = [{"name": "subdl", "status": "DownloadLimitExceeded", "retry": "10h"}]
+        item = bazarr_item((await client.get("/api/setup/checklist", headers=arr_stack)).json())
+        assert item["status"] == "done" and "en pause : subdl" in item["detail"]
+        assert "Scheduler" in item["how"]
 
     async def test_shows_installer_passwords(self, client: AsyncClient, auth_headers: dict) -> None:
         stack = Path(settings.DATA_DIR, "stack.json")

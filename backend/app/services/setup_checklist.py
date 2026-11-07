@@ -357,6 +357,22 @@ async def _check_bazarr(client: httpx.AsyncClient, svc: Service) -> dict[str, An
         if problems
         else f"{len(enabled)} fournisseurs actifs, profil français présent"
     )
+    # Fournisseurs en pause (quota du jour atteint, panne) : pas une erreur de
+    # réglage, mais la raison la plus fréquente des « rien trouvé » du soir
+    try:
+        paused = await _get_json(client, f"{base}/api/providers", headers=headers)
+        paused = paused.get("data") if isinstance(paused, dict) else paused
+        names = [str(p.get("name")) for p in paused or [] if isinstance(p, dict) and p.get("name")]
+    except Exception:  # noqa: BLE001 — simple complément d'information
+        names = []
+    if names:
+        detail += f" · en pause : {', '.join(names[:4])}"
+        how.append(
+            "Fournisseurs en pause (quota du jour atteint) : Bazarr les reprend seul. Pour en "
+            "avoir moins : un compte OpenSubtitles.com (VIP pour un gros quota), et dans "
+            "Bazarr › Settings › Scheduler, la recherche des sous-titres manquants toutes les "
+            "24 h au lieu de 6 h (ArrMada cherche déjà en priorité ce que tu regardes)."
+        )
     return _item(
         "bazarr", "Sous-titres français (Bazarr)", why,
         status="todo" if problems else "done", detail=detail, how=" ".join(how),

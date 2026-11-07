@@ -12,7 +12,10 @@ une tâche planifiée Control-M) et :
   2. lit la liste « il manque des sous-titres français » de Bazarr et en
      cherche quelques-uns par passage (SUBTITLE_GUARDIAN_BATCH), **les
      épisodes des séries en cours d'abord** (vues ces 30 derniers jours :
-     l'épisode suivant est probablement celui de ce soir) ;
+     l'épisode suivant est probablement celui de ce soir). Seulement les
+     titres qu'on risque de regarder bientôt (séries en cours, « Ma liste »,
+     importés ces 14 jours, films commencés) : les quotas des fournisseurs
+     sont trop petits pour une liste de 1 000 titres (voir _interest) ;
   3. **espace les essais** d'un même titre : 1 h, 3 h, 6 h, 12 h, 24 h, 2 j,
      4 j puis 7 j. Le sous-titre d'un fansub arrive souvent quelques jours
      après l'épisode ; chercher en boucle ferait bloquer les fournisseurs.
@@ -46,6 +49,7 @@ session_factory = async_session_factory  # remplacée par les tests
 # Délai avant l'essai suivant, selon le nombre d'essais déjà faits (heures)
 RETRY_HOURS = (1, 3, 6, 12, 24, 48, 96, 168)
 IN_PROGRESS_DAYS = 30  # série « en cours » : un épisode vu ces N derniers jours
+RECENT_IMPORT_DAYS = 14  # titre importé ces N derniers jours : probablement pour bientôt
 FORGET_DAYS = 90  # ligne sans nouvel essai depuis N jours : oubliée
 PROFILE_BATCH = 50  # profils posés au plus par passage (Bazarr reste réactif)
 
@@ -73,7 +77,13 @@ def _has_missing(row: dict[str, Any], language: str) -> bool:
 
 
 def wanted_targets(
-    episodes: Any, movies: Any, language: str, in_progress: set[int]
+    episodes: Any,
+    movies: Any,
+    language: str,
+    in_progress: set[int],
+    *,
+    series_scope: set[int] | None = None,
+    movie_scope: set[int] | None = None,
 ) -> list[sj.Target]:
     """Listes « wanted » de Bazarr → cibles, dans l'ordre où les chercher.
 
@@ -81,6 +91,10 @@ def wanted_targets(
     plus ancien au plus récent (l'épisode suivant d'abord) ; puis les films
     (soirées cinéma), puis les autres épisodes ; les plus récemment ajoutés
     d'abord (identifiant le plus grand).
+
+    [series_scope] / [movie_scope] : séries Sonarr / films Radarr qu'on
+    risque de regarder bientôt (voir _interest) ; les autres sont laissés à
+    Bazarr. None : toute la liste (SUBTITLE_GUARDIAN_SCOPE=all).
     """
     urgent: list[tuple[int, sj.Target]] = []
     films: list[tuple[int, sj.Target]] = []
@@ -95,9 +109,14 @@ def wanted_targets(
             kind="episode", language=language, series_id=int(series_id),
             episode_id=int(episode_id), title=str(row.get("seriesTitle") or ""),
         )  # fmt: skip
-        (urgent if int(series_id) in in_progress else others).append((int(episode_id), target))
+        if int(series_id) in in_progress:
+            urgent.append((int(episode_id), target))
+        elif series_scope is None or int(series_id) in series_scope:
+            others.append((int(episode_id), target))
     for row in movies if isinstance(movies, list) else []:
         if not isinstance(row, dict) or not _has_missing(row, language) or not row.get("radarrId"):
+            continue
+        if movie_scope is not None and int(row["radarrId"]) not in movie_scope:
             continue
         target = sj.Target(
             kind="movie", language=language, radarr_id=int(row["radarrId"]),
@@ -167,7 +186,13 @@ async def _pass() -> dict[str, Any]:
         await bazarr.close()
 
     in_progress = await _in_progress_series(series)
-    targets = wanted_targets(wanted_eps, wanted_movies, language, in_progress)
+    series_scope = movie_scope = None
+    if settings.SUBTITLE_GUARDIAN_SCOPE != "all":
+        series_scope, movie_scope = await _interest(series)
+    targets = wanted_targets(
+        wanted_eps, wanted_movies, language, in_progress,
+        series_scope=series_scope, movie_scope=movie_scope,
+    )  # fmt: skip
     due = await _due(targets)
     searched = found = 0
     for target in due[: max(0, settings.SUBTITLE_GUARDIAN_BATCH)]:
@@ -182,7 +207,10 @@ async def _pass() -> dict[str, Any]:
     summary = {
         "status": "ok",
         "profiles_set": profiles,
-        "wanted": len(targets),
+        # Manquants chez Bazarr, et ceux que le gardien prend en charge
+        "wanted": len(_rows_missing(wanted_eps, language))
+        + len(_rows_missing(wanted_movies, language)),
+        "in_scope": len(targets),
         "due": len(due),
         "searched": searched,
         "found": found,
@@ -243,6 +271,99 @@ async def _in_progress_series(series: list[dict]) -> set[int]:
         if s.get("sonarrSeriesId")
         and str(s.get("tvdbId") or "").isdigit()
         and int(s["tvdbId"]) in tvdb
+    }
+
+
+def _rows_missing(rows: list[dict[str, Any]], language: str) -> list[dict[str, Any]]:
+    return [r for r in rows if _has_missing(r, language)]
+
+
+async def _interest(series: list[dict]) -> tuple[set[int], set[int]]:
+    """Titres qu'on risque de regarder bientôt : (séries Sonarr, films Radarr).
+
+    Les quotas des fournisseurs sont petits (OpenSubtitles.com : quelques
+    dizaines de téléchargements par jour sans compte VIP, SubDL bloqué dès
+    sa limite atteinte) et la liste « wanted » de Bazarr compte souvent des
+    centaines de titres que personne ne regardera. Dépenser le quota sur eux,
+    c'est ne plus en avoir le soir de la séance. Le gardien ne prend donc que :
+      - les titres de « Ma liste » (tous profils) ;
+      - les titres importés ces RECENT_IMPORT_DAYS derniers jours ;
+      - les films commencés (reprise en cours) ;
+      (plus les séries en cours, toujours en tête : voir _in_progress_series).
+    """
+    from app.models.activity import ActivityEvent
+    from app.models.watch_state import WatchState
+    from app.models.watchlist import WatchlistItem
+
+    since = datetime.now(UTC) - timedelta(days=RECENT_IMPORT_DAYS)
+    started = datetime.now(UTC) - timedelta(days=IN_PROGRESS_DAYS)
+    async with session_factory() as db:
+        listed = (
+            await db.execute(select(WatchlistItem.media_type, WatchlistItem.external_id))
+        ).all()
+        imports = (
+            await db.execute(
+                select(ActivityEvent.media_type, ActivityEvent.media_id).where(
+                    ActivityEvent.category == "download",
+                    ActivityEvent.action == "imported",
+                    ActivityEvent.ts >= since,
+                )
+            )
+        ).all()
+        films_started = (
+            (
+                await db.execute(
+                    select(WatchState.external_id).where(
+                        WatchState.media_type == "movie",
+                        WatchState.id_type == "tmdb",
+                        WatchState.watched.is_(False),
+                        WatchState.position > 0,
+                        WatchState.updated_at >= started,
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    by_tvdb = {
+        int(s["tvdbId"]): int(s["sonarrSeriesId"])
+        for s in series
+        if str(s.get("tvdbId") or "").isdigit() and s.get("sonarrSeriesId")
+    }
+    series_ids = {int(m) for t, m in imports if t == "series" and str(m or "").isdigit()}
+    series_ids |= {
+        by_tvdb[int(e)]
+        for t, e in listed
+        if t == "series" and str(e).isdigit() and int(e) in by_tvdb
+    }
+    movie_ids = {int(m) for t, m in imports if t == "movie" and str(m or "").isdigit()}
+    wanted_tmdb = {int(e) for t, e in listed if t == "movie" and str(e).isdigit()}
+    wanted_tmdb |= {int(e) for e in films_started if str(e).isdigit()}
+    if wanted_tmdb:
+        movie_ids |= await _radarr_ids(wanted_tmdb)
+    return series_ids, movie_ids
+
+
+async def _radarr_ids(tmdb_ids: set[int]) -> set[int]:
+    """Films TMDB → identifiants Radarr (Bazarr ne donne pas toujours le TMDB)."""
+    from app.services import kodi
+
+    async with session_factory() as db:
+        radarr = await kodi._get_radarr_client(db)
+    if radarr is None:
+        return set()
+    try:
+        rows = await radarr.get("/movie")
+    except Exception as exc:  # Radarr en panne : ces films attendront
+        logger.debug("Gardien des sous-titres : Radarr injoignable (%s)", exc)
+        return set()
+    finally:
+        await radarr.close()
+    return {
+        int(m["id"])
+        for m in rows or []
+        if isinstance(m, dict) and m.get("id") and m.get("tmdbId") in tmdb_ids
     }
 
 
