@@ -5,10 +5,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from httpx import AsyncClient
 
 from app.config import settings
 from app.services import modules
+from tests import fake_arr
 
 
 class TestModules:
@@ -82,6 +84,44 @@ class TestChecklist:
         # Movies and series already followed → first request done
         assert items["first-request"]["status"] == "done"
         assert items["first-request"]["link"]["url"] == "/search"
+
+    async def test_bazarr_subtitles_check(
+        self, client: AsyncClient, arr_stack: dict, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Un seul fournisseur, pas de profil français, Single Language : tout est dit."""
+        state = {"providers": ["opensubtitlescom"], "single": True, "profile_lang": "en"}
+        routes = dict(fake_arr.ROUTES)
+        routes["bazarr.test"] = [
+            (r"/api/system/settings", lambda _p, _m: {"general": {
+                "enabled_providers": state["providers"], "single_language": state["single"]}}),
+            (r"/api/system/languages/profiles",
+             lambda _p, _m: [{"profileId": 1, "items": [{"language": state["profile_lang"]}]}]),
+            (r"/api/system/status", lambda _p, _m: {"data": {"bazarr_version": "1.5"}}),
+            (r"/api/providers", lambda _p, _m: {"data": state.get("paused", [])}),
+        ]  # fmt: skip
+        monkeypatch.setattr(fake_arr, "ROUTES", routes)
+        svc = {"name": "Bazarr", "type": "bazarr", "url": "http://bazarr.test:6767", "api_key": "b"}
+        assert (await client.post("/api/services", json=svc, headers=arr_stack)).status_code == 201
+
+        def bazarr_item(data: dict) -> dict:
+            return next(i for i in data["items"] if i["id"] == "bazarr")
+
+        item = bazarr_item((await client.get("/api/setup/checklist", headers=arr_stack)).json())
+        assert item["status"] == "todo"
+        assert "1 fournisseur actif" in item["detail"] and "Single Language" in item["detail"]
+        assert "embeddedsubtitles" in item["how"] and "profil" in item["how"]
+        assert item["link"]["url"] == "http://bazarr.test:6767/settings/providers"
+
+        state.update(providers=["embeddedsubtitles", "opensubtitlescom", "subdl"], single=False,
+                     profile_lang="fr")  # fmt: skip
+        item = bazarr_item((await client.get("/api/setup/checklist", headers=arr_stack)).json())
+        assert item["status"] == "done", item
+
+        # subdl a atteint son quota du jour : dit, sans bloquer
+        state["paused"] = [{"name": "subdl", "status": "DownloadLimitExceeded", "retry": "10h"}]
+        item = bazarr_item((await client.get("/api/setup/checklist", headers=arr_stack)).json())
+        assert item["status"] == "done" and "en pause : subdl" in item["detail"]
+        assert "Scheduler" in item["how"]
 
     async def test_shows_installer_passwords(self, client: AsyncClient, auth_headers: dict) -> None:
         stack = Path(settings.DATA_DIR, "stack.json")

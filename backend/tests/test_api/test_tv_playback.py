@@ -36,7 +36,10 @@ def _dune_streams() -> list[dict[str, Any]]:
         {"Type": "Subtitle", "Index": 4, "Codec": "ass", "Language": "fre", "IsExternal": False},
     ]
     refreshed = any(path == f"/Items/{MOVIE_ID}/Refresh" for _h, path, _b in fake_arr.POSTS)
-    if SEEN.get("bazarr") and refreshed:
+    # Bazarr a écrit le .fr.srt (faux Bazarr de test_subtitle_jobs.py)
+    downloaded = any(h == "bazarr.test" and path in ("/api/movies/subtitles", "/api/providers/movies")
+                     for h, path, _b in fake_arr.POSTS)  # fmt: skip
+    if (SEEN.get("bazarr") or downloaded) and refreshed:
         streams.append(
             {"Type": "Subtitle", "Index": 5, "Codec": "srt", "Language": "fre", "IsExternal": True}
         )
@@ -773,89 +776,12 @@ async def test_play_lists_external_subtitles(client: AsyncClient, jellyfin: dict
     assert bad.status_code == 404
 
 
-async def test_download_subtitles_from_pause_menu(
-    client: AsyncClient, jellyfin: dict[str, str], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from app.services import kodi
-
-    async def fake_bazarr(_db: Any, data: dict) -> dict:
-        SEEN["bazarr"] = data
-        return {"status": "ok", "message": "Recherche lancée"}
-
-    monkeypatch.setattr(kodi, "handle_addon_subtitles", fake_bazarr)
-    monkeypatch.setattr(tv_playback, "POLL_EVERY", 0.01)
-    tv = await _tv(client, jellyfin)
-    fake_arr.POSTS.clear()
-    body = {"media_type": "movie", "tmdb_id": 438631}
-    data = (await client.post(f"/api/tv/subtitles/{MOVIE_ID}", json=body, headers=tv)).json()
-    assert data["status"] == "ok", data
-    assert data["message"] == "Sous-titres ajoutés : Français"
-    assert [s["url"] for s in data["subtitles"]] == [
-        f"/api/tv/subtitle/{MOVIE_ID}/2.srt",
-        f"/api/tv/subtitle/{MOVIE_ID}/5.srt",
-    ]
-    # Bazarr : français par défaut, demande marquée « appli »
-    assert SEEN["bazarr"]["language"] == "fr" and SEEN["bazarr"]["origin"] == "android"
-    assert any(path == f"/Items/{MOVIE_ID}/Refresh" for _h, path, _b in fake_arr.POSTS)
-
-
 def test_refresh_reanalyses_the_file_without_replacing_metadata() -> None:
     # « Default » ne ré-analyse pas une vidéo inchangée : le .srt de Bazarr restait invisible
     params = tv_playback.refresh_params("j-key")
     assert params["MetadataRefreshMode"] == "FullRefresh"
     assert params["ReplaceAllMetadata"] == "false" and params["ReplaceAllImages"] == "false"
     assert params["ImageRefreshMode"] == "None"
-
-
-async def test_download_subtitles_nothing_found(
-    client: AsyncClient, jellyfin: dict[str, str], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from app.services import kodi
-
-    async def nothing(_db: Any, _data: dict) -> dict:
-        return {"status": "ok"}  # Bazarr a cherché, sans rien écrire sur le disque
-
-    monkeypatch.setattr(kodi, "handle_addon_subtitles", nothing)
-    monkeypatch.setattr(tv_playback, "POLL_EVERY", 0.01)
-    monkeypatch.setattr(tv_playback, "JELLYFIN_WAIT", 0.05)
-    tv = await _tv(client, jellyfin)
-    body = {"media_type": "movie", "tmdb_id": 438631}
-    data = (await client.post(f"/api/tv/subtitles/{MOVIE_ID}", json=body, headers=tv)).json()
-    assert data["status"] == "none"
-    assert data["message"] == "Aucun nouveau sous-titre FR trouvé par Bazarr"
-    assert len(data["subtitles"]) == 1
-
-
-async def test_download_subtitles_bazarr_still_searching(
-    client: AsyncClient, jellyfin: dict[str, str], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    import asyncio
-
-    from app.services import kodi
-
-    async def slow(_db: Any, _data: dict) -> dict:
-        await asyncio.sleep(0.5)
-        return {"status": "ok"}
-
-    async def error(_db: Any, _data: dict) -> dict:
-        return {"status": "error", "message": "Bazarr n'est pas configuré dans ArrMada"}
-
-    monkeypatch.setattr(tv_playback, "BAZARR_WAIT", 0.05)
-    monkeypatch.setattr(tv_playback, "POLL_EVERY", 0.01)
-    monkeypatch.setattr(tv_playback, "JELLYFIN_WAIT", 0.05)
-    tv = await _tv(client, jellyfin)
-    body = {"media_type": "movie", "tmdb_id": 438631}
-    monkeypatch.setattr(kodi, "handle_addon_subtitles", slow)
-    data = (await client.post(f"/api/tv/subtitles/{MOVIE_ID}", json=body, headers=tv)).json()
-    assert data["status"] == "pending"
-    monkeypatch.setattr(kodi, "handle_addon_subtitles", error)
-    data = (await client.post(f"/api/tv/subtitles/{MOVIE_ID}", json=body, headers=tv)).json()
-    assert data == {
-        "status": "error",
-        "message": "Bazarr n'est pas configuré dans ArrMada",
-        "subtitles": data["subtitles"],
-    }
-    await asyncio.sleep(0.5)  # la recherche lente se termine sans bruit
 
 
 # ── Sous-titres décalés (menu pause) et resynchro Bazarr ──────

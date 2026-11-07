@@ -28,6 +28,7 @@ import { fadeUp, stagger } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { subLangLabel, subTrackKey } from "../labels";
 import { MissingSubChip, SubTrackChip } from "./chips";
+import { startSubtitleToast } from "./job-toast";
 import { ProviderResults, providerKey } from "./provider-results";
 
 export function MovieSubtitlePanel({ media, block }: { media: MediaDetail; block: MovieSubtitleInfo }) {
@@ -46,15 +47,11 @@ export function MovieSubtitlePanel({ media, block }: { media: MediaDetail; block
     const dl = useDownloadMovieProviderSub();
     const [dlKey, setDlKey] = useState<string | null>(null);
 
-    const runAuto = () =>
-        auto.mutate(
-            { radarrId: media.id },
-            {
-                onSuccess: () =>
-                    toast.success("Recherche de sous-titres FR lancée", { description: "Bazarr choisit automatiquement le meilleur." }),
-                onError: (e) => toast.error("Recherche impossible", { description: e.message }),
-            },
-        );
+    // Recherche suivie jusqu'au résultat (le serveur la poursuit même si on quitte la page)
+    const runAuto = () => {
+        const t = startSubtitleToast(media.title);
+        auto.mutate({ radarrId: media.id, onProgress: t.progress }, { onSuccess: t.done, onError: t.failed });
+    };
 
     const runDownload = (s: ProviderSubtitle) => {
         setDlKey(providerKey(s));

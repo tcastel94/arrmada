@@ -32,7 +32,7 @@ internal fun audioDecoderFailed(e: PlaybackException): Boolean {
 internal fun subtitleError(e: Throwable): String = when {
     e is fr.arrmada.app.data.ApiException && e.code in setOf(403, 404, 405) ->
         "Le serveur ArrMada n’a pas encore cette fonction : mets-le à jour (maj-arrmada.sh)"
-    e is java.net.SocketTimeoutException -> "Bazarr met du temps : réessaie dans une minute"
+    e is java.net.SocketTimeoutException -> "Bazarr met du temps : la recherche continue sur le serveur"
     e is fr.arrmada.app.data.ApiException -> e.message ?: "Le serveur a refusé (${e.code})"
     else -> "Serveur injoignable (${e.message.orEmpty()})"
 }

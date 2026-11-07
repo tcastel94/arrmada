@@ -76,28 +76,70 @@ export function useSubtitleStatus(language: string = DEFAULT_SUB_LANG, enabled =
 
 /* ── Automatic (one-click) download ────────────────────────── */
 
+/**
+ * Recherche de sous-titres côté serveur (backend/app/services/subtitle_jobs.py).
+ *
+ * Bazarr peut chercher plus d'une minute (animes surtout) : le serveur ne
+ * fait plus attendre la page. Il répond au bout de 20 s au plus, avec
+ * `status: "pending"` et un `job_id` si la recherche continue ; la page
+ * relit alors l'avancement toutes les 3 s (comme un `tail -f` sur un job),
+ * jusqu'au résultat final.
+ */
+export interface SubtitleJob {
+    job_id?: string;
+    /** found : trouvé · none : rien chez les fournisseurs · error : panne · pending : en cours */
+    status: "found" | "none" | "error" | "pending";
+    /** Étape en cours (« Recherche chez les fournisseurs (Bazarr) »…) */
+    phase?: string;
+    message: string;
+    /** Sous-titres apparus sur la TV (« Français »…) */
+    added?: string[];
+    /** Trouvé par la recherche élargie, puis recalé sur le son */
+    approximate?: boolean;
+    elapsed?: number;
+}
+
+const JOB_POLL_MS = 3_000;
+// Au-delà, la page arrête de suivre : la recherche, elle, continue sur le serveur
+const JOB_FOLLOW_MAX_MS = 8 * 60_000;
+
+/** Suit un job jusqu'à sa fin ; [onProgress] reçoit chaque étape. */
+export async function followSubtitleJob(
+    first: SubtitleJob,
+    onProgress?: (job: SubtitleJob) => void,
+): Promise<SubtitleJob> {
+    let job = first;
+    const started = Date.now();
+    while (job.status === "pending" && job.job_id && Date.now() - started < JOB_FOLLOW_MAX_MS) {
+        onProgress?.(job);
+        await new Promise((resolve) => setTimeout(resolve, JOB_POLL_MS));
+        job = await apiFetch<SubtitleJob>(`/api/subtitles/jobs/${job.job_id}`);
+    }
+    return job;
+}
+
 interface AutoArgs {
     language?: string;
     forced?: boolean;
     hi?: boolean;
+    /** Étapes de la recherche, pour un toast qui se met à jour */
+    onProgress?: (job: SubtitleJob) => void;
 }
 
 function autoQs({ language = DEFAULT_SUB_LANG, forced = false, hi = false }: AutoArgs) {
     return `?language=${language}&forced=${forced}&hi=${hi}`;
 }
 
-/** Ask Bazarr to auto-download the best subtitle for a movie. */
+/** Ask Bazarr to auto-download the best subtitle for a movie (suivi jusqu'au résultat). */
 export function useAutoDownloadMovieSub() {
     const qc = useQueryClient();
-    return useMutation<
-        { status: string },
-        Error,
-        { radarrId: number | string } & AutoArgs
-    >({
-        mutationFn: ({ radarrId, ...args }) =>
-            apiFetch(`/api/subtitles/movie/${radarrId}/search${autoQs(args)}`, {
+    return useMutation<SubtitleJob, Error, { radarrId: number | string } & AutoArgs>({
+        mutationFn: async ({ radarrId, onProgress, ...args }) => {
+            const first = await apiFetch<SubtitleJob>(`/api/subtitles/movie/${radarrId}/search${autoQs(args)}`, {
                 method: "POST",
-            }),
+            });
+            return followSubtitleJob(first, onProgress);
+        },
         onSuccess: () => {
             qc.invalidateQueries({ queryKey: ["subtitles", "status"] });
             qc.invalidateQueries({ queryKey: ["media", "detail", "movie"] });
@@ -105,19 +147,17 @@ export function useAutoDownloadMovieSub() {
     });
 }
 
-/** Ask Bazarr to auto-download the best subtitle for a single episode. */
+/** Ask Bazarr to auto-download the best subtitle for a single episode (suivi jusqu'au résultat). */
 export function useAutoDownloadEpisodeSub() {
     const qc = useQueryClient();
-    return useMutation<
-        { status: string },
-        Error,
-        { seriesId: number | string; episodeId: number } & AutoArgs
-    >({
-        mutationFn: ({ seriesId, episodeId, ...args }) =>
-            apiFetch(
+    return useMutation<SubtitleJob, Error, { seriesId: number | string; episodeId: number } & AutoArgs>({
+        mutationFn: async ({ seriesId, episodeId, onProgress, ...args }) => {
+            const first = await apiFetch<SubtitleJob>(
                 `/api/subtitles/episode/${seriesId}/${episodeId}/search${autoQs(args)}`,
                 { method: "POST" },
-            ),
+            );
+            return followSubtitleJob(first, onProgress);
+        },
         onSuccess: () => {
             qc.invalidateQueries({ queryKey: ["subtitles", "status"] });
             qc.invalidateQueries({ queryKey: ["media", "detail", "series"] });

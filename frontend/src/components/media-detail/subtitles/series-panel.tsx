@@ -38,6 +38,7 @@ import { EASE_OUT, fadeUp, stagger } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { episodeCode, pad2, seasonLabel, subLangLabel, subTrackKey } from "../labels";
 import { MissingSubChip, SubTrackChip } from "./chips";
+import { startSubtitleToast } from "./job-toast";
 import { ProviderResults, providerKey } from "./provider-results";
 
 const hasFr = (e: EpisodeSubtitleInfo) => e.subtitles.some((s) => s.code2 === DEFAULT_SUB_LANG);
@@ -79,7 +80,8 @@ export function SeriesSubtitlePanel({ media, episodes }: { media: MediaDetail; e
             {
                 onSuccess: (d) =>
                     toast.success(`Recherche lancée pour ${d.triggered} épisode${d.triggered > 1 ? "s" : ""}`, {
-                        description: "Bazarr télécharge les meilleurs sous-titres FR trouvés.",
+                        description:
+                            "Un épisode après l'autre, en arrière-plan : les sous-titres apparaissent au fil de l'eau (ici et sur la TV).",
                     }),
                 onError: (e) => toast.error("Recherche impossible", { description: e.message }),
             },
@@ -87,13 +89,11 @@ export function SeriesSubtitlePanel({ media, episodes }: { media: MediaDetail; e
 
     const runEpAuto = (e: EpisodeSubtitleInfo) => {
         setAutoEp(e.episode_id);
+        // Recherche suivie jusqu'au résultat (le serveur la poursuit même si on quitte la page)
+        const t = startSubtitleToast(`${media.title} ${episodeCode(e.season, e.episode)}`);
         epAuto.mutate(
-            { seriesId: media.id, episodeId: e.episode_id },
-            {
-                onSuccess: () => toast.success(`Recherche de sous-titres FR lancée (${episodeCode(e.season, e.episode)})`),
-                onError: (err) => toast.error("Recherche impossible", { description: err.message }),
-                onSettled: () => setAutoEp(null),
-            },
+            { seriesId: media.id, episodeId: e.episode_id, onProgress: t.progress },
+            { onSuccess: t.done, onError: t.failed, onSettled: () => setAutoEp(null) },
         );
     };
 

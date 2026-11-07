@@ -426,7 +426,26 @@ async def movie(db: AsyncSession, tmdb_id: int, profile_id: int | None = None) -
     resume = await _resume(
         db, profiled_key(watch_sync.state_key("movie", "tmdb", str(tmdb_id)), profile_id)
     )
+    _prefetch_subtitles(details, "movie", item["id"], tmdb_id=tmdb_id)
     return _found(item["id"], details, resume)
+
+
+def _prefetch_subtitles(
+    details: dict[str, Any] | None, kind: str, item_id: str, **ids: Any
+) -> None:
+    """Fiche ouverte / épisode lancé sans sous-titre complet dans la langue de
+    la maison : Bazarr cherche en fond pendant qu'on lit le résumé ou le
+    générique (services/subtitle_guardian.py, sans effet si déjà essayé)."""
+    from app.services import subtitle_guardian
+    from app.services.subtitle_jobs import Target
+
+    language = settings.SUBTITLE_LANGUAGE
+    if not details or language in subtitle_guardian.full_languages(details):
+        return
+    try:
+        subtitle_guardian.prefetch(Target(kind=kind, language=language, item_id=item_id, **ids))
+    except Exception as exc:  # jamais au point de gêner la lecture
+        logger.debug("Préchargement des sous-titres : %s", exc)
 
 
 async def movie_trailer(db: AsyncSession, tmdb_id: int) -> dict[str, Any]:
@@ -542,6 +561,19 @@ async def episode(
         ),
     )
     result = _found(item["id"], details, resume)
+    _prefetch_subtitles(
+        details, "episode", item["id"], tvdb_id=tvdb_id, season=season, episode=number
+    )
+    # Épisode suivant de la saison : ses sous-titres seront prêts au générique
+    # (élément Jellyfin retrouvé par le job ; rien si l'épisode n'existe pas)
+    if settings.SUBTITLE_GUARDIAN_ENABLED:
+        from app.services import subtitle_guardian
+        from app.services.subtitle_jobs import Target
+
+        subtitle_guardian.prefetch(
+            Target(kind="episode", language=settings.SUBTITLE_LANGUAGE, tvdb_id=tvdb_id,
+                   season=season, episode=number + 1)
+        )  # fmt: skip
     segments = await jellyfin.episode_segments(db, tvdb_id, season, number)
     result["segments"] = segments.get("segments") or []
     return result
@@ -862,28 +894,52 @@ async def _refresh_item(base: str, key: str, item_id: str) -> None:
         await client.post(f"{base}/Items/{item_id}/Refresh?{urlencode(params)}")
 
 
-# Recherches Bazarr qui continuent après la réponse à la TV (gardées ici pour
-# qu'elles ne soient pas interrompues en route)
+# Recherches Bazarr qui continuent après la réponse à la TV (resynchro ;
+# gardées ici pour qu'elles ne soient pas interrompues en route)
 _PENDING: set[asyncio.Task[Any]] = set()
 
-# Budget d'une demande de la TV (elle attend 45 s au plus) : recherche Bazarr,
-# puis relecture du dossier par Jellyfin
-BAZARR_WAIT = 25.0
-JELLYFIN_WAIT = 12.0
-POLL_EVERY = 2.0
+# Ce que la TV attend une recherche de sous-titres avant d'avoir une réponse
+# (son client attend 45 s au plus). Au-delà, la recherche continue sur le
+# serveur (services/subtitle_jobs.py) : redemander la rejoint, sans relancer
+# Bazarr, et Jellyfin relit le dossier dès qu'elle aboutit.
+TV_WAIT = 30.0
+
+
+def subtitle_target(item_id: str, data: dict[str, Any]):
+    """Corps envoyé par la TV → cible de recherche (film TMDB / épisode TVDB)."""
+    from app.services.subtitle_jobs import Target
+
+    def num(name: str) -> int | None:
+        try:
+            return int(data[name]) if data.get(name) is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    kind = data.get("media_type") or ("episode" if data.get("season") is not None else "movie")
+    return Target(
+        kind="episode" if kind == "episode" else "movie",
+        language=str(data.get("language") or settings.SUBTITLE_LANGUAGE).lower()[:3],
+        tmdb_id=num("tmdb_id"),
+        tvdb_id=num("tvdb_id"),
+        season=num("season"),
+        episode=num("episode"),
+        item_id=item_id,
+        title=str(data.get("title") or ""),
+    )
 
 
 async def download_subtitles(
     db: AsyncSession, item_id: str, data: dict[str, Any]
 ) -> dict[str, Any]:
-    """Menu pause → « Sous-titres français » : Bazarr cherche et télécharge,
-    Jellyfin relit le dossier, la TV reçoit la liste des sous-titres externes.
+    """Menu pause → « Sous-titres FR » : recherche Bazarr en arrière-plan,
+    la TV reçoit la liste à jour des sous-titres externes.
 
     [data] : {media_type: movie|episode, tmdb_id | tvdb_id, season, episode,
-    language}. Statuts : ok (nouveau sous-titre), none (rien trouvé),
-    pending (Bazarr cherche encore : réessayer dans une minute), error.
+    language}. Statuts : ok (sous-titre disponible), none (rien trouvé),
+    pending (la recherche continue sur le serveur : redemander la rejoint),
+    error. Champs en plus : job_id, phase (étape en cours).
     """
-    from app.services import kodi
+    from app.services import subtitle_jobs
 
     if not ITEM_ID.match(item_id):
         return {"status": "error", "message": "Élément inconnu", "subtitles": []}
@@ -891,51 +947,31 @@ async def download_subtitles(
     if not cfg:
         return {"status": "error", "message": "Jellyfin non configuré", "subtitles": []}
     base, key = cfg
-    language = str(data.get("language") or "fr").lower()[:3]
 
-    before = external_subtitles(item_id, await _item_details(base, key, item_id) or {})
-    known = {s["url"] for s in before}
+    job = subtitle_jobs.start(subtitle_target(item_id, data), origin="tv")
+    await subtitle_jobs.wait(job, TV_WAIT)
 
-    # Bazarr peut chercher longtemps (plusieurs fournisseurs) : on l'attend un
-    # temps raisonnable, il finit seul au-delà
-    task = asyncio.create_task(
-        kodi.handle_addon_subtitles(db, {**data, "language": language, "origin": "android"})
-    )
-    _PENDING.add(task)
-    task.add_done_callback(_PENDING.discard)
     try:
-        result = await asyncio.wait_for(asyncio.shield(task), BAZARR_WAIT)
-    except TimeoutError:
-        result = {"status": "pending"}
-    if result.get("status") == "error":
-        return {"status": "error", "message": result.get("message"), "subtitles": before}
-
-    # Jellyfin relit le dossier : le nouveau .srt devient un sous-titre externe
-    after = before
-    try:
-        await _refresh_item(base, key, item_id)
-        waited = 0.0
-        while waited < JELLYFIN_WAIT:
-            await asyncio.sleep(POLL_EVERY)
-            waited += POLL_EVERY
-            after = external_subtitles(item_id, await _item_details(base, key, item_id) or {})
-            if any(s["url"] not in known for s in after):
-                break
-    except httpx.HTTPError as exc:
-        logger.debug("Relecture Jellyfin de %s : %s", item_id, exc)
-
-    added = [s for s in after if s["url"] not in known]
-    if added:
-        names = ", ".join(s["label"].removesuffix(" · fichier") for s in added)
-        return {"status": "ok", "message": f"Sous-titres ajoutés : {names}", "subtitles": after}
-    if result.get("status") == "pending":
-        message = "Bazarr cherche encore : réessaie dans une minute"
-        return {"status": "pending", "message": message, "subtitles": after}
-    return {
-        "status": "none",
-        "message": f"Aucun nouveau sous-titre {language.upper()} trouvé par Bazarr",
-        "subtitles": after,
-    }
+        current = external_subtitles(item_id, await _item_details(base, key, item_id) or {})
+    except (httpx.HTTPError, ValueError):
+        current = job.subtitles
+    extra = {"job_id": job.id, "phase": job.phase}
+    if job.status == "running":
+        message = (
+            f"Bazarr cherche encore ({job.phase.lower()}) : les sous-titres arriveront tout seuls"
+        )
+        return {"status": "pending", "message": message, "subtitles": current, **extra}
+    if job.status == "found":
+        added = [s for s in current if s["url"] not in job.before_urls]
+        if added:
+            names = ", ".join(s["label"].removesuffix(" · fichier") for s in added)
+            message = f"Sous-titres ajoutés : {names}"
+            if job.approximate:
+                message += " (recalés sur le son)"
+        else:
+            message = job.message
+        return {"status": "ok", "message": message, "subtitles": current, **extra}
+    return {"status": job.status, "message": job.message, "subtitles": current, **extra}
 
 
 # Resynchronisation par Bazarr (ffsubsync, calée sur le son) : 30 s à 2 min

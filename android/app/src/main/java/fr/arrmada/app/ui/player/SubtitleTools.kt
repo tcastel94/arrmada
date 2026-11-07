@@ -15,10 +15,12 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import fr.arrmada.app.data.PlayInfo
 import fr.arrmada.app.data.Repository
+import fr.arrmada.app.data.SubtitleFollowLogic
 import fr.arrmada.app.data.SubtitleRequest
 import fr.arrmada.app.data.SubtitleResult
 import fr.arrmada.app.data.SubtitleShiftLogic
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -78,15 +80,38 @@ internal class SubtitleTools(
         else -> null
     }?.takeIf { info.itemId.isNotBlank() }
 
-    /** Menu pause → « Sous-titres FR » : Bazarr cherche, les trouvés s'ajoutent aux pistes. */
+    /**
+     * Menu pause → « Sous-titres FR » : Bazarr cherche, les trouvés s'ajoutent aux pistes.
+     *
+     * La recherche tourne sur le serveur ; tant qu'elle n'est pas finie
+     * (« pending »), la TV redemande toute seule (même recherche, rejointe),
+     * en affichant l'étape en cours sous le bouton. La lecture reste possible
+     * pendant ce temps. Voir [SubtitleFollowLogic].
+     */
     fun download(reload: () -> Unit) {
         val body = request ?: return
         if (busy) return
         busy = true
         note = null
         scope.launch {
-            val result = runCatching { repository.downloadSubtitles(info.itemId, body) }
-                .getOrElse { SubtitleResult(message = subtitleError(it)) }
+            var round = 0
+            var result = SubtitleResult(status = "pending")
+            while (true) {
+                round++
+                result = runCatching { repository.downloadSubtitles(info.itemId, body) }
+                    .getOrElse {
+                        // Délai dépassé : la recherche continue sur le serveur, on la rejoint
+                        if (it is java.net.SocketTimeoutException) SubtitleResult(status = "pending")
+                        else SubtitleResult(message = subtitleError(it))
+                    }
+                if (!SubtitleFollowLogic.shouldFollow(result.status, round)) break
+                if (round == 1) {
+                    Toast.makeText(context, "Bazarr cherche… les sous-titres s’ajouteront tout seuls", Toast.LENGTH_LONG).show()
+                }
+                note = SubtitleFollowLogic.progressNote(result)
+                delay(SubtitleFollowLogic.PAUSE_MS)
+            }
+            if (result.status == "pending") result = result.copy(message = SubtitleFollowLogic.STILL_RUNNING)
             busy = false
             note = result.message
             result.message?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
