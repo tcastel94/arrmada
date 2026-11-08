@@ -227,6 +227,9 @@ async def jellyfin(
     SEEN.clear()
     jf._series_cache.clear()
     tv_playback._WARMED.clear()
+    tv_playback._WARM_CANDIDATES.clear()
+    # Le verrou se lie à la boucle d'événements du test qui l'utilise
+    monkeypatch.setattr(tv_playback, "_WARM_GATE", asyncio.Semaphore(1))
     routes = dict(fake_arr.ROUTES)
     routes["jellyfin.test"] = [
         (r"/Items", _items),
@@ -1004,7 +1007,7 @@ def test_warm_candidate(source: dict, expected: tuple[int, str] | None) -> None:
     assert tv_playback.WARM_MIN_BITRATE == 25_000_000  # MIN_SUGGEST_BITRATE de QualityLogic.kt
 
 
-async def test_play_big_file_warms_embedded_subtitles(
+async def test_first_read_of_a_big_file_warms_embedded_subtitles(
     client: AsyncClient, jellyfin: dict[str, str]
 ) -> None:
     tv = await _tv(client, jellyfin)
@@ -1013,21 +1016,54 @@ async def test_play_big_file_warms_embedded_subtitles(
     # La réponse à la TV ne change pas : même fiche, mêmes pistes à poser à côté
     assert data["status"] == "ok" and data["bitrate"] == 89_700_000
     assert [s["url"] for s in data["embedded_subtitles"]] == [f"/api/tv/subtitle/{MOVIE_ID}/4.ass"]
-    # Une seule demande à Jellyfin, sur la première piste texte : il les extrait toutes
+    # La fiche seule ne demande rien à Jellyfin (la TV la précharge pour
+    # chaque carte survolée) : la piste à demander est juste notée
+    assert "subtitle_calls" not in SEEN
+    assert tv_playback._WARM_CANDIDATES == {MOVIE_ID: (4, "ass")}
+    # Premier octet du fichier lu : une seule demande, sur la première piste
+    # texte (Jellyfin les extrait toutes)
+    assert (await client.get(data["stream"], headers=tv)).status_code == 200
+    await _settled()
     assert SEEN["subtitle_calls"] == [WARM_PATH]
     assert SEEN["subtitle"]["params"] == {"ApiKey": "j-key"}
-    # Relancé dans l'heure (reprise après une pause) : rien de plus
-    assert (await client.get("/api/tv/play/movie/438631", headers=tv)).json()["status"] == "ok"
+    # Avance rapide (autre morceau du fichier), reprise dans l'heure : rien de plus
+    resp = await client.get(data["stream"], headers={**tv, "Range": "bytes=1000-1999"})
+    assert resp.status_code == 206
     await _settled()
     assert SEEN["subtitle_calls"] == [WARM_PATH]
     # Une heure plus tard : redemandé (Jellyfin a pu vider son cache)
     tv_playback._WARMED[MOVIE_ID] -= tv_playback.WARM_INTERVAL
-    assert (await client.get("/api/tv/play/movie/438631", headers=tv)).json()["status"] == "ok"
+    assert (await client.get(data["stream"], headers=tv)).status_code == 200
     await _settled()
     assert SEEN["subtitle_calls"] == [WARM_PATH, WARM_PATH]
 
 
-async def test_play_does_not_warm_small_or_text_free_files(
+async def test_browsing_the_home_rows_extracts_nothing(
+    client: AsyncClient, jellyfin: dict[str, str]
+) -> None:
+    """La TV demande les infos de lecture de chaque carte survolée : le
+    08/11/2026, parcourir l'accueil a lancé six passes ffmpeg chez Jellyfin."""
+    tv = await _tv(client, jellyfin)
+    for tmdb_id in (438631, 116745, 438631):
+        assert (await client.get(f"/api/tv/play/movie/{tmdb_id}", headers=tv)).json()[
+            "status"
+        ] == "ok"
+    await _settled()
+    assert "subtitle_calls" not in SEEN and tv_playback._WARMED == {}
+
+
+async def test_reading_a_file_without_its_sheet_warms_nothing(
+    client: AsyncClient, jellyfin: dict[str, str]
+) -> None:
+    """Serveur redémarré entre la fiche et la lecture : rien n'est connu du
+    fichier, rien n'est demandé (la TV redemande la fiche au lancement suivant)."""
+    tv = await _tv(client, jellyfin)
+    assert (await client.get(f"/api/tv/stream/{MOVIE_ID}", headers=tv)).status_code == 200
+    await _settled()
+    assert "subtitle_calls" not in SEEN and tv_playback._WARMED == {}
+
+
+async def test_small_or_text_free_files_are_not_warmed(
     client: AsyncClient, jellyfin: dict[str, str]
 ) -> None:
     tv = await _tv(client, jellyfin)
@@ -1036,10 +1072,14 @@ async def test_play_does_not_warm_small_or_text_free_files(
     assert small["status"] == "ok" and small["bitrate"] == 12_000_000
     assert [s["url"] for s in small["embedded_subtitles"]] == [f"/api/tv/subtitle/{SMALL_ID}/2.srt"]
     # Dolby Vision sans aucune piste de sous-titres : rien à extraire
-    assert (await client.get("/api/tv/play/movie/777", headers=tv)).json()["status"] == "ok"
+    dovi = (await client.get("/api/tv/play/movie/777", headers=tv)).json()
     # Épisode dont Jellyfin ne donne pas les pistes
     episode = (await client.get("/api/tv/play/episode/280619/2/2", headers=tv)).json()
-    assert episode["status"] == "ok"
+    assert dovi["status"] == "ok" and episode["status"] == "ok"
+    assert tv_playback._WARM_CANDIDATES == {}
+    # Même lus, ces fichiers ne déclenchent rien
+    for info in (small, dovi, episode):
+        assert (await client.get(info["stream"], headers=tv)).status_code == 200
     await _settled()
     assert "subtitle_calls" not in SEEN
     assert tv_playback._WARMED == {}
@@ -1048,7 +1088,7 @@ async def test_play_does_not_warm_small_or_text_free_files(
 async def test_warm_never_delays_the_tv(
     client: AsyncClient, jellyfin: dict[str, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Jellyfin met des minutes à extraire : la TV a sa fiche tout de suite."""
+    """Jellyfin met des minutes à extraire : la TV a son flux tout de suite."""
     started = asyncio.Event()
     release = asyncio.Event()
 
@@ -1059,17 +1099,46 @@ async def test_warm_never_delays_the_tv(
 
     monkeypatch.setattr(tv_playback, "_warm_fetch", slow_fetch)
     tv = await _tv(client, jellyfin)
-    resp = await client.get("/api/tv/play/movie/438631", headers=tv)
-    assert resp.status_code == 200 and resp.json()["status"] == "ok"
+    sheet = await client.get("/api/tv/play/movie/438631", headers=tv)
+    assert sheet.status_code == 200 and "j-key" not in sheet.text  # la clé reste côté serveur
+    resp = await client.get(f"/api/tv/stream/{MOVIE_ID}", headers=tv)
+    assert resp.status_code == 200 and resp.content == VIDEO
     await asyncio.wait_for(started.wait(), 1)
-    assert not release.is_set()  # Jellyfin « extrait » toujours, la TV a déjà sa réponse
+    assert not release.is_set()  # Jellyfin « extrait » toujours, la TV a déjà son flux
     assert SEEN["warm"] == {"item": MOVIE_ID, "url": f"{JELLYFIN_URL}{WARM_PATH}?ApiKey=j-key"}
-    assert "j-key" not in resp.text  # la clé reste entre ArrMada et Jellyfin
     release.set()
     await _settled()
 
 
-async def test_warm_retries_at_next_launch_when_jellyfin_is_down(
+async def test_warm_extractions_run_one_at_a_time(
+    client: AsyncClient, jellyfin: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Deux lectures lancées à la suite : la seconde extraction attend la fin
+    de la première, elles ne se disputent pas le disque."""
+    calls: list[str] = []
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def slow_fetch(item_id: str, url: str) -> None:
+        calls.append(item_id)
+        started.set()
+        await release.wait()
+
+    monkeypatch.setattr(tv_playback, "_warm_fetch", slow_fetch)
+    tv_playback._WARM_CANDIDATES.update({MOVIE_ID: (4, "ass"), REMUX_ID: (3, "srt")})
+    tv = await _tv(client, jellyfin)
+    for item in (MOVIE_ID, REMUX_ID):
+        assert (await client.get(f"/api/tv/stream/{item}", headers=tv)).status_code == 200
+    await asyncio.wait_for(started.wait(), 1)
+    await asyncio.sleep(0)
+    assert calls == [MOVIE_ID]  # la seconde attend son tour
+    assert set(tv_playback._WARMED) == {MOVIE_ID, REMUX_ID} and len(tv_playback._PENDING) == 2
+    release.set()
+    await _settled()
+    assert calls == [MOVIE_ID, REMUX_ID]
+
+
+async def test_warm_retries_at_next_read_when_jellyfin_is_down(
     client: AsyncClient, jellyfin: dict[str, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     def down(_params: dict, _m: Any) -> httpx.Response:
@@ -1078,12 +1147,27 @@ async def test_warm_retries_at_next_launch_when_jellyfin_is_down(
     broken = [(r"/Videos/.*/Subtitles/.*", down), *fake_arr.ROUTES["jellyfin.test"]]
     monkeypatch.setitem(fake_arr.ROUTES, "jellyfin.test", broken)
     tv = await _tv(client, jellyfin)
-    # Jellyfin ne répond pas : la TV a quand même sa fiche, et rien n'est noté
     assert (await client.get("/api/tv/play/movie/438631", headers=tv)).json()["status"] == "ok"
+    # Jellyfin ne répond pas aux sous-titres : la TV a quand même son flux, rien n'est noté
+    assert (await client.get(f"/api/tv/stream/{MOVIE_ID}", headers=tv)).status_code == 200
     await _settled()
     assert "subtitle_calls" not in SEEN and MOVIE_ID not in tv_playback._WARMED
-    # Jellyfin revenu : le lancement suivant redemande
+    # Jellyfin revenu : la lecture suivante redemande
     del broken[0]
-    assert (await client.get("/api/tv/play/movie/438631", headers=tv)).json()["status"] == "ok"
+    assert (await client.get(f"/api/tv/stream/{MOVIE_ID}", headers=tv)).status_code == 200
     await _settled()
     assert SEEN["subtitle_calls"] == [WARM_PATH] and MOVIE_ID in tv_playback._WARMED
+
+
+def test_warm_candidates_are_bounded_and_forgotten(monkeypatch: pytest.MonkeyPatch) -> None:
+    """La TV demande la fiche de chaque carte survolée : la mémoire des pistes
+    à demander reste petite, et un titre qui n'a plus rien à préparer en sort."""
+    monkeypatch.setattr(tv_playback, "WARM_REMEMBERED", 2)
+    monkeypatch.setattr(tv_playback, "_WARM_CANDIDATES", {})
+    big = {"MediaSources": [{"Bitrate": 89_700_000, "MediaStreams": [ASS_TRACK]}]}
+    for item in ("a" * 32, "b" * 32, "c" * 32):
+        tv_playback.note_warm_candidate(item, big)
+    assert list(tv_playback._WARM_CANDIDATES) == ["b" * 32, "c" * 32]
+    # Revu sans piste texte (fichier remplacé) : oublié
+    tv_playback.note_warm_candidate("c" * 32, {"MediaSources": [{"Bitrate": 89_700_000}]})
+    assert list(tv_playback._WARM_CANDIDATES) == ["b" * 32]

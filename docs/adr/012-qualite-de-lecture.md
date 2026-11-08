@@ -146,9 +146,15 @@ réservé au Dolby Vision profil 5 sur un écran sans Dolby Vision.
   première demande d'une piste, Jellyfin extrait toutes les pistes texte du
   fichier en une passe ffmpeg sur le fichier entier et les garde en cache
   (plusieurs minutes pour un remux 4K, quand la TV abandonne après 20 s). Le
-  serveur lance donc cette extraction en arrière-plan dès le lancement d'une
-  lecture, pour les fichiers d'au moins 25 Mb/s (ou de débit inconnu) qui ont
-  des pistes texte (`_warm_embedded_subtitles()` dans
-  `services/tv_playback.py`), une fois par heure et par élément. Couper la
+  serveur lance donc cette extraction en arrière-plan dès que la TV lit le
+  premier octet du fichier (`open_stream()` → `_warm_embedded_subtitles()`
+  dans `services/tv_playback.py`), pour les fichiers d'au moins 25 Mb/s (ou
+  de débit inconnu) qui ont des pistes texte, une fois par heure et par
+  élément, une extraction à la fois. Pas à l'appel d'infos de lecture : la
+  TV le fait pour chaque carte survolée sur l'accueil, et le 08/11/2026
+  parcourir les rangées a lancé six passes ffmpeg en parallèle. Couper la
   connexion n'annule pas l'extraction chez Jellyfin (vérifié dans le code de
-  10.10 et 12).
+  10.10 et 12). Limite : une bascule dans la première minute d'un gros
+  fichier jamais lu trouve l'extraction en cours ; la préparation sert les
+  bascules plus tardives et les lectures suivantes (cache Jellyfin sur
+  disque).
