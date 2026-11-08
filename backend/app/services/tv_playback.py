@@ -483,7 +483,7 @@ async def movie(db: AsyncSession, tmdb_id: int, profile_id: int | None = None) -
         db, profiled_key(watch_sync.state_key("movie", "tmdb", str(tmdb_id)), profile_id)
     )
     _prefetch_subtitles(details, "movie", item["id"], tmdb_id=tmdb_id)
-    _warm_embedded_subtitles(base, key, item["id"], details)
+    note_warm_candidate(item["id"], details)
     return _found(item["id"], details, resume)
 
 
@@ -621,7 +621,7 @@ async def episode(
     _prefetch_subtitles(
         details, "episode", item["id"], tvdb_id=tvdb_id, season=season, episode=number
     )
-    _warm_embedded_subtitles(base, key, item["id"], details)
+    note_warm_candidate(item["id"], details)
     # Épisode suivant de la saison : ses sous-titres seront prêts au générique
     # (élément Jellyfin retrouvé par le job ; rien si l'épisode n'existe pas)
     if settings.SUBTITLE_GUARDIAN_ENABLED:
@@ -764,6 +764,9 @@ async def open_stream(
     if not cfg:
         raise UpstreamError(503, "Jellyfin non configuré")
     base, key = cfg
+    # Le fichier est vraiment lu : c'est maintenant que préparer la bascule
+    # 1080p a un sens (« Pistes texte intégrées », plus bas)
+    _warm_embedded_subtitles(base, key, item_id)
     url = f"{base}/Videos/{item_id}/stream?{urlencode({jellyfin.KEY_PARAM: key, 'static': 'true'})}"
     return await _relay(url, range_header, item_id)
 
@@ -1007,8 +1010,23 @@ _PENDING: set[asyncio.Task[Any]] = set()
 # cache : quelques secondes pour un épisode, plusieurs minutes pour un remux
 # 4K de 60 Go. La TV n'attend pas tant : 20 s de lecture (OkHttp), trois
 # essais (Media3), puis la piste reste vide jusqu'au rechargement suivant.
-# D'où cette demande faite en avance, dès le lancement de la lecture, pour
-# les fichiers où la bascule est plausible.
+# D'où cette demande faite en avance, pour les fichiers où la bascule est
+# plausible, dès que la TV lit le premier octet du fichier (open_stream()).
+#
+# Pas à l'appel d'infos de lecture (movie(), episode()) : la TV le fait aussi
+# pour chaque carte survolée sur l'accueil (Repository.prefetch(), pour que
+# la fiche s'ouvre sans attendre). Le 08/11/2026, parcourir les rangées de
+# l'accueil a lancé six passes ffmpeg en parallèle sur six remux 4K, et
+# l'extraction du film lancé a pris dix minutes. L'appel d'infos note donc
+# seulement la piste à demander (note_warm_candidate()) ; la première
+# lecture du fichier la demande. Et les extractions se suivent (_WARM_GATE) :
+# deux lectures lancées à la suite ne se disputent pas le disque.
+#
+# Limite assumée : pour un gros fichier jamais lu, une bascule faite dans la
+# première minute trouve l'extraction en cours (la carte « Passer en
+# 1080p ? » s'affiche après 20 s). Cette préparation sert la bascule faite
+# plus tard dans le film, et toutes les lectures suivantes du titre : le
+# cache de Jellyfin est sur disque et survit aux redémarrages.
 #
 # Vérifié dans le code source de Jellyfin 10.10.7 et 12.3
 # (Jellyfin.Api/Controllers/SubtitleController.cs, EncodeSubtitles ;
@@ -1041,6 +1059,16 @@ _WARMED: dict[str, float] = {}
 # l'extraction a abouti.
 WARM_TIMEOUT = 900.0
 
+# Piste à demander, notée à l'appel d'infos de lecture et consommée à la
+# première lecture du fichier : {item_id: (index Jellyfin, extension)}.
+# Borné : la TV demande la fiche de chaque carte survolée sur l'accueil.
+WARM_REMEMBERED = 500
+_WARM_CANDIDATES: dict[str, tuple[int, str]] = {}
+
+# Une extraction à la fois : la suivante attend la fin de la précédente
+# (WARM_TIMEOUT au plus). Lié à la boucle d'événements à son premier usage.
+_WARM_GATE = asyncio.Semaphore(1)
+
 
 def warm_candidate(item_id: str, details: dict[str, Any] | None) -> tuple[int, str] | None:
     """Piste texte intégrée à demander en avance : (index Jellyfin, extension)
@@ -1058,14 +1086,27 @@ def warm_candidate(item_id: str, details: dict[str, Any] | None) -> tuple[int, s
     return int(index), ext
 
 
-def _warm_embedded_subtitles(
-    base: str, key: str, item_id: str, details: dict[str, Any] | None
-) -> asyncio.Task[None] | None:
-    """Lancement d'une lecture : demande en fond à Jellyfin la première piste
-    texte intégrée, pour qu'elles soient toutes en cache quand la TV bascule
-    en 1080p. Ne retarde jamais la réponse à la TV ; un échec se journalise en
-    debug. Renvoie la tâche (None : rien à préparer, ou déjà fait dans l'heure)."""
+def note_warm_candidate(item_id: str, details: dict[str, Any] | None) -> None:
+    """Appel d'infos de lecture (fiche ouverte, ou carte survolée sur
+    l'accueil) : retient la piste à demander si le fichier est lu ensuite.
+    Rien n'est demandé à Jellyfin ici. Un élément qui n'a plus rien à
+    préparer (fichier remplacé) est oublié."""
     candidate = warm_candidate(item_id, details)
+    _WARM_CANDIDATES.pop(item_id, None)
+    if candidate is None:
+        return
+    _WARM_CANDIDATES[item_id] = candidate  # en dernier : les plus anciens partent d'abord
+    while len(_WARM_CANDIDATES) > WARM_REMEMBERED:
+        del _WARM_CANDIDATES[next(iter(_WARM_CANDIDATES))]
+
+
+def _warm_embedded_subtitles(base: str, key: str, item_id: str) -> asyncio.Task[None] | None:
+    """Lecture du fichier : demande en fond à Jellyfin la première piste texte
+    intégrée notée par note_warm_candidate(), pour qu'elles soient toutes en
+    cache quand la TV bascule en 1080p. Ne retarde jamais le flux ; un échec
+    se journalise en debug. Renvoie la tâche (None : rien à préparer, ou
+    déjà fait dans l'heure, morceaux suivants du même fichier compris)."""
+    candidate = _WARM_CANDIDATES.get(item_id)
     if candidate is None:
         return None
     now = time.monotonic()
@@ -1076,11 +1117,19 @@ def _warm_embedded_subtitles(
     _WARMED[item_id] = now
     index, ext = candidate
     task = asyncio.create_task(
-        _warm_fetch(item_id, subtitle_upstream(base, key, item_id, index, ext))
+        _warm_in_turn(item_id, subtitle_upstream(base, key, item_id, index, ext))
     )
     _PENDING.add(task)
     task.add_done_callback(_PENDING.discard)
     return task
+
+
+async def _warm_in_turn(item_id: str, url: str) -> None:
+    """Les extractions se suivent : chacune lit un fichier entier, et six
+    lancées ensemble (08/11/2026) se sont partagé le disque pendant dix
+    minutes."""
+    async with _WARM_GATE:
+        await _warm_fetch(item_id, url)
 
 
 async def _warm_fetch(item_id: str, url: str) -> None:
