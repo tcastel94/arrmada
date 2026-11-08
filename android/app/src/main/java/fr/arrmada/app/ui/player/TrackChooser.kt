@@ -81,10 +81,13 @@ internal class TrackChooser(
      * Sous-titres), le choix automatique et la piste retenue s'effacent
      * alors devant elle ; [hlsAudioLanguage] : pendant un flux converti, la
      * langue de la piste du serveur qu'il porte (le lecteur ne la voit pas),
-     * null en lecture directe. [onSubtitleLost] : la piste retenue avant le
-     * changement de flux n'y existe plus (nom, piste image ?) ; les
-     * sous-titres sont alors coupés plutôt que remplacés par une autre piste
-     * de la même langue (des forcés à la place des complets surprendraient).
+     * null en lecture directe. [comingLater] : la piste retenue fait partie
+     * des sous-titres encore attendus de Jellyfin (LateSubtitleLogic), elle
+     * reviendra d'elle-même à la relecture du flux. [onSubtitleLost] : la
+     * piste retenue avant le changement de flux n'y existe plus (nom, piste
+     * image ?, ou attendue plus tard) ; les sous-titres sont alors coupés
+     * plutôt que remplacés par une autre piste de la même langue (des forcés
+     * à la place des complets surprendraient).
      */
     fun onTracksChanged(
         newTracks: Tracks,
@@ -92,7 +95,8 @@ internal class TrackChooser(
         preference: TrackPreference?,
         waitingSubtitle: Boolean,
         hlsAudioLanguage: String?,
-        onSubtitleLost: (String, Boolean) -> Unit = { _, _ -> },
+        comingLater: (StreamSwitchLogic.Shown) -> Boolean = { false },
+        onSubtitleLost: (String, Boolean, Boolean) -> Unit = { _, _, _ -> },
     ) {
         this.hlsAudioLanguage = hlsAudioLanguage
         val loaded = newTracks.groups.any { it.type == C.TRACK_TYPE_AUDIO }
@@ -112,9 +116,11 @@ internal class TrackChooser(
                     lost = null
                     selectTrack(player, C.TRACK_TYPE_TEXT, texts[index])
                 } else {
+                    // Retenue pour le prochain flux : la relecture avec les pistes
+                    // reçues plus tard, ou le retour à l'original
                     lost = wanted
                     selectTrack(player, C.TRACK_TYPE_TEXT, null)
-                    onSubtitleLost(wanted.label?.ifBlank { null } ?: languageName(wanted.language) ?: "inconnus", wanted.image)
+                    onSubtitleLost(wanted.label?.ifBlank { null } ?: languageName(wanted.language) ?: "inconnus", wanted.image, comingLater(wanted))
                 }
             }
         }

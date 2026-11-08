@@ -62,6 +62,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
@@ -77,6 +78,7 @@ import fr.arrmada.app.data.DolbyVisionLogic
 import fr.arrmada.app.data.PlayInfo
 import fr.arrmada.app.data.DefaultQuality
 import fr.arrmada.app.data.HlsAudioLogic
+import fr.arrmada.app.data.LateSubtitleLogic
 import fr.arrmada.app.data.Quality
 import fr.arrmada.app.data.QualityLogic
 import fr.arrmada.app.data.RemoteCommand
@@ -95,6 +97,7 @@ import fr.arrmada.app.ui.components.ProgressBar
 import fr.arrmada.app.ui.components.formatClock
 import fr.arrmada.app.ui.theme.ArrColors
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
@@ -188,8 +191,12 @@ internal fun PlayerSurface(
         val renderers = DefaultRenderersFactory(context)
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
             .setEnableDecoderFallback(true) // autre décodeur Android si le premier ne démarre pas
+        // Flux et sous-titres passent par OkHttp (jeton d'appareil) ; DefaultDataSource
+        // lit en plus les fichiers de l'appli : les pistes texte reçues en avance de
+        // Jellyfin (LateSubtitleFetcher) sont posées à côté du flux depuis le disque
+        val dataSources = DefaultDataSource.Factory(context, OkHttpDataSource.Factory(app.api.http))
         ExoPlayer.Builder(context, renderers)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(OkHttpDataSource.Factory(app.api.http)))
+            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSources))
             .setTrackSelector(trackSelector)
             .setAudioAttributes(
                 AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),
@@ -198,16 +205,11 @@ internal fun PlayerSurface(
             .setSeekBackIncrementMs(10_000)
             .setSeekForwardIncrementMs(30_000)
             .build()
-            .apply {
-                // Sous-titres posés à côté du flux ; en HLS (remux, 1080p d'office), aussi
-                // les pistes texte du fichier, que le flux de Jellyfin ne transporte pas
-                val subs = StreamSwitchLogic.sideloaded(initialSource.second, info.subtitles, info.embeddedSubtitles)
-                val url = app.api.baseUrl + HlsAudioLogic.withAudio(initialSource.first, initialHlsAudio)
-                setMediaItem(mediaItem(url, initialSource.second, sideSubtitles(subs, app.api.baseUrl)))
-                prepare()
-                if (request.startSeconds > 0) seekTo(request.startSeconds * 1000L)
-                playWhenReady = true
-            }
+            // Le premier flux est chargé par load(), plus bas, comme un changement
+            // de flux : une lecture convertie dès le départ (réglage « 1080p »,
+            // remux) pose les pistes texte du fichier à côté du flux, et doit
+            // démarrer même si Jellyfin est encore en train de les extraire
+            .apply { playWhenReady = true }
     }
 
     var showMenu by remember { mutableStateOf(false) }
@@ -289,6 +291,11 @@ internal fun PlayerSurface(
     val subtitles = remember { SubtitleTools(info, request, player, repository, uiScope, context) }
     // Choix des pistes (langues d'office, mémoire par profil) : TrackChooser.kt
     val trackChooser = remember { TrackChooser(player, request, repository, app.appScope) }
+    // Pistes texte extraites par Jellyfin, qui peuvent répondre dans des minutes :
+    // demandées en arrière-plan avec le client patient de l'API, gardées en local
+    // (LateSubtitleFetcher) ; lateLoad : l'attente en cours pour le flux lu
+    val lateSubtitles = remember { LateSubtitleFetcher(app.api.slowHttp, app.api.baseUrl, uiScope, context.cacheDir) }
+    var lateLoad by remember { mutableStateOf<Job?>(null) }
     val currentMeta by rememberUpdatedState(meta) // la fiche peut arriver après le lecteur
     val currentPreference by rememberUpdatedState(trackPreference)
     // Le bouton central ouvre le menu à l'appui : son relâchement est avalé
@@ -397,6 +404,14 @@ internal fun PlayerSurface(
      * En HLS, le flux de Jellyfin n'a que l'image et une seule piste de son :
      * la piste audio entendue lui est demandée (« ?audio=N ») et les pistes
      * texte du fichier sont posées à côté, avec les sous-titres externes.
+     *
+     * Les pistes texte extraites par Jellyfin peuvent mettre des minutes à
+     * répondre, et Media3 ne démarre pas tant qu'une piste posée à côté n'a
+     * pas répondu (LateSubtitleLogic) : si elles arrivent dans la foulée
+     * (déjà extraites), elles partent avec le flux, comme avant ; sinon la
+     * vidéo démarre sans elles, elles sont demandées en arrière-plan
+     * (LateSubtitleFetcher) et le même flux est relu, au même endroit, quand
+     * elles sont là. Le lecteur les lit alors depuis le disque de l'appli.
      */
     fun load(url: String, hls: Boolean, at: Long, before: Tracks = player.currentTracks) {
         // Flux converti : la piste audio entendue, retrouvée parmi celles du
@@ -404,15 +419,48 @@ internal fun PlayerSurface(
         // Lue AVANT de changer d'élément : le lecteur oublie alors ses pistes.
         hlsAudio = if (hls) HlsAudioLogic.indexForSwitch(source.second, hlsAudio, heardAudio(before), info.audioTracks) else null
         source = url to hls
-        // Le nouveau flux remplit sa mémoire tampon : ce n'est pas une coupure
-        readyOnce = false
-        lastSeekAt = System.currentTimeMillis()
-        trackChooser.keepSubtitle(before)
         val subs = StreamSwitchLogic.sideloaded(hls, subtitles.sideSubs, info.embeddedSubtitles)
         val target = app.api.baseUrl + HlsAudioLogic.withAudio(url, hlsAudio)
-        player.setMediaItem(mediaItem(target, hls, sideSubtitles(subs, app.api.baseUrl)), at)
-        player.prepare()
+        // L'attente de pistes lancée pour le flux précédent ne vaut plus
+        lateLoad?.cancel()
+        lateLoad = null
+        lateSubtitles.cancel()
+
+        /** Charge le flux à [position] avec les sous-titres disponibles maintenant (reçus : depuis le disque). */
+        fun post(position: Long) {
+            // Le nouveau flux remplit sa mémoire tampon : ce n'est pas une coupure
+            readyOnce = false
+            lastSeekAt = System.currentTimeMillis()
+            trackChooser.keepSubtitle(before)
+            val posted = LateSubtitleLogic.split(subs, info.embeddedSubtitles, lateSubtitles.ready, lateSubtitles.failed).now
+            player.setMediaItem(mediaItem(target, hls, sideSubtitles(posted, app.api.baseUrl, lateSubtitles::localUri)), position)
+            player.prepare()
+        }
+
+        val later = LateSubtitleLogic.split(subs, info.embeddedSubtitles, lateSubtitles.ready, lateSubtitles.failed).later
+        if (later.isEmpty()) {
+            post(at)
+            return
+        }
+        lateLoad = uiScope.launch {
+            val fetch = lateSubtitles.fetch(later)
+            // Déjà extraites : reçues en moins de PROBE_MS, un seul chargement, comme avant
+            val quick = withTimeoutOrNull(LateSubtitleLogic.PROBE_MS) { fetch.join() } != null
+            post(at)
+            if (!quick) fetch.join() // des minutes, peut-être ; la vidéo joue pendant ce temps
+            val message = lateSubtitles.outcomeMessage(later)
+            if (!quick && later.any { it.url in lateSubtitles.ready }) {
+                lateLoad = null // cette attente est finie : rien à interrompre
+                load(url, hls, player.currentPosition) // relecture au même endroit, pistes reçues depuis le disque
+            }
+            message?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
+        }
     }
+
+    // Premier flux, par load() : une lecture convertie dès le départ (réglage
+    // « 1080p » de la TV, remux .m2ts / .iso, SDR) pose les pistes texte du
+    // fichier à côté du flux, Jellyfin peut encore être en train de les extraire
+    LaunchedEffect(Unit) { load(initialSource.first, initialSource.second, request.startSeconds * 1000L, Tracks.EMPTY) }
 
     /** Même flux, même position : relu après un changement de sous-titres (SubtitleTools). */
     fun reloadSameStream() = load(source.first, source.second, player.currentPosition)
@@ -590,10 +638,16 @@ internal fun PlayerSurface(
                     waitingSubtitle = subtitles.pendingLabel != null,
                     // Flux converti : la langue de la piste que Jellyfin y a mise (le lecteur ne la voit pas)
                     hlsAudioLanguage = if (source.second) HlsAudioLogic.playedLanguage(info.audioTracks, hlsAudio) else null,
-                    onSubtitleLost = { label, image ->
+                    // Piste extraite par Jellyfin encore attendue : elle reviendra à la relecture du flux
+                    comingLater = { shown -> LateSubtitleLogic.comingLater(shown, lateSubtitles.pending) },
+                    onSubtitleLost = { label, image, later ->
                         // Piste image (PGS, VobSub) : pas de version texte à poser à côté du flux converti
-                        val why = if (image) " : pas de version texte pour ce flux" else " absents de ce flux"
-                        Toast.makeText(context, "Sous-titres « $label »$why", Toast.LENGTH_LONG).show()
+                        val text = when {
+                            later -> LateSubtitleLogic.waitingMessage(label)
+                            image -> "Sous-titres « $label » : pas de version texte pour ce flux"
+                            else -> "Sous-titres « $label » absents de ce flux"
+                        }
+                        Toast.makeText(context, text, Toast.LENGTH_LONG).show()
                     },
                 )
                 // Flux rechargé (décalage, resynchro) : la piste voulue, dès qu'elle apparaît
@@ -712,6 +766,8 @@ internal fun PlayerSurface(
         onDispose {
             save(false)
             if (scrobbleStarted) sendScrobble("stop", finished)
+            lateLoad?.cancel()
+            lateSubtitles.clear() // attente interrompue, fichiers de sous-titres effacés
             player.removeListener(listener)
             player.release()
             // Remux : Jellyfin arrête la conversion (sinon elle tourne à vide)
