@@ -30,11 +30,17 @@ internal fun mediaItem(url: String, hls: Boolean, subtitles: List<MediaItem.Subt
 /**
  * Sous-titres posés à côté de la vidéo (écran Vidéos) : ajoutés aux pistes du
  * fichier, choisis dans l'onglet Sous-titres du menu pause. Téléchargés par
- * le même client HTTP que la vidéo (jeton d'appareil), en UTF-8.
+ * le même client HTTP que la vidéo (jeton d'appareil), en UTF-8 ; [local] :
+ * fichier de l'appli déjà reçu pour une piste (LateSubtitleFetcher), lu à
+ * la place du serveur, null sinon.
  */
-internal fun sideSubtitles(subtitles: List<SideSubtitle>, baseUrl: String): List<MediaItem.SubtitleConfiguration> =
+internal fun sideSubtitles(
+    subtitles: List<SideSubtitle>,
+    baseUrl: String,
+    local: (SideSubtitle) -> android.net.Uri? = { null },
+): List<MediaItem.SubtitleConfiguration> =
     subtitles.map { sub ->
-        MediaItem.SubtitleConfiguration.Builder(android.net.Uri.parse(baseUrl + sub.url))
+        MediaItem.SubtitleConfiguration.Builder(local(sub) ?: android.net.Uri.parse(baseUrl + sub.url))
             .setMimeType(sub.mime)
             .setLanguage(sub.language.ifBlank { null })
             .setLabel(sub.label)
