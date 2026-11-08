@@ -337,6 +337,25 @@ data class PlayInfo(
     val subtitles: List<SideSubtitle> = emptyList(),
     // Pistes texte intégrées au MKV (extraites par Jellyfin) : seulement pour les décaler
     @SerialName("embedded_subtitles") val embeddedSubtitles: List<SideSubtitle> = emptyList(),
+    // Pistes audio du fichier avec leur index Jellyfin : un flux converti n'en
+    // porte qu'une, la TV demande celle qu'elle écoute (HlsAudioLogic)
+    @SerialName("audio_tracks") val audioTracks: List<AudioTrack> = emptyList(),
+)
+
+/**
+ * Piste audio du fichier telle que Jellyfin la connaît. [index] : celui de la
+ * piste dans MediaStreams, à demander avec « ?audio=N » sur un flux converti ;
+ * [language] : code du fichier (« fre », « eng »…, vide si inconnu) ; [codec] :
+ * nom ffprobe (« eac3 », « truehd », « dts »…) ; [channels] : 0 si inconnu.
+ */
+@Serializable
+data class AudioTrack(
+    val index: Int = -1,
+    val language: String = "",
+    val codec: String = "",
+    val channels: Int = 0,
+    val title: String = "",
+    @SerialName("default") val isDefault: Boolean = false,
 )
 
 /**

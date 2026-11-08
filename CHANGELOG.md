@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Lecture TV : la piste audio suit la bascule en 1080p
+
+#### Fixed
+- **Appli TV : la VF (ou la VO) choisie était perdue en passant en 1080p** (menu pause › Qualité, carte « Passer en 1080p ? », remux de secours, conversion SDR). Vérifié dans le code de Jellyfin 12.4 (`DynamicHlsHelper`, `EncodingHelper`) : sa liste HLS ne porte qu'**une** piste audio, celle d'`AudioStreamIndex`, sinon la **première** du fichier. Sur un fichier MULTi, le panneau Audio du menu pause ne montrait plus qu'une piste et la langue changeait dans les enceintes. La TV retrouve désormais la piste entendue (langue, format, canaux, rang dans le fichier) parmi celles du serveur et la demande à Jellyfin ; au retour à l'original, le choix du lecteur reprend de lui-même
+
+#### Added
+- `GET /api/tv/play/…` : `audio_tracks`, les pistes audio du fichier avec leur index Jellyfin (`index`, `language`, `codec`, `channels`, `title`, `default`)
+- `GET /api/tv/hls/{id}/master.m3u8?audio=N` et `sdr.m3u8?audio=N` : conversion avec la piste audio `N` (index `MediaStreams` de Jellyfin, transmis en `AudioStreamIndex`) ; toute autre valeur est refusée (404)
+- Appli TV : `HlsAudioLogic` (logique pure, testée sur la JVM) retrouve la piste entendue dans la liste du serveur
+
+#### Notes
+- Changer de piste pendant un flux converti impose d'arrêter la conversion en cours **avant** (même session `arrmada-{id}`, ce que fait déjà le menu Qualité) : le dossier de sortie de Jellyfin ne dépend que de la session, il resservirait sinon les morceaux déjà produits avec l'ancienne piste
+- Reste à faire : en lecture convertie **dès le départ** (réglage « 1080p » de la TV, remux .m2ts / .iso), le panneau Audio ne propose toujours que la piste de Jellyfin ; il faudrait y lister les `audio_tracks` du serveur et recharger le flux avec `?audio=N`
+- APK non construite dans l'environnement de la modification (pas de JDK) : compilation et tests JVM (`HlsAudioLogicTest`) par la CI Android ; bascule Original → 1080p sur un fichier MULTi à vérifier sur la Shield (langue gardée, une seule session de transcodage dans le tableau de bord Jellyfin)
+- Tests serveur : 5 nouveaux (liste des pistes, `?audio=N` transmis en `AudioStreamIndex` sur `master` et `sdr`, valeurs refusées)
+
 ### Sous-titres : recherche en arrière-plan, recherche élargie pour les animes, gardien qui cherche avant la séance
 
 #### Fixed

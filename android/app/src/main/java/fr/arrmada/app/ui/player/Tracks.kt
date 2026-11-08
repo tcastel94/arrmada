@@ -6,6 +6,7 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
+import fr.arrmada.app.data.HlsAudioLogic
 import java.util.Locale
 
 /** Une piste audio ou de sous-titres, telle qu'on la propose dans le menu pause. */
@@ -54,6 +55,26 @@ fun selectedSound(tracks: Tracks, fileAudio: String?): fr.arrmada.app.data.Sound
             if (!group.isTrackSelected(i)) continue
             val format = group.getTrackFormat(i)
             return fr.arrmada.app.data.SoundAdvisor.sound(format.sampleMimeType, format.channelCount, format.label, fileAudio)
+        }
+    }
+    return null
+}
+
+/**
+ * Piste audio en cours de lecture, telle que HlsAudioLogic la retrouve parmi
+ * les pistes connues du serveur : rang parmi les pistes audio (même ordre que
+ * le fichier), langue, format, canaux. Null tant que rien n'est choisi.
+ */
+fun heardAudio(tracks: Tracks): HlsAudioLogic.Heard? {
+    var position = 0
+    for (group in tracks.groups) {
+        if (group.type != C.TRACK_TYPE_AUDIO) continue
+        for (i in 0 until group.length) {
+            if (group.isTrackSelected(i)) {
+                val format = group.getTrackFormat(i)
+                return HlsAudioLogic.Heard(position, format.language, format.sampleMimeType, format.channelCount)
+            }
+            position++
         }
     }
     return null

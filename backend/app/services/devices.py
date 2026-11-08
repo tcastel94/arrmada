@@ -189,7 +189,9 @@ _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         # Téléphone / tablette : envoyer un titre sur une TV de la maison
         ("GET", r"/api/tv/targets"),
         ("POST", r"/api/tv/targets/\d+/play"),
-        # Remux HLS (.m2ts, .iso…) : listes et morceaux seulement, puis arrêt
+        # Remux HLS (.m2ts, .iso…) : listes et morceaux seulement, puis arrêt.
+        # Le chemin seul est vérifié ici : « ?audio=N » (piste audio voulue sur
+        # master / sdr) est un paramètre de requête, borné par tv_playback
         (
             "GET",
             r"/api/tv/hls/[0-9a-f]{32}/((master|main|sdr)\.m3u8|hls1/[A-Za-z0-9_]+/-?\d+\.(mp4|m4s|ts))",
