@@ -4,10 +4,12 @@ import androidx.annotation.OptIn
 import androidx.compose.runtime.Stable
 import androidx.media3.common.C
 import androidx.media3.common.Format
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import fr.arrmada.app.data.Repository
+import fr.arrmada.app.data.StreamSwitchLogic
 import fr.arrmada.app.data.TrackLanguageLogic
 import fr.arrmada.app.data.TrackPreference
 import kotlinx.coroutines.CoroutineScope
@@ -23,7 +25,11 @@ import kotlinx.coroutines.launch
  *    VF + forcés) ;
  *  - quand quelqu'un change de piste ([select] : menu pause, tablette), il
  *    applique le choix puis le range sur le serveur dès que le lecteur
- *    l'a pris en compte, pour l'épisode suivant.
+ *    l'a pris en compte, pour l'épisode suivant ;
+ *  - quand le flux change (qualité, remux de secours, SDR), il retient la
+ *    piste de sous-titres affichée ([keepSubtitle]) et la rechoisit dans le
+ *    nouveau flux, où elle n'a plus ni le même numéro ni forcément le même
+ *    nom (piste du MKV en direct, extraction de Jellyfin en HLS).
  *
  * Flux converti (1080p, remux, SDR) : Jellyfin n'y met qu'une piste audio,
  * dont le lecteur ne connaît pas la langue. PlayerSurface lui passe celle de
@@ -58,14 +64,27 @@ internal class TrackChooser(
     // fichier, « fre »), null en lecture directe ou si le fichier ne la dit pas
     private var hlsAudioLanguage: String? = null
 
+    // Sous-titres affichés avant un changement de flux : à retrouver dans le
+    // nouveau flux dès que ses pistes arrivent (null : rien n'était affiché)
+    private var carried: StreamSwitchLogic.Shown? = null
+
+    // Piste retenue mais absente du flux lu (PGS français en 1080p…) : les
+    // sous-titres sont coupés en attendant, et elle est réessayée au prochain
+    // changement de flux (retour à l'original), tant que personne n'a choisi autre chose
+    private var lost: StreamSwitchLogic.Shown? = null
+
     /**
      * Nouveau jeu de pistes (ouverture du fichier, piste changée, flux
      * rechargé). [originalLanguage] : langue originale du titre (fiche) ;
      * [preference] : dernier choix rangé du profil ; [waitingSubtitle] : une
      * piste de sous-titres précise est attendue après rechargement (outils
-     * Sous-titres), le choix automatique attend alors ; [hlsAudioLanguage] :
-     * pendant un flux converti, la langue de la piste du serveur qu'il porte
-     * (le lecteur ne la voit pas), null en lecture directe.
+     * Sous-titres), le choix automatique et la piste retenue s'effacent
+     * alors devant elle ; [hlsAudioLanguage] : pendant un flux converti, la
+     * langue de la piste du serveur qu'il porte (le lecteur ne la voit pas),
+     * null en lecture directe. [onSubtitleLost] : la piste retenue avant le
+     * changement de flux n'y existe plus (nom, piste image ?) ; les
+     * sous-titres sont alors coupés plutôt que remplacés par une autre piste
+     * de la même langue (des forcés à la place des complets surprendraient).
      */
     fun onTracksChanged(
         newTracks: Tracks,
@@ -73,12 +92,31 @@ internal class TrackChooser(
         preference: TrackPreference?,
         waitingSubtitle: Boolean,
         hlsAudioLanguage: String?,
+        onSubtitleLost: (String, Boolean) -> Unit = { _, _ -> },
     ) {
         this.hlsAudioLanguage = hlsAudioLanguage
+        val loaded = newTracks.groups.any { it.type == C.TRACK_TYPE_AUDIO }
         // Premier jeu de pistes du fichier : langues choisies d'office
-        if (!autoTracksDone && !waitingSubtitle && newTracks.groups.any { it.type == C.TRACK_TYPE_AUDIO }) {
+        if (!autoTracksDone && !waitingSubtitle && loaded) {
             autoTracksDone = true
             applyLanguagePlan(newTracks, originalLanguage, preference)
+        }
+        // Flux rechargé : la piste de sous-titres d'avant, si le nouveau flux l'a
+        val wanted = carried
+        if (wanted != null && loaded) {
+            carried = null
+            if (!waitingSubtitle) {
+                val texts = trackChoices(newTracks, C.TRACK_TYPE_TEXT)
+                val index = StreamSwitchLogic.sameText(wanted, texts.map(::asText))
+                if (index != null) {
+                    lost = null
+                    selectTrack(player, C.TRACK_TYPE_TEXT, texts[index])
+                } else {
+                    lost = wanted
+                    selectTrack(player, C.TRACK_TYPE_TEXT, null)
+                    onSubtitleLost(wanted.label?.ifBlank { null } ?: languageName(wanted.language) ?: "inconnus", wanted.image)
+                }
+            }
         }
         // Choix de l'utilisateur appliqué par le lecteur : on le range
         if (saveTracksPending) {
@@ -87,9 +125,45 @@ internal class TrackChooser(
         }
     }
 
+    /**
+     * Le flux va être rechargé (qualité, remux de secours, SDR) : retenir la
+     * piste de sous-titres affichée dans [tracks], pour la rechoisir dans le
+     * nouveau flux ([onTracksChanged]). Rien d'affiché (coupés, aucune) :
+     * la piste perdue au changement précédent s'il y en a une, sinon rien à
+     * retenir, le lecteur garde ce réglage de lui-même.
+     */
+    fun keepSubtitle(tracks: Tracks) {
+        val format = trackChoices(tracks, C.TRACK_TYPE_TEXT).firstOrNull { it.selected }?.let { it.group?.getTrackFormat(it.index) }
+        carried = if (format == null) {
+            lost
+        } else {
+            // Depuis Media3 1.4, les sous-titres sont décodés dès la lecture : le format d'origine est dans « codecs »
+            val kind = if (format.sampleMimeType == MimeTypes.APPLICATION_MEDIA3_CUES) format.codecs else format.sampleMimeType
+            StreamSwitchLogic.Shown(
+                label = format.label,
+                language = format.language,
+                forced = TrackLanguageLogic.isForced((format.selectionFlags and C.SELECTION_FLAG_FORCED) != 0, format.label),
+                image = kind == MimeTypes.APPLICATION_PGS || kind == MimeTypes.APPLICATION_VOBSUB || kind == MimeTypes.APPLICATION_DVBSUBS,
+            )
+        }
+    }
+
+    /** La piste de sous-titres [choice], vue par la logique pure. */
+    private fun asText(choice: TrackChoice): TrackLanguageLogic.Text {
+        val format = choice.group?.getTrackFormat(choice.index)
+        return TrackLanguageLogic.Text(
+            language = format?.language,
+            forced = format != null && (format.selectionFlags and C.SELECTION_FLAG_FORCED) != 0,
+            supported = choice.supported,
+            isDefault = format != null && (format.selectionFlags and C.SELECTION_FLAG_DEFAULT) != 0,
+            label = format?.label,
+        )
+    }
+
     /** Piste choisie par l'utilisateur (menu pause, tablette) : appliquée, puis rangée pour ce profil. */
     fun select(type: Int, choice: TrackChoice?) {
         selectTrack(player, type, choice)
+        if (type == C.TRACK_TYPE_TEXT) lost = null // choix explicite : plus rien à reprendre d'un flux précédent
         saveTracksPending = titleScope != null
     }
 
@@ -122,16 +196,7 @@ internal class TrackChooser(
         val plan = TrackLanguageLogic.plan(
             originalLanguage,
             audios.map { TrackLanguageLogic.Audio(hlsAudioLanguage ?: it.group?.getTrackFormat(it.index)?.language, it.supported) },
-            texts.map { choice ->
-                val format = choice.group?.getTrackFormat(choice.index)
-                TrackLanguageLogic.Text(
-                    language = format?.language,
-                    forced = format != null && (format.selectionFlags and C.SELECTION_FLAG_FORCED) != 0,
-                    supported = choice.supported,
-                    isDefault = format != null && (format.selectionFlags and C.SELECTION_FLAG_DEFAULT) != 0,
-                    label = format?.label,
-                )
-            },
+            texts.map(::asText),
             TrackLanguageLogic.remembered(preference),
         )
         player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()

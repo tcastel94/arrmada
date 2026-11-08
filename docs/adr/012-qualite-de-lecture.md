@@ -118,16 +118,27 @@ réservé au Dolby Vision profil 5 sur un écran sans Dolby Vision.
   langues (dernier choix du profil, sinon VO + sous-titres FR, sinon VF :
   `TrackLanguageLogic`) s'applique donc aux `audio_tracks` du serveur
   (`HlsAudioLogic.indexAtStart`) et la piste est demandée dans l'adresse de
-  départ. Seuls les sous-titres posés à côté du fichier comptent pour la VO +
-  sous-titres FR : Jellyfin ne met pas ceux du MKV dans son flux. La fiche et
+  départ. Comptent pour la VO + sous-titres FR les sous-titres que le flux
+  converti aura : ceux posés à côté du fichier (Bazarr) et les pistes texte du
+  MKV que la TV pose à côté elle aussi (voir Sous-titres ci-dessous). La fiche et
   le dernier choix du profil sont attendus par `PlayerScreen` (3 s au plus)
   avant de créer le lecteur ; s'ils arrivent après, le flux n'est pas
   rechargé (la conversion repartirait de zéro pour une fiche en retard) :
   piste par défaut de Jellyfin, changeable au panneau Audio.
 - À vérifier à la main sur la Shield : bascule Original → 1080p → Original
   pendant un film (position à moins de 2 s près, langue gardée sur un fichier
-  MULTi), passage en VF depuis le panneau Audio en lecture 1080p dès le départ
-  (position gardée), épisode suivant d'une série passée en VF lu en 1080p dès
-  le départ et en VF sans intervention, et plus aucune session de transcodage
-  orpheline dans le tableau de bord Jellyfin après le retour à l'original ou
-  la sortie de la lecture.
+  MULTi, sous-titres intégrés toujours proposés), passage en VF depuis le
+  panneau Audio en lecture 1080p dès le départ (position et sous-titres
+  gardés), épisode suivant d'une série passée en VF lu en 1080p dès le départ
+  et en VF sans intervention, et plus aucune session de transcodage orpheline
+  dans le tableau de bord Jellyfin après le retour à l'original ou la sortie
+  de la lecture.
+- **Sous-titres** (ajouté le 08/11/2026, après des sous-titres disparus en
+  1080p) : le flux HLS de Jellyfin ne transporte que l'image et le son. Les
+  pistes texte intégrées au fichier (SRT, ASS) sont donc posées à côté du
+  flux converti par la TV, depuis l'extraction de Jellyfin que le serveur
+  liste déjà (`embedded_subtitles`), et la piste affichée est rechoisie par
+  sa langue et sa sorte (`data/StreamSwitchLogic.kt`). Les pistes image
+  (PGS, VobSub) n'ont pas d'équivalent texte : elles ne suivent pas en
+  1080p, la TV l'annonce ; les incruster dans l'image (`SubtitleMethod=
+  Encode` de Jellyfin, une conversion par piste) reste à décider.

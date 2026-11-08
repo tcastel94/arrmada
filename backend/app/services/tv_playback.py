@@ -224,9 +224,13 @@ def external_subtitles(item_id: str, details: dict[str, Any]) -> list[dict[str, 
 def embedded_subtitles(item_id: str, details: dict[str, Any]) -> list[dict[str, str]]:
     """Sous-titres texte INTÉGRÉS au fichier (MKV), même format qu'externes.
 
-    Le lecteur les lit déjà dans le fichier ; cette liste ne sert qu'au
-    décalage du menu pause : Jellyfin extrait la piste en .srt, le serveur
-    la décale, la TV l'ajoute à côté (« Français (décalé +1,5 s) »).
+    En lecture directe, le lecteur les lit déjà dans le fichier ; la liste
+    sert alors au décalage du menu pause : Jellyfin extrait la piste en
+    .srt, le serveur la décale, la TV l'ajoute à côté (« Français (décalé
+    +1,5 s) »). En HLS (remux, 1080p d'ADR-012), le flux de Jellyfin n'a
+    que l'image et le son : la TV pose ces pistes extraites à côté du flux,
+    sinon les sous-titres du fichier disparaissent à la bascule. Les pistes
+    image (PGS, VobSub) n'ont pas de version texte : absentes de la liste.
     """
     sources = details.get("MediaSources") or [{}]
     source = sources[0] if isinstance(sources[0], dict) else {}
@@ -455,7 +459,8 @@ def _found(item_id: str, details: dict[str, Any] | None, resume: dict[str, Any])
         # Sous-titres posés à côté du fichier (.fr.srt de Bazarr…) : le lecteur
         # ne voit que les pistes du MKV, on les lui ajoute
         "subtitles": external_subtitles(item_id, details),
-        # Pistes intégrées, extraites par Jellyfin seulement pour être décalées
+        # Pistes texte intégrées, extraites par Jellyfin : décalage du menu
+        # pause, et posées à côté du flux HLS (remux, 1080p), qui ne les a pas
         "embedded_subtitles": embedded_subtitles(item_id, details),
         # Pistes audio du fichier avec leur index Jellyfin : un flux converti
         # n'en porte qu'une, la TV demande celle qu'elle écoute (« ?audio=N »)
