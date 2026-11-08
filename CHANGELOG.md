@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Appli TV : sous-titres intégrés déjà extraits quand on bascule en 1080p
+
+#### Fixed
+- **Piste de sous-titres vide après la bascule en 1080p sur un gros fichier** (menu pause › Qualité, ADR-012). Le flux 1080p de Jellyfin ne transporte que l'image et le son : la TV pose à côté les pistes texte intégrées au fichier (`GET /api/tv/subtitle/…`), et Jellyfin les extrait **toutes** en une passe ffmpeg sur le fichier entier à la première demande, puis les garde en cache : quelques secondes pour un épisode, **plusieurs minutes pour un remux 4K de 60 Go**. La TV abandonne bien avant (20 s de lecture, trois essais) : la piste restait vide jusqu'au rechargement suivant. Le serveur demande désormais la première piste texte à Jellyfin **dès le lancement de la lecture**, en arrière-plan, pour les fichiers où la bascule est plausible : pistes texte intégrées et débit d'au moins 25 Mb/s (le seuil à partir duquel la TV propose le 1080p) ou inconnu. Une seule demande par élément et par heure ; la réponse à la TV ne change pas et n'attend rien ; un échec se journalise en debug. Vérifié dans le code source de Jellyfin 10.10 et 12 : couper la connexion n'annule pas l'extraction (le contrôleur passe `CancellationToken.None` à ffmpeg), elle va au bout et remplit le cache
+
+#### Notes
+- Tests serveur : 5 nouveaux (fichiers à préparer ou non, lancé pour un remux avec pistes texte, pas relancé dans l'heure, réponse à la TV immédiate pendant l'extraction, Jellyfin injoignable)
+
 ### Sous-titres : recherche en arrière-plan, recherche élargie pour les animes, gardien qui cherche avant la séance
 
 #### Fixed

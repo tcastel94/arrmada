@@ -94,6 +94,16 @@ réservé au Dolby Vision profil 5 sur un écran sans Dolby Vision.
   `HLS_PATH` et dans `device_may_call` (`services/devices.py`), activer
   « Autoriser l'encodage au format HEVC » dans Jellyfin, puis renvoyer
   `lite_stream` dans `_found()`. Rien à changer dans l'appli.
+- Le flux `sdr.m3u8` ne transporte ni les pistes texte intégrées au fichier :
+  la TV les pose à côté (`embedded_subtitles`, relayées par
+  `GET /api/tv/subtitle/…`), et Jellyfin les extrait toutes en une passe
+  ffmpeg sur le fichier entier à la première demande (plusieurs minutes pour
+  un remux 4K, quand la TV abandonne après 20 s). Le serveur lance donc cette
+  extraction en arrière-plan dès le lancement d'une lecture, pour les
+  fichiers d'au moins 25 Mb/s (ou de débit inconnu) qui ont des pistes texte
+  (`_warm_embedded_subtitles()` dans `services/tv_playback.py`), une fois par
+  heure et par élément. Couper la connexion n'annule pas l'extraction chez
+  Jellyfin (vérifié dans le code de 10.10 et 12).
 - À vérifier à la main sur la Shield : bascule Original → 1080p → Original
   pendant un film (position à moins de 2 s près), et plus aucune session de
   transcodage orpheline dans le tableau de bord Jellyfin après le retour à
