@@ -17,6 +17,20 @@ import java.util.Locale
  * le lecteur joue, que lui ne connaît que par sa langue, son format, ses
  * canaux et son rang dans le fichier.
  *
+ * Pendant un flux converti (dès le départ : réglage « 1080p » de la TV,
+ * remux .m2ts / .iso ; ou après une bascule), le panneau Audio du menu pause
+ * propose les pistes du serveur ([choices]) à la place de l'unique piste que
+ * voit le lecteur ; en choisir une autre recharge le même flux avec
+ * « ?audio=N » ([switchNeeded], [withAudio]).
+ *
+ * Lecture convertie dès le départ : le lecteur ne verra jamais les pistes du
+ * fichier, la règle des langues d'office (TrackLanguageLogic : dernier choix
+ * du profil, sinon VO + sous-titres FR, sinon VF) se décide donc ici, sur les
+ * pistes du serveur, avant de préparer le lecteur ([indexAtStart]). La
+ * langue de la piste que le flux porte ([playedLanguage]) sert ensuite à
+ * TrackChooser : sous-titres d'office cohérents, et mémoire du profil quand
+ * la piste change (le lecteur, lui, ne la connaît pas).
+ *
  * Logique pure (sans Android), testée sur la JVM (HlsAudioLogicTest).
  */
 object HlsAudioLogic {
@@ -63,6 +77,50 @@ object HlsAudioLogic {
         }?.value?.index
     }
 
+    /**
+     * Piste à demander à Jellyfin quand la lecture démarre déjà convertie
+     * (réglage « 1080p » de la TV, remux .m2ts / .iso, SDR pour le Dolby
+     * Vision profil 5) : la règle des langues d'office (TrackLanguageLogic.plan :
+     * dernier choix du profil [remembered], sinon VO + sous-titres FR, sinon
+     * VF) appliquée aux pistes du serveur. [subtitles] : les sous-titres que le
+     * flux converti portera, ceux posés à côté du fichier (Jellyfin n'y met pas
+     * ceux du MKV) ; sans sous-titres français parmi eux, un titre étranger
+     * part en VF. Null : rien à demander (pas de liste, ou règle sans avis :
+     * Jellyfin prend sa piste par défaut).
+     */
+    fun indexAtStart(
+        tracks: List<AudioTrack>,
+        originalLanguage: String?,
+        subtitles: List<SideSubtitle>,
+        remembered: TrackLanguageLogic.Remembered?,
+    ): Int? {
+        if (tracks.isEmpty()) return null
+        val plan = TrackLanguageLogic.plan(
+            originalLanguage,
+            tracks.map { TrackLanguageLogic.Audio(it.language.ifBlank { null }) },
+            subtitles.map {
+                TrackLanguageLogic.Text(
+                    language = it.language.ifBlank { null },
+                    forced = TrackLanguageLogic.isForced(false, it.label),
+                    label = it.label,
+                )
+            },
+            remembered,
+        )
+        return plan.audio?.let { tracks.getOrNull(it)?.index }
+    }
+
+    /**
+     * Langue (code du fichier : « fre ») de la piste qu'un flux converti porte
+     * ([playedIndex]) : le lecteur ne la sait pas (la liste HLS de Jellyfin ne
+     * la nomme pas), TrackChooser s'en sert pour les sous-titres d'office et
+     * la mémoire du profil. Null sans liste, ou si le fichier ne la dit pas.
+     */
+    fun playedLanguage(tracks: List<AudioTrack>, requested: Int?): String? {
+        val played = playedIndex(tracks, requested) ?: return null
+        return tracks.firstOrNull { it.index == played }?.language?.ifBlank { null }
+    }
+
     /** Adresse du flux converti avec la piste voulue : « …/sdr.m3u8?audio=2 » ; telle quelle sans piste. */
     fun withAudio(url: String, index: Int?): String {
         if (index == null || index < 0 || url.isBlank()) return url
@@ -89,5 +147,88 @@ object HlsAudioLogic {
             v == "ac4" || v == "audio/ac4" -> "ac4"
             else -> v.substringAfter('/')
         }
+    }
+
+    /**
+     * Piste du serveur telle que le panneau Audio la propose pendant un flux
+     * converti : [index] Jellyfin à demander, libellé (langue, sinon titre,
+     * sinon « Piste n »), détail (titre, format, canaux), [selected] pour la
+     * piste lue.
+     */
+    data class Choice(val index: Int, val label: String, val detail: String, val selected: Boolean)
+
+    /**
+     * Pistes à proposer au panneau Audio pendant un flux converti, dans l'ordre
+     * du fichier. [requested] : index demandé à Jellyfin (« ?audio=N »), null
+     * si rien n'a été demandé ; la piste lue ([playedIndex]) est marquée.
+     * [languageName] : « fre » → « Français », null si la langue est inconnue
+     * (Tracks.kt l'a, la logique pure l'emprunte).
+     */
+    fun choices(tracks: List<AudioTrack>, requested: Int?, languageName: (String?) -> String?): List<Choice> {
+        val played = playedIndex(tracks, requested)
+        return tracks.mapIndexed { rank, track ->
+            val language = languageName(track.language.ifBlank { null })
+            val title = track.title.trim().takeIf { it.isNotEmpty() }
+            Choice(
+                index = track.index,
+                label = language ?: title ?: "Piste ${rank + 1}",
+                detail = listOfNotNull(
+                    title?.takeIf { language != null },
+                    codecName(track.codec),
+                    channelsName(track.channels),
+                ).joinToString(" · "),
+                selected = track.index == played,
+            )
+        }
+    }
+
+    /**
+     * Index Jellyfin de la piste qu'un flux converti porte : [requested] si elle
+     * est dans la liste ; sinon celle que Jellyfin prend de lui-même sans
+     * `AudioStreamIndex` (`MediaSourceInfo.GetDefaultAudioStream`) : la piste
+     * marquée par défaut, sinon la première du fichier. Null sans liste.
+     */
+    fun playedIndex(tracks: List<AudioTrack>, requested: Int?): Int? =
+        tracks.firstOrNull { requested != null && it.index == requested }?.index
+            ?: tracks.firstOrNull { it.isDefault }?.index
+            ?: tracks.firstOrNull()?.index
+
+    /**
+     * Piste [chosen] prise au panneau Audio pendant un flux converti : faut-il
+     * recharger le flux ? Non si c'est déjà celle qui est lue, ou si elle n'est
+     * pas dans la liste du serveur.
+     */
+    fun switchNeeded(tracks: List<AudioTrack>, requested: Int?, chosen: Int): Boolean =
+        tracks.any { it.index == chosen } && chosen != playedIndex(tracks, requested)
+
+    /**
+     * Nom commercial d'un format audio nommé par Jellyfin (ffprobe : « eac3 »),
+     * le même que celui du lecteur pour une piste Media3 (audioCodecName,
+     * Tracks.kt) ; ffprobe ne dit pas l'Atmos ni le DTS-HD. Null si inconnu.
+     */
+    fun codecName(codec: String?): String? = when (val family = codecFamily(codec)) {
+        null -> null
+        "truehd" -> "Dolby TrueHD"
+        "eac3" -> "Dolby Digital Plus"
+        "ac3" -> "Dolby Digital"
+        "ac4" -> "Dolby AC-4"
+        "dts" -> "DTS"
+        "aac" -> "AAC"
+        "opus" -> "Opus"
+        "flac" -> "FLAC"
+        "mpeg" -> "MP3"
+        "vorbis" -> "Vorbis"
+        "pcm" -> "PCM"
+        else -> family.uppercase(Locale.ROOT)
+    }
+
+    /** « 6 » → « 5.1 » ; null si inconnu. Le lecteur (Tracks.kt) s'en sert aussi. */
+    fun channelsName(count: Int): String? = when {
+        count <= 0 -> null
+        count == 1 -> "Mono"
+        count == 2 -> "Stéréo"
+        count == 6 -> "5.1"
+        count == 8 -> "7.1"
+        else -> "$count canaux"
     }
 }

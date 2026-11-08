@@ -120,6 +120,29 @@ object TrackLanguageLogic {
     }
 
     /**
+     * Dernier choix du profil tel que le serveur le rend (GET
+     * /api/tv/track-preference/{scope}), vu par la règle ; null si rien n'est
+     * rangé ([TrackPreference.found] faux) : la règle automatique s'applique.
+     */
+    fun remembered(preference: TrackPreference?): Remembered? =
+        preference?.takeIf { it.found }?.let {
+            Remembered(
+                audio = it.audioLanguage.ifBlank { null },
+                subtitle = it.subtitleLanguage.ifBlank { null },
+                subtitleForced = it.subtitleForced,
+            )
+        }
+
+    /** Ce qui est lu, prêt à ranger sur le serveur (POST /api/tv/track-preference/{scope}). */
+    fun preference(remembered: Remembered): TrackPreference =
+        TrackPreference(
+            found = true,
+            audioLanguage = remembered.audio.orEmpty(),
+            subtitleLanguage = remembered.subtitle.orEmpty(),
+            subtitleForced = remembered.subtitleForced,
+        )
+
+    /**
      * Ce qui est lu en ce moment, à ranger quand l'utilisateur change de piste.
      * [subtitleLanguage] null avec [subtitlesOn] faux : sous-titres coupés.
      */
