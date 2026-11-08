@@ -7,7 +7,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Flux converti (1080p, remux, SDR) : Jellyfin n'y met qu'une piste audio, on lui demande celle qu'on entend. */
+/** Flux converti (1080p, remux, SDR) : Jellyfin n'y met qu'une piste audio, on lui demande celle qu'on entend, ou celle de la règle au lancement. */
 class HlsAudioLogicTest {
 
     // Fichier MULTi : VO TrueHD 7.1 par défaut, VF Dolby Digital Plus 5.1, audiodescription française stéréo
@@ -63,6 +63,55 @@ class HlsAudioLogicTest {
         assertNull(HlsAudioLogic.indexForSwitch(currentIsHls = true, currentIndex = null, heard = heard, tracks = multi))
         // Depuis le direct : la piste entendue
         assertEquals(1, HlsAudioLogic.indexForSwitch(currentIsHls = false, currentIndex = 2, heard = heard, tracks = multi))
+    }
+
+    // Sous-titres posés à côté du fichier : les seuls qu'un flux converti porte (pas ceux du MKV)
+    private val frenchSubs = listOf(SideSubtitle(url = "/s/1.srt", label = "Français", language = "fr", mime = "application/x-subrip"))
+    private val forcedFrenchSubs = listOf(SideSubtitle(url = "/s/2.srt", label = "Français (forcés)", language = "fr", mime = "application/x-subrip"))
+
+    @Test
+    fun `lecture convertie des le depart, le dernier choix du profil decide de la piste`() {
+        // Série passée en VF au panneau Audio pendant un flux 1080p : l'épisode
+        // suivant, lui aussi en 1080p, repart en VF, même avec des sous-titres FR à côté
+        val frenchDub = TrackLanguageLogic.Remembered(audio = "fr", subtitle = TrackLanguageLogic.SUBTITLES_OFF)
+        assertEquals(2, HlsAudioLogic.indexAtStart(multi, "en", frenchSubs, frenchDub))
+        // VO voulue, sous-titres FR voulus mais absents : la VO reste
+        assertEquals(1, HlsAudioLogic.indexAtStart(multi, "en", emptyList(), TrackLanguageLogic.Remembered("en", "fr")))
+        // Langue voulue absente de ce fichier : la règle automatique (VO + sous-titres FR)
+        val japanese = TrackLanguageLogic.Remembered("ja", TrackLanguageLogic.SUBTITLES_OFF)
+        assertEquals(1, HlsAudioLogic.indexAtStart(multi, "en", frenchSubs, japanese))
+    }
+
+    @Test
+    fun `lecture convertie des le depart sans choix range, VO avec sous-titres FR a cote sinon VF`() {
+        // Titre étranger avec des sous-titres français complets à côté : VO
+        assertEquals(1, HlsAudioLogic.indexAtStart(multi, "en", frenchSubs, null))
+        // Sans sous-titres français (ceux du MKV n'entrent pas dans le flux converti) : VF
+        assertEquals(2, HlsAudioLogic.indexAtStart(multi, "en", emptyList(), null))
+        // Forcés seulement : pas de quoi suivre la VO, VF
+        assertEquals(2, HlsAudioLogic.indexAtStart(multi, "en", forcedFrenchSubs, null))
+        // Langue originale inconnue (vidéo hors médiathèque) ou film français : le français
+        assertEquals(2, HlsAudioLogic.indexAtStart(multi, null, frenchSubs, null))
+        assertEquals(2, HlsAudioLogic.indexAtStart(multi, "fr", frenchSubs, null))
+    }
+
+    @Test
+    fun `lecture convertie des le depart, rien a demander sans liste ni avis`() {
+        assertNull(HlsAudioLogic.indexAtStart(emptyList(), "en", frenchSubs, null))
+        // VO seule d'un titre japonais, pas de français : la règle n'a pas d'avis, Jellyfin prend sa piste par défaut
+        val voOnly = listOf(AudioTrack(index = 1, language = "eng", codec = "dts", channels = 6, isDefault = true))
+        assertNull(HlsAudioLogic.indexAtStart(voOnly, "ja", frenchSubs, null))
+        // La VO d'un titre anglais, elle, est nommée par la règle : demandée
+        assertEquals(1, HlsAudioLogic.indexAtStart(voOnly, "en", frenchSubs, null))
+    }
+
+    @Test
+    fun `langue de la piste qu'un flux converti porte`() {
+        assertEquals("eng", HlsAudioLogic.playedLanguage(multi, null)) // la piste par défaut de Jellyfin
+        assertEquals("fre", HlsAudioLogic.playedLanguage(multi, 2))
+        assertEquals("eng", HlsAudioLogic.playedLanguage(multi, 9)) // index inconnu du fichier : Jellyfin l'ignore
+        assertNull(HlsAudioLogic.playedLanguage(emptyList(), 2))
+        assertNull(HlsAudioLogic.playedLanguage(listOf(AudioTrack(index = 1, language = "", codec = "aac")), null))
     }
 
     @Test

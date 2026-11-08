@@ -153,6 +153,32 @@ class TrackLanguageLogicTest {
     }
 
     @Test
+    fun rememberedChoiceComesFromTheServerPreference() {
+        assertNull(TrackLanguageLogic.remembered(null))
+        // Rien de rangé pour ce titre : la règle automatique
+        assertNull(TrackLanguageLogic.remembered(TrackPreference(found = false, audioLanguage = "fr")))
+        assertEquals(
+            TrackLanguageLogic.Remembered("fr", TrackLanguageLogic.SUBTITLES_OFF, false),
+            TrackLanguageLogic.remembered(TrackPreference(found = true, audioLanguage = "fr", subtitleLanguage = "off")),
+        )
+        // Champs vides : pas de choix sur ce point
+        assertEquals(TrackLanguageLogic.Remembered(null, null, false), TrackLanguageLogic.remembered(TrackPreference(found = true)))
+    }
+
+    @Test
+    fun preferenceToSaveRoundTrips() {
+        val remembered = TrackLanguageLogic.remember("fre", subtitlesOn = true, subtitleLanguage = "fre", subtitleForced = true)
+        val preference = TrackLanguageLogic.preference(remembered)
+        assertEquals(TrackPreference(found = true, audioLanguage = "fr", subtitleLanguage = "fr", subtitleForced = true), preference)
+        assertEquals(remembered, TrackLanguageLogic.remembered(preference))
+        // Piste du serveur choisie pendant un flux converti (« fre »), sous-titres coupés
+        assertEquals(
+            TrackPreference(found = true, audioLanguage = "fr", subtitleLanguage = "off"),
+            TrackLanguageLogic.preference(TrackLanguageLogic.remember("fre", subtitlesOn = false, subtitleLanguage = null, subtitleForced = false)),
+        )
+    }
+
+    @Test
     fun scopeOfATitle() {
         assertEquals("movie:tmdb:438631", TrackLanguageLogic.scope("movie", 438631, 0))
         assertEquals("series:tvdb:280619", TrackLanguageLogic.scope("episode", 280619, 0))

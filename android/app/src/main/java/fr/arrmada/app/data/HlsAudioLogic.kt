@@ -23,6 +23,14 @@ import java.util.Locale
  * voit le lecteur ; en choisir une autre recharge le même flux avec
  * « ?audio=N » ([switchNeeded], [withAudio]).
  *
+ * Lecture convertie dès le départ : le lecteur ne verra jamais les pistes du
+ * fichier, la règle des langues d'office (TrackLanguageLogic : dernier choix
+ * du profil, sinon VO + sous-titres FR, sinon VF) se décide donc ici, sur les
+ * pistes du serveur, avant de préparer le lecteur ([indexAtStart]). La
+ * langue de la piste que le flux porte ([playedLanguage]) sert ensuite à
+ * TrackChooser : sous-titres d'office cohérents, et mémoire du profil quand
+ * la piste change (le lecteur, lui, ne la connaît pas).
+ *
  * Logique pure (sans Android), testée sur la JVM (HlsAudioLogicTest).
  */
 object HlsAudioLogic {
@@ -67,6 +75,50 @@ object HlsAudioLogic {
                 (if (codec != null && codecFamily(track.codec) == codec) 1 else 0) +
                 (if (heard.channels > 0 && track.channels == heard.channels) 1 else 0)
         }?.value?.index
+    }
+
+    /**
+     * Piste à demander à Jellyfin quand la lecture démarre déjà convertie
+     * (réglage « 1080p » de la TV, remux .m2ts / .iso, SDR pour le Dolby
+     * Vision profil 5) : la règle des langues d'office (TrackLanguageLogic.plan :
+     * dernier choix du profil [remembered], sinon VO + sous-titres FR, sinon
+     * VF) appliquée aux pistes du serveur. [subtitles] : les sous-titres que le
+     * flux converti portera, ceux posés à côté du fichier (Jellyfin n'y met pas
+     * ceux du MKV) ; sans sous-titres français parmi eux, un titre étranger
+     * part en VF. Null : rien à demander (pas de liste, ou règle sans avis :
+     * Jellyfin prend sa piste par défaut).
+     */
+    fun indexAtStart(
+        tracks: List<AudioTrack>,
+        originalLanguage: String?,
+        subtitles: List<SideSubtitle>,
+        remembered: TrackLanguageLogic.Remembered?,
+    ): Int? {
+        if (tracks.isEmpty()) return null
+        val plan = TrackLanguageLogic.plan(
+            originalLanguage,
+            tracks.map { TrackLanguageLogic.Audio(it.language.ifBlank { null }) },
+            subtitles.map {
+                TrackLanguageLogic.Text(
+                    language = it.language.ifBlank { null },
+                    forced = TrackLanguageLogic.isForced(false, it.label),
+                    label = it.label,
+                )
+            },
+            remembered,
+        )
+        return plan.audio?.let { tracks.getOrNull(it)?.index }
+    }
+
+    /**
+     * Langue (code du fichier : « fre ») de la piste qu'un flux converti porte
+     * ([playedIndex]) : le lecteur ne la sait pas (la liste HLS de Jellyfin ne
+     * la nomme pas), TrackChooser s'en sert pour les sous-titres d'office et
+     * la mémoire du profil. Null sans liste, ou si le fichier ne la dit pas.
+     */
+    fun playedLanguage(tracks: List<AudioTrack>, requested: Int?): String? {
+        val played = playedIndex(tracks, requested) ?: return null
+        return tracks.firstOrNull { it.index == played }?.language?.ifBlank { null }
     }
 
     /** Adresse du flux converti avec la piste voulue : « …/sdr.m3u8?audio=2 » ; telle quelle sans piste. */

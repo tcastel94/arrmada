@@ -110,10 +110,24 @@ réservé au Dolby Vision profil 5 sur un écran sans Dolby Vision.
   `audio_tracks` du serveur, la piste lue cochée (celle demandée, sinon celle
   que Jellyfin prend seul : par défaut, sinon la première) ; en choisir une
   autre arrête la conversion, puis recharge le même flux avec `?audio=N` à la
-  même position.
+  même position, et la langue de la piste du serveur est rangée dans la
+  mémoire du profil (le lecteur ne la connaît pas) avec les sous-titres en
+  cours.
+- **Lecture convertie dès le départ : la langue d'office se décide avant le
+  lecteur.** Le lecteur ne verra jamais les pistes du fichier, la règle des
+  langues (dernier choix du profil, sinon VO + sous-titres FR, sinon VF :
+  `TrackLanguageLogic`) s'applique donc aux `audio_tracks` du serveur
+  (`HlsAudioLogic.indexAtStart`) et la piste est demandée dans l'adresse de
+  départ. Seuls les sous-titres posés à côté du fichier comptent pour la VO +
+  sous-titres FR : Jellyfin ne met pas ceux du MKV dans son flux. La fiche et
+  le dernier choix du profil sont attendus par `PlayerScreen` (3 s au plus)
+  avant de créer le lecteur ; s'ils arrivent après, le flux n'est pas
+  rechargé (la conversion repartirait de zéro pour une fiche en retard) :
+  piste par défaut de Jellyfin, changeable au panneau Audio.
 - À vérifier à la main sur la Shield : bascule Original → 1080p → Original
   pendant un film (position à moins de 2 s près, langue gardée sur un fichier
   MULTi), passage en VF depuis le panneau Audio en lecture 1080p dès le départ
-  (position gardée), et plus aucune session de transcodage orpheline dans le
-  tableau de bord Jellyfin après le retour à l'original ou la sortie de la
-  lecture.
+  (position gardée), épisode suivant d'une série passée en VF lu en 1080p dès
+  le départ et en VF sans intervention, et plus aucune session de transcodage
+  orpheline dans le tableau de bord Jellyfin après le retour à l'original ou
+  la sortie de la lecture.

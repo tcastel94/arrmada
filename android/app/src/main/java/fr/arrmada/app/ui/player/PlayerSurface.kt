@@ -8,6 +8,7 @@ import androidx.core.view.WindowCompat
 import android.content.pm.ActivityInfo
 import fr.arrmada.app.ui.components.LocalScreen
 import fr.arrmada.app.ui.components.gutter
+import fr.arrmada.app.data.TrackLanguageLogic
 import fr.arrmada.app.data.TrackPreference
 import fr.arrmada.app.data.TrickplayLogic
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -145,6 +146,25 @@ internal fun PlayerSurface(
     val reducedQuality = remember { QualityLogic.reduced(info, screenHdr10) } // le « 1080p » proposé ici
     // Flux lu (adresse, HLS ?) : change si l'on bascule en remux, en SDR ou en 1080p
     val initialSource = QualityLogic.source(info, startQuality)
+    // Lecture convertie dès le départ (réglage « 1080p » de la TV, remux .m2ts /
+    // .iso, SDR) : Jellyfin ne mettra qu'une piste audio dans son flux, la
+    // règle des langues d'office (TrackLanguageLogic : dernier choix du profil,
+    // sinon VO + sous-titres FR, sinon VF) se décide donc ici, sur les pistes du
+    // serveur, avant de préparer le lecteur (HlsAudioLogic.indexAtStart).
+    // La fiche ([meta]) et le dernier choix du profil ([trackPreference]) sont
+    // lus par PlayerScreen AVANT de créer cet écran (3 s au plus) : on prend ce
+    // qui est là, comme la lecture directe prend ses pistes d'office au premier
+    // jeu de pistes. S'ils arrivent après (serveur lent), on ne recharge pas le
+    // flux pour autant : la conversion repartirait de zéro, coupure visible,
+    // pour une fiche en retard ; la piste par défaut de Jellyfin joue et le
+    // panneau Audio permet d'en changer. Null : rien à demander.
+    val initialHlsAudio = remember {
+        if (!initialSource.second) {
+            null
+        } else {
+            HlsAudioLogic.indexAtStart(info.audioTracks, meta?.originalLanguage, info.subtitles, TrackLanguageLogic.remembered(trackPreference))
+        }
+    }
 
     // ── Création du lecteur (une fois) ──
     val player = remember {
@@ -175,7 +195,8 @@ internal fun PlayerSurface(
             .setSeekForwardIncrementMs(30_000)
             .build()
             .apply {
-                setMediaItem(mediaItem(app.api.baseUrl + initialSource.first, initialSource.second, sideSubtitles(info.subtitles, app.api.baseUrl)))
+                val url = app.api.baseUrl + HlsAudioLogic.withAudio(initialSource.first, initialHlsAudio)
+                setMediaItem(mediaItem(url, initialSource.second, sideSubtitles(info.subtitles, app.api.baseUrl)))
                 prepare()
                 if (request.startSeconds > 0) seekTo(request.startSeconds * 1000L)
                 playWhenReady = true
@@ -248,9 +269,10 @@ internal fun PlayerSurface(
     var dolbyVisionWarned by remember { mutableStateOf(false) }
     var source by remember { mutableStateOf(initialSource) }
     // Piste audio demandée à Jellyfin pour le flux converti en cours (index
-    // MediaStreams), null : sa première piste. Sa liste HLS n'en porte qu'une :
-    // sans ça, la VF choisie en direct serait perdue en 1080p (HlsAudioLogic)
-    var hlsAudio by remember { mutableStateOf<Int?>(null) }
+    // MediaStreams), null : sa piste par défaut. Sa liste HLS n'en porte qu'une :
+    // sans ça, la VF choisie en direct serait perdue en 1080p (HlsAudioLogic).
+    // Converti dès le départ : la piste de la règle des langues d'office
+    var hlsAudio by remember { mutableStateOf(initialHlsAudio) }
     // Flux converti : les pistes du serveur pour le panneau Audio et la tablette
     // (le lecteur n'en voit qu'une) ; vide en lecture directe
     val hlsChoices = remember(source, hlsAudio) {
@@ -423,6 +445,10 @@ internal fun PlayerSurface(
         val (url, hls) = source
         val at = player.currentPosition.takeIf { it > 0 } ?: (request.startSeconds * 1000L)
         val wasPlaying = player.playWhenReady
+        // Mémoire du profil (l'épisode suivant repartira dans cette langue) : la
+        // langue de la piste du serveur, avec les sous-titres en cours, rangée
+        // avant le rechargement (le lecteur ne saura pas celle qu'il reçoit)
+        trackChooser.saveHlsAudioChoice(HlsAudioLogic.playedLanguage(info.audioTracks, index))
         hlsAudio = index // load() le garde : déjà sur un flux converti
         rebuffers = emptyList()
         player.stop() // plus aucune requête vers la conversion qu'on arrête
@@ -541,6 +567,8 @@ internal fun PlayerSurface(
                     originalLanguage = currentMeta?.originalLanguage,
                     preference = currentPreference,
                     waitingSubtitle = subtitles.pendingLabel != null,
+                    // Flux converti : la langue de la piste que Jellyfin y a mise (le lecteur ne la voit pas)
+                    hlsAudioLanguage = if (source.second) HlsAudioLogic.playedLanguage(info.audioTracks, hlsAudio) else null,
                 )
                 // Flux rechargé (décalage, resynchro) : la piste voulue, dès qu'elle apparaît
                 subtitles.pendingLabel?.let { wanted ->
