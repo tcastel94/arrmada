@@ -118,7 +118,10 @@ internal class SubtitleTools(
             if (result.subtitles.isNotEmpty() && result.subtitles.map { it.url } != sideSubs.map { it.url }) {
                 sideSubs = result.subtitles
                 // Même flux, sous-titres en plus ; la lecture reste en pause, le
-                // français est choisi d'office
+                // français est choisi d'office : la piste française (complète de
+                // préférence) dès qu'elle apparaît, et non la piste affichée avant,
+                // que le lecteur reprend sinon après un rechargement (TrackChooser)
+                pendingLabel = (sideSubs.firstOrNull { it.language == "fr" && "forcés" !in it.label } ?: sideSubs.firstOrNull { it.language == "fr" })?.label
                 reload()
                 (player.trackSelector as? DefaultTrackSelector)?.let {
                     // Réactivés : ils ont pu être coupés au lancement (VF sans forcés)

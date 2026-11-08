@@ -82,6 +82,7 @@ import fr.arrmada.app.data.ScrobbleCast
 import fr.arrmada.app.data.ScrobbleLogic
 import fr.arrmada.app.data.ScrobbleSkip
 import fr.arrmada.app.data.ScrobbleTrack
+import fr.arrmada.app.data.StreamSwitchLogic
 import fr.arrmada.app.ui.detail.techBadges
 import fr.arrmada.app.data.PlaybackLogic
 import fr.arrmada.app.data.PlayerKeyLogic
@@ -174,7 +175,10 @@ internal fun PlayerSurface(
             .setSeekForwardIncrementMs(30_000)
             .build()
             .apply {
-                setMediaItem(mediaItem(app.api.baseUrl + initialSource.first, initialSource.second, sideSubtitles(info.subtitles, app.api.baseUrl)))
+                // Sous-titres posés à côté du flux ; en HLS (remux, 1080p d'office), aussi
+                // les pistes texte du fichier, que le flux de Jellyfin ne transporte pas
+                val subs = StreamSwitchLogic.sideloaded(initialSource.second, info.subtitles, info.embeddedSubtitles)
+                setMediaItem(mediaItem(app.api.baseUrl + initialSource.first, initialSource.second, sideSubtitles(subs, app.api.baseUrl)))
                 prepare()
                 if (request.startSeconds > 0) seekTo(request.startSeconds * 1000L)
                 playWhenReady = true
@@ -348,13 +352,23 @@ internal fun PlayerSurface(
         if (next != null && !upNextDismissed) onPlayNext(next.request) else onExit()
     }
 
-    /** Recharge le flux [url] (remux, SDR, nouveaux sous-titres) à la position [at]. */
-    fun load(url: String, hls: Boolean, at: Long) {
+    /**
+     * Recharge le flux [url] (remux, SDR, 1080p, nouveaux sous-titres) à la
+     * position [at]. [before] : pistes lues jusque-là, dont les sous-titres
+     * affichés, à rechoisir dans le nouveau flux (TrackChooser) ; à passer
+     * soi-même si le lecteur a été arrêté entre-temps.
+     *
+     * En HLS, le flux de Jellyfin n'a que l'image et le son : les pistes
+     * texte du fichier sont posées à côté, avec les sous-titres externes.
+     */
+    fun load(url: String, hls: Boolean, at: Long, before: Tracks = player.currentTracks) {
         source = url to hls
         // Le nouveau flux remplit sa mémoire tampon : ce n'est pas une coupure
         readyOnce = false
         lastSeekAt = System.currentTimeMillis()
-        player.setMediaItem(mediaItem(app.api.baseUrl + url, hls, sideSubtitles(subtitles.sideSubs, app.api.baseUrl)), at)
+        trackChooser.keepSubtitle(before)
+        val subs = StreamSwitchLogic.sideloaded(hls, subtitles.sideSubs, info.embeddedSubtitles)
+        player.setMediaItem(mediaItem(app.api.baseUrl + url, hls, sideSubtitles(subs, app.api.baseUrl)), at)
         player.prepare()
     }
 
@@ -373,6 +387,7 @@ internal fun PlayerSurface(
         if (url.isBlank()) return
         val at = player.currentPosition.takeIf { it > 0 } ?: (request.startSeconds * 1000L)
         val wasPlaying = player.playWhenReady
+        val before = player.currentTracks // les sous-titres affichés, avant l'arrêt du lecteur
         val stopFirst = remuxed && info.itemId.isNotBlank()
         quality = target
         toneMapped = target == Quality.HD_SDR
@@ -380,14 +395,14 @@ internal fun PlayerSurface(
         rebuffers = emptyList()
         Toast.makeText(context, QualityLogic.switchMessage(target), Toast.LENGTH_SHORT).show()
         if (!stopFirst) {
-            load(url, hls, at)
+            load(url, hls, at, before)
             player.playWhenReady = wasPlaying
             return
         }
         player.stop() // plus aucune requête vers la conversion qu'on arrête
         uiScope.launch {
             runCatching { repository.stopRemux(info.itemId) }
-            load(url, hls, at)
+            load(url, hls, at, before)
             player.playWhenReady = wasPlaying
         }
     }
@@ -489,12 +504,18 @@ internal fun PlayerSurface(
         val listener = object : Player.Listener {
             override fun onTracksChanged(newTracks: Tracks) {
                 tracks = newTracks
-                // Langues d'office au premier jeu de pistes, choix de l'utilisateur rangé
+                // Langues d'office au premier jeu de pistes, choix de l'utilisateur rangé,
+                // sous-titres d'avant repris après un changement de flux (qualité, remux)
                 trackChooser.onTracksChanged(
                     newTracks,
                     originalLanguage = currentMeta?.originalLanguage,
                     preference = currentPreference,
                     waitingSubtitle = subtitles.pendingLabel != null,
+                    onSubtitleLost = { label, image ->
+                        // Piste image (PGS, VobSub) : pas de version texte à poser à côté du flux converti
+                        val why = if (image) " : pas de version texte pour ce flux" else " absents de ce flux"
+                        Toast.makeText(context, "Sous-titres « $label »$why", Toast.LENGTH_LONG).show()
+                    },
                 )
                 // Flux rechargé (décalage, resynchro) : la piste voulue, dès qu'elle apparaît
                 subtitles.pendingLabel?.let { wanted ->

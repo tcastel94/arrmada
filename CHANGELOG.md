@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Appli TV : les sous-titres du fichier suivent le changement de qualité
+
+#### Fixed
+- **Sous-titres disparus en passant en 1080p** (menu pause › Qualité, carte « Passer en 1080p ? », remux de secours, SDR du Dolby Vision profil 5) : le flux HLS de Jellyfin ne transporte que l'image et le son. Les pistes texte intégrées au MKV (SRT, ASS), que le lecteur lit tout seul en lecture directe, n'existaient plus dans le flux converti ; seuls les sous-titres posés à côté du fichier (Bazarr) restaient. Le serveur listait déjà ces pistes extraites par Jellyfin (`embedded_subtitles`, jusque-là réservées au décalage −/+ 0,5 s) : en HLS, la TV les pose désormais à côté du flux, comme les sous-titres externes. Rien ne change en lecture directe (pas de doublon)
+- **La piste affichée est rechoisie après le changement de flux** : la même piste n'a plus le même numéro ni forcément le même nom (« French » dans le MKV, « Français » dans l'extraction de Jellyfin). Elle est retrouvée par sa langue et sa sorte (complets ou « forcés »), ou par son nom (copie décalée). Vaut aussi pour le retour à l'original
+- Sous-titres **image** (PGS des Blu-ray, VobSub des DVD) : pas de version texte, ils ne peuvent pas suivre dans le flux converti. La TV le dit (« Sous-titres « Français » : pas de version texte pour ce flux ») et coupe les sous-titres plutôt que d'afficher à leur place une autre piste de la même langue (les forcés) ; ils reviennent d'eux-mêmes au retour à l'original, sauf si une autre piste a été choisie entre-temps
+
+#### Notes
+- Première bascule sur un gros fichier : Jellyfin extrait toutes les pistes texte en une passe sur le fichier (quelques secondes pour un épisode, plusieurs minutes pour un remux 4K de 60 Go) et les garde en cache. La TV attend 20 s par essai, trois essais : au-delà, la piste reste vide pour ce flux et marche à la relecture suivante. Le décalage −/+ 0,5 s avait déjà cette limite
+- Nouvelle logique pure `data/StreamSwitchLogic.kt` (sous-titres à poser à côté selon le flux, piste à rechoisir), testée dans `StreamSwitchLogicTest`. APK non construite dans l'environnement de la modification (pas de JDK) : compilation et tests JVM par la CI Android
+
 ### Sous-titres : recherche en arrière-plan, recherche élargie pour les animes, gardien qui cherche avant la séance
 
 #### Fixed
