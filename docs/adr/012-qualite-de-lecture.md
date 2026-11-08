@@ -104,10 +104,16 @@ réservé au Dolby Vision profil 5 sur un écran sans Dolby Vision.
   `HlsAudioLogic`) et la demande. L'arrêt de la conversion avant la bascule
   (décision 6) devient indispensable : le dossier de sortie de Jellyfin ne
   dépend que de la session, pas de la piste, il resservirait sinon les
-  morceaux déjà produits. Reste le flux converti dès le départ (réglage
-  « 1080p », remux) : une seule piste au panneau Audio, à compléter avec les
-  `audio_tracks` du serveur si le besoin se fait sentir.
+  morceaux déjà produits. Pendant un flux converti (dès le départ : réglage
+  « 1080p », remux ; ou après une bascule), le lecteur ne voit qu'une piste :
+  le panneau Audio du menu pause et la tablette proposent alors les
+  `audio_tracks` du serveur, la piste lue cochée (celle demandée, sinon celle
+  que Jellyfin prend seul : par défaut, sinon la première) ; en choisir une
+  autre arrête la conversion, puis recharge le même flux avec `?audio=N` à la
+  même position.
 - À vérifier à la main sur la Shield : bascule Original → 1080p → Original
   pendant un film (position à moins de 2 s près, langue gardée sur un fichier
-  MULTi), et plus aucune session de transcodage orpheline dans le tableau de
-  bord Jellyfin après le retour à l'original ou la sortie de la lecture.
+  MULTi), passage en VF depuis le panneau Audio en lecture 1080p dès le départ
+  (position gardée), et plus aucune session de transcodage orpheline dans le
+  tableau de bord Jellyfin après le retour à l'original ou la sortie de la
+  lecture.

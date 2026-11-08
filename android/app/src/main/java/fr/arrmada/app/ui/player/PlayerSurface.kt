@@ -251,6 +251,11 @@ internal fun PlayerSurface(
     // MediaStreams), null : sa première piste. Sa liste HLS n'en porte qu'une :
     // sans ça, la VF choisie en direct serait perdue en 1080p (HlsAudioLogic)
     var hlsAudio by remember { mutableStateOf<Int?>(null) }
+    // Flux converti : les pistes du serveur pour le panneau Audio et la tablette
+    // (le lecteur n'en voit qu'une) ; vide en lecture directe
+    val hlsChoices = remember(source, hlsAudio) {
+        if (source.second) HlsAudioLogic.choices(info.audioTracks, hlsAudio, ::languageName) else emptyList()
+    }
     // Outils Sous-titres (Bazarr, resynchro, décalage) et leur état : SubtitleTools.kt
     val subtitles = remember { SubtitleTools(info, request, player, repository, uiScope, context) }
     // Choix des pistes (langues d'office, mémoire par profil) : TrackChooser.kt
@@ -405,6 +410,29 @@ internal fun PlayerSurface(
         }
     }
 
+    /**
+     * Panneau Audio (ou tablette) pendant un flux converti : Jellyfin n'y met
+     * qu'une piste, on recharge le MÊME flux avec la piste [index] (« ?audio=N »),
+     * même position, même état lecture / pause. La conversion en cours est
+     * arrêtée AVANT (comme setQuality) : son dossier de sortie ne dépend que de
+     * la session, Jellyfin resservirait sinon les morceaux déjà produits avec
+     * l'ancienne piste.
+     */
+    fun setHlsAudio(index: Int) {
+        if (!source.second || !HlsAudioLogic.switchNeeded(info.audioTracks, hlsAudio, index)) return
+        val (url, hls) = source
+        val at = player.currentPosition.takeIf { it > 0 } ?: (request.startSeconds * 1000L)
+        val wasPlaying = player.playWhenReady
+        hlsAudio = index // load() le garde : déjà sur un flux converti
+        rebuffers = emptyList()
+        player.stop() // plus aucune requête vers la conversion qu'on arrête
+        uiScope.launch {
+            if (info.itemId.isNotBlank()) runCatching { repository.stopRemux(info.itemId) }
+            load(url, hls, at)
+            player.playWhenReady = wasPlaying
+        }
+    }
+
     /** Carte de qualité : OK / « Passer en 1080p » (ou « Oui » à la seconde question). */
     fun acceptQualityCard() {
         when (qualityCard) {
@@ -468,7 +496,12 @@ internal fun PlayerSurface(
             )
             val total = (player.duration.takeIf { it > 0 } ?: duration) / 1000.0
             val positionS = player.currentPosition / 1000.0
-            val audioChoices = trackChoices(tracks, C.TRACK_TYPE_AUDIO)
+            // Flux converti : les pistes du serveur (le lecteur n'en voit qu'une), sinon celles du lecteur
+            val audioChoices = if (hlsChoices.isNotEmpty()) {
+                hlsChoices.map { TrackChoice(it.label, it.detail, it.selected, supported = true, group = null, index = it.index) }
+            } else {
+                trackChoices(tracks, C.TRACK_TYPE_AUDIO)
+            }
             val textChoices = trackChoices(tracks, C.TRACK_TYPE_TEXT)
             // Ce que la tablette affiche en plus pendant la séance
             val rich = what.copy(
@@ -702,6 +735,9 @@ internal fun PlayerSurface(
                 val type = if (kind == "audio") C.TRACK_TYPE_AUDIO else C.TRACK_TYPE_TEXT
                 if (index < 0) {
                     if (type == C.TRACK_TYPE_TEXT) trackChooser.select(type, null)
+                } else if (type == C.TRACK_TYPE_AUDIO && hlsChoices.isNotEmpty()) {
+                    // Flux converti : la tablette a reçu les pistes du serveur (même rang)
+                    hlsChoices.getOrNull(index)?.let { setHlsAudio(it.index) }
                 } else {
                     trackChoices(tracks, type).getOrNull(index)?.takeIf { it.supported }?.let { trackChooser.select(type, it) }
                 }
@@ -941,6 +977,7 @@ internal fun PlayerSurface(
                     current = quality,
                     onSelect = ::setQuality,
                 ),
+                hlsAudio = HlsAudioChoice(hlsChoices, ::setHlsAudio).takeIf { hlsChoices.isNotEmpty() },
             )
         }
 
