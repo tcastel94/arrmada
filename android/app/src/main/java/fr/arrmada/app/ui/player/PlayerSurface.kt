@@ -75,6 +75,7 @@ import fr.arrmada.app.data.SoundAdvisor
 import fr.arrmada.app.data.DolbyVisionLogic
 import fr.arrmada.app.data.PlayInfo
 import fr.arrmada.app.data.DefaultQuality
+import fr.arrmada.app.data.HlsAudioLogic
 import fr.arrmada.app.data.Quality
 import fr.arrmada.app.data.QualityLogic
 import fr.arrmada.app.data.RemoteCommand
@@ -246,6 +247,10 @@ internal fun PlayerSurface(
     var qualityCard by remember { mutableStateOf<QualityCardKind?>(null) }
     var dolbyVisionWarned by remember { mutableStateOf(false) }
     var source by remember { mutableStateOf(initialSource) }
+    // Piste audio demandée à Jellyfin pour le flux converti en cours (index
+    // MediaStreams), null : sa première piste. Sa liste HLS n'en porte qu'une :
+    // sans ça, la VF choisie en direct serait perdue en 1080p (HlsAudioLogic)
+    var hlsAudio by remember { mutableStateOf<Int?>(null) }
     // Outils Sous-titres (Bazarr, resynchro, décalage) et leur état : SubtitleTools.kt
     val subtitles = remember { SubtitleTools(info, request, player, repository, uiScope, context) }
     // Choix des pistes (langues d'office, mémoire par profil) : TrackChooser.kt
@@ -348,13 +353,18 @@ internal fun PlayerSurface(
         if (next != null && !upNextDismissed) onPlayNext(next.request) else onExit()
     }
 
-    /** Recharge le flux [url] (remux, SDR, nouveaux sous-titres) à la position [at]. */
+    /** Recharge le flux [url] (remux, SDR, 1080p, nouveaux sous-titres) à la position [at]. */
     fun load(url: String, hls: Boolean, at: Long) {
+        // Flux converti : la piste audio entendue, retrouvée parmi celles du
+        // serveur (déjà converti : la même qu'avant, le lecteur n'en voit qu'une).
+        // Lue AVANT de changer d'élément : le lecteur oublie alors ses pistes.
+        hlsAudio = if (hls) HlsAudioLogic.indexForSwitch(source.second, hlsAudio, heardAudio(tracks), info.audioTracks) else null
         source = url to hls
         // Le nouveau flux remplit sa mémoire tampon : ce n'est pas une coupure
         readyOnce = false
         lastSeekAt = System.currentTimeMillis()
-        player.setMediaItem(mediaItem(app.api.baseUrl + url, hls, sideSubtitles(subtitles.sideSubs, app.api.baseUrl)), at)
+        val target = app.api.baseUrl + HlsAudioLogic.withAudio(url, hlsAudio)
+        player.setMediaItem(mediaItem(target, hls, sideSubtitles(subtitles.sideSubs, app.api.baseUrl)), at)
         player.prepare()
     }
 
@@ -366,6 +376,9 @@ internal fun PlayerSurface(
      * même état lecture / pause. Une conversion Jellyfin en cours est arrêtée
      * AVANT de lancer le nouveau flux : remux, SDR et 1080p partagent la même
      * session chez Jellyfin, l'arrêt après coup couperait aussi le nouveau.
+     * Cet arrêt efface aussi les morceaux déjà produits : indispensable quand
+     * la piste audio change, Jellyfin les resservirait sinon (son dossier de
+     * sortie ne dépend que de la session, pas de la piste demandée).
      */
     fun setQuality(target: Quality) {
         if (target == quality) return

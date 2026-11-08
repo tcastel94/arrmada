@@ -35,6 +35,13 @@ Pas de flux 1080p qui garderait le HDR (ADR-012) : vérifié sur Jellyfin
 12.3, tout réencodage d'une image HDR passe par le mappage tonal (sortie
 BT.709) et le HEVC réencodé est forcé en Main 8 bits ; « hevc-rangetype=HDR10 »
 ne sert qu'à décider de la copie de l'image, pas de l'encodage.
+
+Une seule piste audio dans un flux converti (vérifié dans le code de Jellyfin
+12.4, `DynamicHlsHelper` / `EncodingHelper`) : celle d'`AudioStreamIndex`,
+sinon la première du fichier. Une VF choisie en direct serait donc perdue en
+1080p sur un fichier MULTi. La TV reçoit la liste des pistes du fichier
+(`audio_tracks`, avec l'index Jellyfin de chacune) et demande la piste
+qu'elle est en train de lire avec « ?audio=N » sur master.m3u8 / sdr.m3u8.
 """
 
 from __future__ import annotations
@@ -43,7 +50,7 @@ import asyncio
 import re
 from collections.abc import AsyncIterator
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import parse_qs, urlencode
 
 import httpx
 from sqlalchemy import select
@@ -84,6 +91,12 @@ DIRECT_EXTENSIONS = {"mkv", "mk3d", "webm", "mp4", "m4v", "mov", "ts", "avi", "o
 # principale, celle des morceaux, et les morceaux eux-mêmes. Rien d'autre
 # n'est relayé vers Jellyfin.
 HLS_PATH = re.compile(r"^(master|main|sdr)\.m3u8$|^hls1/[A-Za-z0-9_]+/-?\d+\.(mp4|m4s|ts)$")
+
+# Seul paramètre de requête écouté sur master.m3u8 / sdr.m3u8 : « ?audio=N »,
+# la piste audio voulue, N étant l'index de la piste dans MediaStreams chez
+# Jellyfin (son `AudioStreamIndex`). Un index de piste : 0 à 999, rien d'autre.
+AUDIO_PARAM = "audio"
+AUDIO_INDEX = re.compile(r"^\d{1,3}$")
 
 # Identifiants de la session de remux chez Jellyfin (pour l'arrêter ensuite)
 HLS_DEVICE = "arrmada-tv"
@@ -237,6 +250,40 @@ def embedded_subtitles(item_id: str, details: dict[str, Any]) -> list[dict[str, 
             "mime": fmt[1],
         })  # fmt: skip
     return found
+
+
+def audio_tracks(details: dict[str, Any]) -> list[dict[str, Any]]:
+    """Pistes audio du fichier, dans l'ordre du fichier →
+    [{index, language, codec, channels, title, default}].
+
+    `index` : celui de la piste dans MediaStreams chez Jellyfin, à passer en
+    « ?audio=N » sur master.m3u8 / sdr.m3u8. `language` : code du fichier tel
+    quel (« fre », « eng »…, vide si inconnu), `codec` : nom ffprobe (« eac3 »,
+    « truehd », « dts »…), `channels` : 0 si inconnu. La TV y retrouve la
+    piste qu'elle est en train de lire (langue, format, canaux, rang) pour la
+    redemander quand elle bascule sur un flux converti.
+    """
+    sources = details.get("MediaSources") or [{}]
+    source = sources[0] if isinstance(sources[0], dict) else {}
+    tracks = []
+    for stream in source.get("MediaStreams") or []:
+        if not isinstance(stream, dict) or stream.get("Type") != "Audio":
+            continue
+        index = stream.get("Index")
+        if isinstance(index, bool) or not isinstance(index, int) or index < 0:
+            continue
+        channels = stream.get("Channels")
+        if isinstance(channels, bool) or not isinstance(channels, int) or channels < 0:
+            channels = 0
+        tracks.append({
+            "index": index,
+            "language": str(stream.get("Language") or "").lower(),
+            "codec": str(stream.get("Codec") or "").lower(),
+            "channels": channels,
+            "title": str(stream.get("Title") or ""),
+            "default": bool(stream.get("IsDefault")),
+        })  # fmt: skip
+    return sorted(tracks, key=lambda t: t["index"])
 
 
 def source_bitrate(details: dict[str, Any]) -> int | None:
@@ -410,6 +457,9 @@ def _found(item_id: str, details: dict[str, Any] | None, resume: dict[str, Any])
         "subtitles": external_subtitles(item_id, details),
         # Pistes intégrées, extraites par Jellyfin seulement pour être décalées
         "embedded_subtitles": embedded_subtitles(item_id, details),
+        # Pistes audio du fichier avec leur index Jellyfin : un flux converti
+        # n'en porte qu'une, la TV demande celle qu'elle écoute (« ?audio=N »)
+        "audio_tracks": audio_tracks(details),
     }
 
 
@@ -727,11 +777,15 @@ async def open_audio(
 # ── Remux HLS (formats que la TV ne lit pas directement) ─────────────────────
 
 
-def hls_master_params(item_id: str) -> dict[str, str]:
+def hls_master_params(item_id: str, audio_index: int | None = None) -> dict[str, str]:
     """Paramètres du remux : image copiée telle quelle (HEVC, HDR, Dolby
     Vision gardés), son copié s'il tient dans le conteneur, sinon converti en
-    Dolby Digital Plus (jusqu'en 7.1)."""
-    return {
+    Dolby Digital Plus (jusqu'en 7.1).
+
+    [audio_index] : la piste audio à garder (index MediaStreams de Jellyfin,
+    voir `audio_tracks`) ; None : Jellyfin prend la première du fichier.
+    """
+    params = {
         "MediaSourceId": item_id,
         "DeviceId": HLS_DEVICE,
         "PlaySessionId": f"arrmada-{item_id}",
@@ -746,9 +800,12 @@ def hls_master_params(item_id: str) -> dict[str, str]:
         "TranscodingMaxAudioChannels": "8",
         "MaxStreamingBitrate": "250000000",
     }
+    if audio_index is not None:
+        params["AudioStreamIndex"] = str(audio_index)
+    return params
 
 
-def hls_sdr_params(item_id: str) -> dict[str, str]:
+def hls_sdr_params(item_id: str, audio_index: int | None = None) -> dict[str, str]:
     """Paramètres de la conversion SDR : image réencodée en H.264 SDR 1080p.
 
     Le H.264 n'existe qu'en SDR : Jellyfin applique donc son mappage tonal
@@ -760,9 +817,10 @@ def hls_sdr_params(item_id: str) -> dict[str, str]:
 
     Sert aussi de qualité réduite choisie à la TV (menu pause › Qualité,
     ADR-012) : 20 Mb/s passent sur un lien à 100 Mb/s ou en Wi-Fi.
+    [audio_index] : comme pour `hls_master_params`.
     """
     return {
-        **hls_master_params(item_id),
+        **hls_master_params(item_id, audio_index),
         "VideoCodec": "h264",
         "AllowVideoStreamCopy": "false",
         "h264-rangetype": "SDR",
@@ -775,25 +833,50 @@ def hls_sdr_params(item_id: str) -> dict[str, str]:
     }
 
 
+def requested_audio(query: str) -> int | None:
+    """« ?audio=N » d'une liste principale → index Jellyfin de la piste audio
+    voulue ; None sans ce paramètre (Jellyfin prend la première du fichier).
+
+    Toute autre valeur (lettres, négatif, trop grand, répété) est refusée :
+    seule une piste du fichier, par son index MediaStreams, peut être demandée.
+    """
+    values = parse_qs(query or "", keep_blank_values=True).get(AUDIO_PARAM)
+    if not values:
+        return None
+    if len(values) != 1 or not AUDIO_INDEX.match(values[0]):
+        raise UpstreamError(404, "Piste audio inconnue")
+    return int(values[0])
+
+
 async def open_hls(
     db: AsyncSession, item_id: str, path: str, query: str, range_header: str | None
 ) -> tuple[int, dict[str, str], AsyncIterator[bytes] | bytes]:
     """Relaie une liste HLS (clé retirée) ou un morceau du remux Jellyfin.
 
-    [query] : paramètres tels que la TV les a reçus dans les listes de
-    Jellyfin (sans la clé) ; la clé est ajoutée ici.
+    [query] : sur master.m3u8 / sdr.m3u8, « audio=N » (la piste audio voulue,
+    voir `requested_audio`), le reste est ignoré ; sur la liste des morceaux
+    et les morceaux, les paramètres tels que la TV les a reçus dans les listes
+    de Jellyfin (sans la clé) ; la clé est ajoutée ici.
     """
     if not ITEM_ID.match(item_id) or not HLS_PATH.match(path):
         raise UpstreamError(404, "Élément inconnu")
+    audio = requested_audio(query) if path in ("master.m3u8", "sdr.m3u8") else None
     cfg = await jellyfin.get_config(db)
     if not cfg:
         raise UpstreamError(503, "Jellyfin non configuré")
     base, key = cfg
     if path in ("master.m3u8", "sdr.m3u8"):
-        # Liste principale : paramètres décidés ici, jamais par la TV.
-        # « sdr.m3u8 » n'existe pas chez Jellyfin : c'est sa master.m3u8,
-        # demandée avec les paramètres de la conversion SDR.
-        chosen = hls_sdr_params(item_id) if path == "sdr.m3u8" else hls_master_params(item_id)
+        # Liste principale : paramètres décidés ici, jamais par la TV (sauf
+        # la piste audio, bornée ci-dessus). « sdr.m3u8 » n'existe pas chez
+        # Jellyfin : c'est sa master.m3u8, demandée avec les paramètres de la
+        # conversion SDR. Jellyfin recopie ces paramètres (AudioStreamIndex
+        # compris) dans les adresses de la liste des morceaux, qui nous
+        # reviennent telles quelles.
+        chosen = (
+            hls_sdr_params(item_id, audio)
+            if path == "sdr.m3u8"
+            else hls_master_params(item_id, audio)
+        )
         params = urlencode({**chosen, jellyfin.KEY_PARAM: key})
         path = "master.m3u8"
     else:
