@@ -8,6 +8,7 @@ import androidx.core.view.WindowCompat
 import android.content.pm.ActivityInfo
 import fr.arrmada.app.ui.components.LocalScreen
 import fr.arrmada.app.ui.components.gutter
+import fr.arrmada.app.data.TrackLanguageLogic
 import fr.arrmada.app.data.TrackPreference
 import fr.arrmada.app.data.TrickplayLogic
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -75,6 +76,7 @@ import fr.arrmada.app.data.SoundAdvisor
 import fr.arrmada.app.data.DolbyVisionLogic
 import fr.arrmada.app.data.PlayInfo
 import fr.arrmada.app.data.DefaultQuality
+import fr.arrmada.app.data.HlsAudioLogic
 import fr.arrmada.app.data.Quality
 import fr.arrmada.app.data.QualityLogic
 import fr.arrmada.app.data.RemoteCommand
@@ -82,6 +84,7 @@ import fr.arrmada.app.data.ScrobbleCast
 import fr.arrmada.app.data.ScrobbleLogic
 import fr.arrmada.app.data.ScrobbleSkip
 import fr.arrmada.app.data.ScrobbleTrack
+import fr.arrmada.app.data.StreamSwitchLogic
 import fr.arrmada.app.ui.detail.techBadges
 import fr.arrmada.app.data.PlaybackLogic
 import fr.arrmada.app.data.PlayerKeyLogic
@@ -144,6 +147,28 @@ internal fun PlayerSurface(
     val reducedQuality = remember { QualityLogic.reduced(info, screenHdr10) } // le « 1080p » proposé ici
     // Flux lu (adresse, HLS ?) : change si l'on bascule en remux, en SDR ou en 1080p
     val initialSource = QualityLogic.source(info, startQuality)
+    // Lecture convertie dès le départ (réglage « 1080p » de la TV, remux .m2ts /
+    // .iso, SDR) : Jellyfin ne mettra qu'une piste audio dans son flux, la
+    // règle des langues d'office (TrackLanguageLogic : dernier choix du profil,
+    // sinon VO + sous-titres FR, sinon VF) se décide donc ici, sur les pistes du
+    // serveur, avant de préparer le lecteur (HlsAudioLogic.indexAtStart).
+    // La fiche ([meta]) et le dernier choix du profil ([trackPreference]) sont
+    // lus par PlayerScreen AVANT de créer cet écran (3 s au plus) : on prend ce
+    // qui est là, comme la lecture directe prend ses pistes d'office au premier
+    // jeu de pistes. S'ils arrivent après (serveur lent), on ne recharge pas le
+    // flux pour autant : la conversion repartirait de zéro, coupure visible,
+    // pour une fiche en retard ; la piste par défaut de Jellyfin joue et le
+    // panneau Audio permet d'en changer. Null : rien à demander.
+    val initialHlsAudio = remember {
+        if (!initialSource.second) {
+            null
+        } else {
+            // Sous-titres que le flux converti aura : ceux posés à côté du fichier et
+            // les pistes texte du MKV, posées à côté elles aussi (StreamSwitchLogic)
+            val subs = StreamSwitchLogic.sideloaded(hls = true, side = info.subtitles, embedded = info.embeddedSubtitles)
+            HlsAudioLogic.indexAtStart(info.audioTracks, meta?.originalLanguage, subs, TrackLanguageLogic.remembered(trackPreference))
+        }
+    }
 
     // ── Création du lecteur (une fois) ──
     val player = remember {
@@ -174,7 +199,11 @@ internal fun PlayerSurface(
             .setSeekForwardIncrementMs(30_000)
             .build()
             .apply {
-                setMediaItem(mediaItem(app.api.baseUrl + initialSource.first, initialSource.second, sideSubtitles(info.subtitles, app.api.baseUrl)))
+                // Sous-titres posés à côté du flux ; en HLS (remux, 1080p d'office), aussi
+                // les pistes texte du fichier, que le flux de Jellyfin ne transporte pas
+                val subs = StreamSwitchLogic.sideloaded(initialSource.second, info.subtitles, info.embeddedSubtitles)
+                val url = app.api.baseUrl + HlsAudioLogic.withAudio(initialSource.first, initialHlsAudio)
+                setMediaItem(mediaItem(url, initialSource.second, sideSubtitles(subs, app.api.baseUrl)))
                 prepare()
                 if (request.startSeconds > 0) seekTo(request.startSeconds * 1000L)
                 playWhenReady = true
@@ -246,6 +275,16 @@ internal fun PlayerSurface(
     var qualityCard by remember { mutableStateOf<QualityCardKind?>(null) }
     var dolbyVisionWarned by remember { mutableStateOf(false) }
     var source by remember { mutableStateOf(initialSource) }
+    // Piste audio demandée à Jellyfin pour le flux converti en cours (index
+    // MediaStreams), null : sa piste par défaut. Sa liste HLS n'en porte qu'une :
+    // sans ça, la VF choisie en direct serait perdue en 1080p (HlsAudioLogic).
+    // Converti dès le départ : la piste de la règle des langues d'office
+    var hlsAudio by remember { mutableStateOf(initialHlsAudio) }
+    // Flux converti : les pistes du serveur pour le panneau Audio et la tablette
+    // (le lecteur n'en voit qu'une) ; vide en lecture directe
+    val hlsChoices = remember(source, hlsAudio) {
+        if (source.second) HlsAudioLogic.choices(info.audioTracks, hlsAudio, ::languageName) else emptyList()
+    }
     // Outils Sous-titres (Bazarr, resynchro, décalage) et leur état : SubtitleTools.kt
     val subtitles = remember { SubtitleTools(info, request, player, repository, uiScope, context) }
     // Choix des pistes (langues d'office, mémoire par profil) : TrackChooser.kt
@@ -348,13 +387,30 @@ internal fun PlayerSurface(
         if (next != null && !upNextDismissed) onPlayNext(next.request) else onExit()
     }
 
-    /** Recharge le flux [url] (remux, SDR, nouveaux sous-titres) à la position [at]. */
-    fun load(url: String, hls: Boolean, at: Long) {
+    /**
+     * Recharge le flux [url] (remux, SDR, 1080p, nouveaux sous-titres) à la
+     * position [at]. [before] : pistes lues jusque-là, dont la piste audio
+     * entendue et les sous-titres affichés, à retrouver dans le nouveau flux
+     * (HlsAudioLogic, TrackChooser) ; à passer soi-même si le lecteur a été
+     * arrêté entre-temps.
+     *
+     * En HLS, le flux de Jellyfin n'a que l'image et une seule piste de son :
+     * la piste audio entendue lui est demandée (« ?audio=N ») et les pistes
+     * texte du fichier sont posées à côté, avec les sous-titres externes.
+     */
+    fun load(url: String, hls: Boolean, at: Long, before: Tracks = player.currentTracks) {
+        // Flux converti : la piste audio entendue, retrouvée parmi celles du
+        // serveur (déjà converti : la même qu'avant, le lecteur n'en voit qu'une).
+        // Lue AVANT de changer d'élément : le lecteur oublie alors ses pistes.
+        hlsAudio = if (hls) HlsAudioLogic.indexForSwitch(source.second, hlsAudio, heardAudio(before), info.audioTracks) else null
         source = url to hls
         // Le nouveau flux remplit sa mémoire tampon : ce n'est pas une coupure
         readyOnce = false
         lastSeekAt = System.currentTimeMillis()
-        player.setMediaItem(mediaItem(app.api.baseUrl + url, hls, sideSubtitles(subtitles.sideSubs, app.api.baseUrl)), at)
+        trackChooser.keepSubtitle(before)
+        val subs = StreamSwitchLogic.sideloaded(hls, subtitles.sideSubs, info.embeddedSubtitles)
+        val target = app.api.baseUrl + HlsAudioLogic.withAudio(url, hlsAudio)
+        player.setMediaItem(mediaItem(target, hls, sideSubtitles(subs, app.api.baseUrl)), at)
         player.prepare()
     }
 
@@ -366,6 +422,9 @@ internal fun PlayerSurface(
      * même état lecture / pause. Une conversion Jellyfin en cours est arrêtée
      * AVANT de lancer le nouveau flux : remux, SDR et 1080p partagent la même
      * session chez Jellyfin, l'arrêt après coup couperait aussi le nouveau.
+     * Cet arrêt efface aussi les morceaux déjà produits : indispensable quand
+     * la piste audio change, Jellyfin les resservirait sinon (son dossier de
+     * sortie ne dépend que de la session, pas de la piste demandée).
      */
     fun setQuality(target: Quality) {
         if (target == quality) return
@@ -373,6 +432,7 @@ internal fun PlayerSurface(
         if (url.isBlank()) return
         val at = player.currentPosition.takeIf { it > 0 } ?: (request.startSeconds * 1000L)
         val wasPlaying = player.playWhenReady
+        val before = player.currentTracks // les sous-titres affichés, avant l'arrêt du lecteur
         val stopFirst = remuxed && info.itemId.isNotBlank()
         quality = target
         toneMapped = target == Quality.HD_SDR
@@ -380,13 +440,40 @@ internal fun PlayerSurface(
         rebuffers = emptyList()
         Toast.makeText(context, QualityLogic.switchMessage(target), Toast.LENGTH_SHORT).show()
         if (!stopFirst) {
-            load(url, hls, at)
+            load(url, hls, at, before)
             player.playWhenReady = wasPlaying
             return
         }
         player.stop() // plus aucune requête vers la conversion qu'on arrête
         uiScope.launch {
             runCatching { repository.stopRemux(info.itemId) }
+            load(url, hls, at, before)
+            player.playWhenReady = wasPlaying
+        }
+    }
+
+    /**
+     * Panneau Audio (ou tablette) pendant un flux converti : Jellyfin n'y met
+     * qu'une piste, on recharge le MÊME flux avec la piste [index] (« ?audio=N »),
+     * même position, même état lecture / pause. La conversion en cours est
+     * arrêtée AVANT (comme setQuality) : son dossier de sortie ne dépend que de
+     * la session, Jellyfin resservirait sinon les morceaux déjà produits avec
+     * l'ancienne piste.
+     */
+    fun setHlsAudio(index: Int) {
+        if (!source.second || !HlsAudioLogic.switchNeeded(info.audioTracks, hlsAudio, index)) return
+        val (url, hls) = source
+        val at = player.currentPosition.takeIf { it > 0 } ?: (request.startSeconds * 1000L)
+        val wasPlaying = player.playWhenReady
+        // Mémoire du profil (l'épisode suivant repartira dans cette langue) : la
+        // langue de la piste du serveur, avec les sous-titres en cours, rangée
+        // avant le rechargement (le lecteur ne saura pas celle qu'il reçoit)
+        trackChooser.saveHlsAudioChoice(HlsAudioLogic.playedLanguage(info.audioTracks, index))
+        hlsAudio = index // load() le garde : déjà sur un flux converti
+        rebuffers = emptyList()
+        player.stop() // plus aucune requête vers la conversion qu'on arrête
+        uiScope.launch {
+            if (info.itemId.isNotBlank()) runCatching { repository.stopRemux(info.itemId) }
             load(url, hls, at)
             player.playWhenReady = wasPlaying
         }
@@ -455,7 +542,12 @@ internal fun PlayerSurface(
             )
             val total = (player.duration.takeIf { it > 0 } ?: duration) / 1000.0
             val positionS = player.currentPosition / 1000.0
-            val audioChoices = trackChoices(tracks, C.TRACK_TYPE_AUDIO)
+            // Flux converti : les pistes du serveur (le lecteur n'en voit qu'une), sinon celles du lecteur
+            val audioChoices = if (hlsChoices.isNotEmpty()) {
+                hlsChoices.map { TrackChoice(it.label, it.detail, it.selected, supported = true, group = null, index = it.index) }
+            } else {
+                trackChoices(tracks, C.TRACK_TYPE_AUDIO)
+            }
             val textChoices = trackChoices(tracks, C.TRACK_TYPE_TEXT)
             // Ce que la tablette affiche en plus pendant la séance
             val rich = what.copy(
@@ -489,12 +581,20 @@ internal fun PlayerSurface(
         val listener = object : Player.Listener {
             override fun onTracksChanged(newTracks: Tracks) {
                 tracks = newTracks
-                // Langues d'office au premier jeu de pistes, choix de l'utilisateur rangé
+                // Langues d'office au premier jeu de pistes, choix de l'utilisateur rangé,
+                // sous-titres d'avant repris après un changement de flux (qualité, remux)
                 trackChooser.onTracksChanged(
                     newTracks,
                     originalLanguage = currentMeta?.originalLanguage,
                     preference = currentPreference,
                     waitingSubtitle = subtitles.pendingLabel != null,
+                    // Flux converti : la langue de la piste que Jellyfin y a mise (le lecteur ne la voit pas)
+                    hlsAudioLanguage = if (source.second) HlsAudioLogic.playedLanguage(info.audioTracks, hlsAudio) else null,
+                    onSubtitleLost = { label, image ->
+                        // Piste image (PGS, VobSub) : pas de version texte à poser à côté du flux converti
+                        val why = if (image) " : pas de version texte pour ce flux" else " absents de ce flux"
+                        Toast.makeText(context, "Sous-titres « $label »$why", Toast.LENGTH_LONG).show()
+                    },
                 )
                 // Flux rechargé (décalage, resynchro) : la piste voulue, dès qu'elle apparaît
                 subtitles.pendingLabel?.let { wanted ->
@@ -689,6 +789,9 @@ internal fun PlayerSurface(
                 val type = if (kind == "audio") C.TRACK_TYPE_AUDIO else C.TRACK_TYPE_TEXT
                 if (index < 0) {
                     if (type == C.TRACK_TYPE_TEXT) trackChooser.select(type, null)
+                } else if (type == C.TRACK_TYPE_AUDIO && hlsChoices.isNotEmpty()) {
+                    // Flux converti : la tablette a reçu les pistes du serveur (même rang)
+                    hlsChoices.getOrNull(index)?.let { setHlsAudio(it.index) }
                 } else {
                     trackChoices(tracks, type).getOrNull(index)?.takeIf { it.supported }?.let { trackChooser.select(type, it) }
                 }
@@ -928,6 +1031,7 @@ internal fun PlayerSurface(
                     current = quality,
                     onSelect = ::setQuality,
                 ),
+                hlsAudio = HlsAudioChoice(hlsChoices, ::setHlsAudio).takeIf { hlsChoices.isNotEmpty() },
             )
         }
 

@@ -6,6 +6,7 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
+import fr.arrmada.app.data.HlsAudioLogic
 import java.util.Locale
 
 /** Une piste audio ou de sous-titres, telle qu'on la propose dans le menu pause. */
@@ -59,6 +60,26 @@ fun selectedSound(tracks: Tracks, fileAudio: String?): fr.arrmada.app.data.Sound
     return null
 }
 
+/**
+ * Piste audio en cours de lecture, telle que HlsAudioLogic la retrouve parmi
+ * les pistes connues du serveur : rang parmi les pistes audio (même ordre que
+ * le fichier), langue, format, canaux. Null tant que rien n'est choisi.
+ */
+fun heardAudio(tracks: Tracks): HlsAudioLogic.Heard? {
+    var position = 0
+    for (group in tracks.groups) {
+        if (group.type != C.TRACK_TYPE_AUDIO) continue
+        for (i in 0 until group.length) {
+            if (group.isTrackSelected(i)) {
+                val format = group.getTrackFormat(i)
+                return HlsAudioLogic.Heard(position, format.language, format.sampleMimeType, format.channelCount)
+            }
+            position++
+        }
+    }
+    return null
+}
+
 /** Choisit une piste ; pour les sous-titres, `choice == null` les coupe. */
 fun selectTrack(player: Player, type: Int, choice: TrackChoice?) {
     val builder = player.trackSelectionParameters.buildUpon()
@@ -99,14 +120,8 @@ fun audioCodecName(format: Format): String? = when (format.sampleMimeType) {
     else -> format.sampleMimeType?.substringAfter('/')?.uppercase()
 }
 
-fun channelsName(count: Int): String? = when {
-    count <= 0 -> null
-    count == 1 -> "Mono"
-    count == 2 -> "Stéréo"
-    count == 6 -> "5.1"
-    count == 8 -> "7.1"
-    else -> "$count canaux"
-}
+/** « 6 » → « 5.1 » (même règle pour les pistes du serveur : HlsAudioLogic). */
+fun channelsName(count: Int): String? = HlsAudioLogic.channelsName(count)
 
 // Depuis Media3 1.4, les sous-titres sont décodés dès la lecture du fichier :
 // le format d'origine (PGS, SRT…) est alors rangé dans « codecs ».

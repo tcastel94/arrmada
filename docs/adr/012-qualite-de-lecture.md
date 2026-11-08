@@ -94,17 +94,61 @@ réservé au Dolby Vision profil 5 sur un écran sans Dolby Vision.
   `HLS_PATH` et dans `device_may_call` (`services/devices.py`), activer
   « Autoriser l'encodage au format HEVC » dans Jellyfin, puis renvoyer
   `lite_stream` dans `_found()`. Rien à changer dans l'appli.
-- Le flux `sdr.m3u8` ne transporte ni les pistes texte intégrées au fichier :
-  la TV les pose à côté (`embedded_subtitles`, relayées par
-  `GET /api/tv/subtitle/…`), et Jellyfin les extrait toutes en une passe
-  ffmpeg sur le fichier entier à la première demande (plusieurs minutes pour
-  un remux 4K, quand la TV abandonne après 20 s). Le serveur lance donc cette
-  extraction en arrière-plan dès le lancement d'une lecture, pour les
-  fichiers d'au moins 25 Mb/s (ou de débit inconnu) qui ont des pistes texte
-  (`_warm_embedded_subtitles()` dans `services/tv_playback.py`), une fois par
-  heure et par élément. Couper la connexion n'annule pas l'extraction chez
-  Jellyfin (vérifié dans le code de 10.10 et 12).
+- **La piste audio suit la bascule.** La liste HLS de Jellyfin (vérifié dans
+  le code de la 12.4, `DynamicHlsHelper` / `EncodingHelper`) ne porte qu'une
+  piste audio : celle d'`AudioStreamIndex`, sinon la première du fichier. Sur
+  un fichier MULTi, la VF (ou la VO) choisie en direct était donc perdue en
+  1080p. Le serveur donne les pistes du fichier avec leur index Jellyfin
+  (`audio_tracks`) et accepte `?audio=N` sur `master.m3u8` / `sdr.m3u8` ; la
+  TV retrouve la piste entendue (langue, format, canaux, rang :
+  `HlsAudioLogic`) et la demande. L'arrêt de la conversion avant la bascule
+  (décision 6) devient indispensable : le dossier de sortie de Jellyfin ne
+  dépend que de la session, pas de la piste, il resservirait sinon les
+  morceaux déjà produits. Pendant un flux converti (dès le départ : réglage
+  « 1080p », remux ; ou après une bascule), le lecteur ne voit qu'une piste :
+  le panneau Audio du menu pause et la tablette proposent alors les
+  `audio_tracks` du serveur, la piste lue cochée (celle demandée, sinon celle
+  que Jellyfin prend seul : par défaut, sinon la première) ; en choisir une
+  autre arrête la conversion, puis recharge le même flux avec `?audio=N` à la
+  même position, et la langue de la piste du serveur est rangée dans la
+  mémoire du profil (le lecteur ne la connaît pas) avec les sous-titres en
+  cours.
+- **Lecture convertie dès le départ : la langue d'office se décide avant le
+  lecteur.** Le lecteur ne verra jamais les pistes du fichier, la règle des
+  langues (dernier choix du profil, sinon VO + sous-titres FR, sinon VF :
+  `TrackLanguageLogic`) s'applique donc aux `audio_tracks` du serveur
+  (`HlsAudioLogic.indexAtStart`) et la piste est demandée dans l'adresse de
+  départ. Comptent pour la VO + sous-titres FR les sous-titres que le flux
+  converti aura : ceux posés à côté du fichier (Bazarr) et les pistes texte du
+  MKV que la TV pose à côté elle aussi (voir Sous-titres ci-dessous). La fiche et
+  le dernier choix du profil sont attendus par `PlayerScreen` (3 s au plus)
+  avant de créer le lecteur ; s'ils arrivent après, le flux n'est pas
+  rechargé (la conversion repartirait de zéro pour une fiche en retard) :
+  piste par défaut de Jellyfin, changeable au panneau Audio.
 - À vérifier à la main sur la Shield : bascule Original → 1080p → Original
-  pendant un film (position à moins de 2 s près), et plus aucune session de
-  transcodage orpheline dans le tableau de bord Jellyfin après le retour à
-  l'original ou la sortie de la lecture.
+  pendant un film (position à moins de 2 s près, langue gardée sur un fichier
+  MULTi, sous-titres intégrés toujours proposés), passage en VF depuis le
+  panneau Audio en lecture 1080p dès le départ (position et sous-titres
+  gardés), épisode suivant d'une série passée en VF lu en 1080p dès le départ
+  et en VF sans intervention, et plus aucune session de transcodage orpheline
+  dans le tableau de bord Jellyfin après le retour à l'original ou la sortie
+  de la lecture.
+- **Sous-titres** (ajouté le 08/11/2026, après des sous-titres disparus en
+  1080p) : le flux HLS de Jellyfin ne transporte que l'image et le son. Les
+  pistes texte intégrées au fichier (SRT, ASS) sont donc posées à côté du
+  flux converti par la TV, depuis l'extraction de Jellyfin que le serveur
+  liste déjà (`embedded_subtitles`), et la piste affichée est rechoisie par
+  sa langue et sa sorte (`data/StreamSwitchLogic.kt`). Les pistes image
+  (PGS, VobSub) n'ont pas d'équivalent texte : elles ne suivent pas en
+  1080p, la TV l'annonce ; les incruster dans l'image (`SubtitleMethod=
+  Encode` de Jellyfin, une conversion par piste) reste à décider.
+- **Pistes texte prêtes avant la bascule** (ajouté le 08/11/2026) : à la
+  première demande d'une piste, Jellyfin extrait toutes les pistes texte du
+  fichier en une passe ffmpeg sur le fichier entier et les garde en cache
+  (plusieurs minutes pour un remux 4K, quand la TV abandonne après 20 s). Le
+  serveur lance donc cette extraction en arrière-plan dès le lancement d'une
+  lecture, pour les fichiers d'au moins 25 Mb/s (ou de débit inconnu) qui ont
+  des pistes texte (`_warm_embedded_subtitles()` dans
+  `services/tv_playback.py`), une fois par heure et par élément. Couper la
+  connexion n'annule pas l'extraction chez Jellyfin (vérifié dans le code de
+  10.10 et 12).

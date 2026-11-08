@@ -63,6 +63,7 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import fr.arrmada.app.data.AmpDevice
 import fr.arrmada.app.data.Chapter
+import fr.arrmada.app.data.HlsAudioLogic
 import fr.arrmada.app.data.PlayInfo
 import fr.arrmada.app.data.Quality
 import fr.arrmada.app.data.QualityOption
@@ -113,6 +114,18 @@ data class QualityChoice(
     val options: List<QualityOption>,
     val current: Quality,
     val onSelect: (Quality) -> Unit,
+)
+
+/**
+ * Flux converti (HLS) : Jellyfin n'y met qu'une piste audio, le lecteur n'en
+ * voit donc qu'une. L'écran Réglages audio propose à la place les pistes du
+ * serveur ([choices], HlsAudioLogic.choices, la piste lue cochée) ; [onSelect]
+ * recharge le même flux avec la piste choisie (index Jellyfin, « ?audio=N »),
+ * à la même position.
+ */
+data class HlsAudioChoice(
+    val choices: List<HlsAudioLogic.Choice>,
+    val onSelect: (Int) -> Unit,
 )
 
 /**
@@ -176,6 +189,7 @@ fun PauseMenu(
     onSkip: (seconds: Int) -> Unit = {}, // tactile : −10 s / +30 s
     subtitleDownload: SubtitleDownload? = null, // null : pas de recherche (vidéo hors médiathèque)
     quality: QualityChoice? = null, // null, ou original seul : pas de bouton « Qualité »
+    hlsAudio: HlsAudioChoice? = null, // flux converti : pistes audio du serveur (null : celles du lecteur)
 ) {
     val screen = LocalScreen.current
     val touch = screen.isTouch
@@ -186,11 +200,19 @@ fun PauseMenu(
     val audioFocus = remember { FocusRequester() }
     if (showAudio) {
         BackHandler { showAudio = false }
+        // Flux converti : les pistes du serveur, en cartes comme celles du lecteur
+        // (sans groupe Media3 : c'est le flux qu'on recharge, pas une piste du lecteur)
+        val serverAudio = hlsAudio?.takeIf { it.choices.isNotEmpty() }
         AudioSettings(
             audio = audio ?: AudioContext("", false, SoundAdvisor.advise(null, null), false),
             tracks = tracks,
             amp = amp,
-            onSelectTrack = { onSelectTrack(C.TRACK_TYPE_AUDIO, it) },
+            choices = serverAudio?.choices?.map {
+                TrackChoice(it.label, it.detail, it.selected, supported = true, group = null, index = it.index)
+            },
+            onSelectTrack = { choice ->
+                if (serverAudio != null) choice?.let { serverAudio.onSelect(it.index) } else onSelectTrack(C.TRACK_TYPE_AUDIO, choice)
+            },
             onAmp = onAmp,
             onAuto = onAuto,
             onApplyAdvice = onApplyAdvice,
