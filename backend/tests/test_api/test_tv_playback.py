@@ -31,6 +31,15 @@ def _dune_streams() -> list[dict[str, Any]]:
     téléchargé ET que Jellyfin a relu le dossier (Refresh)."""
     streams: list[dict[str, Any]] = [
         {"Type": "Video", "Codec": "hevc", "VideoRangeType": "HDR10"},
+        {
+            "Type": "Audio",
+            "Index": 1,
+            "Codec": "truehd",
+            "Language": "eng",
+            "Channels": 8,
+            "IsDefault": True,
+            "Title": "TrueHD Atmos 7.1",
+        },
         {"Type": "Subtitle", "Index": 2, "Codec": "subrip", "Language": "eng", "IsExternal": True},
         {"Type": "Subtitle", "Index": 3, "Codec": "PGSSUB", "Language": "fre", "IsExternal": True},
         {"Type": "Subtitle", "Index": 4, "Codec": "ass", "Language": "fre", "IsExternal": False},
@@ -83,7 +92,10 @@ def _items(params: dict, _m: Any) -> Any:
             "MediaSources": [{"Path": "/tv/Tulsa King/S02E01.mkv", "MediaStreams": [
                 {"Type": "Video", "Codec": "hevc", "VideoRange": "HDR", "VideoRangeType": "DOVI",
                  "DvProfile": 5, "DvBlSignalCompatibilityId": 0},
-                {"Type": "Audio", "Codec": "eac3"},
+                # MULTi : VO par défaut, VF ensuite (index = celui de MediaStreams chez Jellyfin)
+                {"Type": "Audio", "Index": 1, "Codec": "eac3", "Language": "eng", "Channels": 6,
+                 "IsDefault": True, "Title": "English"},
+                {"Type": "Audio", "Index": 2, "Codec": "eac3", "Language": "fre", "Channels": 6},
             ]}],
         }]}  # fmt: skip
     if params.get("ids") == EPISODE_ID:
@@ -568,6 +580,92 @@ async def test_hls_sdr_conversion(client: AsyncClient, jellyfin: dict[str, str])
     assert params["AllowAudioStreamCopy"] == "true"  # son intact
     # Même session que le remux : « stop » arrête aussi cette conversion
     assert params["PlaySessionId"] == f"arrmada-{DOVI_ID}"
+
+
+# ── Piste audio gardée sur le flux converti (une seule piste dans le HLS de Jellyfin) ──
+
+
+def test_audio_tracks() -> None:
+    streams = [
+        {"Type": "Video", "Codec": "hevc"},
+        {"Type": "Audio", "Index": 2, "Codec": "EAC3", "Language": "FRE", "Channels": 6},
+        {"Type": "Audio", "Index": 1, "Codec": "truehd", "Language": "eng", "Channels": 8,
+         "IsDefault": True, "Title": "Atmos"},
+        {"Type": "Audio", "Index": 3, "Codec": "aac"},  # langue et canaux inconnus
+        {"Type": "Audio", "Codec": "ac3"},  # sans index : impossible à demander à Jellyfin
+        {"Type": "Audio", "Index": True, "Codec": "ac3"},
+        {"Type": "Subtitle", "Index": 4, "Codec": "subrip", "Language": "fre"},
+        "pas un dict",
+    ]  # fmt: skip
+    tracks = tv_playback.audio_tracks({"MediaSources": [{"MediaStreams": streams}]})
+    # Dans l'ordre du fichier (index croissant), codes en minuscules, inconnus explicites
+    assert tracks == [
+        {"index": 1, "language": "eng", "codec": "truehd", "channels": 8, "title": "Atmos",
+         "default": True},
+        {"index": 2, "language": "fre", "codec": "eac3", "channels": 6, "title": "", "default": False},
+        {"index": 3, "language": "", "codec": "aac", "channels": 0, "title": "", "default": False},
+    ]  # fmt: skip
+    assert tv_playback.audio_tracks({}) == []
+    assert tv_playback.audio_tracks({"MediaSources": ["pas un dict"]}) == []
+
+
+async def test_play_lists_audio_tracks(client: AsyncClient, jellyfin: dict[str, str]) -> None:
+    tv = await _tv(client, jellyfin)
+    tulsa = (await client.get("/api/tv/play/movie/777", headers=tv)).json()
+    assert tulsa["audio_tracks"] == [
+        {"index": 1, "language": "eng", "codec": "eac3", "channels": 6, "title": "English",
+         "default": True},
+        {"index": 2, "language": "fre", "codec": "eac3", "channels": 6, "title": "", "default": False},
+    ]  # fmt: skip
+    dune = (await client.get("/api/tv/play/movie/438631", headers=tv)).json()
+    assert [t["index"] for t in dune["audio_tracks"]] == [1]
+    # Jellyfin sans MediaStreams : liste vide, la TV ne demande aucune piste
+    gemini = (await client.get("/api/tv/play/movie/453405", headers=tv)).json()
+    assert gemini["audio_tracks"] == []
+
+
+async def test_hls_keeps_the_chosen_audio_track(
+    client: AsyncClient, jellyfin: dict[str, str]
+) -> None:
+    tv = await _tv(client, jellyfin)
+    # 1080p avec la VF entendue en direct (index 2 chez Jellyfin) : le jeton
+    # d'appareil passe (le chemin seul est vérifié), AudioStreamIndex est transmis
+    sdr = await client.get(f"/api/tv/hls/{DOVI_ID}/sdr.m3u8?audio=2", headers=tv)
+    assert sdr.status_code == 200, sdr.text
+    assert "j-key" not in sdr.text
+    params = SEEN["hls"][0]["params"]
+    assert params["AudioStreamIndex"] == "2"
+    assert params["VideoCodec"] == "h264"  # toujours la conversion SDR
+    # Même session que les autres conversions : la TV arrête la précédente
+    # AVANT de demander celle-ci, sinon Jellyfin resservirait ses morceaux
+    assert params["PlaySessionId"] == f"arrmada-{DOVI_ID}"
+    # Remux de secours : même paramètre, image toujours copiée
+    master = await client.get(f"/api/tv/hls/{DOVI_ID}/master.m3u8?audio=2", headers=tv)
+    assert master.status_code == 200, master.text
+    assert SEEN["hls"][1]["params"]["AudioStreamIndex"] == "2"
+    assert SEEN["hls"][1]["params"]["AllowVideoStreamCopy"] == "true"
+    # Sans « audio » : rien d'envoyé, Jellyfin prend la première piste du fichier
+    assert (await client.get(f"/api/tv/hls/{DOVI_ID}/sdr.m3u8", headers=tv)).status_code == 200
+    assert "AudioStreamIndex" not in SEEN["hls"][2]["params"]
+
+
+@pytest.mark.parametrize("value", ["abc", "-1", "1000", "2&audio=1", "", "2.0"])
+async def test_hls_rejects_bad_audio_index(
+    client: AsyncClient, jellyfin: dict[str, str], value: str
+) -> None:
+    tv = await _tv(client, jellyfin)
+    resp = await client.get(f"/api/tv/hls/{DOVI_ID}/sdr.m3u8?audio={value}", headers=tv)
+    assert resp.status_code == 404, resp.text
+    assert "hls" not in SEEN  # rien n'est parti vers Jellyfin
+
+
+def test_requested_audio() -> None:
+    assert tv_playback.requested_audio("") is None
+    assert tv_playback.requested_audio("DeviceId=x") is None
+    assert tv_playback.requested_audio("audio=0") == 0
+    assert tv_playback.requested_audio("audio=12&DeviceId=x") == 12
+    with pytest.raises(tv_playback.UpstreamError):
+        tv_playback.requested_audio("audio=")
 
 
 # ── Qualité réduite (ADR-012) : débit du fichier, 1080p SDR ───

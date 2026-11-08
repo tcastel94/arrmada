@@ -94,8 +94,22 @@ réservé au Dolby Vision profil 5 sur un écran sans Dolby Vision.
   `HLS_PATH` et dans `device_may_call` (`services/devices.py`), activer
   « Autoriser l'encodage au format HEVC » dans Jellyfin, puis renvoyer
   `lite_stream` dans `_found()`. Rien à changer dans l'appli.
+- **La piste audio suit la bascule.** La liste HLS de Jellyfin (vérifié dans
+  le code de la 12.4, `DynamicHlsHelper` / `EncodingHelper`) ne porte qu'une
+  piste audio : celle d'`AudioStreamIndex`, sinon la première du fichier. Sur
+  un fichier MULTi, la VF (ou la VO) choisie en direct était donc perdue en
+  1080p. Le serveur donne les pistes du fichier avec leur index Jellyfin
+  (`audio_tracks`) et accepte `?audio=N` sur `master.m3u8` / `sdr.m3u8` ; la
+  TV retrouve la piste entendue (langue, format, canaux, rang :
+  `HlsAudioLogic`) et la demande. L'arrêt de la conversion avant la bascule
+  (décision 6) devient indispensable : le dossier de sortie de Jellyfin ne
+  dépend que de la session, pas de la piste, il resservirait sinon les
+  morceaux déjà produits. Reste le flux converti dès le départ (réglage
+  « 1080p », remux) : une seule piste au panneau Audio, à compléter avec les
+  `audio_tracks` du serveur si le besoin se fait sentir.
 - À vérifier à la main sur la Shield : bascule Original → 1080p → Original
-  pendant un film (position à moins de 2 s près), et plus aucune session de
+  pendant un film (position à moins de 2 s près, langue gardée sur un fichier
+  MULTi, sous-titres intégrés toujours proposés), et plus aucune session de
   transcodage orpheline dans le tableau de bord Jellyfin après le retour à
   l'original ou la sortie de la lecture.
 - **Sous-titres** (ajouté le 08/11/2026, après des sous-titres disparus en
@@ -106,7 +120,4 @@ réservé au Dolby Vision profil 5 sur un écran sans Dolby Vision.
   sa langue et sa sorte (`data/StreamSwitchLogic.kt`). Les pistes image
   (PGS, VobSub) n'ont pas d'équivalent texte : elles ne suivent pas en
   1080p, la TV l'annonce ; les incruster dans l'image (`SubtitleMethod=
-  Encode` de Jellyfin, une conversion par piste) reste à décider. De même,
-  le flux HLS n'a qu'une piste audio (celle par défaut du fichier) : le
-  choix VF / VO ne survit pas à la bascule, à traiter si le besoin apparaît
-  (`AudioStreamIndex`, index Jellyfin à faire connaître à la TV).
+  Encode` de Jellyfin, une conversion par piste) reste à décider.
