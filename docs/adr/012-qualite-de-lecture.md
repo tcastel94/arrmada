@@ -109,5 +109,15 @@ réservé au Dolby Vision profil 5 sur un écran sans Dolby Vision.
   `audio_tracks` du serveur si le besoin se fait sentir.
 - À vérifier à la main sur la Shield : bascule Original → 1080p → Original
   pendant un film (position à moins de 2 s près, langue gardée sur un fichier
-  MULTi), et plus aucune session de transcodage orpheline dans le tableau de
-  bord Jellyfin après le retour à l'original ou la sortie de la lecture.
+  MULTi, sous-titres intégrés toujours proposés), et plus aucune session de
+  transcodage orpheline dans le tableau de bord Jellyfin après le retour à
+  l'original ou la sortie de la lecture.
+- **Sous-titres** (ajouté le 08/11/2026, après des sous-titres disparus en
+  1080p) : le flux HLS de Jellyfin ne transporte que l'image et le son. Les
+  pistes texte intégrées au fichier (SRT, ASS) sont donc posées à côté du
+  flux converti par la TV, depuis l'extraction de Jellyfin que le serveur
+  liste déjà (`embedded_subtitles`), et la piste affichée est rechoisie par
+  sa langue et sa sorte (`data/StreamSwitchLogic.kt`). Les pistes image
+  (PGS, VobSub) n'ont pas d'équivalent texte : elles ne suivent pas en
+  1080p, la TV l'annonce ; les incruster dans l'image (`SubtitleMethod=
+  Encode` de Jellyfin, une conversion par piste) reste à décider.
