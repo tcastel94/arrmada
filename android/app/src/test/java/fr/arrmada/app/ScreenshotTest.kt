@@ -101,7 +101,11 @@ import fr.arrmada.app.ui.home.HomeContent
 import fr.arrmada.app.ui.home.HomeState
 import fr.arrmada.app.ui.home.LibraryContent
 import fr.arrmada.app.data.FamilyProfile
+import fr.arrmada.app.data.AudioTrack
+import fr.arrmada.app.data.HlsAudioLogic
 import fr.arrmada.app.ui.player.AudioContext
+import fr.arrmada.app.ui.player.HlsAudioChoice
+import fr.arrmada.app.ui.player.languageName
 import fr.arrmada.app.ui.profiles.ProfilesContent
 import fr.arrmada.app.ui.player.PauseMenu
 import fr.arrmada.app.ui.player.RecapScreen
@@ -385,6 +389,30 @@ class ScreenshotTest {
                     absolute = noAbsolute, onResume = {}, onSeek = {}, onSelectTrack = { _, _ -> },
                     audio = AudioContext("Salle de cinéma · enceintes 7.2.2", true, advice, auto = true),
                     amp = amp, audioOpen = true,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun reglagesAudioFluxConverti() {
+        // Lecture convertie dès le départ (réglage « 1080p ») : le lecteur ne voit
+        // qu'une piste, le panneau propose celles du serveur, la piste lue cochée
+        val tracks = sampleTracks()
+        val advice = SoundAdvisor.advise(null, selectedSound(tracks, null))
+        val serverTracks = listOf(
+            AudioTrack(index = 1, language = "eng", codec = "truehd", channels = 8, isDefault = true),
+            AudioTrack(index = 2, language = "fre", codec = "eac3", channels = 6),
+            AudioTrack(index = 3, language = "fre", codec = "ac3", channels = 2, title = "Audiodescription"),
+        )
+        captureRoboImage(shot("42-reglages-audio-flux-converti")) {
+            ArrMadaTheme {
+                PauseMenu(
+                    info = play, meta = dune.toMeta(), position = 2_530_000, duration = 9_300_000, tracks = tracks,
+                    absolute = noAbsolute, onResume = {}, onSeek = {}, onSelectTrack = { _, _ -> },
+                    audio = AudioContext("Pas d’ampli dans cette pièce : son de la TV", false, advice, auto = true),
+                    audioOpen = true,
+                    hlsAudio = HlsAudioChoice(HlsAudioLogic.choices(serverTracks, requested = 2, languageName = ::languageName)) {},
                 )
             }
         }

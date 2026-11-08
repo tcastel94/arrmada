@@ -66,6 +66,9 @@ fun AudioSettings(
     onAuto: (Boolean) -> Unit,
     onApplyAdvice: () -> Unit,
     onClose: () -> Unit,
+    // Flux converti par Jellyfin : les pistes du serveur (HlsAudioLogic), à la
+    // place de l'unique piste que voit le lecteur ; null : celles du lecteur
+    choices: List<TrackChoice>? = null,
 ) {
     val focus = remember { FocusRequester() }
     val advice = audio.advice
@@ -131,7 +134,15 @@ fun AudioSettings(
         // ── Piste audio du film (mêmes cartes que l'onglet Sous-titres) ──
         GlassSection("Piste audio") {
             // 6 dp : la carte grossie au focus n'est pas rognée par le bord de la rangée
-            TracksPanel(trackChoices(tracks, C.TRACK_TYPE_AUDIO), allowOff = false, sidePadding = 6.dp, onSelect = onSelectTrack)
+            TracksPanel(choices ?: trackChoices(tracks, C.TRACK_TYPE_AUDIO), allowOff = false, sidePadding = 6.dp, onSelect = onSelectTrack)
+            if (choices != null) {
+                Text(
+                    "Flux converti par Jellyfin : changer de piste relance la conversion, la lecture reprend au même endroit",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Dim,
+                    modifier = Modifier.padding(top = 6.dp, start = 6.dp),
+                )
+            }
         }
 
         // ── Ampli ──

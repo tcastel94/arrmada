@@ -120,14 +120,8 @@ fun audioCodecName(format: Format): String? = when (format.sampleMimeType) {
     else -> format.sampleMimeType?.substringAfter('/')?.uppercase()
 }
 
-fun channelsName(count: Int): String? = when {
-    count <= 0 -> null
-    count == 1 -> "Mono"
-    count == 2 -> "Stéréo"
-    count == 6 -> "5.1"
-    count == 8 -> "7.1"
-    else -> "$count canaux"
-}
+/** « 6 » → « 5.1 » (même règle pour les pistes du serveur : HlsAudioLogic). */
+fun channelsName(count: Int): String? = HlsAudioLogic.channelsName(count)
 
 // Depuis Media3 1.4, les sous-titres sont décodés dès la lecture du fichier :
 // le format d'origine (PGS, SRT…) est alors rangé dans « codecs ».

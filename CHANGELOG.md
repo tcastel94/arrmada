@@ -7,20 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Lecture TV : la piste audio suit la bascule en 1080p
+### Lecture TV : la piste audio suit la bascule en 1080p, et se change pendant un flux converti
 
 #### Fixed
+- **Appli TV : impossible de passer en VF pendant un flux converti** (lecture en « 1080p » dès le départ par le réglage de la TV, remux .m2ts / .iso, ou après une bascule) : le lecteur ne voyait que l'unique piste de la liste HLS de Jellyfin, le panneau Audio du menu pause n'en proposait donc pas d'autre. Il liste désormais les pistes du fichier données par le serveur (`audio_tracks` : langue, format, canaux, titre), la piste lue cochée (celle demandée, sinon celle que Jellyfin prend seul : marquée par défaut, sinon la première du fichier) ; en choisir une autre arrête la conversion en cours, puis recharge le même flux avec `?audio=N` à la même position, en lecture ou en pause comme avant. La tablette (télécommande tactile) reçoit la même liste pendant un flux converti et sa commande `track` passe par la même bascule
 - **Appli TV : la VF (ou la VO) choisie était perdue en passant en 1080p** (menu pause › Qualité, carte « Passer en 1080p ? », remux de secours, conversion SDR). Vérifié dans le code de Jellyfin 12.4 (`DynamicHlsHelper`, `EncodingHelper`) : sa liste HLS ne porte qu'**une** piste audio, celle d'`AudioStreamIndex`, sinon la **première** du fichier. Sur un fichier MULTi, le panneau Audio du menu pause ne montrait plus qu'une piste et la langue changeait dans les enceintes. La TV retrouve désormais la piste entendue (langue, format, canaux, rang dans le fichier) parmi celles du serveur et la demande à Jellyfin ; au retour à l'original, le choix du lecteur reprend de lui-même
 
 #### Added
 - `GET /api/tv/play/…` : `audio_tracks`, les pistes audio du fichier avec leur index Jellyfin (`index`, `language`, `codec`, `channels`, `title`, `default`)
 - `GET /api/tv/hls/{id}/master.m3u8?audio=N` et `sdr.m3u8?audio=N` : conversion avec la piste audio `N` (index `MediaStreams` de Jellyfin, transmis en `AudioStreamIndex`) ; toute autre valeur est refusée (404)
-- Appli TV : `HlsAudioLogic` (logique pure, testée sur la JVM) retrouve la piste entendue dans la liste du serveur
+- Appli TV : `HlsAudioLogic` (logique pure, testée sur la JVM) retrouve la piste entendue dans la liste du serveur ; `choices` / `playedIndex` / `switchNeeded` construisent la liste du panneau Audio en flux converti (libellés, piste lue) et décident du rechargement
+- Appli TV : écran Réglages audio (`AudioSettings`) et menu pause (`HlsAudioChoice`) acceptent les pistes du serveur à la place de celles du lecteur ; capture Roborazzi `42-reglages-audio-flux-converti`
 
 #### Notes
 - Changer de piste pendant un flux converti impose d'arrêter la conversion en cours **avant** (même session `arrmada-{id}`, ce que fait déjà le menu Qualité) : le dossier de sortie de Jellyfin ne dépend que de la session, il resservirait sinon les morceaux déjà produits avec l'ancienne piste
-- Reste à faire : en lecture convertie **dès le départ** (réglage « 1080p » de la TV, remux .m2ts / .iso), le panneau Audio ne propose toujours que la piste de Jellyfin ; il faudrait y lister les `audio_tracks` du serveur et recharger le flux avec `?audio=N`
-- APK non construite dans l'environnement de la modification (pas de JDK) : compilation et tests JVM (`HlsAudioLogicTest`) par la CI Android ; bascule Original → 1080p sur un fichier MULTi à vérifier sur la Shield (langue gardée, une seule session de transcodage dans le tableau de bord Jellyfin)
+- Pendant un flux converti, le lecteur ne sait pas la langue de la piste qu'il joue (la liste HLS de Jellyfin ne la nomme pas) : la piste cochée vient de ce que la TV a demandé, ou de la règle de Jellyfin sans `AudioStreamIndex` (`MediaSourceInfo.GetDefaultAudioStream` : piste par défaut, sinon la première)
+- Reste à faire : au lancement d'une lecture convertie dès le départ, la langue d'office (VO + sous-titres FR, VF, dernier choix du profil : `TrackLanguageLogic`) n'est pas demandée à Jellyfin, c'est sa piste par défaut qui part ; le choix fait au panneau Audio pendant un flux converti n'est pas non plus rangé dans la mémoire du profil
+- APK non construite dans l'environnement de la modification (pas de JDK) : compilation et tests JVM (`HlsAudioLogicTest`) par la CI Android ; à vérifier sur la Shield : bascule Original → 1080p sur un fichier MULTi (langue gardée, une seule session de transcodage dans le tableau de bord Jellyfin), et en lecture 1080p dès le départ sur un fichier MULTi, le panneau Audio propose la VF et la bascule garde la position
 - Tests serveur : 5 nouveaux (liste des pistes, `?audio=N` transmis en `AudioStreamIndex` sur `master` et `sdr`, valeurs refusées)
 
 ### Sous-titres : recherche en arrière-plan, recherche élargie pour les animes, gardien qui cherche avant la séance
