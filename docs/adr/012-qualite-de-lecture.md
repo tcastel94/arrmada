@@ -142,3 +142,13 @@ réservé au Dolby Vision profil 5 sur un écran sans Dolby Vision.
   (PGS, VobSub) n'ont pas d'équivalent texte : elles ne suivent pas en
   1080p, la TV l'annonce ; les incruster dans l'image (`SubtitleMethod=
   Encode` de Jellyfin, une conversion par piste) reste à décider.
+- **Pistes texte prêtes avant la bascule** (ajouté le 08/11/2026) : à la
+  première demande d'une piste, Jellyfin extrait toutes les pistes texte du
+  fichier en une passe ffmpeg sur le fichier entier et les garde en cache
+  (plusieurs minutes pour un remux 4K, quand la TV abandonne après 20 s). Le
+  serveur lance donc cette extraction en arrière-plan dès le lancement d'une
+  lecture, pour les fichiers d'au moins 25 Mb/s (ou de débit inconnu) qui ont
+  des pistes texte (`_warm_embedded_subtitles()` dans
+  `services/tv_playback.py`), une fois par heure et par élément. Couper la
+  connexion n'annule pas l'extraction chez Jellyfin (vérifié dans le code de
+  10.10 et 12).

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Appli TV : sous-titres intégrés déjà extraits quand on bascule en 1080p
+
+#### Fixed
+- **Piste de sous-titres vide après la bascule en 1080p sur un gros fichier** (menu pause › Qualité, ADR-012). Le flux 1080p de Jellyfin ne transporte que l'image et le son : la TV pose à côté les pistes texte intégrées au fichier (`GET /api/tv/subtitle/…`), et Jellyfin les extrait **toutes** en une passe ffmpeg sur le fichier entier à la première demande, puis les garde en cache : quelques secondes pour un épisode, **plusieurs minutes pour un remux 4K de 60 Go**. La TV abandonne bien avant (20 s de lecture, trois essais) : la piste restait vide jusqu'au rechargement suivant. Le serveur demande désormais la première piste texte à Jellyfin **dès le lancement de la lecture**, en arrière-plan, pour les fichiers où la bascule est plausible : pistes texte intégrées et débit d'au moins 25 Mb/s (le seuil à partir duquel la TV propose le 1080p) ou inconnu. Une seule demande par élément et par heure ; la réponse à la TV ne change pas et n'attend rien ; un échec se journalise en debug. Vérifié dans le code source de Jellyfin 10.10 et 12 : couper la connexion n'annule pas l'extraction (le contrôleur passe `CancellationToken.None` à ffmpeg), elle va au bout et remplit le cache
+
+#### Notes
+- Tests serveur : 5 nouveaux (fichiers à préparer ou non, lancé pour un remux avec pistes texte, pas relancé dans l'heure, réponse à la TV immédiate pendant l'extraction, Jellyfin injoignable)
+
 ### Appli TV : les sous-titres du fichier suivent le changement de qualité
 
 #### Fixed
@@ -15,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Sous-titres **image** (PGS des Blu-ray, VobSub des DVD) : pas de version texte, ils ne peuvent pas suivre dans le flux converti. La TV le dit (« Sous-titres « Français » : pas de version texte pour ce flux ») et coupe les sous-titres plutôt que d'afficher à leur place une autre piste de la même langue (les forcés) ; ils reviennent d'eux-mêmes au retour à l'original, sauf si une autre piste a été choisie entre-temps
 
 #### Notes
-- Première bascule sur un gros fichier : Jellyfin extrait toutes les pistes texte en une passe sur le fichier (quelques secondes pour un épisode, plusieurs minutes pour un remux 4K de 60 Go) et les garde en cache. La TV attend 20 s par essai, trois essais : au-delà, la piste reste vide pour ce flux et marche à la relecture suivante. Le décalage −/+ 0,5 s avait déjà cette limite
+- Première bascule sur un gros fichier : Jellyfin extrait toutes les pistes texte en une passe sur le fichier (quelques secondes pour un épisode, plusieurs minutes pour un remux 4K de 60 Go) et les garde en cache. La TV attend 20 s par essai, trois essais : au-delà, la piste reste vide pour ce flux et marche à la relecture suivante. Le décalage −/+ 0,5 s avait déjà cette limite. Corrigé par l'extraction lancée dès le lancement de la lecture (section précédente)
 - Nouvelle logique pure `data/StreamSwitchLogic.kt` (sous-titres à poser à côté selon le flux, piste à rechoisir), testée dans `StreamSwitchLogicTest`. APK non construite dans l'environnement de la modification (pas de JDK) : compilation et tests JVM par la CI Android
 
 ### Lecture TV : la piste audio suit la bascule en 1080p, et se change pendant un flux converti

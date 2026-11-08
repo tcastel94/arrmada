@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import time
 from collections.abc import AsyncIterator
 from typing import Any
 from urllib.parse import parse_qs, urlencode
@@ -482,6 +483,7 @@ async def movie(db: AsyncSession, tmdb_id: int, profile_id: int | None = None) -
         db, profiled_key(watch_sync.state_key("movie", "tmdb", str(tmdb_id)), profile_id)
     )
     _prefetch_subtitles(details, "movie", item["id"], tmdb_id=tmdb_id)
+    _warm_embedded_subtitles(base, key, item["id"], details)
     return _found(item["id"], details, resume)
 
 
@@ -619,6 +621,7 @@ async def episode(
     _prefetch_subtitles(
         details, "episode", item["id"], tvdb_id=tvdb_id, season=season, episode=number
     )
+    _warm_embedded_subtitles(base, key, item["id"], details)
     # Épisode suivant de la saison : ses sous-titres seront prêts au générique
     # (élément Jellyfin retrouvé par le job ; rien si l'épisode n'existe pas)
     if settings.SUBTITLE_GUARDIAN_ENABLED:
@@ -940,10 +943,9 @@ async def open_subtitle(
     if not cfg:
         raise UpstreamError(503, "Jellyfin non configuré")
     base, key = cfg
-    url = f"{base}/Videos/{item_id}/{item_id}/Subtitles/{index}/0/Stream.{ext}"
     try:
         async with httpx.AsyncClient(timeout=30) as client:
-            r = await client.get(f"{url}?{urlencode({jellyfin.KEY_PARAM: key})}")
+            r = await client.get(subtitle_upstream(base, key, item_id, index, ext))
     except httpx.HTTPError as exc:
         raise UpstreamError(502, "Jellyfin injoignable") from exc
     if r.status_code >= 400:
@@ -953,6 +955,12 @@ async def open_subtitle(
         text = subtitle_shift.shift(content.decode("utf-8-sig", errors="replace"), ext, shift_ms)
         content = text.encode("utf-8")
     return content, f"{SUB_MIME[ext]}; charset=utf-8"
+
+
+def subtitle_upstream(base: str, key: str, item_id: str, index: int, ext: str) -> str:
+    """Adresse Jellyfin d'une piste de sous-titres, convertie en texte UTF-8."""
+    query = urlencode({jellyfin.KEY_PARAM: key})
+    return f"{base}/Videos/{item_id}/{item_id}/Subtitles/{index}/0/Stream.{ext}?{query}"
 
 
 def refresh_params(key: str) -> dict[str, str]:
@@ -982,9 +990,116 @@ async def _refresh_item(base: str, key: str, item_id: str) -> None:
         await client.post(f"{base}/Items/{item_id}/Refresh?{urlencode(params)}")
 
 
-# Recherches Bazarr qui continuent après la réponse à la TV (resynchro ;
-# gardées ici pour qu'elles ne soient pas interrompues en route)
+# Tâches qui continuent après la réponse à la TV (resynchro Bazarr,
+# extraction des pistes texte par Jellyfin), gardées ici pour qu'elles ne
+# soient pas interrompues en route
 _PENDING: set[asyncio.Task[Any]] = set()
+
+
+# ── Pistes texte intégrées : extraites par Jellyfin avant la bascule 1080p ──
+#
+# Le flux HLS 1080p de Jellyfin (sdr.m3u8, ADR-012) ne transporte que l'image
+# et le son : la TV pose à côté les pistes texte intégrées au fichier
+# (`embedded_subtitles`), servies par open_subtitle(). À la première demande
+# d'une piste, Jellyfin extrait TOUTES les pistes texte du fichier en une
+# seule passe ffmpeg (lecture du fichier entier, sans décodage :
+# ExtractAllExtractableSubtitles, SubtitleEncoder.cs) et les garde dans son
+# cache : quelques secondes pour un épisode, plusieurs minutes pour un remux
+# 4K de 60 Go. La TV n'attend pas tant : 20 s de lecture (OkHttp), trois
+# essais (Media3), puis la piste reste vide jusqu'au rechargement suivant.
+# D'où cette demande faite en avance, dès le lancement de la lecture, pour
+# les fichiers où la bascule est plausible.
+#
+# Vérifié dans le code source de Jellyfin 10.10.7 et 12.3
+# (Jellyfin.Api/Controllers/SubtitleController.cs, EncodeSubtitles ;
+# MediaBrowser.MediaEncoding/Subtitles/SubtitleEncoder.cs) : le contrôleur
+# appelle GetSubtitles avec CancellationToken.None, la coupure de la
+# connexion par le client n'arrive donc jamais jusqu'à ffmpeg. En 10.10,
+# l'attente de ffmpeg (WaitForExitAsync) ne connaît d'ailleurs qu'un délai de
+# 30 min ; en 12, le jeton est bien relié à l'attente (délai
+# SubtitleExtractionTimeoutMinutes), mais c'est toujours
+# CancellationToken.None qui y arrive. Que la TV abandonne, ou que ce serveur
+# ferme sa connexion au bout de WARM_TIMEOUT, l'extraction va au bout et
+# remplit le cache. Deux demandes en parallèle sur le même fichier : la
+# seconde attend le verrou du fichier de sortie, puis le trouve tout fait.
+
+# Débit (bit/s) à partir duquel la TV peut proposer le 1080p : le
+# MIN_SUGGEST_BITRATE de android/…/data/QualityLogic.kt. En dessous, pas de
+# bascule plausible, rien à préparer. Débit inconnu : préparé, comme la TV
+# garde sa proposition dans ce cas.
+WARM_MIN_BITRATE = 25_000_000
+
+# Un même élément n'est pas redemandé avant une heure : Jellyfin garde les
+# pistes extraites en cache, et deux lancements rapprochés (reprise, épisode
+# relancé) ne doivent pas coûter deux passes. {item_id: time.monotonic()}
+WARM_INTERVAL = 3600.0
+_WARMED: dict[str, float] = {}
+
+# Attente de la réponse de Jellyfin : plusieurs minutes pour un remux 4K sur
+# un disque occupé (Jellyfin tue lui-même ffmpeg au bout de 30 min). Fermer
+# avant n'annulerait rien (voir plus haut) ; attendre dit en debug si
+# l'extraction a abouti.
+WARM_TIMEOUT = 900.0
+
+
+def warm_candidate(item_id: str, details: dict[str, Any] | None) -> tuple[int, str] | None:
+    """Piste texte intégrée à demander en avance : (index Jellyfin, extension)
+    de la première, ou None si rien à préparer (pas de piste texte, ou fichier
+    sous WARM_MIN_BITRATE). Une seule suffit : Jellyfin les extrait toutes."""
+    details = details or {}
+    tracks = embedded_subtitles(item_id, details)
+    if not tracks:
+        return None
+    bitrate = source_bitrate(details)
+    if bitrate is not None and bitrate < WARM_MIN_BITRATE:
+        return None
+    # « …/subtitle/{item_id}/4.ass » : la piste 4, demandée en .ass
+    index, ext = tracks[0]["url"].rsplit("/", 1)[-1].split(".")
+    return int(index), ext
+
+
+def _warm_embedded_subtitles(
+    base: str, key: str, item_id: str, details: dict[str, Any] | None
+) -> asyncio.Task[None] | None:
+    """Lancement d'une lecture : demande en fond à Jellyfin la première piste
+    texte intégrée, pour qu'elles soient toutes en cache quand la TV bascule
+    en 1080p. Ne retarde jamais la réponse à la TV ; un échec se journalise en
+    debug. Renvoie la tâche (None : rien à préparer, ou déjà fait dans l'heure)."""
+    candidate = warm_candidate(item_id, details)
+    if candidate is None:
+        return None
+    now = time.monotonic()
+    for stale in [k for k, t in _WARMED.items() if now - t >= WARM_INTERVAL]:
+        del _WARMED[stale]
+    if item_id in _WARMED:
+        return None
+    _WARMED[item_id] = now
+    index, ext = candidate
+    task = asyncio.create_task(
+        _warm_fetch(item_id, subtitle_upstream(base, key, item_id, index, ext))
+    )
+    _PENDING.add(task)
+    task.add_done_callback(_PENDING.discard)
+    return task
+
+
+async def _warm_fetch(item_id: str, url: str) -> None:
+    """Une requête à Jellyfin dont la réponse ne sert à rien : c'est
+    l'extraction qu'elle déclenche, et son cache, qui comptent."""
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(WARM_TIMEOUT, connect=10)) as client:
+            r = await client.get(url)
+    except httpx.HTTPError as exc:
+        # Jellyfin injoignable, ou pas de réponse dans le délai : le prochain
+        # lancement redemande (chez Jellyfin, l'extraction continue)
+        _WARMED.pop(item_id, None)
+        logger.debug("Extraction des pistes texte de %s : %s", item_id, exc)
+        return
+    if r.status_code >= 400:
+        logger.debug("Jellyfin n'a pas extrait les pistes texte de %s (%s)", item_id, r.status_code)
+    else:
+        logger.debug("Pistes texte de %s extraites par Jellyfin", item_id)
+
 
 # Ce que la TV attend une recherche de sous-titres avant d'avoir une réponse
 # (son client attend 45 s au plus). Au-delà, la recherche continue sur le

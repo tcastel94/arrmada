@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
@@ -22,6 +24,9 @@ REMUX_ID = "b" * 32
 # Épisode en Dolby Vision profil 5 (sans image de secours HDR10) : violet sur
 # un écran sans Dolby Vision, la TV peut demander la conversion SDR
 DOVI_ID = "d" * 32
+# Film 1080p ordinaire (12 Mb/s) avec une piste texte intégrée : le 1080p
+# à 20 Mb/s ne le soulagerait pas, la TV ne propose jamais la bascule
+SMALL_ID = "e" * 32
 VIDEO = bytes(range(256)) * 40  # « fichier » de 10 240 octets
 SEEN: dict[str, Any] = {}
 
@@ -57,6 +62,7 @@ def _dune_streams() -> list[dict[str, Any]]:
 
 def _subtitle(params: dict, m: Any) -> httpx.Response:
     SEEN["subtitle"] = {"path": m.group(0), "params": params}
+    SEEN.setdefault("subtitle_calls", []).append(m.group(0))
     return httpx.Response(200, text="1\n00:00:01,000 --> 00:00:02,000\nÉté\n")
 
 
@@ -98,6 +104,16 @@ def _items(params: dict, _m: Any) -> Any:
                 {"Type": "Audio", "Index": 2, "Codec": "eac3", "Language": "fre", "Channels": 6},
             ]}],
         }]}  # fmt: skip
+    if params.get("ids") == SMALL_ID:
+        return {"Items": [{
+            "Id": SMALL_ID, "Name": "Paddington", "RunTimeTicks": 5700 * T,
+            "MediaSources": [{"Path": "/movies/Paddington.mkv", "Bitrate": 12_000_000,
+                              "MediaStreams": [
+                {"Type": "Video", "Codec": "h264"},
+                {"Type": "Subtitle", "Index": 2, "Codec": "subrip", "Language": "fre",
+                 "IsExternal": False},
+            ]}],
+        }]}  # fmt: skip
     if params.get("ids") == EPISODE_ID:
         return {"Items": [{"Id": EPISODE_ID, "Name": "Static", "RunTimeTicks": 2700 * T}]}
     if params.get("includeItemTypes") == "Series":
@@ -106,6 +122,7 @@ def _items(params: dict, _m: Any) -> Any:
         {"Id": MOVIE_ID, "Name": "Dune", "ProviderIds": {"Tmdb": "438631"}},
         {"Id": REMUX_ID, "Name": "Gemini Man", "ProviderIds": {"Tmdb": "453405"}},
         {"Id": DOVI_ID, "Name": "Tulsa King", "ProviderIds": {"Tmdb": "777"}},
+        {"Id": SMALL_ID, "Name": "Paddington", "ProviderIds": {"Tmdb": "116745"}},
     ]}  # fmt: skip
 
 
@@ -206,9 +223,10 @@ def _with_range(handle: Any) -> Any:
 @pytest.fixture
 async def jellyfin(
     client: AsyncClient, arr_stack: dict[str, str], monkeypatch: pytest.MonkeyPatch
-) -> dict[str, str]:
+) -> AsyncIterator[dict[str, str]]:
     SEEN.clear()
     jf._series_cache.clear()
+    tv_playback._WARMED.clear()
     routes = dict(fake_arr.ROUTES)
     routes["jellyfin.test"] = [
         (r"/Items", _items),
@@ -226,7 +244,18 @@ async def jellyfin(
     monkeypatch.setattr(fake_arr, "handle", _with_range(fake_arr.handle))
     svc = {"name": "Jellyfin", "type": "jellyfin", "url": JELLYFIN_URL, "api_key": "j-key"}
     assert (await client.post("/api/services", json=svc, headers=arr_stack)).status_code == 201
-    return arr_stack
+    yield arr_stack
+    # Les tâches de fond d'un test (extraction chez Jellyfin) finissent dans sa
+    # boucle, pas dans celle du test suivant
+    await _settled()
+
+
+async def _settled() -> None:
+    """Attend les tâches lancées après la réponse (extraction chez Jellyfin…)."""
+    for _ in range(5):
+        if not tv_playback._PENDING:
+            break
+        await asyncio.gather(*tv_playback._PENDING, return_exceptions=True)
 
 
 async def _tv(client: AsyncClient, admin: dict[str, str]) -> dict[str, str]:
@@ -855,6 +884,7 @@ async def test_play_lists_external_subtitles(client: AsyncClient, jellyfin: dict
     tv = await _tv(client, jellyfin)
     fake_arr.POSTS.clear()
     data = (await client.get("/api/tv/play/movie/438631", headers=tv)).json()
+    await _settled()
     # Le .en.srt seulement : ni le PGS (image), ni la piste intégrée au MKV
     assert data["subtitles"] == [
         {
@@ -941,3 +971,119 @@ async def test_sync_subtitles_from_pause_menu(
     assert data["status"] == "ok" and len(data["subtitles"]) == 1
     assert SEEN["sync"]["language"] == "fr" and SEEN["sync"]["origin"] == "android"
     assert device_may_call("POST", f"/api/tv/subtitles/{MOVIE_ID}/sync")
+
+
+# ── Pistes texte intégrées : extraites par Jellyfin avant la bascule 1080p ──
+
+ASS_TRACK = {"Type": "Subtitle", "Index": 4, "Codec": "ass", "Language": "fre", "IsExternal": False}
+PGS_TRACK = {"Type": "Subtitle", "Index": 3, "Codec": "PGSSUB", "IsExternal": False}
+SRT_FILE = {"Type": "Subtitle", "Index": 5, "Codec": "srt", "Language": "fre", "IsExternal": True}
+WARM_PATH = f"/Videos/{MOVIE_ID}/{MOVIE_ID}/Subtitles/4/0/Stream.ass"
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        # Remux 4K avec une piste ASS : la bascule 1080p est plausible, on prépare
+        ({"Bitrate": 89_700_000, "MediaStreams": [PGS_TRACK, ASS_TRACK]}, (4, "ass")),
+        # Débit inconnu : la TV garde sa proposition, on prépare aussi
+        ({"MediaStreams": [ASS_TRACK]}, (4, "ass")),
+        # Épisode à 12 Mb/s : le 1080p à 20 Mb/s ne le soulagerait pas
+        ({"Bitrate": 12_000_000, "MediaStreams": [ASS_TRACK]}, None),
+        # Pile le seuil de la TV (MIN_SUGGEST_BITRATE) : proposé, donc préparé
+        ({"Bitrate": 25_000_000, "MediaStreams": [ASS_TRACK]}, (4, "ass")),
+        # Pistes image seulement (PGS) : rien à extraire en texte
+        ({"Bitrate": 89_700_000, "MediaStreams": [PGS_TRACK]}, None),
+        # .srt posé à côté du fichier : le lecteur le lit déjà, pas d'extraction
+        ({"Bitrate": 89_700_000, "MediaStreams": [SRT_FILE]}, None),
+    ],
+)
+def test_warm_candidate(source: dict, expected: tuple[int, str] | None) -> None:
+    assert tv_playback.warm_candidate(MOVIE_ID, {"MediaSources": [source]}) == expected
+    assert tv_playback.warm_candidate(MOVIE_ID, None) is None
+    assert tv_playback.WARM_MIN_BITRATE == 25_000_000  # MIN_SUGGEST_BITRATE de QualityLogic.kt
+
+
+async def test_play_big_file_warms_embedded_subtitles(
+    client: AsyncClient, jellyfin: dict[str, str]
+) -> None:
+    tv = await _tv(client, jellyfin)
+    data = (await client.get("/api/tv/play/movie/438631", headers=tv)).json()
+    await _settled()
+    # La réponse à la TV ne change pas : même fiche, mêmes pistes à poser à côté
+    assert data["status"] == "ok" and data["bitrate"] == 89_700_000
+    assert [s["url"] for s in data["embedded_subtitles"]] == [f"/api/tv/subtitle/{MOVIE_ID}/4.ass"]
+    # Une seule demande à Jellyfin, sur la première piste texte : il les extrait toutes
+    assert SEEN["subtitle_calls"] == [WARM_PATH]
+    assert SEEN["subtitle"]["params"] == {"ApiKey": "j-key"}
+    # Relancé dans l'heure (reprise après une pause) : rien de plus
+    assert (await client.get("/api/tv/play/movie/438631", headers=tv)).json()["status"] == "ok"
+    await _settled()
+    assert SEEN["subtitle_calls"] == [WARM_PATH]
+    # Une heure plus tard : redemandé (Jellyfin a pu vider son cache)
+    tv_playback._WARMED[MOVIE_ID] -= tv_playback.WARM_INTERVAL
+    assert (await client.get("/api/tv/play/movie/438631", headers=tv)).json()["status"] == "ok"
+    await _settled()
+    assert SEEN["subtitle_calls"] == [WARM_PATH, WARM_PATH]
+
+
+async def test_play_does_not_warm_small_or_text_free_files(
+    client: AsyncClient, jellyfin: dict[str, str]
+) -> None:
+    tv = await _tv(client, jellyfin)
+    # 12 Mb/s avec une piste texte : la TV ne proposera pas le 1080p
+    small = (await client.get("/api/tv/play/movie/116745", headers=tv)).json()
+    assert small["status"] == "ok" and small["bitrate"] == 12_000_000
+    assert [s["url"] for s in small["embedded_subtitles"]] == [f"/api/tv/subtitle/{SMALL_ID}/2.srt"]
+    # Dolby Vision sans aucune piste de sous-titres : rien à extraire
+    assert (await client.get("/api/tv/play/movie/777", headers=tv)).json()["status"] == "ok"
+    # Épisode dont Jellyfin ne donne pas les pistes
+    episode = (await client.get("/api/tv/play/episode/280619/2/2", headers=tv)).json()
+    assert episode["status"] == "ok"
+    await _settled()
+    assert "subtitle_calls" not in SEEN
+    assert tv_playback._WARMED == {}
+
+
+async def test_warm_never_delays_the_tv(
+    client: AsyncClient, jellyfin: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Jellyfin met des minutes à extraire : la TV a sa fiche tout de suite."""
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def slow_fetch(item_id: str, url: str) -> None:
+        SEEN["warm"] = {"item": item_id, "url": url}
+        started.set()
+        await release.wait()
+
+    monkeypatch.setattr(tv_playback, "_warm_fetch", slow_fetch)
+    tv = await _tv(client, jellyfin)
+    resp = await client.get("/api/tv/play/movie/438631", headers=tv)
+    assert resp.status_code == 200 and resp.json()["status"] == "ok"
+    await asyncio.wait_for(started.wait(), 1)
+    assert not release.is_set()  # Jellyfin « extrait » toujours, la TV a déjà sa réponse
+    assert SEEN["warm"] == {"item": MOVIE_ID, "url": f"{JELLYFIN_URL}{WARM_PATH}?ApiKey=j-key"}
+    assert "j-key" not in resp.text  # la clé reste entre ArrMada et Jellyfin
+    release.set()
+    await _settled()
+
+
+async def test_warm_retries_at_next_launch_when_jellyfin_is_down(
+    client: AsyncClient, jellyfin: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def down(_params: dict, _m: Any) -> httpx.Response:
+        raise httpx.ConnectError("Jellyfin éteint")
+
+    broken = [(r"/Videos/.*/Subtitles/.*", down), *fake_arr.ROUTES["jellyfin.test"]]
+    monkeypatch.setitem(fake_arr.ROUTES, "jellyfin.test", broken)
+    tv = await _tv(client, jellyfin)
+    # Jellyfin ne répond pas : la TV a quand même sa fiche, et rien n'est noté
+    assert (await client.get("/api/tv/play/movie/438631", headers=tv)).json()["status"] == "ok"
+    await _settled()
+    assert "subtitle_calls" not in SEEN and MOVIE_ID not in tv_playback._WARMED
+    # Jellyfin revenu : le lancement suivant redemande
+    del broken[0]
+    assert (await client.get("/api/tv/play/movie/438631", headers=tv)).json()["status"] == "ok"
+    await _settled()
+    assert SEEN["subtitle_calls"] == [WARM_PATH] and MOVIE_ID in tv_playback._WARMED
