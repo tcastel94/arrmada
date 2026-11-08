@@ -152,3 +152,18 @@ réservé au Dolby Vision profil 5 sur un écran sans Dolby Vision.
   `services/tv_playback.py`), une fois par heure et par élément. Couper la
   connexion n'annule pas l'extraction chez Jellyfin (vérifié dans le code de
   10.10 et 12).
+- **La bascule n'attend pas ces pistes** (ajouté le 08/11/2026, après une TV
+  bloquée 4 min sur un spinner en basculant 60 s après le lancement de
+  Dragons) : Media3 ne prépare la lecture qu'une fois toutes les pistes
+  posées à côté reçues, et la préparation côté serveur n'est pas finie si
+  l'on bascule dans les premières minutes. La TV leur laisse 2 s (déjà
+  extraites : un seul chargement, comme avant), sinon la vidéo démarre avec
+  les seuls sous-titres du disque, les pistes sont demandées en arrière-plan
+  avec patience (45 s par essai, 10 min au plus, une à la fois : Jellyfin les
+  extrait toutes d'un coup), gardées dans un fichier de l'appli, puis le même
+  flux est relu au même endroit avec elles, lues en local
+  (`data/LateSubtitleLogic.kt`, `ui/player/LateSubtitleFetcher.kt`). Piste
+  refusée par le serveur : la vidéo joue sans elle, un message le dit. Rendre
+  leurs erreurs non fatales dans Media3 a été écarté : depuis Media3 1.4 les
+  sous-titres posés à côté passent par un `ProgressiveMediaSource` sans ce
+  réglage, qui ne se déclare prêt qu'à la réponse HTTP.
