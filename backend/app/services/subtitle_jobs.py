@@ -204,6 +204,43 @@ def code2(value: Any) -> str:
     return _LANG_ALIASES.get(text, text)
 
 
+# Fin du nom d'un sous-titre « pour malentendants » posé à côté de la vidéo.
+# Bazarr écrit « Film.hi.srt » quand il range sans code de langue ; Jellyfin
+# y lit du hindi (« hi », « hin »).
+_SDH_SUFFIXES = (".hi", ".sdh", ".cc")
+
+
+def _sdh_named(stream: dict[str, Any]) -> bool:
+    """Fichier externe dont le nom finit par « .hi » / « .sdh » / « .cc » ?"""
+    name = str(stream.get("Path") or "").replace("\\", "/").rsplit("/", 1)[-1]
+    stem = name.rsplit(".", 1)[0].casefold()
+    return bool(stream.get("IsExternal")) and stem.endswith(_SDH_SUFFIXES)
+
+
+def stream_language(stream: dict[str, Any]) -> str:
+    """Langue (« fr », « en »… ou « ») d'une piste de sous-titres Jellyfin.
+
+    Un fichier externe sans langue dans son nom (« Film.srt ») : Jellyfin n'en
+    sait rien et l'affiche « Non défini ». C'est ce que Bazarr écrit en mode
+    « une seule langue » (Settings › Languages › Single Language), et ce que
+    font beaucoup de gens à la main : il est dans la langue de la maison
+    (SUBTITLE_LANGUAGE). « Film.hi.srt » : pas du hindi, le même fichier pour
+    malentendants (sauf si la maison regarde en hindi).
+    """
+    house = code2(settings.SUBTITLE_LANGUAGE)
+    lang = code2(stream.get("Language"))
+    if not stream.get("IsExternal"):
+        return lang
+    if lang in ("hi", "hin") and house != "hi" and _sdh_named(stream):
+        return house
+    return lang or house
+
+
+def stream_sdh(stream: dict[str, Any]) -> bool:
+    """Piste pour malentendants (annoncée par Jellyfin, ou fichier « .hi.srt »)."""
+    return bool(stream.get("IsHearingImpaired")) or _sdh_named(stream)
+
+
 def _truthy(value: Any) -> bool:
     return str(value).casefold() in ("true", "1", "yes")
 
@@ -243,12 +280,12 @@ def full_languages(details: dict[str, Any] | None) -> set[str]:
     sources = (details or {}).get("MediaSources") or [{}]
     source = sources[0] if isinstance(sources[0], dict) else {}
     return {
-        code2(s.get("Language"))
+        stream_language(s)
         for s in source.get("MediaStreams") or []
         if isinstance(s, dict)
         and s.get("Type") == "Subtitle"
         and not s.get("IsForced")
-        and s.get("Language")
+        and stream_language(s)
     }
 
 

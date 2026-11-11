@@ -8,6 +8,7 @@ Given a TMDB person id, return the actor's info plus two lists:
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 import httpx
@@ -32,6 +33,72 @@ def _profile_url(path: str | None) -> str | None:
 
 def _poster_url(path: str | None) -> str | None:
     return f"{TMDB_IMG}/w342{path}" if path else None
+
+
+# Distribution d'une série, gardée 24 h (la fiche est ouverte bien plus souvent
+# qu'un casting ne change) : {id TVDB ou « tmdb:N » → (heure, distribution)}
+_SERIES_CAST_TTL = 24 * 3600.0
+_SERIES_CAST_MAX = 500
+_series_cast: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+
+
+def parse_series_cast(data: Any, limit: int = 20) -> list[dict[str, Any]]:
+    """Réponse TMDB `/tv/{id}/aggregate_credits` → distribution au format des
+    fiches film ([{name, character, tmdb_id, photo, order}], par ordre d'affiche)."""
+    cast = []
+    raw = data.get("cast") if isinstance(data, dict) else None
+    for c in raw if isinstance(raw, list) else []:
+        if not isinstance(c, dict) or not c.get("name"):
+            continue
+        roles = [r for r in c.get("roles") or [] if isinstance(r, dict)]
+        # Rôle tenu dans le plus d'épisodes (un acteur peut en avoir plusieurs)
+        roles.sort(key=lambda r: r.get("episode_count") or 0, reverse=True)
+        cast.append({
+            "name": c["name"],
+            "character": str((roles[0].get("character") if roles else c.get("character")) or ""),
+            "type": "cast",
+            "job": "",
+            "tmdb_id": c.get("id"),
+            "order": c.get("order", 999),
+            "photo": _profile_url(c.get("profile_path")),
+        })  # fmt: skip
+    cast.sort(key=lambda p: p.get("order", 999))
+    return cast[:limit]
+
+
+async def get_series_cast(tvdb_id: Any, tmdb_id: Any = None) -> list[dict[str, Any]]:
+    """Distribution d'une série (Sonarr n'en a pas) : TMDB, par l'ID TMDB que
+    Sonarr v4 connaît, sinon retrouvé par l'ID TVDB. Vide sans clé TMDB, si
+    la série est inconnue ou TMDB injoignable : la fiche s'affiche sans."""
+    if not settings.TMDB_API_KEY or not (tvdb_id or tmdb_id):
+        return []
+    key = str(tvdb_id) if tvdb_id else f"tmdb:{tmdb_id}"
+    cached = _series_cast.get(key)
+    now = time.monotonic()
+    if cached and now - cached[0] < _SERIES_CAST_TTL:
+        return cached[1]
+    params = {"api_key": settings.TMDB_API_KEY, "language": "fr-FR"}
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            if not tmdb_id:
+                found = await client.get(
+                    f"{TMDB_BASE}/find/{tvdb_id}", params={**params, "external_source": "tvdb_id"}
+                )
+                results = found.json().get("tv_results") or [] if found.status_code == 200 else []
+                tmdb_id = results[0].get("id") if results else None
+                if not tmdb_id:
+                    return []
+            resp = await client.get(f"{TMDB_BASE}/tv/{tmdb_id}/aggregate_credits", params=params)
+            if resp.status_code != 200:
+                return []
+            cast = parse_series_cast(resp.json())
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.debug("Distribution de la série %s : TMDB injoignable (%s)", key, exc)
+        return []
+    if len(_series_cast) >= _SERIES_CAST_MAX:
+        _series_cast.clear()
+    _series_cast[key] = (now, cast)
+    return cast
 
 
 async def _radarr_library_map(db: AsyncSession) -> dict[int, dict[str, Any]]:

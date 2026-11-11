@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Écran noir avec le son, sous-titres « Non défini », distribution des fiches et du menu pause
+
+#### Fixed
+- **Appli TV : écran noir avec le son sur les fichiers que l'appareil ne sait pas décoder** (AV1 sur une Shield, qui n'a pas de décodeur AV1 : 462 fichiers de la médiathèque le 11/11/2026 ; HEVC 10 bits, VC-1 ou MPEG-4 ASP sur d'autres boîtiers). Media3 ne signale aucune erreur dans ce cas : il écarte la piste vidéo et joue le son seul. Le lecteur le repère au premier jeu de pistes (une piste vidéo dans le fichier, aucune retenue) et bascule, là où on en était, sur une conversion Jellyfin : le 1080p proposé sur cet écran (HDR si l'écran est HDR10), puis le 1080p SDR en H.264 si celui-ci ne passe pas non plus. Un message le dit (« Image AV1 non décodée par cet appareil : convertie par Jellyfin (1080p) »). Même bascule quand le décodeur vidéo plante en cours de route (format au-delà de ce que l'appareil sait faire) : le lecteur retentait un remux, qui garde la même image. Vidéo hors médiathèque (pas de Jellyfin pour convertir) : un message au lieu d'un écran noir muet d'explication
+- **Sous-titres téléchargés affichés « Non défini »** (1 338 fichiers) : Bazarr en mode « une seule langue » range `Film.srt`, sans code de langue ; Jellyfin n'en connaît donc pas la langue (« Non défini - SUBRIP - Externe »), et lit `Film.hi.srt` (malentendants) comme du hindi. Le serveur donne à ces fichiers la langue de la maison (`SUBTITLE_LANGUAGE`) : « Français · fichier », « Français (SDH) · fichier ». La langue étant connue, la règle VO + sous-titres FR de la TV les voit, et le gardien des sous-titres ne relance plus de recherche pour un titre qui a déjà son `.srt`
+- **Appli TV : distribution coupée par le bas de l'écran, voire invisible, sur la fiche d'un film** : la fiche ne défilait qu'au doigt. Elle descend désormais jusqu'à la distribution quand le focus y entre, et remonte quand il en sort ; chaque acteur prend le focus, même sans filmographie connue
+
+#### Added
+- **Distribution des séries** : `GET /api/media/series/{id}` renvoie `cast` (TMDB `aggregate_credits`, rôle principal de chaque acteur, gardé 24 h ; vide sans clé TMDB). Affichée en bas de la fiche série de l'appli TV et dans l'onglet Distribution du menu pause d'un épisode
+- **Appli TV : filmographie depuis le menu pause** : OK sur un acteur de l'onglet Distribution ouvre sa filmographie par-dessus le film en pause, et de là l'écran « Télécharger » d'un film qu'on n'a pas. Retour revient d'un cran, jusqu'à l'onglet Distribution ; la lecture n'est jamais quittée
+
+#### Notes
+- Vignettes de chapitres vides : aucune bibliothèque Jellyfin de cette installation n'extrait d'images (chapitres comme aperçus « trickplay » : options désactivées, le réglage d'origine de Jellyfin), le serveur n'a donc rien à relayer et la TV montre ses cartes numérotées. Rien de changé dans le code ; à activer dans Jellyfin (Bibliothèques › ⋮ › Gérer la bibliothèque › « Activer l'extraction des images de chapitres »)
+- Nouvelle logique pure `data/VideoRescueLogic.kt` (testée dans `VideoRescueLogicTest`) ; rangée partagée `ui/detail/CastRow.kt`. APK non construite dans l'environnement de la modification (pas de JDK) : compilation et tests JVM par la CI Android. À vérifier sur la Shield : un film AV1 (image en 1080p après quelques secondes, message à l'écran), la fiche d'un film au résumé long (↓ jusqu'à la distribution), un acteur du menu pause puis Retour
+- Tests serveur : 5 nouveaux (sous-titre externe sans langue, `.hi.srt`, distribution d'une série avec et sans clé TMDB)
+
 ### Appli TV : la bascule en 1080p démarre sans attendre les sous-titres que Jellyfin extrait
 
 #### Fixed

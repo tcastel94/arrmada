@@ -1,6 +1,14 @@
 package fr.arrmada.app.ui.player
 
 import androidx.activity.compose.BackHandler
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
+import fr.arrmada.app.data.CreditOpen
+import fr.arrmada.app.data.DownloadTarget
+import fr.arrmada.app.data.Repository
+import fr.arrmada.app.ui.detail.PersonScreen
+import fr.arrmada.app.ui.detail.castInitials
+import fr.arrmada.app.ui.request.DownloadScreen
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -190,6 +198,7 @@ fun PauseMenu(
     subtitleDownload: SubtitleDownload? = null, // null : pas de recherche (vidéo hors médiathèque)
     quality: QualityChoice? = null, // null, ou original seul : pas de bouton « Qualité »
     hlsAudio: HlsAudioChoice? = null, // flux converti : pistes audio du serveur (null : celles du lecteur)
+    repository: Repository? = null, // filmographie d'un acteur de la distribution (null : acteurs sans action)
 ) {
     val screen = LocalScreen.current
     val touch = screen.isTouch
@@ -230,6 +239,42 @@ fun PauseMenu(
         }
     }
     var tab by remember { mutableStateOf(tabs.firstOrNull { it.label == initialTab } ?: tabs.first()) }
+    // Distribution : OK sur un acteur ouvre sa filmographie PAR-DESSUS le film en
+    // pause (rien n'est quitté : la lecture reprend où elle en était), et de là
+    // l'écran « Télécharger » d'un film qu'on n'a pas. Retour revient d'un cran,
+    // jusqu'à l'onglet Distribution du menu.
+    var person by remember { mutableStateOf<Long?>(null) }
+    var download by remember { mutableStateOf<DownloadTarget?>(null) }
+    var backFromPerson by remember { mutableStateOf(false) } // au retour, le focus revient sur la distribution
+    val shownPerson = person
+    if (shownPerson != null && repository != null) {
+        val context = LocalContext.current
+        val target = download
+        Box(Modifier.fillMaxSize().background(ArrColors.Night)) {
+            if (target != null) {
+                BackHandler { download = null }
+                DownloadScreen(target, repository, absolute, onDone = { download = null })
+            } else {
+                BackHandler { person = null }
+                PersonScreen(
+                    personId = shownPerson,
+                    repository = repository,
+                    onOpen = { credit ->
+                        when (credit) {
+                            is CreditOpen.Download -> download = credit.target
+                            // Sa fiche quitterait la lecture : on le dit, sans rien interrompre
+                            is CreditOpen.Movie -> Toast.makeText(context, "Déjà dans ta médiathèque", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                )
+            }
+        }
+        LaunchedEffect(Unit) {
+            backFromPerson = true
+            backFromAudio = false
+        }
+        return
+    }
     // Un « point d'accroche » par onglet : en descendant des boutons, le focus
     // arrive sur l'onglet affiché (et non sur le plus proche à l'écran)
     val tabFocus = remember { PauseTab.entries.associateWith { FocusRequester() } }
@@ -246,6 +291,7 @@ fun PauseMenu(
     val subtitlesFocus = remember { FocusRequester() } // premier choix du panneau Sous-titres
     val subtitlesButtonFocus = remember { FocusRequester() }
     val resumeFocus = remember { FocusRequester() }
+    val castFocus = remember { FocusRequester() } // rangée Distribution (retour de la filmographie)
     val remaining = ((duration - position) / 1000).coerceAtLeast(0)
     val endsAt = LocalTime.now().plusSeconds(remaining).format(DateTimeFormatter.ofPattern("HH:mm"))
     val progress = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
@@ -391,7 +437,11 @@ fun PauseMenu(
                     else -> when (tab) {
                         PauseTab.CHAPTERS -> ChaptersPanel(info.chapters, info.trickplay, position, duration, absolute, onSeek)
                         PauseTab.INFO -> InfoPanel(meta, info)
-                        PauseTab.CAST -> CastPanel(meta)
+                        PauseTab.CAST -> CastPanel(
+                            meta,
+                            Modifier.focusRequester(castFocus),
+                            onPerson = if (repository != null) ({ id: Long -> person = id }) else null,
+                        )
                     }
                 }
             }
@@ -420,7 +470,15 @@ fun PauseMenu(
             }
         }
     }
-    LaunchedEffect(Unit) { runCatching { (if (backFromAudio) audioFocus else resumeFocus).requestFocus() } }
+    LaunchedEffect(Unit) {
+        if (backFromPerson) {
+            // Retour de la filmographie : l'onglet Distribution est resté affiché, le focus y revient
+            backFromPerson = false
+            withFrameNanos { } // la rangée doit être affichée pour recevoir le focus
+            if (runCatching { castFocus.requestFocus() }.isSuccess) return@LaunchedEffect
+        }
+        runCatching { (if (backFromAudio) audioFocus else resumeFocus).requestFocus() }
+    }
 }
 
 /** Logo du titre (sinon son nom), puis l'épisode « S02E03 · Static ». */
@@ -621,18 +679,20 @@ private fun InfoPanel(meta: PlaybackMeta?, info: PlayInfo) {
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-private fun CastPanel(meta: PlaybackMeta?) {
+private fun CastPanel(meta: PlaybackMeta?, modifier: Modifier = Modifier, onPerson: ((tmdbId: Long) -> Unit)? = null) {
     LazyRow(
-        modifier = Modifier.focusRestorer(),
+        modifier = modifier.focusRestorer(),
         contentPadding = PaddingValues(horizontal = gutter, vertical = 8.dp), // rond grossi au focus non coupé
         horizontalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         items(meta?.cast.orEmpty().take(20)) { person ->
             Column(Modifier.width(96.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                // Focusable (sans action) : c'est ce qui fait défiler la rangée à la télécommande
+                // Toujours focusable (c'est ce qui fait défiler la rangée à la télécommande) ;
+                // OK ouvre la filmographie quand l'acteur est connu de TMDB
+                val open = { person.tmdbId?.let { id -> onPerson?.invoke(id) }; Unit }
                 Surface(
-                    onClick = {},
-                    modifier = Modifier.size(78.dp),
+                    onClick = open,
+                    modifier = Modifier.size(78.dp).tapToClick(open),
                     shape = ClickableSurfaceDefaults.shape(CircleShape),
                     scale = ClickableSurfaceDefaults.scale(focusedScale = 1.1f),
                     border = ClickableSurfaceDefaults.border(focusedBorder = Border(BorderStroke(3.dp, Color.White), shape = CircleShape)),
@@ -650,7 +710,7 @@ private fun CastPanel(meta: PlaybackMeta?) {
                     } else {
                         // Pas de photo : initiales
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text(initials(person.name), style = MaterialTheme.typography.titleLarge, color = Dim)
+                            Text(castInitials(person.name), style = MaterialTheme.typography.titleLarge, color = Dim)
                         }
                     }
                 }
@@ -660,10 +720,6 @@ private fun CastPanel(meta: PlaybackMeta?) {
         }
     }
 }
-
-/** « Timothée Chalamet » → « TC ». */
-private fun initials(name: String): String =
-    name.split(' ').filter { it.isNotBlank() }.take(2).joinToString("") { it.first().uppercase() }
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable

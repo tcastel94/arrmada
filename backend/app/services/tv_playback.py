@@ -184,6 +184,8 @@ _LANGS = {
     "spa": ("es", "Espagnol"), "ger": ("de", "Allemand"), "deu": ("de", "Allemand"),
     "ita": ("it", "Italien"), "jpn": ("ja", "Japonais"), "por": ("pt", "Portugais"),
 }  # fmt: skip
+# Code court → nom affiché (langue devinée d'un fichier externe sans langue)
+_LANG_NAMES = dict(_LANGS.values())
 
 
 def subtitle_path(item_id: str, index: int, ext: str) -> str:
@@ -196,6 +198,8 @@ def external_subtitles(item_id: str, details: dict[str, Any]) -> list[dict[str, 
     Même format que les sous-titres de l'écran Vidéos : le lecteur les ajoute
     aux pistes du fichier (onglet Sous-titres du menu pause).
     """
+    from app.services import subtitle_jobs
+
     sources = details.get("MediaSources") or [{}]
     source = sources[0] if isinstance(sources[0], dict) else {}
     found = []
@@ -207,11 +211,17 @@ def external_subtitles(item_id: str, details: dict[str, Any]) -> list[dict[str, 
         fmt = _SUB_FORMATS.get(str(stream.get("Codec") or "").lower())
         if fmt is None:
             continue
+        # Fichier sans langue dans son nom (« Film.srt », le rangement de Bazarr
+        # en mode « une seule langue ») : Jellyfin l'appelle « Non défini » et
+        # « Film.hi.srt » passe pour du hindi. C'est la langue de la maison.
+        guessed = subtitle_jobs.stream_language(stream)
         code, name = _LANGS.get(str(stream.get("Language") or "").lower(), ("", ""))
+        if guessed != subtitle_jobs.code2(stream.get("Language")):
+            code, name = guessed, _LANG_NAMES.get(guessed, guessed.upper())
         label = name or str(stream.get("DisplayTitle") or stream.get("Title") or "Externe")
         if stream.get("IsForced"):
             label += " (forcés)"
-        elif stream.get("IsHearingImpaired"):
+        elif subtitle_jobs.stream_sdh(stream):
             label += " (SDH)"
         found.append({
             "url": subtitle_path(item_id, stream["Index"], fmt[0]),

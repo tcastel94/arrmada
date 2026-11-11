@@ -65,6 +65,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.ExoPlaybackException
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
@@ -83,6 +84,7 @@ import fr.arrmada.app.data.Quality
 import fr.arrmada.app.data.QualityLogic
 import fr.arrmada.app.data.RemoteCommand
 import fr.arrmada.app.data.ScrobbleCast
+import fr.arrmada.app.data.VideoRescueLogic
 import fr.arrmada.app.data.ScrobbleLogic
 import fr.arrmada.app.data.ScrobbleSkip
 import fr.arrmada.app.data.ScrobbleTrack
@@ -276,6 +278,8 @@ internal fun PlayerSurface(
     var qualityDeclined by remember { mutableStateOf(false) } // « Non merci » : plus de proposition
     var qualityCard by remember { mutableStateOf<QualityCardKind?>(null) }
     var dolbyVisionWarned by remember { mutableStateOf(false) }
+    // Image que l'appareil ne décode pas et rien pour la convertir (VideoRescueLogic) : dit une fois
+    var noPictureWarned by remember { mutableStateOf(false) }
     var source by remember { mutableStateOf(initialSource) }
     // Piste audio demandée à Jellyfin pour le flux converti en cours (index
     // MediaStreams), null : sa piste par défaut. Sa liste HLS n'en porte qu'une :
@@ -474,7 +478,7 @@ internal fun PlayerSurface(
      * la piste audio change, Jellyfin les resservirait sinon (son dossier de
      * sortie ne dépend que de la session, pas de la piste demandée).
      */
-    fun setQuality(target: Quality) {
+    fun setQuality(target: Quality, message: String? = null) {
         if (target == quality) return
         val (url, hls) = if (target == Quality.ORIGINAL) originalSource else QualityLogic.source(info, target)
         if (url.isBlank()) return
@@ -486,7 +490,7 @@ internal fun PlayerSurface(
         toneMapped = target == Quality.HD_SDR
         remuxed = target != Quality.ORIGINAL || hls
         rebuffers = emptyList()
-        Toast.makeText(context, QualityLogic.switchMessage(target), Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, message ?: QualityLogic.switchMessage(target), if (message != null) Toast.LENGTH_LONG else Toast.LENGTH_SHORT).show()
         if (!stopFirst) {
             load(url, hls, at, before)
             player.playWhenReady = wasPlaying
@@ -498,6 +502,20 @@ internal fun PlayerSurface(
             load(url, hls, at, before)
             player.playWhenReady = wasPlaying
         }
+    }
+
+    /**
+     * Écran noir avec le son (VideoRescueLogic) : l'appareil ne décode pas
+     * l'image de format [mime] (AV1 sur une Shield…), ou son décodeur a
+     * planté. Jellyfin la réencode, un cran plus bas à chaque appel (1080p de
+     * cet écran, puis H.264), là où on en était. Faux : plus rien à tenter.
+     */
+    fun rescuePicture(mime: String?): Boolean {
+        val target = VideoRescueLogic.next(quality, reducedQuality, info) ?: return false
+        if (QualityLogic.source(info, target).first.isBlank()) return false
+        setQuality(target, VideoRescueLogic.rescueMessage(mime))
+        player.playWhenReady = true
+        return true
     }
 
     /**
@@ -531,7 +549,7 @@ internal fun PlayerSurface(
     fun acceptQualityCard() {
         when (qualityCard) {
             QualityCardKind.SUGGEST -> {
-                reducedQuality?.let(::setQuality)
+                reducedQuality?.let { setQuality(it) }
                 // Une seule fois par TV : en faire le réglage par défaut ?
                 val ask = app.prefs.defaultQuality == DefaultQuality.ORIGINAL && !app.prefs.qualityAsked
                 qualityCard = if (ask) QualityCardKind.ALWAYS else null
@@ -661,6 +679,18 @@ internal fun PlayerSurface(
                 }
                 // Piste changée (menu pause ou tablette) : la tablette suit aussitôt
                 if (scrobbleStarted) sendScrobble("progress", false)
+                // Filet de sécurité : le fichier a une image, mais l'appareil n'a pas de
+                // décodeur pour elle (AV1 sur une Shield…). Le lecteur ne dit rien et
+                // joue le son sur un écran noir : Jellyfin réencode l'image.
+                val videoGroups = newTracks.groups.filter { it.type == C.TRACK_TYPE_VIDEO }
+                if (VideoRescueLogic.noPicture(videoGroups.size, videoGroups.any { it.isSelected })) {
+                    val mime = videoGroups.first().getTrackFormat(0).let { it.sampleMimeType ?: it.codecs }
+                    if (!rescuePicture(mime) && !noPictureWarned) {
+                        noPictureWarned = true
+                        Toast.makeText(context, VideoRescueLogic.stuckMessage(mime), Toast.LENGTH_LONG).show()
+                    }
+                    return
+                }
                 // Filet de sécurité : la piste vidéo se révèle Dolby Vision profil 5
                 // alors que l'écran ne le gère pas (serveur Jellyfin trop ancien
                 // pour l'annoncer, ou remux) → conversion SDR là où on en était.
@@ -740,6 +770,10 @@ internal fun PlayerSurface(
                         return
                     }
                 }
+                // Décodeur vidéo en échec (format au-delà de ce que l'appareil sait
+                // faire, décodeur qui plante) : le remux garderait la même image,
+                // Jellyfin la réencode, là où on en était
+                if (videoDecoderFailed(e) && rescuePicture((e as? ExoPlaybackException)?.rendererFormat?.sampleMimeType)) return
                 // Fichier illisible en direct : on retente une fois en remux,
                 // là où on en était
                 if (!remuxed && info.remuxStream.isNotBlank() && e.errorCode in REMUX_RETRY) {
@@ -1043,6 +1077,7 @@ internal fun PlayerSurface(
             PauseMenu(
                 info = info,
                 meta = meta,
+                repository = repository,
                 position = position,
                 duration = duration,
                 tracks = tracks,
@@ -1085,7 +1120,7 @@ internal fun PlayerSurface(
                         doviForcedSdr = doviForcedSdr,
                     ),
                     current = quality,
-                    onSelect = ::setQuality,
+                    onSelect = { setQuality(it) },
                 ),
                 hlsAudio = HlsAudioChoice(hlsChoices, ::setHlsAudio).takeIf { hlsChoices.isNotEmpty() },
             )

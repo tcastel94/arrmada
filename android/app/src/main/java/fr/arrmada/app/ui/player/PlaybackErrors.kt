@@ -26,6 +26,19 @@ internal fun audioDecoderFailed(e: PlaybackException): Boolean {
 }
 
 /**
+ * L'erreur vient-elle du décodeur de l'image ? Format au-delà de ce que
+ * l'appareil sait faire (4K sur un boîtier 1080p, profil non géré), ou
+ * décodeur qui plante : seule une conversion par Jellyfin la sauve.
+ */
+@OptIn(UnstableApi::class)
+internal fun videoDecoderFailed(e: PlaybackException): Boolean {
+    val renderer = e as? ExoPlaybackException ?: return false
+    return renderer.type == ExoPlaybackException.TYPE_RENDERER &&
+        renderer.rendererFormat?.sampleMimeType?.startsWith("video/") == true &&
+        (e.errorCode in AUDIO_DECODER_ERRORS || e.errorCode == PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED)
+}
+
+/**
  * Échec d'une action Sous-titres (Bazarr), en clair : serveur trop ancien
  * pour la fonction (403 / 404), Bazarr trop lent, ou serveur vraiment injoignable.
  */
