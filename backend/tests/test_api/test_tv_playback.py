@@ -1171,3 +1171,47 @@ def test_warm_candidates_are_bounded_and_forgotten(monkeypatch: pytest.MonkeyPat
     # Revu sans piste texte (fichier remplacé) : oublié
     tv_playback.note_warm_candidate("c" * 32, {"MediaSources": [{"Bitrate": 89_700_000}]})
     assert list(tv_playback._WARM_CANDIDATES) == ["b" * 32]
+
+
+# ── Sous-titres externes sans langue dans leur nom (« Film.srt ») ──
+
+
+def _external(path: str, language: str | None = None, **more: object) -> dict[str, object]:
+    stream = {"Type": "Subtitle", "Index": 7, "Codec": "subrip", "IsExternal": True, "Path": path,
+              "DisplayTitle": "Non défini - SUBRIP - Externe", **more}  # fmt: skip
+    if language:
+        stream["Language"] = language
+    return stream
+
+
+def _labels(*streams: dict[str, object]) -> list[tuple[str, str]]:
+    details = {"MediaSources": [{"MediaStreams": list(streams)}]}
+    return [(s["label"], s["language"]) for s in tv_playback.external_subtitles(MOVIE_ID, details)]
+
+
+def test_external_subtitle_without_language_takes_the_house_language() -> None:
+    # Bazarr en mode « une seule langue » : « Film.srt », que Jellyfin affiche « Non défini »
+    assert _labels(_external("/films/8 Mile (2002)/8 Mile (2002) Bluray-2160p.srt")) == [
+        ("Français · fichier", "fr")
+    ]
+    # « Film.hi.srt » : pour malentendants, pas du hindi
+    assert _labels(_external("/films/Lost/Lost WEBDL-2160p.hi.srt", "hin")) == [
+        ("Français (SDH) · fichier", "fr")
+    ]
+    # Langue connue de Jellyfin : rien ne change, même pour une langue sans nom français ici
+    assert _labels(_external("/films/Dune/Dune.en.srt", "eng")) == [("Anglais · fichier", "en")]
+    dutch = _external("/films/Dune/Dune.nl.srt", "dut", DisplayTitle="Dutch - SUBRIP - External")
+    assert _labels(dutch) == [("Dutch - SUBRIP - External · fichier", "")]
+    # Du vrai hindi (« Film.hin.srt ») reste du hindi
+    hindi = _external("/films/Dune/Dune.hin.srt", "hin", DisplayTitle="Hindi - SUBRIP - External")
+    assert _labels(hindi) == [("Hindi - SUBRIP - External · fichier", "")]
+
+
+def test_external_subtitle_without_language_counts_as_a_full_subtitle() -> None:
+    from app.services import subtitle_jobs
+
+    details = {"MediaSources": [{"MediaStreams": [
+        _external("/films/8 Mile (2002)/8 Mile (2002).srt"),
+        {"Type": "Subtitle", "Index": 3, "Codec": "PGSSUB"},  # intégrée, sans langue : inconnue
+    ]}]}  # fmt: skip
+    assert subtitle_jobs.full_languages(details) == {"fr"}

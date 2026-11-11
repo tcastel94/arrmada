@@ -545,6 +545,7 @@ internal fun ArrMadaNavigation(app: ArrMadaApplication, searchRequests: MutableS
                     }
                 },
                 onDownload = { openDownload(DownloadTarget.of(it)) },
+                onPerson = { nav.navigate(Routes.person(it)) },
             )
         }
         composable(

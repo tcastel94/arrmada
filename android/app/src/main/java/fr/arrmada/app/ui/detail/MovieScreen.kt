@@ -6,8 +6,7 @@ import fr.arrmada.app.data.PlayOnTv
 import fr.arrmada.app.data.WatchlistTarget
 import fr.arrmada.app.ui.components.WatchlistButton
 import fr.arrmada.app.ui.request.SendToTvDialog
-import fr.arrmada.app.ui.components.tapToClick
-import fr.arrmada.app.ui.components.touchScroll
+import androidx.compose.foundation.verticalScroll
 import fr.arrmada.app.ui.components.LocalScreen
 import fr.arrmada.app.ui.components.gutter
 import android.view.TextureView
@@ -29,36 +28,26 @@ import fr.arrmada.app.ui.components.Motion
 import kotlinx.coroutines.delay
 import okhttp3.OkHttpClient
 import android.widget.Toast
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
@@ -266,7 +255,9 @@ fun MovieContent(
             )
         }
         // Texte et boutons à gauche : la place du disque sorti est laissée libre
-        Column(Modifier.fillMaxSize().touchScroll().padding(start = gutter, top = 36.dp, end = if (wide) 360.dp else gutter, bottom = 24.dp)) {
+        // La page défile : au doigt, et à la TV quand le focus descend dans la distribution (CastRow)
+        val pageScroll = rememberScrollState()
+        Column(Modifier.fillMaxSize().verticalScroll(pageScroll).padding(start = gutter, top = 36.dp, end = if (wide) 360.dp else gutter, bottom = 24.dp)) {
             // ── Logo ou titre ──
             val logo = absolute(m.images.bestLogo)
             if (logo != null) {
@@ -338,62 +329,11 @@ fun MovieContent(
             val spec = TechSpecLogic.lines(m.file, m.subtitles.flatMap { it.subtitles })
             if (spec.isNotEmpty()) TechCard(spec, Modifier.padding(top = 16.dp))
 
-            // ── Distribution ──
-            if (m.cast.isNotEmpty()) {
-                Text("Distribution", style = MaterialTheme.typography.titleMedium, color = ArrColors.TextSecondary, modifier = Modifier.padding(top = 22.dp, bottom = 8.dp))
-                // Marge haute / basse : la carte grossie au focus n'est pas coupée par la rangée
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(end = gutter, top = 8.dp, bottom = 8.dp)) {
-                    items(m.cast.take(15)) { person -> // pas de clé : deux rôles peuvent avoir le même nom
-                        // OK sur un acteur : sa filmographie (comme la web app)
-                        val tmdb = person.tmdbId
-                        CastCard(person, if (onPerson != null && tmdb != null) { { onPerson(tmdb) } } else null)
-                    }
-                }
-            }
+            // ── Distribution ── OK sur un acteur : sa filmographie (comme la web app)
+            CastRow(m.cast, pageScroll, onPerson, Modifier.padding(top = 22.dp), endPadding = gutter)
         }
     }
     LaunchedEffect(m.id) { runCatching { playFocus.requestFocus() } }
-}
-
-/** Un membre de la distribution ; cliquable (focus bleu) quand sa filmographie est connue. */
-@Composable
-private fun CastCard(person: fr.arrmada.app.data.Person, onClick: (() -> Unit)?) {
-    val content = @Composable {
-        Column(Modifier.width(84.dp).padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(Modifier.size(68.dp).clip(CircleShape).background(ArrColors.Card)) {
-                if (person.photo != null) {
-                    // Portrait vertical recadré dans un rond : calé en haut, le visage n'est pas coupé
-                    AsyncImage(
-                        model = person.photo,
-                        contentDescription = person.name,
-                        contentScale = ContentScale.Crop,
-                        alignment = Alignment.TopCenter,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
-            }
-            // Nom sur deux lignes au besoin (plus de « Timothée Chal… »)
-            Text(person.name, style = MaterialTheme.typography.labelMedium, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp))
-            Text(person.character, style = MaterialTheme.typography.labelSmall, color = ArrColors.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
-        }
-    }
-    if (onClick == null) return content()
-    val shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
-    androidx.tv.material3.Surface(
-        onClick = onClick,
-        modifier = Modifier.tapToClick(onClick),
-        shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(shape),
-        scale = androidx.tv.material3.ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
-        border = androidx.tv.material3.ClickableSurfaceDefaults.border(
-            focusedBorder = androidx.tv.material3.Border(androidx.compose.foundation.BorderStroke(3.dp, androidx.compose.ui.graphics.Color.White), shape = shape),
-        ),
-        colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
-            containerColor = androidx.compose.ui.graphics.Color.Transparent,
-            contentColor = ArrColors.Text,
-            focusedContainerColor = ArrColors.Card,
-            focusedContentColor = ArrColors.Text,
-        ),
-    ) { content() }
 }
 
 /** Pastilles « 4K », « Dolby Vision », « Atmos »… lues dans le fichier (menu pause, lecteur). */

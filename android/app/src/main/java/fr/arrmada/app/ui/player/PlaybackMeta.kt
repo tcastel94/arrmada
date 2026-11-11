@@ -46,6 +46,7 @@ fun SeriesDetail.toMeta(season: Int, episode: Int, info: PlayInfo?): PlaybackMet
         overview = ep?.overview?.takeIf { it.isNotBlank() } ?: info?.overview,
         metaLine = listOfNotNull(year?.toString(), network?.takeIf { it.isNotBlank() }, genres.take(2).joinToString(", ").ifBlank { null })
             .joinToString("  ·  "),
+        cast = cast,
         file = ep?.file,
         originalLanguage = TrackLanguageLogic.isoCode(originalLanguage),
     )

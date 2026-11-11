@@ -3,7 +3,8 @@ package fr.arrmada.app.ui.detail
 import fr.arrmada.app.data.PlayOnTv
 import fr.arrmada.app.ui.request.SendToTvDialog
 import fr.arrmada.app.ui.components.LocalScreen
-import fr.arrmada.app.ui.components.touchScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import fr.arrmada.app.ui.components.gutter
 import fr.arrmada.app.ui.components.tapToClick
 import android.widget.Toast
@@ -28,14 +29,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -107,6 +108,7 @@ fun SeriesScreen(
     absolute: (String?) -> String?,
     onPlay: (series: SeriesDetail, season: Int, episode: Int, start: Int) -> Unit,
     onDownload: (SeriesDetail) -> Unit,
+    onPerson: ((tmdbId: Long) -> Unit)? = null, // OK sur un acteur : sa filmographie
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -190,6 +192,7 @@ fun SeriesScreen(
         },
         onMark = ::mark,
         onDownload = { onDownload(s) },
+        onPerson = onPerson,
         onSendToTv = if (LocalScreen.current.isTouch && s.tvdbId != null) ({ row: EpisodeRow -> sendTo = row }) else null,
         // Liste « À voir » du profil qui regarde (repérée par l'id TVDB, comme Sonarr)
         extraActions = {
@@ -250,6 +253,7 @@ fun SeriesContent(
     onSendToTv: ((EpisodeRow) -> Unit)? = null, // téléphone / tablette : « Sur la TV »
     // Boutons en plus, après « Télécharger » (« Ma liste » ; rien pour une série maison)
     extraActions: @Composable () -> Unit = {},
+    onPerson: ((tmdbId: Long) -> Unit)? = null, // OK sur un acteur : sa filmographie
 ) {
     val mainFocus = remember { FocusRequester() }
     var focused by remember(season) { mutableStateOf<EpisodeRow?>(null) }
@@ -263,7 +267,9 @@ fun SeriesContent(
     }
 
     KenBurnsBackdrop(url = absolute(series.images.fanart ?: series.images.landscape)) {
-        Column(Modifier.fillMaxSize().touchScroll().padding(top = 26.dp, bottom = 24.dp)) {
+        // La page défile : au doigt, et à la TV quand le focus descend dans la distribution (CastRow)
+        val pageScroll = rememberScrollState()
+        Column(Modifier.fillMaxSize().verticalScroll(pageScroll).padding(top = 26.dp, bottom = 24.dp)) {
             // ── Titre, méta, résumé ──
             Column(Modifier.padding(horizontal = gutter).widthIn(max = 600.dp)) {
                 val logo = absolute(series.images.bestLogo)
@@ -388,6 +394,9 @@ fun SeriesContent(
                     if (spec.isNotEmpty()) TechCard(spec, Modifier.widthIn(max = 380.dp))
                 }
             }
+
+            // ── Distribution (TMDB, par le serveur ; rien pour une série maison) ──
+            CastRow(series.cast, pageScroll, onPerson, Modifier.padding(top = 18.dp), startPadding = gutter, endPadding = gutter)
         }
     }
 

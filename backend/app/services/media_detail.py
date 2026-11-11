@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.service import Service
-from app.services import artwork, translations
+from app.services import artwork, people, translations
 from app.services.bazarr import BazarrClient
 from app.services.encryption import decrypt_api_key
 from app.services.radarr import RadarrClient
@@ -380,6 +380,9 @@ async def get_series_detail(
         "seasons": season_list,
         "tags": raw.get("tags", []),
         "subtitles": [],
+        # Distribution (TMDB : Sonarr n'en a pas), même format que les films :
+        # fiche série et menu pause de la TV. Vide sans clé TMDB.
+        "cast": await people.get_series_cast(raw.get("tvdbId"), raw.get("tmdbId")),
     }
 
     # ── Bazarr subtitle info ──────────────────────────────────

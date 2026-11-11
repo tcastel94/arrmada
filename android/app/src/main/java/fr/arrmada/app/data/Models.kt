@@ -457,6 +457,8 @@ data class SeriesDetail(
     val seasons: List<SeasonInfo> = emptyList(),
     // Sous-titres connus de Bazarr, par épisode : carte technique de l'épisode au focus
     val subtitles: List<BazarrEpisodeSubtitles> = emptyList(),
+    // Distribution (TMDB, par le serveur) : fiche et menu pause ; vide avec un serveur plus ancien
+    val cast: List<Person> = emptyList(),
 )
 
 /** Épisode présent dans Jellyfin (GET /api/tv/series/{tvdb}/season/{n}). */
