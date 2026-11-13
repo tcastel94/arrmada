@@ -67,6 +67,12 @@ COPY --from=web-build /src/public ./web/public
 # dépôt marche sans clone Git. Un montage ./kodi-addon:/app/kodi-addon:ro
 # le remplace (nouvelle version proposée aux TV après un simple git pull).
 COPY kodi-addon/script.arrmada ./kodi-addon/script.arrmada
+# Documents que le copilote sait chercher et lire (services/copilot/knowledge.py) :
+# décisions d'architecture, journal des changements, guides. Le .dockerignore
+# écarte docs/ et *.md, sauf ceux-ci.
+COPY docs/adr ./knowledge/adr
+COPY docs/installer.md docs/deploy-unraid.md ./knowledge/guides/
+COPY CHANGELOG.md README.md ./knowledge/
 # Passerelle, démarrage, outils d'admin
 COPY docker/gateway.js ./docker/gateway.js
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
