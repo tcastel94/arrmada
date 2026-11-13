@@ -176,6 +176,9 @@ Ouvre **`http://<adresse-de-ta-machine>:3420`**. L'assistant t'accompagne jusqu'
 - **Santé de la médiathèque** : qualité, doublons, nettoyage, profils [TRaSH Guides](https://trash-guides.info/).
 - **Serveur & Docker** : disques, ressources, journaux de chaque conteneur et diagnostic par IA
   (Ollama local ou OpenRouter, facultatif).
+- **Copilote** *(facultatif, clé d'API Anthropic)* : une IA qui lit l'état réel de ta stack
+  (profils, files, indexeurs, journaux, TRaSH Guides) avant de répondre : audit de ta
+  configuration, cause d'un blocage, effets d'un changement avant de le faire. Lecture seule.
 - **Palette de commandes** `⌘K` / `Ctrl+K` et raccourcis clavier (`?` pour la liste).
 
 ### Selon ton équipement *(Paramètres › Mon équipement)*

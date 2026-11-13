@@ -17,6 +17,7 @@ from app.api.calendar import router as calendar_router
 from app.api.cameras import router as cameras_router
 from app.api.cast import router as cast_router
 from app.api.cleanup import router as cleanup_router
+from app.api.copilot import router as copilot_router
 from app.api.dashboard import router as dashboard_router
 from app.api.devices import public_router as devices_public_router
 from app.api.devices import router as devices_router
@@ -104,6 +105,7 @@ api_router.include_router(prowlarr_stats_router)
 api_router.include_router(quality_router)
 api_router.include_router(cleanup_router)
 api_router.include_router(ai_search_router)
+api_router.include_router(copilot_router)  # Copilote : IA avec outils en lecture (ADR-017)
 api_router.include_router(subtitles_router)
 api_router.include_router(cameras_router)  # Caméras Eufy : pop-up sur la TV
 api_router.include_router(android_router)  # Mises à jour de l'appli Android (ADR-009)
