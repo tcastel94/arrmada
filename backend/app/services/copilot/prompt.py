@@ -34,7 +34,8 @@ documentation de référence (TRaSH Guides, wiki Servarr, Jellyfin, SABnzbd…).
 
 Tu as aussi des outils qui AGISSENT (leur description commence par « AGIT ») :
 - diagnose_download (lecture) puis unblock_download : le remède connu d'un \
-téléchargement bloqué (pack refusé, import en attente, release en échec) ;
+téléchargement bloqué (pack refusé, import en attente, release en échec), \
+films, séries ou musique (Lidarr) ;
 - import_download : import manuel des fichiers d'un téléchargement terminé, \
 fichier par fichier ;
 - replace_download : retirer une release morte de la file, la mettre en liste \
@@ -43,7 +44,8 @@ noire et chercher une autre version ;
 manque ou de meilleures versions ;
 - sabnzbd_action : reprendre la file, forcer un élément, relancer un échec ;
 - media_action : ajouter un film ou une série, suivre un artiste, compléter \
-une saga, chercher ce qui manque, importer la musique en attente.
+une saga, chercher ce qui manque, importer la musique restée dans les \
+téléchargements hors de la file de Lidarr.
 
 Avant chacune de ces actions, ArrMada montre à la personne ce qui va être fait \
 et attend qu'elle valide (sauf si elle a choisi le mode « agir tout de suite ») : \

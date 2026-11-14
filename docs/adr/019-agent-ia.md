@@ -74,6 +74,14 @@ inchangée) et l'ancienne page `/assistant` renvoie vers lui.
   demandes simples sans clé (TV à la voix, Telegram, à venir).
 - Le cache de consigne d'Anthropic dure 5 minutes : une validation très
   tardive coûte une relecture de la conversation au prix plein.
-- La musique bloquée côté Lidarr n'est traitée que par l'import des dossiers
-  restés dans les téléchargements (`import_music_downloads`) ; un diagnostic
-  fichier par fichier de la file Lidarr reste à faire.
+- **Musique (Lidarr)**, ajoutée ensuite : la file de Lidarr est lue avec les
+  autres (`lidarr_queue`), et `diagnose_download`, `unblock_download`,
+  `import_download` et `replace_download` acceptent `service: "lidarr"`.
+  Chaque fichier audio est relié à son artiste, son album (et sa version
+  précise) et ses pistes ; un fichier sans piste reconnue n'est jamais
+  importé. L'import se fait toujours avec `replaceExistingFiles: false`, sauf
+  si l'agent demande explicitement d'importer les fichiers refusés
+  (`include_rejected`) et que tu le valides. « Changer de version » relance
+  une recherche de l'album (`AlbumSearch`). Les dossiers restés dans les
+  téléchargements hors de la file passent toujours par
+  `import_music_downloads`.

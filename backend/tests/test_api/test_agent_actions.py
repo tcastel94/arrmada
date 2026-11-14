@@ -174,3 +174,146 @@ def test_import_plan_skips_rejected_files_unless_asked() -> None:
     entries = [actions.unstick.import_entry("radarr", c, DOWNLOAD) for c in candidates]
     assert entries[0]["movieId"] == 2 and entries[0]["downloadId"] == DOWNLOAD
     assert actions.unstick.rejections(candidates[1]) == ["Not an upgrade for existing movie file"]
+
+
+# ── Musique (Lidarr) ────────────────────────────────────────────
+
+LIDARR_URL = "http://lidarr.test:8686"
+ALBUM_DL = "SABnzbd_nzo_okc"
+
+LIDARR_QUEUE = {
+    "records": [
+        {
+            "id": 7,
+            "albumId": 30,
+            "artistId": 3,
+            "downloadId": ALBUM_DL,
+            "title": "Radiohead-OK_Computer-FLAC",
+            "size": 400.0,
+            "sizeleft": 0.0,
+            "status": "completed",
+            "trackedDownloadState": "importPending",
+            "trackedDownloadStatus": "warning",
+            "statusMessages": [{"messages": ["Album match is not close enough: 74%"]}],
+            "artist": {"artistName": "Radiohead"},
+            "album": {"title": "OK Computer"},
+        }
+    ]
+}
+
+LIDARR_CANDIDATES = [
+    {
+        "path": "/downloads/OKC/01 Airbag.flac",
+        "artist": {"id": 3, "artistName": "Radiohead"},
+        "album": {"id": 30, "title": "OK Computer"},
+        "albumReleaseId": 301,
+        "tracks": [{"id": 3001, "trackNumber": "1"}],
+        "quality": {"quality": {"name": "FLAC"}},
+    },
+    {
+        "path": "/downloads/OKC/02 Paranoid Android.flac",
+        "artist": {"id": 3, "artistName": "Radiohead"},
+        "album": {"id": 30, "title": "OK Computer"},
+        "albumReleaseId": 301,
+        "tracks": [{"id": 3002, "trackNumber": "2"}],
+        "quality": {"quality": {"name": "FLAC"}},
+        "rejections": [{"reason": "Album match is not close enough: 74%"}],
+    },
+    {
+        "path": "/downloads/OKC/cover.flac",
+        "artist": {"id": 3, "artistName": "Radiohead"},
+        "album": {"id": 30, "title": "OK Computer"},
+        "tracks": [],
+    },
+]
+
+
+@pytest.fixture
+async def music_stack(
+    client: AsyncClient, arr_stack: dict, monkeypatch: pytest.MonkeyPatch
+) -> dict[str, str]:
+    """Le faux Radarr / Sonarr, plus un Lidarr avec un album bloqué à l'import."""
+    monkeypatch.setitem(
+        fake_arr.ROUTES,
+        "lidarr.test",
+        [
+            (r"/api/v1/queue", lambda _p, _m: LIDARR_QUEUE),
+            (r"/api/v1/manualimport", lambda _p, _m: LIDARR_CANDIDATES),
+        ],
+    )
+    svc = {"name": "Lidarr", "type": "lidarr", "url": LIDARR_URL, "api_key": "l-key"}
+    resp = await client.post("/api/services", json=svc, headers=arr_stack)
+    assert resp.status_code == 201, resp.text
+    return arr_stack
+
+
+def _lidarr_posts() -> list[tuple[str, dict[str, Any]]]:
+    return [(path, body) for host, path, body in fake_arr.POSTS if host == "lidarr.test"]
+
+
+async def test_queue_lists_music_downloads(music_stack: dict) -> None:
+    result = await tools.get_download_queue(tools.NoArgs())
+    [album] = result["lidarr_queue"]["items"]
+    assert album["download_id"] == ALBUM_DL and album["service_type"] == "lidarr"
+    assert album["artist"] == "Radiohead" and album["album"] == "OK Computer"
+    assert album["detail"] == "Album match is not close enough: 74%"
+
+
+async def test_diagnose_music_download_file_by_file(music_stack: dict) -> None:
+    result = await actions.diagnose_download(
+        actions.DownloadArgs(service="lidarr", download_id=ALBUM_DL)
+    )
+    assert result["case"] == "import"
+    targets = {f["path"].rsplit("/", 1)[-1]: f for f in result["files"]}
+    assert targets["01 Airbag.flac"]["target"] == "Radiohead – OK Computer, piste 1"
+    assert targets["02 Paranoid Android.flac"]["rejections"] == [
+        "Album match is not close enough: 74%"
+    ]
+    assert targets["cover.flac"]["target"] == "Radiohead – OK Computer, piste non reconnue"
+
+
+async def test_import_music_never_replaces_without_consent(music_stack: dict) -> None:
+    args = actions.ImportArgs(service="lidarr", download_id=ALBUM_DL)
+    preview = await actions.preview_import(args)
+    assert preview.summary == "Importer 1 fichier de « Radiohead-OK_Computer-FLAC » dans Lidarr"
+    assert "Ignoré : 02 Paranoid Android.flac (Album match is not close enough: 74%)" in (
+        preview.details
+    )
+
+    await actions.import_download(args)
+    [(path, body)] = _lidarr_posts()
+    assert path == "/api/v1/command" and body["name"] == "ManualImport"
+    assert body["replaceExistingFiles"] is False
+    [entry] = body["files"]
+    assert entry["albumId"] == 30 and entry["trackIds"] == [3001]
+    assert entry["albumReleaseId"] == 301 and entry["downloadId"] == ALBUM_DL
+
+    # Avec accord explicite : la piste refusée part aussi
+    fake_arr.POSTS.clear()
+    forced = actions.ImportArgs(service="lidarr", download_id=ALBUM_DL, include_rejected=True)
+    await actions.import_download(forced)
+    [(_path, body)] = _lidarr_posts()
+    assert sorted(f["trackIds"][0] for f in body["files"]) == [3001, 3002]
+
+
+async def test_unblock_music_imports_the_clean_tracks(music_stack: dict) -> None:
+    preview = await actions.preview_unblock(
+        actions.DownloadArgs(service="lidarr", download_id=ALBUM_DL)
+    )
+    assert preview.actionable and preview.summary == "Importer : « Radiohead-OK_Computer-FLAC »"
+    result = await actions.unblock_download(
+        actions.DownloadArgs(service="lidarr", download_id=ALBUM_DL)
+    )
+    assert result["status"] == "ok", result
+    [(_path, body)] = _lidarr_posts()
+    assert body["replaceExistingFiles"] is False
+    assert [f["trackIds"] for f in body["files"]] == [[3001]]
+
+
+async def test_replace_music_download_blocklists_and_searches_the_album(
+    music_stack: dict,
+) -> None:
+    await actions.replace_download(actions.ReplaceArgs(service="lidarr", download_id=ALBUM_DL))
+    posts = _lidarr_posts()
+    assert posts[0][0] == "/api/v1/queue/7"
+    assert posts[1] == ("/api/v1/command", {"name": "AlbumSearch", "albumIds": [30]})

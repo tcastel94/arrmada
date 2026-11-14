@@ -775,6 +775,49 @@ async def get_download_queue(_: NoArgs) -> dict[str, Any]:
     ]
     result: dict[str, Any] = {"arr_queue": _capped(queue, 60)}
 
+    music = []
+    for svc in await _services("lidarr"):
+        try:
+            async with _client(svc) as client:
+                records = (await client.get_queue()).get("records") or []
+        except Exception as exc:  # noqa: BLE001
+            music.append({"service": svc.name, "error": _error(exc)})
+            continue
+        seen: set[str] = set()
+        for record in records:
+            # Une ligne par album : Lidarr peut en renvoyer une par piste
+            download_id = str(record.get("downloadId") or record.get("id"))
+            if download_id in seen:
+                continue
+            seen.add(download_id)
+            size = float(record.get("size") or 0)
+            left = float(record.get("sizeleft") or 0)
+            item = {
+                "title": record.get("title"),
+                "download_id": record.get("downloadId"),
+                "service_type": "lidarr",
+                "artist": (record.get("artist") or {}).get("artistName"),
+                "album": (record.get("album") or {}).get("title"),
+                "status": record.get("status"),
+                "tracked_state": record.get("trackedDownloadState"),
+                "progress": round(100 * (size - left) / size) if size else None,
+                "time_left": record.get("timeleft"),
+                "download_client": record.get("downloadClient"),
+                "error": record.get("errorMessage"),
+                "detail": next(
+                    (
+                        msg
+                        for m in record.get("statusMessages") or []
+                        for msg in m.get("messages") or []
+                        if msg
+                    ),
+                    None,
+                ),
+            }
+            music.append({k: v for k, v in item.items() if v not in (None, "")})
+    if music:
+        result["lidarr_queue"] = _capped(music, 40)
+
     clients = []
     for svc in await _services("sabnzbd"):
         try:
@@ -1225,8 +1268,10 @@ TOOLS: tuple[Tool, ...] = (
     Tool(
         "get_download_queue",
         "File de téléchargement",
-        "Téléchargements en cours vus par Radarr et Sonarr (état, état de suivi, message "
-        "d'erreur ou raison d'un import en attente, client, indexeur) et état de SABnzbd "
+        "Téléchargements en cours vus par Radarr et Sonarr (arr_queue) et par Lidarr pour la "
+        "musique (lidarr_queue) : état, état de suivi, message d'erreur ou raison d'un import "
+        "en attente, client, indexeur, `download_id` et `service_type` pour agir ; et état de "
+        "SABnzbd "
         "(pause, vitesse, espace libre, file, échecs récents avec leur message). À appeler "
         "quand quelque chose est bloqué, lent ou n'arrive pas dans la médiathèque.",
         NoArgs,

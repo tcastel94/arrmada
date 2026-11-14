@@ -51,6 +51,23 @@ class LidarrClient(ArrBaseClient):
         """Lancer une commande Lidarr (AlbumSearch, ArtistSearch, ManualImport…)."""
         return await self.post("/command", data={"name": name, **body})
 
+    async def search_albums(self, album_ids: list[int]) -> dict[str, Any]:
+        """Recherche automatique d'albums précis."""
+        return await self.command("AlbumSearch", albumIds=album_ids)
+
+    async def remove_queue_item(
+        self, queue_id: int, remove_from_client: bool = True, blocklist: bool = False
+    ) -> None:
+        """Retire un élément de la file (et du client), en liste noire si demandé."""
+        resp = await self.client.delete(
+            f"{self.API_PREFIX}/queue/{queue_id}",
+            params={
+                "removeFromClient": str(remove_from_client).lower(),
+                "blocklist": str(blocklist).lower(),
+            },
+        )
+        resp.raise_for_status()
+
     # ── Releases (recherche manuelle) ─────────────────────────
     async def get_releases(self, album_id: int) -> list[dict[str, Any]]:
         """Interroge les indexeurs pour un album (lent : jusqu'à 2 min)."""
@@ -78,5 +95,5 @@ class LidarrClient(ArrBaseClient):
     async def get_queue(self) -> dict[str, Any]:
         """Fetch the download queue."""
         return await self.get(
-            "/queue", params={"pageSize": 50, "includeArtist": "true", "includeAlbum": "true"}
+            "/queue", params={"pageSize": 500, "includeArtist": "true", "includeAlbum": "true"}
         )

@@ -57,6 +57,7 @@ import { Markdown } from "./markdown";
 const SUGGESTIONS = [
     "Débloque tous mes téléchargements et imports bloqués.",
     "Pourquoi mes imports Sonarr sont-ils bloqués ? Règle-les.",
+    "Des albums sont bloqués dans Lidarr : trouve pourquoi et importe-les.",
     "Ajoute le film Interstellar et complète la saga Harry Potter.",
     "Fais un audit de ma configuration Radarr par rapport aux TRaSH Guides.",
     "Si je passe mon profil films principal en Remux 2160p, qu'est-ce que ça déclenche ?",

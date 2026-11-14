@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.service import Service
 from app.services import blocked_imports
 from app.services.encryption import decrypt_api_key
+from app.services.lidarr import LidarrClient
 from app.services.radarr import RadarrClient
 from app.services.sonarr import SonarrClient
 from app.utils.logger import get_logger
@@ -65,7 +66,7 @@ def diagnose_records(service_type: str, records: list[dict[str, Any]]) -> dict[s
 
     Renvoie {case, title, steps[{state ok|err|next, text, detail}], action, can_fix}.
     """
-    arr = "Sonarr" if service_type == "sonarr" else "Radarr"
+    arr = {"sonarr": "Sonarr", "lidarr": "Lidarr"}.get(service_type, "Radarr")
     if not records:
         return {
             "case": "gone",
@@ -86,7 +87,11 @@ def diagnose_records(service_type: str, records: list[dict[str, Any]]) -> dict[s
     left = float(first.get("sizeleft") or 0)
     complete = status == "completed" or (size > 0 and left <= 0)
 
-    if tracked == "importblocked" and blocked_imports.FULL_SEASON_REJECTION in joined:
+    if (
+        service_type == "sonarr"
+        and tracked == "importblocked"
+        and blocked_imports.FULL_SEASON_REJECTION in joined
+    ):
         return {
             "case": "pack",
             "title": title,
@@ -169,6 +174,25 @@ def import_entry(
     if service_type == "radarr":
         movie_id = (candidate.get("movie") or {}).get("id")
         return {**common, "movieId": movie_id} if movie_id else None
+    if service_type == "lidarr":
+        # Lidarr relie un fichier audio à un artiste, un album (et sa
+        # version précise) et des pistes ; sans album reconnu, rien à importer.
+        artist_id = (candidate.get("artist") or {}).get("id")
+        album_id = (candidate.get("album") or {}).get("id")
+        track_ids = [t.get("id") for t in candidate.get("tracks") or [] if t.get("id")]
+        if not artist_id or not album_id or not track_ids:
+            return None
+        return {
+            "path": common["path"],
+            "artistId": artist_id,
+            "albumId": album_id,
+            "albumReleaseId": candidate.get("albumReleaseId"),
+            "trackIds": track_ids,
+            "quality": common["quality"],
+            "indexerFlags": common["indexerFlags"],
+            "downloadId": download_id,
+            "disableReleaseSwitching": candidate.get("disableReleaseSwitching", False),
+        }
     series_id = (candidate.get("series") or {}).get("id")
     episode_ids = [e.get("id") for e in candidate.get("episodes") or [] if e.get("id")]
     if not series_id or not episode_ids:
@@ -223,8 +247,10 @@ def plan_clean_import(
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-async def _client(db: AsyncSession, service_type: str) -> RadarrClient | SonarrClient | None:
-    if service_type not in ("radarr", "sonarr"):
+async def _client(
+    db: AsyncSession, service_type: str
+) -> RadarrClient | SonarrClient | LidarrClient | None:
+    if service_type not in ("radarr", "sonarr", "lidarr"):
         return None
     svc = (
         (
@@ -243,6 +269,8 @@ async def _client(db: AsyncSession, service_type: str) -> RadarrClient | SonarrC
     key = decrypt_api_key(svc.api_key)
     if service_type == "radarr":
         return RadarrClient(url=svc.url, api_key=key, timeout=30)
+    if service_type == "lidarr":
+        return LidarrClient(url=svc.url, api_key=key, timeout=30)
     return SonarrClient(url=svc.url, api_key=key, timeout=30)
 
 
@@ -301,10 +329,14 @@ async def unstick(
             plan = plan_clean_import(service_type, candidates, download_id)
             if not plan["ok"]:
                 return _refused(case, f"À régler dans la web app : {plan['reason']}")
-            await client.post(
-                "/command",
-                data={"name": "ManualImport", "files": plan["files"], "importMode": "auto"},
-            )
+            command: dict[str, Any] = {
+                "name": "ManualImport",
+                "files": plan["files"],
+                "importMode": "auto",
+            }
+            if service_type == "lidarr":
+                command["replaceExistingFiles"] = False  # jamais écraser une piste
+            await client.post("/command", data=command)
             message = f"Import lancé : {len(plan['files'])} fichier(s)"
             if plan["left"]:
                 message += f", {plan['left']} à régler dans la web app"
@@ -314,6 +346,8 @@ async def unstick(
             )
             if service_type == "radarr":
                 await client.search_movie(records[0]["movieId"])
+            elif service_type == "lidarr":
+                await client.search_albums([records[0]["albumId"]])
             else:
                 episode_ids = sorted({r["episodeId"] for r in records if r.get("episodeId")})
                 if episode_ids:
@@ -332,7 +366,7 @@ async def unstick(
         action="tv_unstick",
         status="ok",
         source="kodi",
-        media_type="movie" if service_type == "radarr" else "series",
+        media_type={"radarr": "movie", "lidarr": "album"}.get(service_type, "series"),
         title=diag["title"],
         subtitle=case,
         device=device,

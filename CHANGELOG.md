@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Agent IA : la musique aussi
+
+#### Added
+- **Lidarr dans l'agent** : la file de téléchargement musique est lue avec celles de Radarr et Sonarr. Diagnostic, déblocage, import et changement de version marchent pour les albums ([ADR-019](docs/adr/019-agent-ia.md))
+- Diagnostic d'un album, fichier par fichier : « Radiohead – OK Computer, piste 2 », et la raison du refus de Lidarr (ex. « Album match is not close enough: 74% »)
+- Import d'un album bloqué : les pistes reconnues partent, sans jamais écraser une piste existante. Les pistes refusées ne partent que si tu le valides
+- « Changer de version » pour un album : release en liste noire, puis recherche d'une autre version de l'album
+
 ### Agent IA : il diagnostique ET répare
 
 #### Changed
