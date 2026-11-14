@@ -1,4 +1,4 @@
-"""Actions de l'IA : une demande en clair → des actions ArrMada (ADR-017).
+"""Actions de l'IA : une demande en clair → des actions ArrMada (ADR-018).
 
 Principe
 --------

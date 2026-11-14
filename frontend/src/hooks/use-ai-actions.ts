@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Assistant IA qui agit (ADR-017).
+ * Assistant IA qui agit (ADR-018).
  * ----------------------------------------------------------------
  * On écrit une demande en clair ; l'IA propose des actions prises dans un
  * catalogue fermé (demander un film, compléter une saga, débloquer les

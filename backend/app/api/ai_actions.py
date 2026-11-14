@@ -1,4 +1,4 @@
-"""Assistant IA qui agit (ADR-017) : demande en clair → actions confirmées.
+"""Assistant IA qui agit (ADR-018) : demande en clair → actions confirmées.
 
 - ``POST /api/ai/act``                 une demande → réponse + propositions ;
 - ``POST /api/ai/act/{id}/confirm``    exécuter une proposition ;

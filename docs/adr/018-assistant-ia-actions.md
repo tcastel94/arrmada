@@ -1,9 +1,13 @@
-# ADR-017 : Assistant IA qui agit
+# ADR-018 : Assistant IA qui agit
 
 - **Statut** : accepté
 - **Date** : 2026-11-14
 
 ## Contexte
+
+À distinguer du Copilote (ADR-017) : lui lit la stack pour conseiller, sans
+rien modifier ; l'assistant, lui, exécute des actions du catalogue.
+
 
 L'IA d'ArrMada (Ollama en local, OpenRouter en secours) ne faisait que lire :
 recherche en langage naturel, suggestions, bilan hebdomadaire. On veut lui

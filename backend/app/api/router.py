@@ -117,4 +117,4 @@ api_router.include_router(
     music_router
 )  # Musique : Lidarr (bibliothèque, demandes), Jellyfin (écoute)
 api_router.include_router(sagas_router)  # Sagas de films : collections Radarr (TMDB)
-api_router.include_router(ai_actions_router)  # Assistant IA qui agit (ADR-017)
+api_router.include_router(ai_actions_router)  # Assistant IA qui agit (ADR-018)
