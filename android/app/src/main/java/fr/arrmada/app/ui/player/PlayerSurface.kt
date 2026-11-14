@@ -776,7 +776,7 @@ internal fun PlayerSurface(
                 if (videoDecoderFailed(e) && rescuePicture((e as? ExoPlaybackException)?.rendererFormat?.sampleMimeType)) return
                 // Fichier illisible en direct : on retente une fois en remux,
                 // là où on en était
-                if (!remuxed && info.remuxStream.isNotBlank() && e.errorCode in REMUX_RETRY) {
+                if (!remuxed && info.remuxStream.isNotBlank() && remuxRetry(e.errorCode, info.container)) {
                     remuxed = true
                     originalSource = info.remuxStream to true // « Original » = ce remux désormais
                     val at = player.currentPosition.takeIf { it > 0 } ?: (request.startSeconds * 1000L)

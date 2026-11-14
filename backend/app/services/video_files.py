@@ -31,7 +31,9 @@ from app.config import settings
 from app.services.tv_playback import DIRECT_EXTENSIONS
 
 # Ce que le lecteur de l'appli (ExoPlayer) ouvre directement
-VIDEO_EXTENSIONS = DIRECT_EXTENSIONS | {"mpg", "mpeg", "flv", "3gp"}
+# « avi » : plus lu en direct pour un titre de Jellyfin (remuxé), mais
+# toujours une vidéo à montrer dans l'écran Vidéos et les séries maison
+VIDEO_EXTENSIONS = DIRECT_EXTENSIONS | {"avi", "mpg", "mpeg", "flv", "3gp"}
 
 VIDEO_MIME = {
     "mkv": "video/x-matroska",
