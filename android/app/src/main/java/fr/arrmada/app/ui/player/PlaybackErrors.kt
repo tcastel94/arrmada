@@ -63,6 +63,18 @@ internal val REMUX_RETRY = setOf(
 )
 
 /**
+ * Retenter en remux (conversion par Jellyfin) après cet échec de lecture directe ?
+ *
+ * Un vieil .avi (XviD + MP3) échoue souvent en ERROR_CODE_IO_UNSPECIFIED
+ * (« Source error ») : le lecteur d'Android lit mal l'index de l'AVI. Pour
+ * un .avi seulement : ailleurs, cette erreur est d'abord un souci de réseau,
+ * qu'un remux ne réglerait pas.
+ */
+internal fun remuxRetry(code: Int, container: String): Boolean =
+    code in REMUX_RETRY ||
+        (code == PlaybackException.ERROR_CODE_IO_UNSPECIFIED && container.equals("avi", ignoreCase = true))
+
+/**
  * Message lisible, suivi du détail technique (code ExoPlayer, format du
  * fichier, direct ou remux) : utile pour comprendre ce qui coince.
  */
