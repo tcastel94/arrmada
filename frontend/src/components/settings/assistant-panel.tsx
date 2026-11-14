@@ -1,8 +1,9 @@
 "use client";
 
 /**
- * Paramètres › Assistant IA : confirmer chaque action (par défaut), ou
- * laisser l'IA agir seule. Réservé à l'administrateur (la web app).
+ * Paramètres › Agent IA : confirmer chaque action (par défaut), ou laisser
+ * l'agent agir seul. Réservé à l'administrateur (la web app). Le même réglage
+ * vaut pour l'agent (/copilot) et pour les demandes de l'API /api/ai.
  */
 import { Bot, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -14,12 +15,12 @@ const CHOICES: { value: AiMode; label: string; help: string }[] = [
     {
         value: "confirm",
         label: "Confirmer chaque action",
-        help: "L'IA propose (« Ajouter Dune (2021) ? »), rien ne se fait sans ton clic. Recommandé.",
+        help: "L'agent montre ce qu'il va faire (« Débloquer Dune ? »), rien ne se fait sans ton clic. Recommandé.",
     },
     {
         value: "auto",
         label: "Agir tout de suite",
-        help: "L'IA exécute ce qu'elle a compris et rend compte. Plus rapide, mais une erreur de titre ajoute pour de vrai.",
+        help: "L'agent exécute ses actions et rend compte. Plus rapide, mais une erreur de cible agit pour de vrai.",
     },
 ];
 
@@ -28,18 +29,17 @@ export function AssistantPanel() {
     const setMode = useSetAiMode();
     const choose = (mode: AiMode) =>
         setMode.mutate(mode, {
-            onSuccess: () => toast.success(mode === "auto" ? "L'assistant agit seul" : "Chaque action sera confirmée"),
+            onSuccess: () => toast.success(mode === "auto" ? "L'agent agit seul" : "Chaque action sera confirmée"),
             onError: (e) => toast.error("Réglage non enregistré", { description: e.message }),
         });
 
     return (
-        <Panel title="Assistant IA" icon={Bot} iconClassName="text-primary" className="h-full" bodyClassName="space-y-2 py-3">
+        <Panel title="Agent IA" icon={Bot} iconClassName="text-primary" className="h-full" bodyClassName="space-y-2 py-3">
             <p className="text-[13px] text-muted-foreground">
-                {data?.configured === false
-                    ? "Aucune IA configurée (Ollama ou OpenRouter dans le .env) : l'assistant est inactif."
-                    : "Ce que fait l'assistant quand il comprend une demande (ajouter, compléter, débloquer…). Il ne supprime jamais rien."}
+                Avant chaque action de l&apos;agent (débloquer, importer, changer de version, relancer SABnzbd, ajouter un film…). Il ne
+                supprime jamais rien de la médiathèque et ne change pas tes réglages.
             </p>
-            <div className="grid gap-2" role="radiogroup" aria-label="Validation des actions de l'assistant">
+            <div className="grid gap-2" role="radiogroup" aria-label="Validation des actions de l'agent">
                 {CHOICES.map((c) => {
                     const on = data?.mode === c.value;
                     return (

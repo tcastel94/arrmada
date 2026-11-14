@@ -1,10 +1,10 @@
-"""Outils du copilote : tout ce que le modèle peut LIRE de l'installation.
+"""Outils de l'agent : tout ce que le modèle peut LIRE de l'installation.
 
-Chaque outil est une fonction en lecture seule branchée sur un service
-existant d'ArrMada (clients *arr, agrégateur, cache TRaSH, journaux Docker…).
-Aucun n'écrit quoi que ce soit : le copilote conseille et simule, l'utilisateur
-agit (ADR-017). Ajouter une action passera par un outil dédié avec
-confirmation, jamais par un de ceux-ci.
+Chaque outil de ce fichier est une fonction en lecture seule branchée sur un
+service existant d'ArrMada (clients *arr, agrégateur, cache TRaSH, journaux
+Docker…). Les outils qui AGISSENT (débloquer, importer, relancer, ajouter…)
+sont dans ``actions.py`` : ils ont en plus un « aperçu » montré à
+l'utilisateur pour validation avant d'agir (ADR-019).
 
 Un outil = un modèle pydantic pour ses arguments (le schéma JSON envoyé au
 modèle en est tiré, et les arguments reçus sont validés avec) + une fonction
@@ -743,6 +743,8 @@ async def search_trash_guides(args: TrashSearchArgs) -> dict[str, Any]:
 
 _QUEUE_KEYS = (
     "title",
+    "download_id",
+    "service_type",
     "status",
     "tracked_state",
     "progress",
@@ -784,6 +786,7 @@ async def get_download_queue(_: NoArgs) -> dict[str, Any]:
             continue
         failed = [
             {
+                "nzo_id": slot.get("nzo_id"),
                 "name": slot.get("name"),
                 "category": slot.get("category"),
                 "fail_message": slot.get("fail_message"),
@@ -804,6 +807,7 @@ async def get_download_queue(_: NoArgs) -> dict[str, Any]:
                     {
                         key: slot.get(key)
                         for key in (
+                            "nzo_id",
                             "filename",
                             "status",
                             "percentage",
@@ -1140,6 +1144,9 @@ class Tool:
     description: str
     args: type[BaseModel]
     handler: Callable[[Any], Awaitable[Any]]
+    # Outil qui agit (actions.py) : aperçu de ce qu'il va faire, montré à
+    # l'utilisateur pour validation. None : outil en lecture seule.
+    preview: Callable[[Any], Awaitable[Any]] | None = None
 
 
 TOOLS: tuple[Tool, ...] = (
@@ -1309,7 +1316,16 @@ TOOLS: tuple[Tool, ...] = (
     ),
 )
 
-_BY_NAME = {tool.name: tool for tool in TOOLS}
+
+def all_tools() -> tuple[Tool, ...]:
+    """Outils de lecture (ce fichier) puis outils d'action (actions.py).
+
+    Import tardif : actions.py s'appuie sur ce fichier (accès aux services).
+    """
+    from app.services.copilot import actions
+
+    return TOOLS + actions.TOOLS
+
 
 # Sites consultables par la recherche web : la documentation de référence de
 # la stack, pas le web entier (réponses sourcées, moins de bruit, moins de risque).
@@ -1363,7 +1379,7 @@ def api_tools(*, web_search: bool) -> list[dict[str, Any]]:
             # tampon côté API, donc sans validation ; `execute` les valide.
             "eager_input_streaming": True,
         }
-        for tool in TOOLS
+        for tool in all_tools()
     ]
     if web_search:
         definitions += [
@@ -1391,10 +1407,12 @@ def label_of(name: str) -> str:
 
 def resolve(name: str) -> Tool | None:
     """Outil par son nom ; la casse est tolérée (le modèle écrit parfois « Get_Overview »)."""
-    if name in _BY_NAME:
-        return _BY_NAME[name]
+    every = all_tools()
+    for tool in every:
+        if tool.name == name:
+            return tool
     lowered = str(name).lower()
-    matches = [tool for tool in TOOLS if tool.name.lower() == lowered]
+    matches = [tool for tool in every if tool.name.lower() == lowered]
     return matches[0] if len(matches) == 1 else None
 
 
@@ -1436,29 +1454,25 @@ def _serialise(result: Any, redactor: Redactor) -> str:
     return text
 
 
-async def execute(name: str, raw_input: Any, redactor: Redactor) -> ToolOutcome:
-    """Valide les arguments, exécute l'outil, renvoie un résultat sans secret et borné."""
-    started = time.monotonic()
-
-    def outcome(content: str, *, is_error: bool) -> ToolOutcome:
-        return ToolOutcome(content, is_error, int((time.monotonic() - started) * 1000))
-
-    tool = resolve(name)
-    if tool is None:
-        known = ", ".join(t.name for t in TOOLS)
-        return outcome(f"Outil inconnu : {name!r}. Outils disponibles : {known}.", is_error=True)
-
+def parse_args(tool: Tool, raw_input: Any) -> BaseModel | str:
+    """Arguments validés, ou le message d'erreur à rendre au modèle."""
     try:
-        args = tool.args.model_validate(raw_input if raw_input is not None else {})
+        return tool.args.model_validate(raw_input if raw_input is not None else {})
     except ValidationError as exc:
         problems = "; ".join(
             f"{'.'.join(str(p) for p in err['loc']) or 'arguments'} : {err['msg']}"
             for err in exc.errors()
         )
         received = json.dumps(raw_input, ensure_ascii=False, default=str)[:500]
-        return outcome(
-            f"Arguments invalides pour {tool.name} ({problems}). Reçu : {received}", is_error=True
-        )
+        return f"Arguments invalides pour {tool.name} ({problems}). Reçu : {received}"
+
+
+async def run_handler(tool: Tool, args: BaseModel, redactor: Redactor) -> ToolOutcome:
+    """Exécute un outil aux arguments déjà validés ; résultat sans secret et borné."""
+    started = time.monotonic()
+
+    def outcome(content: str, *, is_error: bool) -> ToolOutcome:
+        return ToolOutcome(content, is_error, int((time.monotonic() - started) * 1000))
 
     try:
         result = await asyncio.wait_for(tool.handler(args), timeout=TOOL_TIMEOUT_SECONDS)
@@ -1468,8 +1482,25 @@ async def execute(name: str, raw_input: Any, redactor: Redactor) -> ToolOutcome:
             is_error=True,
         )
     except Exception as exc:  # noqa: BLE001 : l'échec est renvoyé au modèle, qui s'adapte
-        logger.warning("Copilote : outil %s en échec : %s", tool.name, exc)
+        logger.warning("Agent : outil %s en échec : %s", tool.name, exc)
         return outcome(redactor.text(f"{tool.name} a échoué : {_error(exc)}"), is_error=True)
 
     is_error = isinstance(result, dict) and set(result) == {"error"}
     return outcome(_serialise(result, redactor), is_error=is_error)
+
+
+def unknown_tool(name: str) -> ToolOutcome:
+    known = ", ".join(t.name for t in all_tools())
+    return ToolOutcome(f"Outil inconnu : {name!r}. Outils disponibles : {known}.", True, 0)
+
+
+async def execute(name: str, raw_input: Any, redactor: Redactor) -> ToolOutcome:
+    """Valide les arguments puis exécute l'outil (sans demander de validation :
+    c'est la boucle de l'agent qui la demande pour les outils qui agissent)."""
+    tool = resolve(name)
+    if tool is None:
+        return unknown_tool(name)
+    args = parse_args(tool, raw_input)
+    if isinstance(args, str):
+        return ToolOutcome(args, True, 0)
+    return await run_handler(tool, args, redactor)

@@ -1,9 +1,13 @@
-"""Copilote : assistant IA qui lit l'installation avant de conseiller (ADR-017).
+"""Agent IA : il lit l'installation, diagnostique et agit (ADR-017, ADR-019).
 
 ``POST /api/copilot/chat`` répond en flux SSE : le texte arrive au fil de
 l'eau, avec les outils que le modèle consulte. L'historique reste côté
 serveur (``services/copilot/conversations.py``) ; le navigateur n'envoie que
 le nouveau message et l'identifiant de la conversation.
+
+Avant chaque action (débloquer, importer, relancer…), le flux émet un
+événement ``confirm`` et attend la réponse de l'utilisateur :
+``POST /api/copilot/actions/{id}`` avec ``{"approve": true|false}``.
 
 Réservé à l'administrateur (web app, clé API) : refusé aux TV appairées.
 """
@@ -22,7 +26,8 @@ from pydantic import BaseModel, Field
 
 from app.api.deps import require_admin
 from app.config import settings
-from app.services.copilot import agent, conversations, knowledge
+from app.services import ai_actions
+from app.services.copilot import actions, agent, conversations, knowledge
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -36,6 +41,10 @@ router = APIRouter(
 # Sous le délai d'inactivité des proxys (30 s pour Next.js en développement,
 # 60 s pour nginx) : un outil lent ou une longue réflexion ne coupe pas le flux.
 SSE_HEARTBEAT_SECONDS = 15
+
+
+class ActionAnswer(BaseModel):
+    approve: bool
 
 
 class ChatRequest(BaseModel):
@@ -55,6 +64,7 @@ async def copilot_status() -> dict[str, Any]:
         "effort": settings.COPILOT_EFFORT,
         "web_search": settings.COPILOT_WEB_SEARCH,
         "documents": len(knowledge.catalog()),
+        "action_mode": ai_actions.get_mode(),
     }
 
 
@@ -141,3 +151,13 @@ async def chat(body: ChatRequest) -> StreamingResponse:
 )
 async def forget_conversation(conversation_id: str) -> None:
     conversations.drop(conversation_id)
+
+
+@router.post("/actions/{action_id}", summary="Valide ou refuse une action proposée par l'agent")
+async def answer_action(action_id: str, body: ActionAnswer) -> dict[str, Any]:
+    if not actions.answer(action_id, body.approve):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Action inconnue, expirée ou déjà traitée.",
+        )
+    return {"ok": True, "approved": body.approve}

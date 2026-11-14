@@ -1,11 +1,14 @@
-"""Boucle du copilote : le modèle lit, appelle des outils, lit encore, puis répond.
+"""Boucle de l'agent : le modèle lit, agit, vérifie, puis répond.
 
 Un « tour » = un message de l'utilisateur et tout ce qu'il déclenche. Le tour
 est une suite d'appels au modèle : tant que celui-ci demande des outils, on
-les exécute (en parallèle, ils sont tous en lecture seule), on lui rend les
-résultats, et on le rappelle. Chaque étape est émise en événement
-(``text``, ``thinking``, ``tool_start``, ``tool_end``, ``usage``, ``error``,
-``done``) : l'API les relaie au navigateur en SSE.
+les exécute, on lui rend les résultats, et on le rappelle. Les outils de
+lecture partent en parallèle ; ceux qui AGISSENT (actions.py) passent un par
+un, chacun après validation de l'utilisateur (ADR-019) : le tour attend sa
+réponse (événement ``confirm``, réponse par ``POST /api/copilot/actions/{id}``).
+Chaque étape est émise en événement (``text``, ``thinking``, ``tool_start``,
+``tool_end``, ``confirm``, ``confirm_result``, ``action_result``, ``usage``,
+``error``, ``done``) : l'API les relaie au navigateur en SSE.
 
 Pourquoi une boucle écrite à la main plutôt que le « tool runner » du SDK :
 il faut relayer chaque fragment de texte ET chaque appel d'outil au
@@ -22,13 +25,15 @@ interrompu, on retire ce tour entier (coupe par la fin, toujours valide).
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import AsyncIterator
 from typing import Any
 
 import anthropic
 
 from app.config import settings
-from app.services.copilot import tools
+from app.services import ai_actions
+from app.services.copilot import actions, tools
 from app.services.copilot.conversations import Conversation, Usage
 from app.services.copilot.prompt import system_prompt
 from app.services.copilot.redaction import Redactor
@@ -172,18 +177,116 @@ def _request_parameters() -> dict[str, Any]:
     }
 
 
-async def _run_tools(tool_uses: list[Any], redactor: Redactor) -> AsyncIterator[Event | list[Any]]:
-    """Exécute les outils demandés en parallèle.
+async def _run_action(block: Any, tool: tools.Tool, redactor: Redactor, mode: str):
+    """Outil qui agit : aperçu → validation de l'utilisateur → exécution.
 
-    Émet un ``tool_end`` dès qu'un outil a fini, puis, en dernier, la liste des
-    blocs ``tool_result`` dans l'ordre des demandes (tous dans UN message : les
-    répartir sur plusieurs apprendrait au modèle à ne plus paralléliser).
+    Émet les événements ``confirm`` (carte Valider / Annuler), ``confirm_result``
+    et ``action_result`` ; termine par le ``ToolOutcome`` rendu au modèle.
     """
+    from app.services.activity_log import log_event
+
+    args = tools.parse_args(tool, block.input)
+    if isinstance(args, str):
+        yield tools.ToolOutcome(args, True, 0)
+        return
+    try:
+        preview = await asyncio.wait_for(tool.preview(args), timeout=tools.TOOL_TIMEOUT_SECONDS)
+    except Exception as exc:  # noqa: BLE001 : rendu au modèle, qui s'adapte
+        logger.warning("Agent : aperçu de %s impossible : %s", tool.name, exc)
+        yield tools.ToolOutcome(
+            redactor.text(f"{tool.name} : impossible de préparer l'action ({exc})"), True, 0
+        )
+        return
+    if not preview.actionable:
+        yield tools.ToolOutcome(
+            json.dumps({"done": False, "reason": preview.summary}, ensure_ascii=False), False, 0
+        )
+        return
+
+    confirmation_id, future = actions.open_confirmation()
+    try:
+        yield (
+            "confirm",
+            {
+                "id": confirmation_id,
+                "tool_id": block.id,
+                "label": tool.label,
+                "summary": preview.summary,
+                "details": preview.details,
+                "warning": preview.warning,
+                "auto": mode == "auto",
+            },
+        )
+        if mode == "auto":
+            approved, expired = True, False
+        else:
+            try:
+                approved = await asyncio.wait_for(
+                    asyncio.shield(future), timeout=actions.CONFIRM_TIMEOUT_SECONDS
+                )
+                expired = False
+            except TimeoutError:
+                approved, expired = False, True
+        yield ("confirm_result", {"id": confirmation_id, "approved": approved, "expired": expired})
+    finally:
+        actions.close_confirmation(confirmation_id)
+
+    if not approved:
+        why = "sans réponse depuis 10 minutes" if expired else "refusée par l'utilisateur"
+        yield tools.ToolOutcome(
+            json.dumps(
+                {
+                    "done": False,
+                    "reason": f"Action {why}. Ne la relance pas sauf s'il te le redemande ; "
+                    "propose une autre piste si tu en as une.",
+                },
+                ensure_ascii=False,
+            ),
+            False,
+            0,
+        )
+        return
+
+    outcome = await tools.run_handler(tool, args, redactor)
+    message = outcome.content
+    try:
+        data = json.loads(outcome.content)
+        if isinstance(data, dict):
+            message = str(data.get("message") or data.get("status") or outcome.content)
+    except ValueError:
+        pass
+    failed = outcome.is_error or '"status": "error"' in outcome.content
+    yield ("action_result", {"id": confirmation_id, "ok": not failed, "message": message[:300]})
+    await log_event(
+        category="ai",
+        action=tool.name,
+        status="error" if failed else "ok",
+        source="copilot",
+        title=preview.summary[:250],
+        detail=message[:500],
+    )
+    yield outcome
+
+
+async def _run_tools(tool_uses: list[Any], redactor: Redactor) -> AsyncIterator[Event | list[Any]]:
+    """Exécute les outils demandés.
+
+    Lectures en parallèle d'abord ; puis les outils qui agissent, un par un,
+    chacun après validation. Émet un ``tool_end`` dès qu'un outil a fini, puis,
+    en dernier, la liste des blocs ``tool_result`` dans l'ordre des demandes
+    (tous dans UN message : les répartir sur plusieurs apprendrait au modèle à
+    ne plus paralléliser).
+    """
+    reads = []
+    writes = []
+    for block in tool_uses:
+        tool = tools.resolve(block.name)
+        (writes if tool is not None and tool.preview is not None else reads).append(block)
 
     async def run(block: Any) -> tuple[str, tools.ToolOutcome]:
         return block.id, await tools.execute(block.name, block.input, redactor)
 
-    tasks = [asyncio.create_task(run(block)) for block in tool_uses]
+    tasks = [asyncio.create_task(run(block)) for block in reads]
     outcomes: dict[str, tools.ToolOutcome] = {}
     try:
         for finished in asyncio.as_completed(tasks):
@@ -197,6 +300,21 @@ async def _run_tools(tool_uses: list[Any], redactor: Redactor) -> AsyncIterator[
         for task in tasks:
             if not task.done():
                 task.cancel()
+
+    if writes:
+        mode = ai_actions.get_mode()
+        for block in writes:
+            tool = tools.resolve(block.name)
+            async for item in _run_action(block, tool, redactor, mode):
+                if isinstance(item, tools.ToolOutcome):
+                    outcomes[block.id] = item
+                else:
+                    yield item
+            outcome = outcomes[block.id]
+            yield (
+                "tool_end",
+                {"id": block.id, "ok": not outcome.is_error, "duration_ms": outcome.duration_ms},
+            )
 
     results = []
     for block in tool_uses:

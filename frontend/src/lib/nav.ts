@@ -34,7 +34,6 @@ import {
     BookMarked,
     Bookmark,
     Bell,
-    Bot,
     CalendarDays,
     HardDrive,
     Radar,
@@ -89,12 +88,15 @@ export const TOP_ITEMS: NavItem[] = [
     },
     {
         href: "/copilot",
-        label: "Copilote",
+        label: "Agent IA",
         icon: Sparkles,
         tint: "bg-[#BF5AF2]",
-        description: "Pose une question : l'IA lit ta stack et te conseille",
+        description: "Décris le problème : l'IA trouve la cause et la règle",
         shortcut: "o",
-        keywords: ["ia", "ai", "assistant", "claude", "conseil", "diagnostic", "question", "aide", "copilot", "trash"],
+        keywords: [
+            "ia", "ai", "agent", "assistant", "copilote", "claude", "débloquer", "import", "réparer",
+            "action", "ajouter", "diagnostic", "question", "aide", "copilot", "trash",
+        ],
     },
     {
         href: "/remote",
@@ -177,15 +179,6 @@ export const NAV_GROUPS: NavGroup[] = [
                 description: "Sorties à venir",
                 shortcut: "c",
                 keywords: ["agenda", "sorties", "épisodes"],
-            },
-            {
-                href: "/assistant",
-                label: "Assistant",
-                icon: Bot,
-                tint: "bg-[#5E5CE6]",
-                description: "Demande en clair : ajouter, compléter, débloquer",
-                shortcut: "z",
-                keywords: ["ia", "ai", "assistant", "llm", "ollama", "demande", "ajouter", "action"],
             },
             {
                 href: "/search",

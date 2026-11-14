@@ -391,7 +391,7 @@ export default function SettingsGeneralPage() {
                         </Panel>
                     </motion.div>
 
-                    {/* ── Assistant IA : confirmer ou agir seul ── */}
+                    {/* ── Agent IA : confirmer ou agir seul ── */}
                     <motion.div variants={fadeUp}>
                         <AssistantPanel />
                     </motion.div>

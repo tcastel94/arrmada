@@ -372,6 +372,22 @@ async def test_only_web_steps_of_server_side_tools_are_shown(
 # ── Outils ──────────────────────────────────────────────────────
 
 
+def _pydantic_titles(schema: Any, *, in_properties: bool = False) -> list[str]:
+    """Clés « title » ajoutées par pydantic (un ARGUMENT peut s'appeler title)."""
+    found: list[str] = []
+    if isinstance(schema, dict):
+        for key, value in schema.items():
+            if key == "title" and not in_properties:
+                found.append(str(value))
+            found += _pydantic_titles(
+                value, in_properties=key == "properties" and not in_properties
+            )
+    elif isinstance(schema, list):
+        for item in schema:
+            found += _pydantic_titles(item)
+    return found
+
+
 def test_tool_definitions_are_stable_and_well_formed() -> None:
     definitions = tools.api_tools(web_search=True)
     assert definitions == tools.api_tools(web_search=True)  # préfixe de cache identique
@@ -384,7 +400,7 @@ def test_tool_definitions_are_stable_and_well_formed() -> None:
     for definition in definitions[:-2]:
         schema = definition["input_schema"]
         assert schema["type"] == "object" and schema["additionalProperties"] is False
-        assert '"title":' not in json.dumps(schema)  # bruit ajouté par pydantic
+        assert not _pydantic_titles(schema)  # bruit ajouté par pydantic
         assert definition["eager_input_streaming"] is True
         assert len(definition["description"]) > 40
 
@@ -493,7 +509,7 @@ async def test_oversized_result_is_cut_with_a_note(monkeypatch: pytest.MonkeyPat
         return {"lines": ["x" * 100] * 1000}
 
     tool = tools.Tool("huge", "Énorme", "Outil de test au résultat démesuré.", tools.NoArgs, huge)
-    monkeypatch.setitem(tools._BY_NAME, "huge", tool)
+    monkeypatch.setattr(tools, "TOOLS", (*tools.TOOLS, tool))
     outcome = await tools.execute("huge", {}, Redactor())
     assert len(outcome.content) < tools.MAX_RESULT_CHARS + 300
     assert "résultat coupé" in outcome.content

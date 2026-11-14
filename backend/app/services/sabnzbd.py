@@ -122,3 +122,7 @@ class SabnzbdClient(ArrBaseClient):
     async def resume_item(self, nzo_id: str) -> Any:
         """Reprend un seul élément mis en pause."""
         return await self._call("queue", {"name": "resume", "value": nzo_id})
+
+    async def retry(self, nzo_id: str) -> Any:
+        """Relance un téléchargement en échec de l'historique (il revient dans la file)."""
+        return await self._call("retry", {"value": nzo_id})

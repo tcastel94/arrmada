@@ -1,6 +1,6 @@
 # ADR-017 : Copilote, une IA qui lit la stack avant de conseiller
 
-- **Statut** : accepté (V1, lecture seule)
+- **Statut** : accepté (V1, lecture seule) ; complété par l'[ADR-019](019-agent-ia.md) : le Copilote devient l'Agent IA, qui agit
 - **Date** : 2026-11-13
 
 ## Contexte

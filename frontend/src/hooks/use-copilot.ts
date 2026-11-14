@@ -1,11 +1,16 @@
 "use client";
 
 /**
- * Copilote : conversation avec l'IA qui lit la stack (ADR-017).
+ * Agent IA : conversation avec l'IA qui lit la stack et agit (ADR-017, ADR-019).
  * ----------------------------------------------------------------
  * `POST /api/copilot/chat` répond en flux SSE (texte au fil de l'eau +
  * outils consultés). EventSource ne sait pas faire de POST : le flux est lu
  * avec fetch + ReadableStream.
+ *
+ * Avant chaque action (débloquer, importer, relancer…), le flux envoie un
+ * événement `confirm` puis ATTEND : la carte affiche Valider / Annuler, et la
+ * réponse part par `POST /api/copilot/actions/{id}`. Analogie : un script qui
+ * fait `read -p "Confirmer ? [o/N]"` avant chaque commande sensible.
  *
  * La conversation vit dans un petit magasin HORS de React : elle survit à un
  * changement de page (on peut aller vérifier un réglage et revenir), et une
@@ -24,6 +29,21 @@ export interface CopilotStatus {
     effort: string;
     web_search: boolean;
     documents: number;
+    /** confirm : chaque action attend un clic ; auto : l'agent agit seul. */
+    action_mode?: "confirm" | "auto";
+}
+
+/** Une action que l'agent veut faire, avec son aperçu et son sort. */
+export interface CopilotAction {
+    id: string;
+    label: string;
+    summary: string;
+    details: string[];
+    warning: string;
+    auto: boolean;
+    /** pending : attend ton clic ; sending : réponse en route ; running : validée, en cours. */
+    state: "pending" | "sending" | "running" | "done" | "failed" | "refused" | "expired";
+    result?: string;
 }
 
 /** Un outil consulté par le modèle (lecture de la stack, recherche web…). */
@@ -38,7 +58,10 @@ export interface CopilotTool {
 }
 
 /** Une réponse est une suite de morceaux, dans l'ordre : texte, outils, texte… */
-export type CopilotPart = { kind: "text"; text: string } | { kind: "tools"; tools: CopilotTool[] };
+export type CopilotPart =
+    | { kind: "text"; text: string }
+    | { kind: "tools"; tools: CopilotTool[] }
+    | { kind: "action"; action: CopilotAction };
 
 export interface CopilotUsage {
     /** Coût estimé du tour en dollars (null : modèle au tarif inconnu). */
@@ -90,9 +113,11 @@ function cloneMessage(message: CopilotMessage): CopilotMessage {
     return {
         ...message,
         notices: [...message.notices],
-        parts: message.parts.map((part) =>
-            part.kind === "text" ? { ...part } : { kind: "tools", tools: part.tools.map((tool) => ({ ...tool })) },
-        ),
+        parts: message.parts.map((part): CopilotPart => {
+            if (part.kind === "text") return { ...part };
+            if (part.kind === "action") return { kind: "action", action: { ...part.action, details: [...part.action.details] } };
+            return { kind: "tools", tools: part.tools.map((tool) => ({ ...tool })) };
+        }),
     };
 }
 
@@ -128,6 +153,13 @@ function describeInput(input: unknown): string {
         .map(String);
     const text = values.join(" · ");
     return text.length > 90 ? `${text.slice(0, 90)}…` : text;
+}
+
+function findAction(message: CopilotMessage, id: string): CopilotAction | undefined {
+    for (const part of message.parts) {
+        if (part.kind === "action" && part.action.id === id) return part.action;
+    }
+    return undefined;
 }
 
 function findTool(message: CopilotMessage, id: string): CopilotTool | undefined {
@@ -181,6 +213,34 @@ function applyEvent(message: CopilotMessage, event: string, data: Payload) {
             }
             break;
         }
+        case "confirm":
+            message.parts.push({
+                kind: "action",
+                action: {
+                    id: String(data.id),
+                    label: String(data.label ?? ""),
+                    summary: String(data.summary ?? ""),
+                    details: Array.isArray(data.details) ? data.details.map(String) : [],
+                    warning: String(data.warning ?? ""),
+                    auto: Boolean(data.auto),
+                    state: data.auto ? "running" : "pending",
+                },
+            });
+            message.thinking = "";
+            break;
+        case "confirm_result": {
+            const action = findAction(message, String(data.id));
+            if (action) action.state = data.approved ? "running" : data.expired ? "expired" : "refused";
+            break;
+        }
+        case "action_result": {
+            const action = findAction(message, String(data.id));
+            if (action) {
+                action.state = data.ok ? "done" : "failed";
+                action.result = String(data.message ?? "");
+            }
+            break;
+        }
         case "notice":
             message.notices.push(String(data.message));
             break;
@@ -212,6 +272,11 @@ function applyEvent(message: CopilotMessage, event: string, data: Payload) {
 function settle(message: CopilotMessage) {
     message.thinking = "";
     for (const part of message.parts) {
+        if (part.kind === "action") {
+            // Flux coupé pendant l'attente : l'action n'a pas été faite
+            if (part.action.state === "pending" || part.action.state === "sending") part.action.state = "expired";
+            continue;
+        }
         if (part.kind !== "tools") continue;
         for (const tool of part.tools) if (tool.state === "running") tool.state = "error";
     }
@@ -322,6 +387,25 @@ export async function sendCopilotMessage(text: string): Promise<void> {
             publish({ ...state, busy: false, messages: [...state.messages.slice(0, -1), cloneMessage(answer)] });
         }
     }
+}
+
+/**
+ * Valide ou refuse une action en attente. Le flux en cours reçoit ensuite
+ * `confirm_result` puis `action_result`, qui mettent la carte à jour.
+ */
+export async function answerCopilotAction(id: string, approve: boolean): Promise<void> {
+    const action = draft ? findAction(draft, id) : undefined;
+    if (!action || action.state !== "pending") return;
+    action.state = "sending";
+    touch();
+    try {
+        await apiFetch(`/api/copilot/actions/${id}`, { method: "POST", body: JSON.stringify({ approve }) });
+    } catch (error) {
+        // Expirée ou déjà traitée côté serveur : la carte le dit
+        action.state = "expired";
+        action.result = error instanceof Error ? error.message : "Action expirée.";
+    }
+    touch();
 }
 
 /** Interrompt la réponse en cours (le serveur coupe l'appel au modèle et oublie ce tour). */
