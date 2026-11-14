@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Assistant IA qui agit, étape 1 : web app
+
+#### Added
+- **Assistant IA** ([ADR-018](docs/adr/018-assistant-ia-actions.md)) : page « Assistant » (menu Bibliothèque, raccourci `g` + `z`). On demande en clair (« ajoute Interstellar et complète la saga Harry Potter ») ; l'IA propose des actions, ArrMada retrouve lui-même la cible dans Radarr, Sonarr ou Lidarr et affiche une carte par action : **Valider** / **Annuler**
+- Actions possibles : ajouter un film, une série, suivre un artiste, compléter une saga, chercher les épisodes ou albums manquants (ou tout ce qui manque), débloquer les téléchargements en panne, importer la musique restée dans les téléchargements. **Aucune suppression**
+- **Paramètres › Assistant IA** : confirmer chaque action (par défaut) ou laisser l'assistant agir tout de suite
+- Chaque action exécutée est inscrite au journal d'activité
+- Serveur : `POST /api/ai/act`, `POST /api/ai/act/{id}/confirm|cancel`, `GET|PUT /api/ai/settings`
+- Tests : serveur, e2e
+
 ### Lecture des vieux AVI sur la TV
 
 #### Fixed

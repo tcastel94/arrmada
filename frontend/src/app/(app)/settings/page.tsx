@@ -51,6 +51,7 @@ import { RingGauge } from "@/components/fx/ring-gauge";
 import { StatusDot } from "@/components/fx/status-dot";
 import { APP_VERSION } from "@/components/settings/app-version";
 import { PasswordPanel } from "@/components/settings/password-panel";
+import { AssistantPanel } from "@/components/settings/assistant-panel";
 import { useBackendVersion, useSettings, useTestTelegram } from "@/hooks/use-settings";
 import { useServices } from "@/hooks/use-services";
 import { useKodiSettings } from "@/hooks/use-kodi";
@@ -388,6 +389,11 @@ export default function SettingsGeneralPage() {
                                 )}
                             </div>
                         </Panel>
+                    </motion.div>
+
+                    {/* ── Assistant IA : confirmer ou agir seul ── */}
+                    <motion.div variants={fadeUp}>
+                        <AssistantPanel />
                     </motion.div>
 
                     {/* ── Application ──────────────────────────── */}
