@@ -43,6 +43,7 @@ import {
     HeartPulse,
     Library,
     Sofa,
+    Sparkles,
     type LucideIcon,
 } from "lucide-react";
 import type { ModuleKey } from "@/hooks/use-modules";
@@ -85,6 +86,15 @@ export const TOP_ITEMS: NavItem[] = [
         description: "Vue d'ensemble de la flotte",
         shortcut: "d",
         keywords: ["accueil", "home", "tableau de bord"],
+    },
+    {
+        href: "/copilot",
+        label: "Copilote",
+        icon: Sparkles,
+        tint: "bg-[#BF5AF2]",
+        description: "Pose une question : l'IA lit ta stack et te conseille",
+        shortcut: "o",
+        keywords: ["ia", "ai", "assistant", "claude", "conseil", "diagnostic", "question", "aide", "copilot", "trash"],
     },
     {
         href: "/remote",
