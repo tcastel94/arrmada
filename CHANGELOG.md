@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Assistant IA : il agit au lieu de refuser
+
+#### Fixed
+- **Assistant** : avec un petit modèle Ollama, l'assistant répondait souvent « je ne peux pas » sans rien proposer. La consigne lui dit maintenant clairement que son rôle est d'agir, avec des exemples ; seules les suppressions et les changements de réglages restent refusés
+- Les réponses mal formées du modèle sont comprises (`action` au lieu de `type`, `add_movie` au lieu de `request_movie`, paramètres imbriqués, action seule hors liste)
+- **Filet de sécurité** : si le modèle ne propose rien, les demandes au format évident sont comprises sans lui (« ajoute le film X », « ajoute X », « télécharge la série X », « complète la saga X », « suis l'artiste X », « débloque les téléchargements », « importe la musique », « cherche tout ce qui manque »). La réponse brute du modèle est écrite dans le journal du conteneur
+- **Copilote** : il reste en lecture seule, mais quand on lui demande une de ces actions, il renvoie vers la page Assistant avec la phrase à taper
+
 ### Assistant IA qui agit, étape 1 : web app
 
 #### Added

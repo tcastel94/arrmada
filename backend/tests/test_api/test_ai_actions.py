@@ -165,3 +165,67 @@ async def test_no_ai_configured(
     monkeypatch.setattr(ai_api, "ai_configured", lambda: False)
     resp = await client.post("/api/ai/act", json={"message": "ajoute dune"}, headers=arr_stack)
     assert resp.status_code == 400
+
+
+# ── Réponses mal formées des petits modèles, filet de sécurité ─
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        {"reply": "ok", "actions": [{"action": "add_movie", "title": "Dune"}]},
+        {"reply": "ok", "actions": [{"request_movie": {"title": "Dune"}}]},
+        {"reply": "ok", "actions": [{"type": "request_movie", "params": {"title": "Dune"}}]},
+        {"reply": "ok", "actions": {"type": "request_movie", "title": "Dune"}},
+        {"type": "request_movie", "title": "Dune"},
+    ],
+)
+def test_plan_tolerates_small_model_shapes(answer: dict[str, Any]) -> None:
+    _, actions = ai_actions.plan_from_llm(json.dumps(answer))
+    assert actions == [{"type": "request_movie", "title": "Dune"}]
+
+
+def test_plan_survives_non_json() -> None:
+    assert ai_actions.plan_from_llm("Désolé, je ne peux pas.") == ("", [])
+
+
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        ("ajoute le film Interstellar", [{"type": "request_movie", "title": "Interstellar"}]),
+        ("ajoute Interstellar", [{"type": "request_movie", "title": "Interstellar"}]),
+        ("télécharge la série Severance", [{"type": "request_series", "title": "Severance"}]),
+        (
+            "complète la saga Harry Potter et débloque les téléchargements",
+            [{"type": "complete_saga", "title": "Harry Potter"}, {"type": "unblock_downloads"}],
+        ),
+        ("suis l'artiste Daft Punk", [{"type": "follow_artist", "name": "Daft Punk"}]),
+        ("importe la musique", [{"type": "import_music_downloads"}]),
+        ("cherche tout ce qui manque", [{"type": "search_all_missing", "kind": "all"}]),
+        ("quel temps fait-il ?", []),
+    ],
+)
+def test_fallback_understands_obvious_requests(
+    message: str, expected: list[dict[str, Any]]
+) -> None:
+    assert ai_actions.fallback_actions(message) == expected
+
+
+async def test_refusing_model_falls_back_to_rules(
+    client: AsyncClient, arr_stack: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Le modèle répond « je ne peux pas » : la demande évidente passe quand même."""
+    monkeypatch.setattr(
+        ai_actions,
+        "chat_json",
+        _llm({"reply": "Je ne peux pas modifier ta bibliothèque.", "actions": []}),
+    )
+    r = await client.post(
+        "/api/ai/act", json={"message": "ajoute le film Interstellar"}, headers=arr_stack
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    [p] = body["proposals"]
+    assert p["status"] == "pending"
+    assert p["summary"] == "Ajouter le film Interstellar (2014) à Radarr et le chercher"
+    assert body["reply"] == "Voici ce que j'ai compris."
