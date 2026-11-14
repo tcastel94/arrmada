@@ -30,6 +30,7 @@ from app.services import (
     translations,
     tv_priority,
 )
+from app.services.copilot import tools as copilot_tools
 from app.utils.cache import cache
 from tests import fake_arr
 
@@ -133,6 +134,8 @@ tv_priority.session_factory = TestSessionFactory
 # Recherches de sous-titres en arrière-plan (services/subtitle_jobs.py) : idem
 subtitle_jobs.session_factory = TestSessionFactory
 subtitle_guardian.session_factory = TestSessionFactory
+# Outils du copilote (services/copilot/tools.py) : idem
+copilot_tools.session_factory = TestSessionFactory
 
 # Le login est limité à 5 essais/minute (anti brute-force). Chaque test qui
 # utilise `auth_headers` se reconnecte : sans ça, le 6e test prend un 429

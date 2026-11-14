@@ -37,6 +37,9 @@ python-telegram-bot==21.9
 # ML (for recommendations)
 scikit-learn==1.6.1
 
+# Copilote : API Anthropic (boucle d'outils, flux, cache de prompt)
+anthropic==2.8.0
+
 # Rate limiting
 slowapi==0.1.9
 

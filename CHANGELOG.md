@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Copilote : une IA qui lit ta stack avant de conseiller
+
+#### Added
+- **Copilote** (menu du même nom, raccourci `G` puis `O`) : un assistant auquel poser une question sur l'installation, en français. Avant de répondre, il va lire l'état réel : services et leur santé, profils qualité (avec le nombre de titres qui utilisent chacun), formats personnalisés, configuration de Radarr / Sonarr / Lidarr / Prowlarr (nommage, hardlinks, clients de téléchargement, indexeurs, chemins distants…), file de téléchargement et échecs SABnzbd, statistiques des indexeurs, journaux Docker, espace disque, médiathèque, détail et historique d'un titre, journal d'ArrMada, vérification du câblage. Il compare aux TRaSH Guides (écarts de scores, de seuil, formats dont la définition a divergé), cherche dans la documentation d'ArrMada (ADR, changelog, guides, embarqués dans l'image) et, si la recherche web est activée, dans la documentation de référence (TRaSH Guides, wiki Servarr, Jellyfin, SABnzbd…). Usages visés : audit d'une configuration, cause d'un blocage, effets d'un changement avant de le faire
+- **Lecture seule** : aucun outil du copilote n'écrit. Il explique et indique où agir
+- La réponse arrive au fil de l'eau (SSE), avec la liste des outils consultés et leur durée, le résumé de la réflexion en cours, un bouton Arrêter, et sous chaque réponse le coût estimé du tour et le nombre d'étapes. La conversation survit à un changement de page ; « Nouvelle conversation » la remet à zéro
+- Réglages (`.env`) : `ANTHROPIC_API_KEY` (vide = copilote désactivé, la page explique quoi faire), `COPILOT_MODEL` (`claude-sonnet-5-5` par défaut), `COPILOT_EFFORT` (`medium`), `COPILOT_WEB_SEARCH` (`true`). Routes `GET /api/copilot/status`, `POST /api/copilot/chat`, `DELETE /api/copilot/conversations/{id}`, réservées à l'administrateur
+
+#### Security
+- Ce que le copilote consulte est envoyé à l'API d'Anthropic. Avant l'envoi, les secrets sont remplacés par `***` : clés des services enregistrés et secrets du `.env` où qu'ils apparaissent, champs nommés comme des secrets (`apiKey`, `password`…, y compris les champs de formulaire des *arr), motifs `apikey=…` et `utilisateur:motdepasse@` dans les journaux. Restent visibles du modèle : adresses des services, noms d'indexeurs, titres des médias, lignes de journaux. Les mots de passe générés à l'installation ne sont jamais transmis
+- L'historique des conversations reste côté serveur, en mémoire : le navigateur ne reçoit pas les résultats bruts des outils
+
+#### Notes
+- Modèle Claude Sonnet 5.5 par l'API d'Anthropic en direct (SDK `anthropic` 2.8.0), facturé à l'usage sur le compte de l'utilisateur. Consigne et outils sont mis en cache (relus à 5 % du prix), le repli côté serveur rejoue une demande déclinée à tort par les garde-fous du modèle. Ollama et OpenRouter gardent leurs usages (recherche en langage naturel, diagnostic des journaux). Voir [ADR-017](docs/adr/017-copilote-ia.md)
+- Conversations en mémoire : un redémarrage du conteneur les vide, l'interface le signale au message suivant. Le copilote ne lance jamais la synchronisation TRaSH : il lit le cache et en donne l'âge
+- Vérifié : 31 tests serveur (boucle modèle ↔ outils avec un faux client Anthropic, retrait d'un tour en échec, refus, masquage des secrets, documentation), 3 parcours Playwright (clé absente, question → outils → réponse, erreur). Les 17 outils ont été exécutés à blanc sur une vraie stack (lecture seule, aucune clé en clair dans les résultats), puis cinq vraies questions posées par l'API d'Anthropic le 13/11/2026 : outils, cache de prompt, enchaînement des tours et recherche web fonctionnent. Coût mesuré : environ 0,04 $ pour la première question d'une conversation (écriture du cache, 14 500 jetons de consigne et d'outils), environ 0,02 $ pour les suivantes. Cet essai a fait corriger deux défauts : les TV Kodi et les amplis étaient sondés comme des *arr et donnés « hors ligne » à tort (ils sont maintenant listés à part), et les étapes internes de la recherche web s'affichaient comme des outils. Si la recherche web n'est pas autorisée pour ton organisation dans la console Anthropic : `COPILOT_WEB_SEARCH=false`
+
 ### Écran noir avec le son, sous-titres « Non défini », distribution des fiches et du menu pause
 
 #### Fixed
