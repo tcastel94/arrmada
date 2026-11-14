@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Lecture des vieux AVI sur la TV
+
+#### Fixed
+- **Films et séries en .avi (XviD + MP3)** gérés par Radarr / Sonarr : le serveur ne les propose plus en lecture directe, que le lecteur d'Android lit mal (« ERROR_CODE_IO_UNSPECIFIED : Source error »). Jellyfin les convertit à la volée, comme Kodi le faisait avec ffmpeg : son recalé, image XviD convertie en H.264
+- Appli TV : un .avi qui échoue en lecture directe (serveur pas encore à jour) bascule une fois sur la conversion par Jellyfin au lieu d'afficher l'erreur
+- Les .avi restent visibles dans l'écran Vidéos et les séries maison. Pour ces dossiers hors Jellyfin, la conversion reste à faire une fois avec `scripts/remux-avi-mkv.sh`
+
 ### Écran noir avec le son, sous-titres « Non défini », distribution des fiches et du menu pause
 
 #### Fixed

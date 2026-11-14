@@ -506,6 +506,8 @@ async def test_item_image(client: AsyncClient, jellyfin: dict[str, str]) -> None
         ({"MediaSources": [{"Path": "/m/Dune.mkv", "Container": "mkv"}]}, "direct", "mkv"),
         ({"MediaSources": [{"Path": "/m/I Robot.MP4"}]}, "direct", "mp4"),
         ({"MediaSources": [{"Path": "/m/Gemini.Man.m2ts"}]}, "remux", "m2ts"),
+        # Vieil AVI (XviD + MP3) : mal lu par Android en direct, remuxé par Jellyfin
+        ({"MediaSources": [{"Path": "/s/Naruto Shippuden 03.avi"}]}, "remux", "avi"),
         ({"VideoType": "Iso", "MediaSources": [{"Path": "/m/Film.iso"}]}, "remux", "iso"),
         ({"VideoType": "BluRay", "MediaSources": [{"Path": "/m/Film", "Container": "bluray"}]},
          "remux", "bluray"),
@@ -1215,3 +1217,11 @@ def test_external_subtitle_without_language_counts_as_a_full_subtitle() -> None:
         {"Type": "Subtitle", "Index": 3, "Codec": "PGSSUB"},  # intégrée, sans langue : inconnue
     ]}]}  # fmt: skip
     assert subtitle_jobs.full_languages(details) == {"fr"}
+
+
+def test_avi_still_listed_as_local_video() -> None:
+    # Remuxé pour un titre de Jellyfin, l'AVI reste une vidéo de l'écran Vidéos
+    from app.services import video_files
+
+    assert "avi" not in tv_playback.DIRECT_EXTENSIONS
+    assert "avi" in video_files.VIDEO_EXTENSIONS

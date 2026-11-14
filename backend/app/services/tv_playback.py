@@ -86,7 +86,11 @@ _FIELDS = "Chapters,Overview,MediaSources,ProviderIds,Path,Trickplay"
 
 # Extensions que le lecteur de la TV (ExoPlayer) ouvre directement. Les
 # autres (.m2ts, .mts, .iso, .vob, .img…) passent par le remux de Jellyfin.
-DIRECT_EXTENSIONS = {"mkv", "mk3d", "webm", "mp4", "m4v", "mov", "ts", "avi", "ogv"}
+# Pas « avi » : le lecteur d'Android lit mal les vieux AVI (XviD + MP3 :
+# index en fin de fichier, trames MP3 coupées) → ERROR_CODE_IO_UNSPECIFIED.
+# Jellyfin les remuxe (son recalé, XviD converti en H.264 : il n'est pas dans
+# la liste VideoCodec du remux), comme Kodi le faisait avec ffmpeg.
+DIRECT_EXTENSIONS = {"mkv", "mk3d", "webm", "mp4", "m4v", "mov", "ts", "ogv"}
 
 # Morceaux du remux HLS que la TV peut demander : la liste de lecture
 # principale, celle des morceaux, et les morceaux eux-mêmes. Rien d'autre
