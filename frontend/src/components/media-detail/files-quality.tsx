@@ -7,12 +7,11 @@
  * - Série : synthèse sur TOUS les épisodes (avant : qualité = fichier du
  *   1er épisode seulement, et liste tronquée à 5 fichiers sans le dire),
  *   puis la liste complète des fichiers, saison par saison.
- * - Profil de qualité : profil *arr actuel + profil TRaSH personnalisé
- *   (attribution, application, retrait avec confirmation).
+ * - Version & qualité : version voulue pour ce titre (VF, MULTi, VOSTFR, VO),
+ *   ce que contient le fichier actuel, et le bouton pour en changer.
  */
 import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { toast } from "sonner";
 import {
     AudioLines,
     Calendar,
@@ -22,40 +21,29 @@ import {
     Gauge,
     HardDrive,
     Languages,
-    Loader2,
     Monitor,
     Sparkles,
     Subtitles,
     Tag,
-    Target,
-    Trash2,
     Users,
 } from "lucide-react";
 import { Panel } from "@/components/shared/panel";
 import { EmptyState, ErrorState } from "@/components/shared/empty-state";
 import { Shimmer } from "@/components/shared/loading-skeleton";
-import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { GradientProgress } from "@/components/fx/gradient-progress";
 import { AnimatedNumber } from "@/components/fx/animated-number";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useMediaEditOptions, type EpisodeDetail, type FileInfo, type MediaDetail } from "@/hooks/use-media";
-import {
-    useApplyOverride,
-    useAvailableProfiles,
-    useCreateOverride,
-    useDeleteOverride,
-    useProfileOverrides,
-} from "@/hooks/use-profile-overrides";
-import { useServices } from "@/hooks/use-services";
+import { type EpisodeDetail, type FileInfo, type MediaDetail } from "@/hooks/use-media";
+import { useMediaVersion } from "@/hooks/use-media-version";
 import { formatBytes, formatShortDate, percent } from "@/lib/format";
 import { EASE_OUT, fadeUp, stagger } from "@/lib/motion";
 import { cn } from "@/lib/utils";
+import { FileVerdict } from "./version-dialog";
+import { versionLabel } from "./version-options";
 import { audioChannelsLabel, episodeCode, hdrLabel, resolutionLabel, seasonLabel, sortSeasons, sourceLabel } from "./labels";
 
-export function FilesQualityTab({ media }: { media: MediaDetail }) {
+export function FilesQualityTab({ media, onVersion }: { media: MediaDetail; onVersion: () => void }) {
     return (
         <motion.div
             variants={stagger(0, 0.08)}
@@ -67,7 +55,7 @@ export function FilesQualityTab({ media }: { media: MediaDetail }) {
                 {media.type === "movie" ? <MovieFilePanel file={media.file ?? null} /> : <SeriesFiles media={media} />}
             </motion.div>
             <motion.div variants={fadeUp} className="min-w-0">
-                <QualityProfilePanel media={media} />
+                <VersionPanel media={media} onVersion={onVersion} />
             </motion.div>
         </motion.div>
     );
@@ -294,167 +282,64 @@ function EpisodeFileRow({ ep }: { ep: EpisodeDetail }) {
 }
 
 /* ════════════════════════════════════════════════════════════════
-   Profil de qualité (*arr + TRaSH)
+   Version & qualité voulues pour CE titre
    ════════════════════════════════════════════════════════════════ */
 
-function QualityProfilePanel({ media }: { media: MediaDetail }) {
+/**
+ * Résumé de la version voulue (VF, MULTi…) et de ce que contient le fichier,
+ * avec le bouton qui ouvre le réglage. Remplace l'ancien panneau « Profil de
+ * qualité », qui demandait de connaître les noms de profils TRaSH.
+ */
+function VersionPanel({ media, onVersion }: { media: MediaDetail; onVersion: () => void }) {
     const isMovie = media.type === "movie";
-    const serviceType = isMovie ? "radarr" : "sonarr";
     const arr = isMovie ? "Radarr" : "Sonarr";
-
-    const overrides = useProfileOverrides();
-    const profiles = useAvailableProfiles(serviceType);
-    const options = useMediaEditOptions(media.type, true);
-    const { data: services } = useServices();
-    const createOverride = useCreateOverride();
-    const deleteOverride = useDeleteOverride();
-    const applyOverride = useApplyOverride();
-    const [selected, setSelected] = useState("");
-    const [confirmRemove, setConfirmRemove] = useState(false);
-
-    // Correspondance par id ET type : un film et une série peuvent partager le même id *arr.
-    const current = overrides.data?.find((o) => o.external_id === media.id && o.media_type === media.type);
-    const currentName =
-        profiles.data?.find((p) => p.filename === current?.profile_name)?.display_name ?? current?.profile_name.replace(/-/g, " ");
-    const arrProfile = options.data?.quality_profiles.find((p) => p.id === media.quality_profile_id)?.name;
-    // Vrai id du service Radarr/Sonarr (avant : 0 codé en dur → doublons possibles).
-    const serviceId = services?.find((s) => s.type === serviceType && s.is_enabled)?.id ?? 0;
-
-    const assign = () => {
-        if (!selected) return;
-        createOverride.mutate(
-            {
-                media_type: media.type,
-                external_id: media.id,
-                title: media.title,
-                profile_name: selected,
-                service_id: serviceId,
-            },
-            {
-                onSuccess: () => {
-                    toast.success("Profil personnalisé attribué", {
-                        description: `Clique sur « Appliquer à ${arr} » pour l'activer.`,
-                    });
-                    // Le choix n'est réinitialisé qu'en cas de succès (avant : avant même la réponse).
-                    setSelected("");
-                },
-                onError: (e) => toast.error("Attribution impossible", { description: e.message }),
-            },
-        );
-    };
-
-    const apply = () => {
-        if (!current) return;
-        applyOverride.mutate(current.id, {
-            onSuccess: (r) => {
-                toast.success(`Profil appliqué dans ${arr}`, {
-                    description: `${r.cfs_created} format${r.cfs_created > 1 ? "s" : ""} personnalisé${r.cfs_created > 1 ? "s" : ""} créé${r.cfs_created > 1 ? "s" : ""}, ${r.cfs_updated} mis à jour${
-                        r.media_updated ? ` · ${isMovie ? "film mis à jour" : "série mise à jour"}` : ""
-                    }.`,
-                });
-                if (r.errors?.length) toast.warning("Application partielle", { description: r.errors.slice(0, 3).join(" · ") });
-            },
-            onError: (e) => toast.error("Application impossible", { description: e.message }),
-        });
-    };
+    const state = useMediaVersion(media.type, media.id);
+    const data = state.data;
 
     return (
-        <Panel title="Profil de qualité" icon={Target} iconClassName="text-warning">
-            <div className="space-y-5">
-                {/* Profil actuellement appliqué dans Radarr/Sonarr */}
-                <div className="flex items-center justify-between gap-3">
-                    <p className="text-xs text-muted-foreground">Profil {arr}</p>
-                    {options.isLoading ? (
-                        <Shimmer className="h-5 w-28 rounded-md" />
-                    ) : (
-                        <Badge variant="secondary">{arrProfile ?? (media.quality_profile_id ? `#${media.quality_profile_id}` : "—")}</Badge>
-                    )}
+        <Panel title="Version & qualité" icon={Languages}>
+            {state.isLoading ? (
+                <div className="space-y-3">
+                    <Shimmer className="h-7 w-40 rounded-md" />
+                    <Shimmer className="h-12 w-full rounded-xl" />
+                    <Shimmer className="h-10 w-full rounded-xl" />
                 </div>
-
-                {/* Profil TRaSH personnalisé */}
-                {overrides.isLoading ? (
-                    <Shimmer className="h-24 w-full" />
-                ) : overrides.isError ? (
-                    <ErrorState compact error={overrides.error} onRetry={() => overrides.refetch()} title="Profils personnalisés indisponibles" />
-                ) : current ? (
-                    <div className="border-gradient relative space-y-3 rounded-2xl bg-primary/[0.06] p-4">
-                        <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                                <p className="flex items-center gap-1.5 text-xs font-semibold text-primary">
-                                    <Sparkles className="h-3.5 w-3.5" aria-hidden /> Profil personnalisé actif
+            ) : state.isError || !data ? (
+                <ErrorState compact error={state.error} onRetry={() => state.refetch()} title="Version indisponible" />
+            ) : (
+                <div className="space-y-4">
+                    <div>
+                        <p className="eyebrow">Version voulue</p>
+                        {data.version ? (
+                            <p className="mt-1 text-[22px] font-bold tracking-tight">{versionLabel(data.version)}</p>
+                        ) : (
+                            <>
+                                <p className="mt-1 text-[17px] font-semibold">Non choisie</p>
+                                <p className="mt-1 text-xs leading-snug text-muted-foreground">
+                                    Ce {isMovie ? "film" : "titre"} suit le profil général « {data.profile?.name ?? "inconnu"} ». Choisis une version pour
+                                    le distinguer du reste (par exemple la VF pour un dessin animé).
                                 </p>
-                                <p className="mt-1 truncate text-sm font-semibold capitalize">{currentName}</p>
-                                {current.note && <p className="mt-1 text-xs italic text-muted-foreground">{current.note}</p>}
-                            </div>
-                            <Button
-                                size="icon-sm"
-                                variant="ghost"
-                                className="shrink-0 text-muted-foreground hover:text-destructive"
-                                aria-label="Retirer le profil personnalisé"
-                                onClick={() => setConfirmRemove(true)}
-                            >
-                                <Trash2 />
-                            </Button>
-                        </div>
-                        <Button className="w-full" onClick={apply} disabled={applyOverride.isPending}>
-                            {applyOverride.isPending ? <Loader2 className="animate-spin" /> : <Target />}
-                            {applyOverride.isPending ? "Application en cours…" : `Appliquer à ${arr}`}
-                        </Button>
+                            </>
+                        )}
                     </div>
-                ) : (
-                    <p className="text-sm text-muted-foreground">
-                        Ce {isMovie ? "film" : "titre"} suit le profil TRaSH par défaut de {arr}.
-                    </p>
-                )}
 
-                {/* Attribution d'un profil */}
-                <div className="space-y-2">
-                    <Label htmlFor={`trash-profile-${media.id}`} className="text-xs text-muted-foreground">
-                        {current ? "Remplacer par un autre profil TRaSH" : "Attribuer un profil TRaSH personnalisé"}
-                    </Label>
-                    {profiles.isError ? (
-                        <ErrorState compact error={profiles.error} onRetry={() => profiles.refetch()} title="Profils TRaSH indisponibles" />
-                    ) : (
-                        <div className="flex gap-2">
-                            <Select value={selected} onValueChange={setSelected} disabled={profiles.isLoading}>
-                                <SelectTrigger id={`trash-profile-${media.id}`} className="flex-1">
-                                    <SelectValue placeholder={profiles.isLoading ? "Chargement des profils…" : "Choisir un profil…"} />
-                                </SelectTrigger>
-                                <SelectContent className="max-h-72">
-                                    {(profiles.data ?? []).map((p) => (
-                                        <SelectItem key={p.filename} value={p.filename}>
-                                            {p.display_name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            <Button variant="outline" disabled={!selected || createOverride.isPending} onClick={assign}>
-                                {createOverride.isPending && <Loader2 className="animate-spin" />}
-                                Attribuer
-                            </Button>
-                        </div>
-                    )}
+                    <div className="rounded-xl border border-white/[0.06] bg-background/40 p-3">
+                        <p className="eyebrow">{isMovie ? "Fichier actuel" : "Épisodes téléchargés"}</p>
+                        <FileVerdict file={data.file} isMovie={isMovie} showVerdict={!!data.version} className="mt-1.5" />
+                    </div>
+
+                    <Button className="w-full" onClick={onVersion}>
+                        <Languages /> {data.version ? "Changer de version…" : "Choisir une version…"}
+                    </Button>
+
+                    <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                        <span>Profil {arr}</span>
+                        <span className="min-w-0 truncate text-right" title={data.profile?.name}>
+                            {data.profile?.name ?? "—"}
+                        </span>
+                    </div>
                 </div>
-            </div>
-
-            <ConfirmDialog
-                open={confirmRemove}
-                onOpenChange={setConfirmRemove}
-                destructive
-                title="Retirer le profil personnalisé ?"
-                description={`« ${media.title} » repassera sur le profil TRaSH par défaut. Le profil déjà appliqué dans ${arr} n'est pas modifié.`}
-                confirmLabel="Retirer"
-                onConfirm={async () => {
-                    if (!current) return;
-                    try {
-                        await deleteOverride.mutateAsync(current.id);
-                        toast.success("Profil personnalisé retiré");
-                    } catch (e) {
-                        toast.error("Retrait impossible", { description: e instanceof Error ? e.message : String(e) });
-                        throw e;
-                    }
-                }}
-            />
+            )}
         </Panel>
     );
 }

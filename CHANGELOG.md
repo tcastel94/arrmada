@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Version audio et qualité, film par film
+
+#### Added
+- **« Version » sur chaque fiche de film et de série** : un bouton dans la barre d'actions (il affiche le choix en cours, par exemple « VF (VFF) · 1080p ») et un panneau « Version & qualité » dans l'onglet « Fichiers & qualité ». On choisit la langue (**VF**, **MULTi**, **VOSTFR**, **VO**), le doublage préféré pour une VF (**France / VFF**, **Québec / VFQ**, peu importe) et la qualité (1080p ou 4K), indépendamment du reste de la médiathèque. Le profil qualité correspondant est créé dans Radarr / Sonarr s'il manque
+- **Film déjà téléchargé** : la fiche dit ce que contient le fichier (langues audio, étiquettes MULTi / VFF / VFQ) et s'il correspond à la version voulue ; un point orange sur le bouton le signale. Trois issues au choix : *chercher une meilleure release* (le fichier reste en place tant que rien de mieux n'est trouvé), *remplacer maintenant* (supprime le fichier puis lance la recherche, films seulement) ou *garder le fichier*. « Choisir la release moi-même » enregistre le réglage et ouvre l'onglet Releases
+- **En lot** : dans la médiathèque, « Sélectionner » puis **Version** applique la même version à toute la sélection (films et séries mélangés). Chaque titre garde sa qualité si on ne la précise pas ; la recherche est une option, décochée par défaut
+- Routes `GET` / `PUT /api/media-version/{type}/{id}` et `POST /api/media-version/bulk` (écriture réservée à la web app, refusée aux TV)
+
+#### Fixed
+- **« Appliquer » d'un profil TRaSH par média** (onglet « Profils par média » de la page TRaSH) : le profil créé reprenait les qualités du premier profil venu et laissait tous les scores à 0, donc sans effet sur le choix des releases. Il passe par le même moteur que l'assistant TRaSH
+
+#### Changed
+- Le panneau « Profil de qualité » de la fiche (attribution d'un profil TRaSH par son nom) laisse la place à « Version & qualité ». Le choix d'un profil brut reste possible dans « ⋯ › Éditer »
+
+#### Notes
+- Radarr et Sonarr n'ont pas de « langue par film » : une version est un profil qualité. ArrMada ne stocke rien, il relit la version depuis le profil du titre. Un profil déjà présent n'est jamais réécrit ; un profil créé reprend les réglages d'écran et de son (Dolby Vision, HDR10+, audio) du profil actuel du titre. Voir [ADR-018](docs/adr/018-version-par-titre.md)
+- Le doublage est une préférence, pas un blocage : TRaSH ne départage pas VFF et VFQ, les variantes « · VFF » / « · VFQ » sont des profils dérivés (+200 / −200). Faute de mieux l'autre doublage est pris, puis remplacé
+- « Chercher » ne remplace pas toujours : Radarr compare d'abord la qualité, un Blu-ray en VO n'est pas remplacé par un WEB en VF. D'où « Remplacer maintenant »
+- Vérifié : 32 tests serveur sur un faux Radarr / Sonarr à état (création du profil, profil existant intact, ordre des opérations du remplacement, film remis sous surveillance, lot, ancienne route « profil par média »), 3 parcours Playwright. Les 16 profils TRaSH utilisés ont été relus sur le dépôt TRaSH du jour. Pas essayé sur un vrai Radarr / Sonarr dans l'environnement de la modification
+
 ### Copilote : une IA qui lit ta stack avant de conseiller
 
 #### Added

@@ -32,6 +32,7 @@ from app.api.kodi_repo import router as kodi_repo_router
 from app.api.links import router as links_router
 from app.api.local_series import router as local_series_router
 from app.api.media import router as media_router
+from app.api.media_version import router as media_version_router
 from app.api.music import router as music_router
 from app.api.notifications import router as notifications_router
 from app.api.profile_overrides import router as profile_overrides_router
@@ -71,6 +72,7 @@ api_router.include_router(artwork_files_router)  # Images des dossiers (adresse 
 api_router.include_router(services_router)
 api_router.include_router(dashboard_router)
 api_router.include_router(media_router)
+api_router.include_router(media_version_router)  # Version audio & qualité par titre
 api_router.include_router(artwork_router)  # Logos, disques… (fanart.tv / TMDB)
 api_router.include_router(downloads_router)
 api_router.include_router(analytics_router)

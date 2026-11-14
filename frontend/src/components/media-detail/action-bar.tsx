@@ -13,8 +13,10 @@
  *  - « Sur la TV » (contour, appli Kodi 1.19) : lance le film, ou l'épisode à
  *    suivre d'une série, sur une TV appairée ; masqué sans TV appairée
  *  - 1 action secondaire (contour) : « Recherche auto » ou « Recherche manuelle »
+ *  - « Version » (contour) : la version audio voulue pour CE titre (VF,
+ *    MULTi, VOSTFR, VO) ; le bouton affiche le choix en cours
  *  - Bande-annonce en bouton discret (lecteur YouTube dans une modale)
- *  - un menu « ⋯ » : Éditer, Scraper NFO/Art (films seulement — le backend
+ *  - un menu « ⋯ » : Version audio & qualité, Éditer, Scraper NFO/Art (films seulement — le backend
  *    ne gère que Radarr), Déplacer, Supprimer (en rouge).
  */
 import { useCallback, useEffect, useState } from "react";
@@ -27,6 +29,7 @@ import {
     Check,
     ChevronDown,
     FolderInput,
+    Languages,
     Loader2,
     MonitorPlay,
     MoreHorizontal,
@@ -57,23 +60,32 @@ import { useYamahaProfiles, type RoomProfile } from "@/hooks/use-yamaha";
 import { ROOM_META, describeApplied, soundProgramShortLabel, volumePct } from "@/components/remote/yamaha-audio";
 import { useScrapeMedia, type MediaDetail } from "@/hooks/use-media";
 import { useTriggerMediaSearch } from "@/hooks/use-media-actions";
+import { useMediaVersion } from "@/hooks/use-media-version";
 import { cn } from "@/lib/utils";
 import { seriesStats } from "./labels";
+import { versionLabel } from "./version-options";
 
 interface ActionBarProps {
     media: MediaDetail;
     onEdit: () => void;
     onMove: () => void;
     onDelete: () => void;
+    /** Ouvre le réglage « Version audio & qualité » de ce titre. */
+    onVersion: () => void;
     /** Ouvre l'onglet « Releases » (recherche interactive). */
     onManualSearch: () => void;
 }
 
-export function ActionBar({ media, onEdit, onMove, onDelete, onManualSearch }: ActionBarProps) {
+export function ActionBar({ media, onEdit, onMove, onDelete, onVersion, onManualSearch }: ActionBarProps) {
     const isMovie = media.type === "movie";
     const arr = isMovie ? "Radarr" : "Sonarr";
     const triggerSearch = useTriggerMediaSearch();
     const scrape = useScrapeMedia();
+    // Version voulue (VF, MULTi…) : affichée sur le bouton ; facultative,
+    // le bouton reste « Version » tant qu'elle n'est pas connue.
+    const { data: versionState } = useMediaVersion(media.type, media.id);
+    const version = versionState?.version;
+    const versionMismatch = versionState?.file.matches === false;
     const playable = isMovie && !!media.has_file && !!media.tmdb_id;
     const missing = !isMovie ? seriesStats(media.seasons).missing : 0;
     // Vu / reprise partagés par les TV : reprise du film, épisode à suivre
@@ -162,6 +174,23 @@ export function ActionBar({ media, onEdit, onMove, onDelete, onManualSearch }: A
                 </Button>
             )}
 
+            {/* ── Version audio & qualité de CE titre ───────────── */}
+            <Button
+                size="lg"
+                variant="secondary"
+                className="flex-1 sm:flex-none"
+                onClick={onVersion}
+                title={
+                    versionMismatch
+                        ? "Le fichier actuel ne correspond pas à la version voulue"
+                        : "Version audio et qualité voulues pour ce titre"
+                }
+            >
+                <Languages />
+                {version ? versionLabel(version) : "Version"}
+                {versionMismatch && <span className="h-2 w-2 rounded-full bg-warning" aria-label="Le fichier ne correspond pas" />}
+            </Button>
+
             {/* ── Bande-annonce (discrète, lecteur intégré) ─────── */}
             {/* ── Ma liste (« À voir ») du profil choisi ───────────── */}
             <WatchlistButton
@@ -189,6 +218,9 @@ export function ActionBar({ media, onEdit, onMove, onDelete, onManualSearch }: A
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-60">
+                    <DropdownMenuItem onSelect={onVersion}>
+                        <Languages /> Version audio &amp; qualité…
+                    </DropdownMenuItem>
                     <DropdownMenuItem onSelect={onEdit}>
                         <Pencil /> Éditer dans {arr}
                     </DropdownMenuItem>

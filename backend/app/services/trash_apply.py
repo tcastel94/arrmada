@@ -146,8 +146,15 @@ def build_profile_plan(
     service: str,
     profile_file: str,
     prefs: MediaPreferences | None = None,
+    *,
+    extra_groups: list[str] | None = None,
 ) -> ProfilePlan | None:
-    """Ce qu'« Appliquer » écrira pour un profil TRaSH (fichier sans .json)."""
+    """Ce qu'« Appliquer » écrira pour un profil TRaSH (fichier sans .json).
+
+    ``extra_groups`` (noms de fichier TRaSH) remplace les groupes déduits de
+    ``prefs`` : sert à la « version par film » (media_version.py), qui n'a pas
+    les réponses de l'assistant et reprend les groupes du profil déjà en place.
+    """
     profile = next(
         (qp for qp in cache.get_quality_profiles(service) if _stem(qp) == profile_file), None
     )
@@ -183,7 +190,7 @@ def build_profile_plan(
         add(cf_id, "profil")
 
     # 2. Groupes : ceux choisis selon les réponses, puis ceux « par défaut »
-    wanted = explicit_groups(prefs, service)
+    wanted = list(extra_groups) if extra_groups is not None else explicit_groups(prefs, service)
     applied: list[str] = []
     by_stem = {_stem(g): g for g in groups}
     for stem in wanted:

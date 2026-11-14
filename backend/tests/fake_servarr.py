@@ -50,6 +50,12 @@ class FakeServarr:
         self.languages = _load(service, "language")
         self.custom_formats: list[dict[str, Any]] = []
         self.library: list[dict[str, Any]] = []
+        #: fichiers d'épisodes (Sonarr) : [{id, seriesId, languages, …}]
+        self.episode_files: list[dict[str, Any]] = []
+        #: commandes reçues (POST /command) : recherches lancées
+        self.commands: list[dict[str, Any]] = []
+        #: option Radarr « Unmonitor Deleted Movies »
+        self.unmonitor_deleted = False
         #: (méthode, chemin) de chaque écriture reçue
         self.writes: list[tuple[str, str]] = []
         self._next_id = 100
@@ -145,6 +151,37 @@ class FakeServarr:
             by_id = {d["id"]: d for d in body}
             self.definitions = [by_id.get(d["id"], d) for d in self.definitions]
             return httpx.Response(202, json=body)
+
+        # Fiche d'un film / d'une série, fichiers, commandes (version par titre)
+        m = re.fullmatch(r"/(movie|series)/(\d+)", path)
+        if m and method in ("GET", "PUT"):
+            item = next((i for i in self.library if i["id"] == int(m.group(2))), None)
+            if item is None:
+                return httpx.Response(404, json={"message": "NotFound"})
+            if method == "PUT":
+                if not any(p["id"] == body.get("qualityProfileId") for p in self.profiles):
+                    return httpx.Response(400, json=[{"errorMessage": "Profile does not exist"}])
+                item.clear()
+                item.update(body)
+            return httpx.Response(200 if method == "GET" else 202, json=copy.deepcopy(item))
+        m = re.fullmatch(r"/moviefile/(\d+)", path)
+        if method == "DELETE" and m:
+            for item in self.library:
+                if (item.get("movieFile") or {}).get("id") == int(m.group(1)):
+                    item.pop("movieFile")
+                    item["hasFile"] = False
+                    if self.unmonitor_deleted:
+                        item["monitored"] = False
+                    return httpx.Response(200, json={})
+            return httpx.Response(404, json={"message": "NotFound"})
+        if method == "GET" and path == "/episodefile":
+            series_id = int(request.url.params.get("seriesId", 0))
+            return httpx.Response(
+                200, json=[f for f in self.episode_files if f.get("seriesId") == series_id]
+            )
+        if method == "POST" and path == "/command":
+            self.commands.append(body)
+            return httpx.Response(201, json={**body, "id": self._id(), "status": "queued"})
 
         if method == "PUT" and path in ("/movie/editor", "/series/editor"):
             ids = set(body.get("movieIds") or body.get("seriesIds") or [])

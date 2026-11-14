@@ -34,6 +34,7 @@ import {
     Check,
     CheckSquare,
     CloudDownload,
+    Languages,
     LayoutGrid,
     Library,
     List,
@@ -88,6 +89,7 @@ import { useParamState, usePageParam, writeParams } from "@/components/library/u
 import { SegmentedControl } from "@/components/library/segmented-control";
 import { SmartPagination } from "@/components/library/smart-pagination";
 import { FloatingBar, SelectionCount } from "@/components/library/floating-bar";
+import { BulkVersionDialog } from "@/components/library/bulk-version-dialog";
 import { FilterPresetsMenu, RemovableChip, SearchField, StickyToolbar } from "@/components/library/toolbar";
 import { FilterSelect } from "@/components/library/filter-select";
 import { useLibraryEnrichment } from "@/components/library/enrichment";
@@ -406,6 +408,8 @@ function MediaLibrary() {
         );
     };
 
+    // « Version » groupée : même version audio (VF, MULTi…) pour la sélection
+    const [versionOpen, setVersionOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [deleteFiles, setDeleteFiles] = useState(true);
     const [deleteDownloads, setDeleteDownloads] = useState(true);
@@ -848,6 +852,16 @@ function MediaLibrary() {
                     Scraper
                     {selectedMovies.length > 0 && <span className="tabular-nums text-muted-foreground">({selectedMovies.length})</span>}
                 </Button>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setVersionOpen(true)}
+                    disabled={selected.size === 0}
+                    title="Version audio voulue pour la sélection (VF, MULTi, VOSTFR, VO)"
+                >
+                    <Languages />
+                    Version
+                </Button>
                 <Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)} disabled={selected.size === 0}>
                     <Trash2 />
                     Supprimer
@@ -856,6 +870,8 @@ function MediaLibrary() {
                     <X />
                 </Button>
             </FloatingBar>
+
+            <BulkVersionDialog items={selectedItems} open={versionOpen} onOpenChange={setVersionOpen} onDone={exitSelection} />
 
             <ConfirmDialog
                 open={deleteOpen}

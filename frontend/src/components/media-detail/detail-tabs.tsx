@@ -55,11 +55,14 @@ export function DetailTabs({
     tab,
     onTabChange,
     onMove,
+    onVersion,
 }: {
     media: MediaDetail;
     tab: string;
     onTabChange: (t: DetailTab) => void;
     onMove: () => void;
+    /** Ouvre le réglage « Version audio & qualité ». */
+    onVersion: () => void;
 }) {
     const tabs = availableTabs(media);
     // Onglet inconnu dans l'URL (ex : ?tab=seasons sur un film) → onglet par défaut.
@@ -120,7 +123,7 @@ export function DetailTabs({
                 <InfoTab media={media} onMove={onMove} />
             </TabsContent>
             <TabsContent value="files">
-                <FilesQualityTab media={media} />
+                <FilesQualityTab media={media} onVersion={onVersion} />
             </TabsContent>
             <TabsContent value="subtitles">
                 <SubtitlesTab media={media} />

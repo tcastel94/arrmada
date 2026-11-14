@@ -9,6 +9,7 @@
  *   ActionBar      → Lire / Recherche auto / menu « ⋯ »
  *   PlaybackRemote → télécommande Kodi (+ ampli) si CE média est en lecture
  *   DetailTabs     → onglets synchronisés à l'URL (?tab=…)
+ *   VersionDialog  → version audio & qualité voulues pour CE titre
  *   Edit/Move/DeleteMediaDialog → boîtes de dialogue
  *
  * États gérés : chargement (squelette qui imite le hero), erreur (message
@@ -30,6 +31,7 @@ import { PlaybackRemote } from "@/components/media-detail/playback-remote";
 import { DetailTabs, defaultTab, type DetailTab } from "@/components/media-detail/detail-tabs";
 import { DetailSkeleton } from "@/components/media-detail/detail-skeleton";
 import { EditMediaDialog } from "@/components/media-detail/edit-dialog";
+import { VersionDialog } from "@/components/media-detail/version-dialog";
 import { MoveMediaDialog } from "@/components/media-detail/move-dialog";
 import { DeleteMediaDialog } from "@/components/media-detail/delete-dialog";
 
@@ -55,9 +57,9 @@ export default function MediaDetailPage() {
 
     // Boîtes de dialogue. La clé est incrémentée à chaque ouverture : le
     // formulaire est remonté et repart des valeurs actuelles du média.
-    const [dialog, setDialog] = useState<null | "edit" | "move" | "delete">(null);
+    const [dialog, setDialog] = useState<null | "edit" | "move" | "delete" | "version">(null);
     const [dialogKey, setDialogKey] = useState(0);
-    const open = (d: "edit" | "move" | "delete") => {
+    const open = (d: "edit" | "move" | "delete" | "version") => {
         setDialogKey((k) => k + 1);
         setDialog(d);
     };
@@ -105,13 +107,21 @@ export default function MediaDetailPage() {
                                     onEdit={() => open("edit")}
                                     onMove={() => open("move")}
                                     onDelete={() => open("delete")}
+                                    onVersion={() => open("version")}
                                     onManualSearch={goToReleases}
                                 />
                             }
                         />
                         <PlaybackRemote media={media} />
-                        <DetailTabs media={media} tab={tab} onTabChange={setTab} onMove={() => open("move")} />
+                        <DetailTabs media={media} tab={tab} onTabChange={setTab} onMove={() => open("move")} onVersion={() => open("version")} />
 
+                        <VersionDialog
+                            key={`version-${dialogKey}`}
+                            media={media}
+                            open={dialog === "version"}
+                            onOpenChange={close}
+                            onManualSearch={goToReleases}
+                        />
                         <EditMediaDialog key={`edit-${dialogKey}`} media={media} open={dialog === "edit"} onOpenChange={close} />
                         <MoveMediaDialog key={`move-${dialogKey}`} media={media} open={dialog === "move"} onOpenChange={close} />
                         <DeleteMediaDialog key={`delete-${dialogKey}`} media={media} open={dialog === "delete"} onOpenChange={close} />
