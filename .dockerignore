@@ -6,6 +6,12 @@
 .github
 docs
 *.md
+# … sauf la documentation lue par le copilote (COPY … ./knowledge dans le Dockerfile)
+!docs/adr
+!docs/installer.md
+!docs/deploy-unraid.md
+!CHANGELOG.md
+!README.md
 .env
 .env.*
 data

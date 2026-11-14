@@ -110,6 +110,21 @@ class Settings(BaseSettings):
     OLLAMA_URL: str = ""
     OLLAMA_MODEL: str = "qwen2.5:3b-instruct-q4_K_M"
 
+    # ── Copilote (assistant IA avec outils, ADR-017) ──────────
+    # Clé de l'API Anthropic (platform.claude.com). Vide = copilote désactivé.
+    # Le copilote lit l'état de la stack (profils, files, journaux…) et
+    # l'envoie au modèle, secrets masqués : voir services/copilot/redaction.py.
+    ANTHROPIC_API_KEY: str = ""
+    COPILOT_MODEL: str = "claude-sonnet-5-5"
+    # Profondeur de réflexion, donc coût et durée : low | medium | high | xhigh | max.
+    COPILOT_EFFORT: str = "medium"
+    # Recherche web limitée à la documentation de référence (TRaSH Guides, wiki
+    # Servarr…), exécutée par Anthropic et facturée à part. false = hors ligne.
+    COPILOT_WEB_SEARCH: bool = True
+    # Dossier des documents ArrMada (ADR, CHANGELOG). Vide = /app/knowledge
+    # dans l'image, sinon la racine du dépôt.
+    COPILOT_KNOWLEDGE_DIR: str = ""
+
     # ── Auto-import ───────────────────────────────────────────
     # Scheduled job that imports completed-but-orphaned downloads.
     # Set AUTO_IMPORT_ENABLED=false to stop it entirely.
