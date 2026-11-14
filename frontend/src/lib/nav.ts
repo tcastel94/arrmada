@@ -34,6 +34,7 @@ import {
     BookMarked,
     Bookmark,
     Bell,
+    Bot,
     CalendarDays,
     HardDrive,
     Radar,
@@ -166,6 +167,15 @@ export const NAV_GROUPS: NavGroup[] = [
                 description: "Sorties à venir",
                 shortcut: "c",
                 keywords: ["agenda", "sorties", "épisodes"],
+            },
+            {
+                href: "/assistant",
+                label: "Assistant",
+                icon: Bot,
+                tint: "bg-[#5E5CE6]",
+                description: "Demande en clair : ajouter, compléter, débloquer",
+                shortcut: "z",
+                keywords: ["ia", "ai", "assistant", "llm", "ollama", "demande", "ajouter", "action"],
             },
             {
                 href: "/search",

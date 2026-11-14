@@ -6,6 +6,7 @@ from fastapi import APIRouter
 
 from app.api.activity import router as activity_router
 from app.api.activity_timeline import router as activity_timeline_router
+from app.api.ai_actions import router as ai_actions_router
 from app.api.ai_search import router as ai_search_router
 from app.api.ambient import router as ambient_router
 from app.api.analytics import router as analytics_router
@@ -114,3 +115,4 @@ api_router.include_router(
     music_router
 )  # Musique : Lidarr (bibliothèque, demandes), Jellyfin (écoute)
 api_router.include_router(sagas_router)  # Sagas de films : collections Radarr (TMDB)
+api_router.include_router(ai_actions_router)  # Assistant IA qui agit (ADR-017)
