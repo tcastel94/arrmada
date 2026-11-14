@@ -142,6 +142,7 @@ RADARR_QUEUE = {
         {
             "id": 501,
             "movieId": 2,
+            "downloadId": "SABnzbd_nzo_opp",
             "title": "Oppenheimer.2023.1080p.WEB",
             "size": 10 * GB,
             "sizeleft": 4 * GB,

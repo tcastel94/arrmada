@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Agent IA : il diagnostique ET répare
+
+#### Changed
+- **Copilote et Assistant fusionnés en un seul Agent IA** ([ADR-019](docs/adr/019-agent-ia.md)), menu « Agent IA » (adresse `/copilot` inchangée, `/assistant` y renvoie). Il lit l'état réel de la stack comme avant, trouve la cause, puis **agit** et vérifie
+- Paramètres › **Agent IA** : confirmer chaque action (par défaut) ou laisser l'agent agir tout de suite
+
+#### Added
+- Outils qui agissent, chacun avec un aperçu calculé sur l'état réel :
+  - débloquer un téléchargement (même remède que le bouton de la TV : pack de saison, import en attente, release en échec) ;
+  - importer les fichiers d'un téléchargement terminé, fichier par fichier, y compris un fichier refusé si tu le valides (« remplace un fichier existant » est signalé) ;
+  - changer de version : release retirée de la file, mise en liste noire, nouvelle recherche ;
+  - commandes Radarr / Sonarr / Lidarr : relire la file, RSS, bilan de santé, chercher ce qui manque ou de meilleures versions ;
+  - SABnzbd : reprendre ou mettre en pause la file, forcer un élément, relancer un échec ;
+  - ajouter un film ou une série, suivre un artiste, compléter une saga, importer la musique en attente
+- Diagnostic d'un téléchargement : chaque fichier avec ce qu'il devient et les raisons de refus d'import
+- Dans la conversation, une **carte par action** : Valider / Annuler, puis son résultat (Fait, Échec, Annulé). L'agent attend ton clic (10 minutes au plus) et reçoit le vrai résultat
+- Chaque action exécutée est inscrite au journal d'activité (catégorie `ai`)
+- Jamais de suppression dans la médiathèque ni de changement de réglage
+
 ### Assistant IA : il agit au lieu de refuser
 
 #### Fixed

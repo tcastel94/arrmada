@@ -150,6 +150,42 @@ def diagnose_records(service_type: str, records: list[dict[str, Any]]) -> dict[s
     }
 
 
+def import_entry(
+    service_type: str, candidate: dict[str, Any], download_id: str
+) -> dict[str, Any] | None:
+    """Candidat de /manualimport → fichier de la commande ManualImport.
+
+    None : le *arr n'a reconnu ni le film ni les épisodes (rien à quoi le relier).
+    """
+    common = {
+        "path": candidate.get("path"),
+        "folderName": candidate.get("folderName", ""),
+        "quality": candidate.get("quality") or {},
+        "languages": candidate.get("languages") or [],
+        "releaseGroup": candidate.get("releaseGroup") or "",
+        "indexerFlags": candidate.get("indexerFlags") or 0,
+        "downloadId": download_id,
+    }
+    if service_type == "radarr":
+        movie_id = (candidate.get("movie") or {}).get("id")
+        return {**common, "movieId": movie_id} if movie_id else None
+    series_id = (candidate.get("series") or {}).get("id")
+    episode_ids = [e.get("id") for e in candidate.get("episodes") or [] if e.get("id")]
+    if not series_id or not episode_ids:
+        return None
+    return {
+        **common,
+        "seriesId": series_id,
+        "seasonNumber": candidate.get("seasonNumber"),
+        "episodeIds": episode_ids,
+    }
+
+
+def rejections(candidate: dict[str, Any]) -> list[str]:
+    """Raisons de refus du *arr pour un candidat (vide : importable tel quel)."""
+    return [str(r.get("reason") or "") for r in candidate.get("rejections") or [] if r]
+
+
 def plan_clean_import(
     service_type: str, candidates: list[dict[str, Any]], download_id: str
 ) -> dict[str, Any]:
@@ -164,40 +200,18 @@ def plan_clean_import(
     for c in candidates or []:
         if not isinstance(c, dict):
             continue
-        reasons = [str(r.get("reason") or "") for r in c.get("rejections") or []]
+        reasons = rejections(c)
         if reasons:
             if not any(blocked_imports.SAMPLE_REJECTION in r.casefold() for r in reasons):
                 refused.append(reasons[0])
             continue
-        common = {
-            "path": c.get("path"),
-            "folderName": c.get("folderName", ""),
-            "quality": c.get("quality") or {},
-            "languages": c.get("languages") or [],
-            "releaseGroup": c.get("releaseGroup") or "",
-            "indexerFlags": c.get("indexerFlags") or 0,
-            "downloadId": download_id,
-        }
-        if service_type == "radarr":
-            movie_id = (c.get("movie") or {}).get("id")
-            if not movie_id:
-                refused.append("film non reconnu")
-                continue
-            files.append({**common, "movieId": movie_id})
-        else:
-            series_id = (c.get("series") or {}).get("id")
-            episode_ids = [e.get("id") for e in c.get("episodes") or [] if e.get("id")]
-            if not series_id or not episode_ids:
-                refused.append("épisode non reconnu")
-                continue
-            files.append(
-                {
-                    **common,
-                    "seriesId": series_id,
-                    "seasonNumber": c.get("seasonNumber"),
-                    "episodeIds": episode_ids,
-                }
+        entry = import_entry(service_type, c, download_id)
+        if entry is None:
+            refused.append(
+                "film non reconnu" if service_type == "radarr" else "épisode non reconnu"
             )
+            continue
+        files.append(entry)
     if not files:
         reason = refused[0] if refused else "aucun fichier vidéo à importer"
         return {"ok": False, "files": [], "left": len(refused), "reason": reason}

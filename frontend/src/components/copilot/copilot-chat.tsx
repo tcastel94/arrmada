@@ -1,11 +1,13 @@
 "use client";
 
 /**
- * Copilote : la conversation.
+ * Agent IA : la conversation.
  * ----------------------------------------------------------------
- * - Écran vide : ce que sait faire le copilote + questions prêtes à envoyer.
+ * - Écran vide : ce que sait faire l'agent + demandes prêtes à envoyer.
  * - Réponse : texte rendu en Markdown, entrecoupé des outils consultés
  *   (« Profils qualité · radarr ✓ 210 ms ») pour voir sur quoi elle s'appuie.
+ * - Action : une carte « Débloquer « Dune » → Valider / Annuler » ; l'agent
+ *   attend ton clic, puis la carte affiche le résultat (ADR-019).
  * - Pendant la réflexion : son résumé défile sous la réponse.
  * - Sous la réponse : coût estimé du tour et nombre d'étapes.
  * - Zone de saisie collée en bas (au-dessus de la barre d'onglets sur mobile).
@@ -13,17 +15,35 @@
  * serveur, réponse interrompue, conversation perdue après un redémarrage.
  */
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
-import { AlertTriangle, ArrowUp, Check, Globe, KeyRound, Loader2, RotateCcw, ShieldCheck, Sparkles, Square, Wrench } from "lucide-react";
+import {
+    AlertTriangle,
+    ArrowUp,
+    Check,
+    CircleSlash,
+    Globe,
+    KeyRound,
+    Loader2,
+    RotateCcw,
+    ShieldCheck,
+    Sparkles,
+    Square,
+    Wrench,
+    X,
+    Zap,
+} from "lucide-react";
+import Link from "next/link";
 import { PageHeader } from "@/components/shared/page-header";
 import { ErrorState } from "@/components/shared/empty-state";
 import { Shimmer } from "@/components/shared/loading-skeleton";
 import { Button } from "@/components/ui/button";
 import {
+    answerCopilotAction,
     resetCopilot,
     sendCopilotMessage,
     stopCopilot,
     useCopilot,
     useCopilotStatus,
+    type CopilotAction,
     type CopilotMessage,
     type CopilotStatus,
     type CopilotTool,
@@ -33,14 +53,14 @@ import { formatNumber, plural } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Markdown } from "./markdown";
 
-/** Questions d'amorce : une par grand usage (audit, effet de bord, diagnostic, explication). */
+/** Demandes d'amorce : d'abord réparer, puis ajouter, puis auditer et anticiper. */
 const SUGGESTIONS = [
+    "Débloque tous mes téléchargements et imports bloqués.",
+    "Pourquoi mes imports Sonarr sont-ils bloqués ? Règle-les.",
+    "Ajoute le film Interstellar et complète la saga Harry Potter.",
     "Fais un audit de ma configuration Radarr par rapport aux TRaSH Guides.",
-    "Y a-t-il des téléchargements bloqués en ce moment, et pourquoi ?",
     "Si je passe mon profil films principal en Remux 2160p, qu'est-ce que ça déclenche ?",
-    "Mes indexeurs sont-ils fiables, et lesquels posent problème ?",
     "Mes hardlinks et mes chemins sont-ils bien configurés entre SABnzbd, Radarr et Sonarr ?",
-    "Qu'est-ce qui a changé récemment dans ArrMada côté lecture sur la TV ?",
 ] as const;
 
 export function CopilotChat() {
@@ -50,8 +70,8 @@ export function CopilotChat() {
     return (
         <>
             <PageHeader
-                title="Copilote"
-                description="Pose une question sur ta stack : l'IA lit l'état réel de tes services avant de répondre."
+                title="Agent IA"
+                description="Décris le problème : l'agent lit l'état réel de ta stack, trouve la cause et la règle avec ta validation."
                 actions={
                     messages.length > 0 ? (
                         <Button variant="ghost" size="sm" onClick={resetCopilot}>
@@ -68,7 +88,7 @@ export function CopilotChat() {
                     <Shimmer className="h-12 rounded-xl" />
                 </div>
             ) : status.isError ? (
-                <ErrorState error={status.error} onRetry={() => status.refetch()} title="Copilote injoignable" />
+                <ErrorState error={status.error} onRetry={() => status.refetch()} title="Agent injoignable" />
             ) : status.data && !status.data.configured ? (
                 <NotConfigured status={status.data} />
             ) : (
@@ -91,7 +111,7 @@ function NotConfigured({ status }: { status: CopilotStatus }) {
                 <div className="min-w-0">
                     <p className="text-[17px] font-semibold tracking-tight">Il manque une clé d&apos;API</p>
                     <p className="mt-0.5 text-[15px] leading-snug text-muted-foreground">
-                        Le copilote s&apos;appuie sur un modèle Claude ({status.model}), appelé par l&apos;API d&apos;Anthropic. La consommation est
+                        L&apos;agent s&apos;appuie sur un modèle Claude ({status.model}), appelé par l&apos;API d&apos;Anthropic. La consommation est
                         facturée à l&apos;usage sur ton compte Anthropic.
                     </p>
                 </div>
@@ -112,19 +132,25 @@ function NotConfigured({ status }: { status: CopilotStatus }) {
                     Relance le conteneur : <code className={code}>docker compose up -d</code>, puis reviens ici.
                 </li>
             </ol>
-            <PrivacyNote webSearch={status.web_search} />
+            <PrivacyNote webSearch={status.web_search} mode={status.action_mode} />
         </div>
     );
 }
 
-/** Ce qui sort du réseau local, dit une fois, sans détour. */
-function PrivacyNote({ webSearch }: { webSearch: boolean }) {
+/** Ce que l'agent a le droit de faire, et ce qui sort du réseau local, dit une fois, sans détour. */
+function PrivacyNote({ webSearch, mode }: { webSearch: boolean; mode?: "confirm" | "auto" }) {
     return (
         <p className="flex items-start gap-2 text-[13px] leading-snug text-muted-foreground">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-success" />
             <span>
-                Lecture seule : le copilote ne modifie aucun réglage. Ce qu&apos;il consulte pour te répondre (profils, files, journaux, titres) est
-                envoyé à Anthropic, clés d&apos;API et mots de passe masqués.
+                {mode === "auto"
+                    ? "Mode « agir tout de suite » : l'agent exécute ses actions sans attendre ton clic. "
+                    : "Chaque action (débloquer, importer, relancer, ajouter) attend ta validation. "}
+                Il ne supprime jamais rien de la médiathèque et ne change pas tes réglages (
+                <Link href="/settings" className="text-primary hover:underline">
+                    Paramètres › Agent IA
+                </Link>
+                ). Ce qu&apos;il consulte (profils, files, journaux, titres) est envoyé à Anthropic, clés d&apos;API et mots de passe masqués.
                 {webSearch && " La recherche web est limitée à la documentation de référence (TRaSH Guides, wiki Servarr…)."}
             </span>
         </p>
@@ -158,7 +184,7 @@ function Conversation({ messages, busy, status }: { messages: CopilotMessage[]; 
     return (
         <div className="flex flex-col gap-6">
             {messages.length === 0 ? (
-                <Intro onPick={send} webSearch={status?.web_search ?? false} />
+                <Intro onPick={send} webSearch={status?.web_search ?? false} mode={status?.action_mode} />
             ) : (
                 <ol className="flex flex-col gap-6" aria-live="polite">
                     {messages.map((message) => (
@@ -172,7 +198,7 @@ function Conversation({ messages, busy, status }: { messages: CopilotMessage[]; 
     );
 }
 
-function Intro({ onPick, webSearch }: { onPick: (text: string) => void; webSearch: boolean }) {
+function Intro({ onPick, webSearch, mode }: { onPick: (text: string) => void; webSearch: boolean; mode?: "confirm" | "auto" }) {
     return (
         <div className="space-y-5">
             <div className="surface space-y-3 rounded-xl p-5">
@@ -181,13 +207,14 @@ function Intro({ onPick, webSearch }: { onPick: (text: string) => void; webSearc
                         <Sparkles className="h-5 w-5" />
                     </span>
                     <p className="text-[15px] leading-relaxed text-muted-foreground">
-                        Le copilote connaît la suite *arr, les TRaSH Guides et la documentation d&apos;ArrMada, et il{" "}
-                        <span className="text-foreground">va lire ton installation</span> avant de répondre : profils, formats, files, indexeurs,
-                        journaux, historique d&apos;un titre. Demande-lui un audit, la cause d&apos;un blocage, ou{" "}
-                        <span className="text-foreground">ce que déclencherait un changement</span> avant de le faire.
+                        L&apos;agent connaît la suite *arr, les TRaSH Guides et la documentation d&apos;ArrMada. Il{" "}
+                        <span className="text-foreground">lit ton installation</span> (files, journaux, indexeurs, historique d&apos;un titre),
+                        trouve la cause et <span className="text-foreground">la règle</span> : débloquer un téléchargement, importer des fichiers
+                        refusés, changer une release morte, relancer SABnzbd, ajouter un film ou une saga. Il sait aussi auditer ta configuration et
+                        dire ce que déclencherait un changement.
                     </p>
                 </div>
-                <PrivacyNote webSearch={webSearch} />
+                <PrivacyNote webSearch={webSearch} mode={mode} />
             </div>
 
             <div>
@@ -233,7 +260,13 @@ function Answer({ message }: { message: CopilotMessage }) {
             ))}
 
             {message.parts.map((part, index) =>
-                part.kind === "text" ? <Markdown key={index}>{part.text}</Markdown> : <ToolGroup key={index} tools={part.tools} />,
+                part.kind === "text" ? (
+                    <Markdown key={index}>{part.text}</Markdown>
+                ) : part.kind === "action" ? (
+                    <ActionCard key={part.action.id} action={part.action} />
+                ) : (
+                    <ToolGroup key={index} tools={part.tools} />
+                ),
             )}
 
             {streaming && <Thinking text={message.thinking} waiting={empty} />}
@@ -245,9 +278,90 @@ function Answer({ message }: { message: CopilotMessage }) {
                 </p>
             )}
             {message.state === "stopped" && (
-                <p className="text-[13px] text-muted-foreground">Réponse interrompue. Le copilote ne garde pas ce tour en mémoire.</p>
+                <p className="text-[13px] text-muted-foreground">Réponse interrompue. L&apos;agent ne garde pas ce tour en mémoire.</p>
             )}
             {message.usage && !streaming && <UsageLine usage={message.usage} />}
+        </div>
+    );
+}
+
+/* ── Action à valider ───────────────────────────────────────── */
+
+const ACTION_STATE: Record<CopilotAction["state"], { text: string; className: string }> = {
+    pending: { text: "En attente de ta validation", className: "text-primary" },
+    sending: { text: "Envoi de ta réponse…", className: "text-muted-foreground" },
+    running: { text: "En cours…", className: "text-muted-foreground" },
+    done: { text: "Fait", className: "text-success" },
+    failed: { text: "Échec", className: "text-destructive" },
+    refused: { text: "Annulé", className: "text-muted-foreground" },
+    expired: { text: "Non faite (sans réponse)", className: "text-muted-foreground" },
+};
+
+/** Ce que l'agent veut faire : aperçu, détail, avertissement, puis Valider / Annuler. */
+function ActionCard({ action }: { action: CopilotAction }) {
+    const state = ACTION_STATE[action.state];
+    const waiting = action.state === "pending" || action.state === "sending";
+    return (
+        <div
+            className={cn(
+                "space-y-2.5 rounded-xl p-3.5 ring-1",
+                waiting ? "bg-primary/[0.08] ring-primary/40" : "bg-white/[0.04] ring-white/[0.06]",
+            )}
+            aria-label={`Action : ${action.summary}`}
+        >
+            <div className="flex items-start gap-2.5">
+                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                    <Zap className="h-4 w-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                    <p className="text-[12px] font-medium uppercase tracking-wide text-muted-foreground">{action.label}</p>
+                    <p className="text-[15px] font-semibold leading-snug [overflow-wrap:anywhere]">{action.summary}</p>
+                </div>
+            </div>
+            {action.details.length > 0 && (
+                <ul className="space-y-0.5 pl-9 text-[13px] leading-snug text-muted-foreground">
+                    {action.details.map((line, index) => (
+                        <li key={index} className="[overflow-wrap:anywhere]">
+                            {line}
+                        </li>
+                    ))}
+                </ul>
+            )}
+            {action.warning && (
+                <p className="ml-9 flex items-start gap-1.5 text-[13px] leading-snug text-warning">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    {action.warning}
+                </p>
+            )}
+            {waiting ? (
+                <div className="flex flex-wrap gap-2 pl-9">
+                    <Button size="sm" onClick={() => void answerCopilotAction(action.id, true)} disabled={action.state === "sending"}>
+                        {action.state === "sending" ? <Loader2 className="animate-spin" /> : <Check />}
+                        Valider
+                    </Button>
+                    <Button size="sm" variant="secondary" onClick={() => void answerCopilotAction(action.id, false)} disabled={action.state === "sending"}>
+                        <X />
+                        Annuler
+                    </Button>
+                </div>
+            ) : (
+                <p className={cn("flex items-start gap-1.5 pl-9 text-[13px] font-medium leading-snug", state.className)} role="status">
+                    {action.state === "running" ? (
+                        <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin" />
+                    ) : action.state === "done" ? (
+                        <Check className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    ) : action.state === "failed" ? (
+                        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    ) : (
+                        <CircleSlash className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    )}
+                    <span className="[overflow-wrap:anywhere]">
+                        {state.text}
+                        {action.auto && action.state !== "failed" ? " (sans attendre, mode « agir tout de suite »)" : ""}
+                        {action.result ? ` : ${action.result}` : ""}
+                    </span>
+                </p>
+            )}
         </div>
     );
 }
@@ -289,7 +403,7 @@ function Thinking({ text, waiting }: { text: string; waiting: boolean }) {
     return (
         <p className="flex items-center gap-2 text-[13px] text-muted-foreground" role="status">
             <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
-            <span className="min-w-0 truncate italic">{last || (waiting ? "Le copilote regarde ta question…" : "Réflexion…")}</span>
+            <span className="min-w-0 truncate italic">{last || (waiting ? "L'agent regarde ta demande…" : "Réflexion…")}</span>
         </p>
     );
 }
@@ -359,8 +473,8 @@ function Composer({ busy, onSend }: { busy: boolean; onSend: (text: string) => v
                     onKeyDown={onKeyDown}
                     rows={1}
                     maxLength={8000}
-                    placeholder="Pose ta question…"
-                    aria-label="Ta question pour le copilote"
+                    placeholder="Décris le problème ou ce qu'il faut faire…"
+                    aria-label="Ta demande pour l'agent"
                     className="min-h-10 flex-1 resize-none bg-transparent py-2 text-base leading-snug placeholder:text-muted-foreground/80 focus:outline-none md:text-[15px]"
                 />
                 {busy ? (
