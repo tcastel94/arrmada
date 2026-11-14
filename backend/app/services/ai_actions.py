@@ -104,32 +104,182 @@ CATALOG: dict[str, str] = {
 
 SYSTEM_PROMPT = (
     "Tu es l'assistant d'ArrMada, un serveur multimédia familial (films, séries, musique).\n"
-    "L'utilisateur te demande en français de faire des choses. Tu réponds UNIQUEMENT par un "
-    "objet JSON, sans texte autour :\n"
+    "Ton rôle est d'AGIR : l'utilisateur te demande en français d'ajouter, de chercher ou de "
+    "réparer quelque chose, et tu traduis sa demande en actions. ArrMada vérifie chaque "
+    "action et l'utilisateur la valide ensuite : tu n'as donc pas à hésiter ni à refuser une "
+    "action du catalogue.\n"
+    "Tu réponds UNIQUEMENT par un objet JSON, sans texte autour :\n"
     '{"reply": "phrase courte en français pour l\'utilisateur", "actions": [ ... ]}\n\n'
-    "Actions permises (et SEULEMENT celles-ci, au plus 5) :\n"
+    'Actions du catalogue (au plus 5 par demande), chaque action a une clé "type" :\n'
     + "\n".join(f"- {line}" for line in CATALOG.values())
-    + "\n\nRègles :\n"
+    + "\n\nExemples :\n"
+    "Demande : ajoute Interstellar et la série Severance\n"
+    '{"reply": "J\'ajoute le film et la série.", "actions": ['
+    '{"type":"request_movie","title":"Interstellar"},'
+    '{"type":"request_series","title":"Severance"}]}\n'
+    "Demande : complète la saga Harry Potter puis débloque les téléchargements\n"
+    '{"reply": "Je complète la saga et je débloque la file.", "actions": ['
+    '{"type":"complete_saga","title":"Harry Potter"},{"type":"unblock_downloads"}]}\n'
+    "Demande : supprime Dune\n"
+    '{"reply": "Je ne supprime rien : je sais ajouter, chercher ce qui manque et '
+    'débloquer les téléchargements.", "actions": []}\n\n'
+    "Règles :\n"
     "- Recopie les titres tels que l'utilisateur les donne (titre original ou français) ; "
     "n'invente pas d'année si elle n'est pas dite ou évidente.\n"
-    "- Tu ne peux RIEN supprimer ni modifier d'autre : si on te le demande, actions = [] et "
-    "explique-le dans reply.\n"
-    "- Demande hors catalogue ou pas claire : actions = [] et reply qui dit ce que tu sais faire.\n"
     "- « le dernier X » : le titre seul, sans année.\n"
+    "- Seules les suppressions et les changements de réglages sont interdits : actions = [] "
+    "et explique-le dans reply.\n"
+    "- Demande sans rapport avec le catalogue : actions = [] et reply qui dit ce que tu sais "
+    "faire.\n"
 )
+
+# Noms que les petits modèles inventent à la place des types du catalogue
+ALIASES: dict[str, str] = {
+    "add_movie": "request_movie",
+    "movie": "request_movie",
+    "download_movie": "request_movie",
+    "add_series": "request_series",
+    "add_show": "request_series",
+    "add_tv": "request_series",
+    "request_tv": "request_series",
+    "request_show": "request_series",
+    "series": "request_series",
+    "add_artist": "follow_artist",
+    "request_artist": "follow_artist",
+    "follow": "follow_artist",
+    "complete_collection": "complete_saga",
+    "saga": "complete_saga",
+    "unblock": "unblock_downloads",
+    "unstick": "unblock_downloads",
+    "unstick_downloads": "unblock_downloads",
+    "import_music": "import_music_downloads",
+    "search_missing": "search_all_missing",
+}
+
+
+def _type_of(raw: dict[str, Any]) -> str | None:
+    """Type d'une action, même mal nommé (« action », « add_movie »…)."""
+    for key in ("type", "action", "tool", "intent"):
+        value = raw.get(key)
+        if isinstance(value, str):
+            value = value.strip().lower().replace("-", "_").replace(" ", "_")
+            value = ALIASES.get(value, value)
+            if value in CATALOG:
+                return value
+    return None
+
+
+def _normalize(raw: Any) -> dict[str, Any] | None:
+    """Une action brute de l'IA → {"type": …, …} du catalogue, ou None.
+
+    Formes tolérées (vues avec les petits modèles d'Ollama) :
+    {"type": "request_movie", "title": …}, {"action": "add_movie", "title": …},
+    {"request_movie": {"title": …}}, {"type": …, "params": {"title": …}}.
+    """
+    if not isinstance(raw, dict):
+        return None
+    kind = _type_of(raw)
+    if kind is None and len(raw) == 1:  # {"request_movie": {"title": "Dune"}}
+        ((key, value),) = raw.items()
+        key = ALIASES.get(str(key).lower(), str(key).lower())
+        if key in CATALOG:
+            return {"type": key, **(value if isinstance(value, dict) else {})}
+    if kind is None:
+        return None
+    action = {k: v for k, v in raw.items() if k not in ("action", "tool", "intent")}
+    for nested in ("params", "parameters", "args", "arguments"):
+        if isinstance(action.get(nested), dict):
+            action = {**action.pop(nested), **action}
+    action["type"] = kind
+    if not action.get("title") and isinstance(action.get("movie"), str):
+        action["title"] = action["movie"]
+    if not action.get("title") and isinstance(action.get("series"), str):
+        action["title"] = action["series"]
+    if kind in ("follow_artist", "search_missing_albums") and not action.get("name"):
+        action["name"] = action.get("artist") or action.get("title")
+    return action
 
 
 def plan_from_llm(content: str) -> tuple[str, list[dict[str, Any]]]:
     """Réponse de l'IA → (phrase, actions du catalogue). Le reste est ignoré."""
-    data = parse_json_object(content)
-    reply = str(data.get("reply") or "").strip()[:500]
+    try:
+        data = parse_json_object(content)
+    except ValueError:
+        return "", []
+    if not isinstance(data, dict):
+        return "", []
+    reply = str(data.get("reply") or data.get("message") or "").strip()[:500]
+    raw = data.get("actions")
+    if raw is None and _normalize(data):  # l'IA a renvoyé une action seule
+        raw = [data]
+    if isinstance(raw, dict):
+        raw = [raw]
     actions = []
-    for raw in data.get("actions") or []:
-        if isinstance(raw, dict) and raw.get("type") in CATALOG:
-            actions.append(raw)
+    for item in raw or []:
+        action = _normalize(item)
+        if action:
+            actions.append(action)
         if len(actions) >= MAX_ACTIONS:
             break
     return reply, actions
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Filet de sécurité : demandes évidentes comprises sans l'IA
+# ─────────────────────────────────────────────────────────────────────────────
+
+_VERB = r"(?:ajoute|ajouter|télécharge|telecharge|télécharger|telecharger|récupère|recupere|demande|mets|prends)"
+_RULES: list[tuple[re.Pattern[str], str]] = [
+    (
+        re.compile(rf"\b{_VERB}\s+(?:moi\s+)?(?:la|une)\s+s[ée]rie\s+(?P<t>.+)", re.I),
+        "request_series",
+    ),
+    (re.compile(rf"\b{_VERB}\s+(?:moi\s+)?(?:le|un)\s+film\s+(?P<t>.+)", re.I), "request_movie"),
+    (
+        re.compile(r"\bcompl[eè]te(?:r)?\s+(?:la\s+)?(?:saga|collection)\s+(?P<t>.+)", re.I),
+        "complete_saga",
+    ),
+    (
+        re.compile(rf"\b(?:sui(?:s|vre)|{_VERB})\s+(?:l'|l’|l\s)?artiste\s+(?P<t>.+)", re.I),
+        "follow_artist",
+    ),
+    # « ajoute Interstellar » sans préciser : un film (la cible est vérifiée dans Radarr)
+    (
+        re.compile(rf"\b{_VERB}\s+(?:moi\s+)?(?P<t>(?!tout\b|les\b|la\s+musique\b).+)", re.I),
+        "request_movie",
+    ),
+    (re.compile(r"\bd[ée]bloqu", re.I), "unblock_downloads"),
+    (re.compile(r"\bimport\w*\s+(?:la\s+)?musique", re.I), "import_music_downloads"),
+    (re.compile(r"\btout\s+ce\s+qui\s+manque", re.I), "search_all_missing"),
+]
+
+
+def fallback_actions(message: str) -> list[dict[str, Any]]:
+    """Demandes au format évident (« ajoute le film Dune », « débloque les
+    téléchargements ») : comprises sans l'IA quand elle n'a rien proposé.
+
+    Le découpage se fait sur « et » / « puis » / virgule ; chaque morceau
+    donne au plus une action.
+    """
+    actions: list[dict[str, Any]] = []
+    for part in re.split(r"\s*(?:,|;|\bet\b|\bpuis\b)\s*", message):
+        for pattern, kind in _RULES:
+            m = pattern.search(part)
+            if not m:
+                continue
+            action: dict[str, Any] = {"type": kind}
+            title = (m.groupdict().get("t") or "").strip(" .!?«»\"'")
+            if "t" in pattern.groupindex:
+                if not title:
+                    break
+                action["name" if kind == "follow_artist" else "title"] = title
+            if kind == "search_all_missing":
+                action["kind"] = "all"
+            actions.append(action)
+            break
+        if len(actions) >= MAX_ACTIONS:
+            break
+    return actions
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -655,6 +805,13 @@ async def ask(db: AsyncSession, message: str, source: str = "web") -> dict[str, 
         purpose="Assistant IA",
     )
     reply, actions = plan_from_llm(content)
+    if not actions:
+        # Petit modèle trop prudent ou JSON mal formé : on le trace (docker logs)
+        # et on tente les demandes au format évident sans l'IA.
+        logger.info("Assistant IA : aucune action comprise, réponse brute : %.300s", content)
+        actions = fallback_actions(message)
+        if actions:
+            reply = "Voici ce que j'ai compris."
     proposals = [_keep(await resolve(db, a)) for a in actions]
     mode = get_mode()
     if mode == "auto":
