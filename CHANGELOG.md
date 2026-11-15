@@ -20,6 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Changed
 - L'agent pouvait baisser un profil mais pas remplacer les remux déjà présents : c'est désormais sa seule suppression de fichier, limitée à ce cas. Il ne supprime toujours aucun titre
 
+### Musique : « Télécharger » marche aussi pour les torrents
+
+#### Fixed
+- Recherche manuelle d'un album, bouton **Télécharger** : « Envoi impossible : String should have at most 2000 characters » sur les releases torrent (kickasstorrents…). Leur identifiant est le lien magnet complet, avec tous ses trackers, et il dépasse 2 000 caractères. La limite passe à 32 000
+
 ### Agent IA : il modifie les profils qualité
 
 #### Added
