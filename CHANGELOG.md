@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Remux à alléger
+
+#### Added
+- **Santé médiathèque › Remux** ([ADR-021](docs/adr/021-remux-a-alleger.md)) : la liste complète des films dont le fichier est un remux que leur profil qualité n'autorise plus, du plus lourd au plus léger, avec la taille, le profil, le gain estimé et le total récupérable. Option pour compter aussi les Remux-1080p
+- **Remplacer un remux** (une ligne, ou un lot de 10 films au plus) : ArrMada cherche chez les indexeurs une version plus légère acceptée par le profil, la met en téléchargement, puis seulement supprime le fichier du remux. Le film reste dans Radarr, surveillé. Un film sans remplaçant plus léger garde son remux
+- Confirmation avant chaque lot : nombre de films, place occupée, gain estimé, et ce que devient le fichier (corbeille de Radarr et délai avant vidage, ou suppression définitive si aucune corbeille n'est réglée)
+- **Garder le remux** d'un film : un clic le passe dans un profil qui l'autorise (« films d'exception »), il sort de la liste
+- Les films non surveillés, ou trop petits pour être de vrais remux (qualité mal détectée), sont affichés avec la raison et ne sont pas remplaçables
+- **Agent IA** : `list_heavy_remux` (inventaire complet côté serveur, sans la limite de 100 résultats de la recherche) et `replace_remux` (même remplacement, avec la carte de validation). Chaque remplacement est inscrit au journal d'activité
+
+#### Changed
+- L'agent pouvait baisser un profil mais pas remplacer les remux déjà présents : c'est désormais sa seule suppression de fichier, limitée à ce cas. Il ne supprime toujours aucun titre
+
 ### Musique : « Télécharger » marche aussi pour les torrents
 
 #### Fixed

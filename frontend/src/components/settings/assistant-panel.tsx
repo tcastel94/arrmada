@@ -40,7 +40,8 @@ export function AssistantPanel() {
         <Panel title="Agent IA" icon={Bot} iconClassName="text-primary" className="h-full" bodyClassName="space-y-2 py-3">
             <p className="text-[13px] text-muted-foreground">
                 Avant chaque action de l&apos;agent (débloquer, importer, changer de version, relancer SABnzbd, ajouter un film, modifier un
-                profil qualité…). Il ne supprime jamais rien de la médiathèque ; côté réglages, il ne touche qu&apos;aux profils qualité.
+                profil qualité, remplacer un remux…). Il ne supprime aucun titre ; le seul fichier qu&apos;il retire est un remux qu&apos;il fait
+                remplacer par une version plus légère. Côté réglages, il ne touche qu&apos;aux profils qualité.
             </p>
             <div className="grid gap-2" role="radiogroup" aria-label="Validation des actions de l'agent">
                 {CHOICES.map((c) => {

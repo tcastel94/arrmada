@@ -7,9 +7,11 @@
  * redirigent ici : /quality → ?tab=quality, etc.). Le héros agrège les
  * trois analyses : score de santé global, espace récupérable, nombre de
  * doublons et d'upgrades possibles. L'onglet actif est dans l'URL
- * (?tab=quality|duplicates|cleanup) pour être partageable.
+ * (?tab=quality|duplicates|cleanup|remux) pour être partageable.
+ * Quatrième onglet, « Remux » (ADR-021) : les remux que leur profil
+ * n'autorise plus, à remplacer par une version plus légère.
  */
-import { HeartPulse, Copy, Gauge, Recycle, RefreshCw } from "lucide-react";
+import { HeartPulse, Copy, Feather, Gauge, Recycle, RefreshCw } from "lucide-react";
 import { Header } from "@/components/layout/header";
 import { PageContainer } from "@/components/shared/page-container";
 import { PageHeader } from "@/components/shared/page-header";
@@ -18,6 +20,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useQualityOverview } from "@/hooks/use-quality";
 import { useDuplicates } from "@/hooks/use-duplicates";
 import { reclaimableBytes, useCleanupScan } from "@/hooks/use-cleanup";
+import { useRemux } from "@/hooks/use-remux";
 import { useUrlState } from "@/hooks/use-url-state";
 import { cn } from "@/lib/utils";
 import { HealthHero, type HealthTab } from "@/components/health/health-hero";
@@ -25,11 +28,13 @@ import { computeHealth } from "@/components/health/health-score";
 import { QualityTab } from "@/components/health/quality-tab";
 import { DuplicatesTab } from "@/components/health/duplicates-tab";
 import { CleanupTab } from "@/components/health/cleanup-tab";
+import { RemuxTab } from "@/components/health/remux-tab";
 
 const TABS: { value: HealthTab; label: string; icon: typeof Gauge }[] = [
     { value: "quality", label: "Qualité", icon: Gauge },
     { value: "duplicates", label: "Doublons", icon: Copy },
     { value: "cleanup", label: "Nettoyage", icon: Recycle },
+    { value: "remux", label: "Remux", icon: Feather },
 ];
 
 export default function HealthPage() {
@@ -40,6 +45,8 @@ export default function HealthPage() {
     const quality = useQualityOverview();
     const duplicates = useDuplicates();
     const cleanup = useCleanupScan();
+    // Seulement pour le compteur de l'onglet (même requête que l'onglet lui-même).
+    const remux = useRemux();
 
     const health = computeHealth(quality.data, duplicates.data, cleanup.data);
     const anyFetching = quality.isFetching || duplicates.isFetching || cleanup.isFetching;
@@ -54,12 +61,14 @@ export default function HealthPage() {
               cleanup.data.oversized.total +
               cleanup.data.incomplete_ended.total
             : undefined,
+        remux: remux.data?.ready,
     };
 
     const rescanAll = () => {
         quality.refetch();
         duplicates.refetch();
         cleanup.refetch();
+        remux.refetch();
     };
 
     return (
@@ -70,7 +79,7 @@ export default function HealthPage() {
                     icon={HeartPulse}
                     accent="fuchsia"
                     title="Santé médiathèque"
-                    description="Qualité des fichiers, doublons et place perdue : tout ce qui mérite un coup de propre dans ta collection."
+                    description="Qualité des fichiers, doublons, place perdue et remux trop lourds : tout ce qui mérite un coup de propre dans ta collection."
                     actions={
                         <Button variant="outline" onClick={rescanAll} disabled={anyFetching}>
                             <RefreshCw className={cn(anyFetching && "animate-spin")} />
@@ -113,6 +122,9 @@ export default function HealthPage() {
                     </TabsContent>
                     <TabsContent value="cleanup" className="mt-5">
                         <CleanupTab />
+                    </TabsContent>
+                    <TabsContent value="remux" className="mt-5">
+                        <RemuxTab />
                     </TabsContent>
                 </Tabs>
             </PageContainer>

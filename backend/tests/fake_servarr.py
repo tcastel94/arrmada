@@ -50,6 +50,19 @@ class FakeServarr:
         self.languages = _load(service, "language")
         self.custom_formats: list[dict[str, Any]] = []
         self.library: list[dict[str, Any]] = []
+        #: releases rendues par la recherche interactive, par identifiant de film
+        #: (un entier à la place de la liste : la recherche répond ce code d'erreur)
+        self.releases: dict[int, list[dict[str, Any]] | int] = {}
+        self.media_management: dict[str, Any] = {
+            "recycleBin": "/media/.recycle_bin",
+            "recycleBinCleanupDays": 30,
+        }
+        #: commandes reçues (POST /command), releases envoyées au client de
+        #: téléchargement (POST /release) et fichiers supprimés
+        self.commands: list[dict[str, Any]] = []
+        self.grabs: list[dict[str, Any]] = []
+        self.grab_status = 200
+        self.deleted_files: list[int] = []
         #: (méthode, chemin) de chaque écriture reçue
         self.writes: list[tuple[str, str]] = []
         self._next_id = 100
@@ -114,6 +127,38 @@ class FakeServarr:
             return httpx.Response(200, json=copy.deepcopy(self.custom_formats))
         if method == "GET" and path in ("/movie", "/series"):
             return httpx.Response(200, json=copy.deepcopy(self.library))
+
+        m = re.fullmatch(r"/movie/(\d+)", path)
+        if method == "GET" and m:
+            found = [i for i in self.library if i["id"] == int(m.group(1))]
+            if not found:
+                return httpx.Response(404, json={"message": "NotFound"})
+            return httpx.Response(200, json=copy.deepcopy(found[0]))
+        if method == "GET" and path == "/config/mediamanagement":
+            return httpx.Response(200, json=self.media_management)
+        if method == "GET" and path == "/release":
+            movie_id = int(request.url.params.get("movieId") or 0)
+            if isinstance(self.releases.get(movie_id), int):  # indexeurs en panne
+                return httpx.Response(self.releases[movie_id], json={"message": "erreur"})
+            return httpx.Response(200, json=copy.deepcopy(self.releases.get(movie_id, [])))
+        m = re.fullmatch(r"/moviefile/(\d+)", path)
+        if method == "DELETE" and m:
+            file_id = int(m.group(1))
+            for item in self.library:
+                if (item.get("movieFile") or {}).get("id") == file_id:
+                    item["hasFile"] = False
+                    item.pop("movieFile", None)
+                    self.deleted_files.append(file_id)
+                    return httpx.Response(200, json={})
+            return httpx.Response(404, json={"message": "NotFound"})
+        if method == "POST" and path == "/release":
+            if self.grab_status != 200:
+                return httpx.Response(self.grab_status, json={"message": "envoi refusé"})
+            self.grabs.append(body)
+            return httpx.Response(200, json=body)
+        if method == "POST" and path == "/command":
+            self.commands.append(body)
+            return httpx.Response(201, json={**body, "id": self._id()})
 
         if method == "POST" and path == "/customformat":
             if any(cf["name"].lower() == body["name"].lower() for cf in self.custom_formats):

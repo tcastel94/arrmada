@@ -378,13 +378,14 @@ TOOLS: tuple[Tool, ...] = (
 
 
 def all_tools() -> tuple[Tool, ...]:
-    """Outils de lecture (ce dossier) puis outils d'action (actions.py, profile_actions.py).
+    """Outils de lecture (ce dossier) puis outils d'action (actions.py, profile_actions.py,
+    remux_actions.py).
 
     Import tardif : ces modules s'appuient sur ce dossier (accès aux services).
     """
-    from app.services.copilot import actions, profile_actions
+    from app.services.copilot import actions, profile_actions, remux_actions
 
-    return TOOLS + actions.TOOLS + profile_actions.TOOLS
+    return TOOLS + actions.TOOLS + profile_actions.TOOLS + remux_actions.TOOLS
 
 
 # Sites consultables par la recherche web : la documentation de référence de
