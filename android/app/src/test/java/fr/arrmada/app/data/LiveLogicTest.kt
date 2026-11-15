@@ -90,7 +90,7 @@ class LiveLogicTest {
     }
 
     @Test
-    fun `album Lidarr : pas de fiche, Débloquer si l'import attend avec une raison, compté dans la file`() {
+    fun `album Lidarr sans fiche, Débloquer si l'import attend avec une raison, compté dans la file`() {
         val album = QueueItem(
             id = 7, title = "Radiohead – OK Computer", serviceType = "lidarr", status = "completed",
             trackedState = "importPending", detail = "Album match is not close enough: 74%",
