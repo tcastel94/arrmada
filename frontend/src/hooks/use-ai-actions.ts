@@ -33,10 +33,17 @@ export interface AiAnswer {
     proposals: AiProposal[];
 }
 
+/** Réglages de l'agent : validation des actions, alertes Telegram des blocages. */
+export interface AiSettings {
+    mode: AiMode;
+    configured: boolean;
+    telegram?: { configured: boolean; alerts: boolean };
+}
+
 export function useAiSettings() {
     return useQuery({
         queryKey: ["ai", "settings"],
-        queryFn: () => apiFetch<{ mode: AiMode; configured: boolean }>("/api/ai/settings"),
+        queryFn: () => apiFetch<AiSettings>("/api/ai/settings"),
         staleTime: 60_000,
     });
 }
@@ -44,8 +51,17 @@ export function useAiSettings() {
 export function useSetAiMode() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: (mode: AiMode) =>
-            apiFetch<{ mode: AiMode; configured: boolean }>("/api/ai/settings", { method: "PUT", body: JSON.stringify({ mode }) }),
+        mutationFn: (mode: AiMode) => apiFetch<AiSettings>("/api/ai/settings", { method: "PUT", body: JSON.stringify({ mode }) }),
+        onSuccess: (data) => qc.setQueryData(["ai", "settings"], data),
+    });
+}
+
+/** Active ou coupe les alertes Telegram des téléchargements bloqués. */
+export function useSetTelegramAlerts() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (alerts: boolean) =>
+            apiFetch<AiSettings>("/api/ai/settings", { method: "PUT", body: JSON.stringify({ telegram_alerts: alerts }) }),
         onSuccess: (data) => qc.setQueryData(["ai", "settings"], data),
     });
 }

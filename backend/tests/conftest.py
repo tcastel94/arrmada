@@ -27,6 +27,7 @@ from app.services import (
     media_aggregator,
     subtitle_guardian,
     subtitle_jobs,
+    telegram_alerts,
     translations,
     tv_priority,
 )
@@ -136,6 +137,8 @@ subtitle_jobs.session_factory = TestSessionFactory
 subtitle_guardian.session_factory = TestSessionFactory
 # Outils du copilote (services/copilot/tools.py) : idem
 copilot_tools.session_factory = TestSessionFactory
+# Alertes Telegram des téléchargements bloqués (services/telegram_alerts.py) : idem
+telegram_alerts.session_factory = TestSessionFactory
 
 # Le login est limité à 5 essais/minute (anti brute-force). Chaque test qui
 # utilise `auth_headers` se reconnecte : sans ça, le 6e test prend un 429
