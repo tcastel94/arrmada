@@ -1,6 +1,7 @@
 # ADR-020 : l'Agent IA modifie lui-même les profils qualité
 
-- **Statut** : accepté
+- **Statut** : accepté ; « supprimer un fichier » est assoupli par
+  l'[ADR-021](021-remux-a-alleger.md) pour le remplacement des remux
 - **Date** : 2026-11-15
 - **Assouplit** : le point 4 de l'[ADR-019](019-agent-ia.md) (« l'agent ne change
   aucun réglage »), pour les profils qualité seulement

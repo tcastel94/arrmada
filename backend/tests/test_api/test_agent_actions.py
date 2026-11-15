@@ -160,6 +160,8 @@ def test_action_tools_are_declared_with_a_preview() -> None:
         "clone_quality_profile",
         "assign_quality_profile",
         "apply_trash_profile",
+        # Remux à alléger (ADR-021)
+        "replace_remux",
     }
     for tool in tools.all_tools():
         if tool.preview is not None:

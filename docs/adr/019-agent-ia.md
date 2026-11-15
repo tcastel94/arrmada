@@ -1,7 +1,9 @@
 # ADR-019 : Agent IA, un seul assistant qui diagnostique ET répare
 
 - **Statut** : accepté ; le point 4 (« ne change aucun réglage ») est assoupli par
-  l'[ADR-020](020-agent-ia-profils-qualite.md) pour les profils qualité
+  l'[ADR-020](020-agent-ia-profils-qualite.md) pour les profils qualité, et
+  « ne supprime aucun fichier » par l'[ADR-021](021-remux-a-alleger.md) pour le
+  remplacement des remux
 - **Date** : 2026-11-14
 - **Remplace en partie** : ADR-017 (Copilote en lecture seule) et la page
   Assistant de l'ADR-018. Le moteur d'actions de l'ADR-018 est conservé et

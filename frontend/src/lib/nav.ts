@@ -233,9 +233,9 @@ export const NAV_GROUPS: NavGroup[] = [
                 label: "Santé médiathèque",
                 icon: HeartPulse,
         tint: "bg-[#FF375F]",
-                description: "Qualité, doublons et nettoyage",
+                description: "Qualité, doublons, nettoyage et remux",
                 shortcut: "h",
-                keywords: ["qualité", "doublons", "nettoyage", "cleanup", "duplicates", "upgrade"],
+                keywords: ["qualité", "doublons", "nettoyage", "cleanup", "duplicates", "upgrade", "remux"],
             },
             {
                 href: "/trash-guides",

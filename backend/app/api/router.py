@@ -40,6 +40,7 @@ from app.api.profiles import router as profiles_router
 from app.api.prowlarr_stats import router as prowlarr_stats_router
 from app.api.quality import router as quality_router
 from app.api.recommendations import router as recommendations_router
+from app.api.remux import router as remux_router
 from app.api.requests import router as requests_router
 from app.api.sabnzbd_config import router as sabnzbd_config_router
 from app.api.sagas import router as sagas_router
@@ -104,6 +105,7 @@ api_router.include_router(calendar_router)
 api_router.include_router(system_router)
 api_router.include_router(prowlarr_stats_router)
 api_router.include_router(quality_router)
+api_router.include_router(remux_router)  # Santé › Remux à alléger (ADR-021)
 api_router.include_router(cleanup_router)
 api_router.include_router(ai_search_router)
 api_router.include_router(copilot_router)  # Copilote : IA avec outils en lecture (ADR-017)

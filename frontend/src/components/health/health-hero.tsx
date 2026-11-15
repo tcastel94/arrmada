@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 import { fadeUp, stagger } from "@/lib/motion";
 import { healthTone, healthVerdict, type HealthResult } from "./health-score";
 
-export type HealthTab = "quality" | "duplicates" | "cleanup";
+export type HealthTab = "quality" | "duplicates" | "cleanup" | "remux";
 
 /** Découpe une taille en valeur + unité pour pouvoir animer le nombre. */
 function bytesParts(bytes: number): { value: number; unit: string; decimals: number } {
