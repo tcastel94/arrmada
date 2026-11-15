@@ -3,7 +3,8 @@
 Chaque outil de ce fichier est une fonction en lecture seule branchée sur un
 service existant d'ArrMada (clients *arr, agrégateur, cache TRaSH, journaux
 Docker…). Les outils qui AGISSENT (débloquer, importer, relancer, ajouter…)
-sont dans ``actions.py`` : ils ont en plus un « aperçu » montré à
+sont dans ``actions.py``, ceux qui changent les profils qualité dans
+``profile_actions.py`` (ADR-020) : ils ont en plus un « aperçu » montré à
 l'utilisateur pour validation avant d'agir (ADR-019).
 
 Un outil = un modèle pydantic pour ses arguments (le schéma JSON envoyé au
@@ -711,6 +712,8 @@ async def search_trash_guides(args: TrashSearchArgs) -> dict[str, Any]:
             "profiles": [
                 {
                     "name": qp.get("name"),
+                    # Ce qu'attend apply_trash_profile (nom du fichier TRaSH)
+                    "id": str(qp.get("_source_file", "")).removesuffix(".json"),
                     "description": _strip_html(qp.get("trash_description")),
                     "url": qp.get("trash_url"),
                     "score_set": qp.get("trash_score_set"),
@@ -1363,13 +1366,13 @@ TOOLS: tuple[Tool, ...] = (
 
 
 def all_tools() -> tuple[Tool, ...]:
-    """Outils de lecture (ce fichier) puis outils d'action (actions.py).
+    """Outils de lecture (ce fichier) puis outils d'action (actions.py, profile_actions.py).
 
-    Import tardif : actions.py s'appuie sur ce fichier (accès aux services).
+    Import tardif : ces modules s'appuient sur ce fichier (accès aux services).
     """
-    from app.services.copilot import actions
+    from app.services.copilot import actions, profile_actions
 
-    return TOOLS + actions.TOOLS
+    return TOOLS + actions.TOOLS + profile_actions.TOOLS
 
 
 # Sites consultables par la recherche web : la documentation de référence de

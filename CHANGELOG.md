@@ -12,6 +12,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Fixed
 - Recherche manuelle d'un album, bouton **Télécharger** : « Envoi impossible : String should have at most 2000 characters » sur les releases torrent (kickasstorrents…). Leur identifiant est le lien magnet complet, avec tous ses trackers, et il dépasse 2 000 caractères. La limite passe à 32 000
 
+### Agent IA : il modifie les profils qualité
+
+#### Added
+- **L'agent change lui-même un profil qualité** de Radarr ou de Sonarr quand tu le lui demandes ([ADR-020](docs/adr/020-agent-ia-profils-qualite.md)) : décocher ou cocher des qualités, changer le seuil, autoriser ou non les mises à niveau. Avant, il listait les clics à faire
+- Il sait aussi **copier un profil** (garder un profil « Remux » pour quelques films), **passer des titres d'un profil à un autre**, et **appliquer un profil des TRaSH Guides** avec ses formats et ses scores
+- Même validation que ses autres actions : la carte montre les qualités retirées, le seuil avant → après et le nombre de titres concernés
+- Aucun fichier n'est supprimé ni re-téléchargé par ces actions. Les fichiers déjà présents restent : baisser un profil ne libère pas de place tout seul
+
+#### Changed
+- Une question (« que me conseilles-tu ? ») reçoit toujours un conseil ; une demande (« fais-le ») déclenche l'action
+
+### Telegram : ne plus gêner un autre bot
+
+#### Fixed
+- Alertes Telegram coupées (Paramètres › Agent IA) : ArrMada arrête aussi de **lire** le bot. Sinon, un bot partagé avec un autre programme (Searcharr, Requestrr…) se faisait voler ses messages, et ce programme ne répondait plus aux recherches
+
+#### Added
+- `scripts/diag-bot-telegram.sh` : diagnostic d'un bot Telegram externe qui ne répond plus. Il vérifie que son conteneur tourne, relève ses erreurs (clé d'API, adresse, 409), regarde s'il partage le bot d'ArrMada (empreintes, aucun jeton affiché) et teste s'il joint Radarr / Sonarr
+- `scripts/separer-bot-telegram.sh` : donne à ArrMada son propre bot quand il partageait celui d'un autre programme. Il vérifie le nouveau jeton, met à jour le `.env` après une sauvegarde, recrée le conteneur et lève chez Telegram le filtre « que les clics » sur l'ancien bot. Aucun jeton n'est affiché
+- `scripts/test-telegram.sh` : test de bout en bout des alertes d'ArrMada (jeton, webhook, message, puis boutons sur une fausse alerte)
+
 ### TV : la musique dans l'écran Téléchargements
 
 #### Added
