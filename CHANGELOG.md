@@ -36,6 +36,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Changed
 - Une question (« que me conseilles-tu ? ») reçoit toujours un conseil ; une demande (« fais-le ») déclenche l'action
 
+### Agent IA : journal de ses actions
+
+#### Added
+- **Journal de l'agent** (Agent IA › lien « journal », adresse `/copilot/journal`) : chaque action de l'agent et de l'assistant, avec **quand**, **le résultat** et **pourquoi** (la demande qui l'a provoquée, « la série X ne se télécharge plus »)
+- **Bouton « Annuler »** sur les actions qui ont un contraire sûr, une seule fois, et l'annulation est elle-même notée au journal :
+  - film ou série ajouté par l'IA → **ne plus le suivre** (plus de recherche ni de téléchargement automatique). Rien n'est supprimé : le titre reste dans Radarr / Sonarr, où on peut le suivre à nouveau d'un clic
+  - file SABnzbd mise en pause ou reprise → retour à l'état d'avant
+  - un import, une liste noire ou une recherche lancée ne se défont pas proprement : pas de bouton pour eux
+- Pastille **« Agent IA »** dans le Journal d'activité (filtre, libellés des actions de l'IA)
+- API (administrateurs) : `GET /api/copilot/journal`, `POST /api/copilot/journal/{id}/undo`
+
+### Découpage des plus gros fichiers (aucun changement visible)
+
+#### Changed
+- **Appli TV, lecteur** : `PlayerSurface.kt` (1 140 lignes) est réparti par rôle, il garde l'orchestration (~590 lignes) :
+  - `StreamSwitcher` : flux et qualité (bascule 1080p, conversion, filets image / Dolby Vision, erreurs de lecture)
+  - `RoomSound` : son de la pièce et ampli (décodage auto)
+  - `PlayerHud` : affichages par-dessus l'image (barre de lecture et vignette, « Passer l'intro », épisode suivant, carte qualité)
+  - `PlaybackReports` : envois au serveur (position, scrobble) ; `PlayerSetup` : création du lecteur, plein écran
+  - Tout tenait dans une seule fonction : l'état passe dans deux classes, sur le modèle de `SubtitleTools` et `TrackChooser` (938 lignes sur 986 reprises telles quelles, le reste est du raccord)
+- **Écran de la tablette** (`/ecran`) : `page.tsx` (2 025 lignes) est découpé en petits fichiers dans `ecran/_lib` (échanges avec le serveur, luminosité, veille, décalage anti-marquage) et `ecran/_components` (appairage, séance, télécommande, repos, « Ce soir », panneaux, fiches). Déplacement pur, vérifié ligne à ligne
+- **Serveur** : `services/kodi.py` (1 978 lignes) et `services/copilot/tools.py` (1 551 lignes) deviennent des paquets par rôle :
+  - `kodi/` : découverte, JSON-RPC, lecture, maintenance, clients *arr, et l'add-on (sous-titres, médiathèque, médias, versions, file)
+  - `copilot/tools/` : accès aux services, arguments, outils de lecture (*arr, système, médiathèque), le registre restant dans `__init__.py`
+  - Déplacement pur : les imports existants (`from app.services import kodi`, `copilot.tools`) et les remplacements faits par les tests marchent comme avant ; les journaux gardent leur nom (`app.services.kodi`…)
+
+#### Notes
+- APK non construite dans l'environnement de la modification (SDK Android non téléchargeable) : compilation du lecteur découpé par la CI Android
+
 ### Telegram : ne plus gêner un autre bot
 
 #### Fixed

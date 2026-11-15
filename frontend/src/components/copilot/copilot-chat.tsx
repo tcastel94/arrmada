@@ -152,7 +152,11 @@ function PrivacyNote({ webSearch, mode }: { webSearch: boolean; mode?: "confirm"
                 <Link href="/settings" className="text-primary hover:underline">
                     Paramètres › Agent IA
                 </Link>
-                ). Ce qu&apos;il consulte (profils, files, journaux, titres) est envoyé à Anthropic, clés d&apos;API et mots de passe masqués.
+                ). Tout ce qu&apos;il fait est noté dans son{" "}
+                <Link href="/copilot/journal" className="text-primary hover:underline">
+                    journal
+                </Link>
+                , avec la demande d&apos;origine, et ce qui se défait peut y être annulé. Ce qu&apos;il consulte (profils, files, journaux, titres) est envoyé à Anthropic, clés d&apos;API et mots de passe masqués.
                 {webSearch && " La recherche web est limitée à la documentation de référence (TRaSH Guides, wiki Servarr…)."}
             </span>
         </p>

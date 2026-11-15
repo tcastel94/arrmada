@@ -20,6 +20,7 @@ import {
     Plus,
     Search,
     Send,
+    Sparkles,
     Trash2,
     XCircle,
     Cast,
@@ -81,6 +82,14 @@ export const CATEGORIES: CategoryMeta[] = [
         glow: "hsl(187 85% 53% / 0.5)",
     },
     {
+        key: "ai",
+        label: "Agent IA",
+        icon: Sparkles,
+        text: "text-fuchsia-300",
+        tile: "from-fuchsia-500/30 to-purple-500/10 ring-fuchsia-400/30",
+        glow: "hsl(292 84% 65% / 0.5)",
+    },
+    {
         key: "system",
         label: "Système",
         icon: Cog,
@@ -124,6 +133,23 @@ const ACTION_LABELS: Record<string, string> = {
     seriesDeleted: "Série supprimée",
     episodeFileRenamed: "Renommé",
     movieFileRenamed: "Renommé",
+    // Agent IA (journal de l'agent : /copilot/journal)
+    undo: "Action annulée",
+    unblock_download: "Téléchargement débloqué",
+    import_download: "Fichiers importés",
+    replace_download: "Autre version cherchée",
+    arr_command: "Commande lancée",
+    sabnzbd_action: "SABnzbd",
+    media_action: "Médiathèque",
+    request_movie: "Film demandé",
+    request_series: "Série demandée",
+    follow_artist: "Artiste suivi",
+    complete_saga: "Saga complétée",
+    search_missing_episodes: "Épisodes manquants cherchés",
+    search_missing_albums: "Albums manquants cherchés",
+    search_all_missing: "Manquants cherchés",
+    unblock_downloads: "Téléchargements débloqués",
+    import_music_downloads: "Musique importée",
 };
 
 /** Action inconnue : « someAction_name » → « Some action name ». */
@@ -151,6 +177,11 @@ export const SOURCE_LABELS: Record<string, string> = {
     bazarr: "Bazarr",
     telegram: "Telegram",
     external: "Externe",
+    copilot: "Agent IA",
+    "ai-web": "Assistant IA",
+    "ai-tv": "Assistant IA (TV)",
+    "ai-telegram": "Assistant IA (Telegram)",
+    "ai-copilot": "Agent IA",
 };
 
 export function sourceLabel(source: string): string {

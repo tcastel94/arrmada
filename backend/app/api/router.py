@@ -7,6 +7,7 @@ from fastapi import APIRouter
 from app.api.activity import router as activity_router
 from app.api.activity_timeline import router as activity_timeline_router
 from app.api.ai_actions import router as ai_actions_router
+from app.api.ai_journal import router as ai_journal_router
 from app.api.ai_search import router as ai_search_router
 from app.api.ambient import router as ambient_router
 from app.api.analytics import router as analytics_router
@@ -109,6 +110,7 @@ api_router.include_router(remux_router)  # Santé › Remux à alléger (ADR-021
 api_router.include_router(cleanup_router)
 api_router.include_router(ai_search_router)
 api_router.include_router(copilot_router)  # Copilote : IA avec outils en lecture (ADR-017)
+api_router.include_router(ai_journal_router)  # Journal de l'agent IA : quoi, pourquoi, annuler
 api_router.include_router(subtitles_router)
 api_router.include_router(cameras_router)  # Caméras Eufy : pop-up sur la TV
 api_router.include_router(android_router)  # Mises à jour de l'appli Android (ADR-009)

@@ -34,6 +34,7 @@ import re
 import secrets
 import time
 import unicodedata
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -53,6 +54,10 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 MODES = ("confirm", "auto")
+
+# Demande en cours côté Agent IA (copilot/agent.py la pose le temps d'un tour) :
+# une action de médiathèque lancée par l'agent garde ainsi son « pourquoi »
+CURRENT_REQUEST: ContextVar[str] = ContextVar("ai_current_request", default="")
 MAX_ACTIONS = 5  # par demande : au-delà, l'IA a mal compris
 PROPOSAL_TTL = 15 * 60  # s : une proposition non confirmée expire
 
@@ -296,6 +301,10 @@ class Proposal:
     status: str = "pending"  # pending | done | error | cancelled | unresolved
     message: str = ""  # résultat (ou raison d'une proposition non résolue)
     created: float = field(default_factory=time.monotonic)
+    # Demande d'origine (« ajoute le dernier Dune ») : le « pourquoi » du journal
+    request: str = ""
+    # Comment défaire l'action une fois faite (ai_journal.UNDO), sinon None
+    undo: dict[str, Any] | None = None
 
     def public(self) -> dict[str, Any]:
         return {
@@ -656,7 +665,9 @@ async def execute(db: AsyncSession, p: Proposal, source: str = "web") -> Proposa
     if p.status != "pending":
         return p
     try:
-        p.message = await _EXECUTORS[p.type](db, p.target)
+        # Un exécutant rend son message, ou (message, comment le défaire)
+        result = await _EXECUTORS[p.type](db, p.target)
+        p.message, p.undo = result if isinstance(result, tuple) else (result, None)
         p.status = "done"
     except HTTPException as exc:
         p.status, p.message = "error", str(exc.detail)
@@ -670,11 +681,24 @@ async def execute(db: AsyncSession, p: Proposal, source: str = "web") -> Proposa
         source=f"ai-{source}",
         title=p.summary[:300],
         detail=p.message[:500],
+        meta=journal_meta(
+            p.request or CURRENT_REQUEST.get(), p.undo if p.status == "done" else None
+        ),
     )
     return p
 
 
-async def _exec_movie(db: AsyncSession, t: dict[str, Any]) -> str:
+def journal_meta(request: str, undo: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Ce que le journal de l'agent garde en plus : la demande, et comment défaire."""
+    meta: dict[str, Any] = {}
+    if request:
+        meta["why"] = request[:500]
+    if undo:
+        meta["undo"] = undo
+    return meta or None
+
+
+async def _exec_movie(db: AsyncSession, t: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
     from app.services import request_service
 
     req = await request_service.create_request(
@@ -682,10 +706,12 @@ async def _exec_movie(db: AsyncSession, t: dict[str, Any]) -> str:
     )
     if req.status == "failed":
         raise HTTPException(status_code=502, detail="Radarr a refusé l'ajout")
-    return f"{t['title']} ajouté, recherche lancée"
+    # Annulable : le film était absent (vérifié à la résolution), on peut ne plus le suivre
+    undo = {"kind": "radarr_unmonitor", "id": req.arr_id} if req.arr_id else None
+    return f"{t['title']} ajouté, recherche lancée", undo
 
 
-async def _exec_series(db: AsyncSession, t: dict[str, Any]) -> str:
+async def _exec_series(db: AsyncSession, t: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
     from app.services import request_service
 
     req = await request_service.create_request(
@@ -693,7 +719,8 @@ async def _exec_series(db: AsyncSession, t: dict[str, Any]) -> str:
     )
     if req.status == "failed":
         raise HTTPException(status_code=502, detail="Sonarr a refusé l'ajout")
-    return f"{t['title']} ajoutée, recherche des épisodes lancée"
+    undo = {"kind": "sonarr_unmonitor", "id": req.arr_id} if req.arr_id else None
+    return f"{t['title']} ajoutée, recherche des épisodes lancée", undo
 
 
 async def _exec_artist(db: AsyncSession, t: dict[str, Any]) -> str:
@@ -813,6 +840,8 @@ async def ask(db: AsyncSession, message: str, source: str = "web") -> dict[str, 
         if actions:
             reply = "Voici ce que j'ai compris."
     proposals = [_keep(await resolve(db, a)) for a in actions]
+    for p in proposals:
+        p.request = message
     mode = get_mode()
     if mode == "auto":
         for p in proposals:
