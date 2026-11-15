@@ -8,7 +8,8 @@
 import { Bot, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Panel } from "@/components/shared/panel";
-import { useAiSettings, useSetAiMode, type AiMode } from "@/hooks/use-ai-actions";
+import { Switch } from "@/components/ui/switch";
+import { useAiSettings, useSetAiMode, useSetTelegramAlerts, type AiMode } from "@/hooks/use-ai-actions";
 import { cn } from "@/lib/utils";
 
 const CHOICES: { value: AiMode; label: string; help: string }[] = [
@@ -27,6 +28,8 @@ const CHOICES: { value: AiMode; label: string; help: string }[] = [
 export function AssistantPanel() {
     const { data } = useAiSettings();
     const setMode = useSetAiMode();
+    const setAlerts = useSetTelegramAlerts();
+    const telegram = data?.telegram;
     const choose = (mode: AiMode) =>
         setMode.mutate(mode, {
             onSuccess: () => toast.success(mode === "auto" ? "L'agent agit seul" : "Chaque action sera confirmée"),
@@ -63,6 +66,29 @@ export function AssistantPanel() {
                         </button>
                     );
                 })}
+            </div>
+
+            {/* Alertes Telegram : un téléchargement bloqué arrive sur le téléphone avec ses boutons */}
+            <div className="flex items-start justify-between gap-3 rounded-xl border border-white/[0.08] bg-white/[0.02] p-3">
+                <div className="min-w-0">
+                    <p className="text-[14px] font-semibold">Alertes Telegram des blocages</p>
+                    <p className="mt-0.5 text-[12.5px] text-muted-foreground">
+                        {telegram?.configured === false
+                            ? "Telegram n'est pas configuré : renseigne TELEGRAM_BOT_TOKEN et TELEGRAM_CHAT_ID dans le .env."
+                            : "Un téléchargement bloqué depuis 10 minutes t'est envoyé avec son diagnostic et les boutons « Débloquer » / « Ignorer ». En mode « agir tout de suite », il est débloqué et tu reçois le résultat."}
+                    </p>
+                </div>
+                <Switch
+                    checked={Boolean(telegram?.configured && telegram.alerts)}
+                    disabled={!telegram?.configured || setAlerts.isPending}
+                    onCheckedChange={(on) =>
+                        setAlerts.mutate(on, {
+                            onSuccess: () => toast.success(on ? "Alertes Telegram activées" : "Alertes Telegram coupées"),
+                            onError: (e) => toast.error("Réglage non enregistré", { description: e.message }),
+                        })
+                    }
+                    aria-label="Alertes Telegram des téléchargements bloqués"
+                />
             </div>
         </Panel>
     );
