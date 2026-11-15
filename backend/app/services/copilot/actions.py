@@ -500,6 +500,22 @@ async def run_sab(args: SabArgs) -> dict[str, Any]:
     return {"status": "ok", "message": _SAB_LABELS[args.action]}
 
 
+def undo_for(tool_name: str, args: Any) -> dict[str, Any] | None:
+    """Comment défaire une action de l'agent (journal de l'agent), si c'est possible.
+
+    Seules les actions qui ont un contraire sûr sont annulables : file SABnzbd
+    mise en pause ↔ reprise. Un import, une liste noire ou une recherche
+    lancée ne se défont pas proprement : pas de bouton « Annuler » pour eux.
+    Les ajouts à la médiathèque (media_action) portent leur propre annulation
+    (ai_actions : ne plus suivre le titre).
+    """
+    if tool_name == "sabnzbd_action":
+        opposite = {"pause_queue": "sab_resume_queue", "resume_queue": "sab_pause_queue"}
+        kind = opposite.get(getattr(args, "action", ""))
+        return {"kind": kind} if kind else None
+    return None
+
+
 # ══════════════════════════════════════════════════════════════
 # Médiathèque : ajouter, suivre, compléter (moteur de l'ADR-018)
 # ══════════════════════════════════════════════════════════════
