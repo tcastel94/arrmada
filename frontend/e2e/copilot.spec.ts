@@ -53,7 +53,7 @@ test("question → outils consultés → réponse en Markdown, puis conversation
     await page.goto("/copilot");
 
     // Écran vide : ce qui sort du réseau local est dit, des questions sont proposées
-    await expect(page.getByText("Chaque action (débloquer, importer, relancer, ajouter) attend ta validation.", { exact: false })).toBeVisible();
+    await expect(page.getByText("Chaque action (débloquer, importer, relancer, ajouter, modifier un profil qualité) attend ta validation.", { exact: false })).toBeVisible();
     const input = page.getByRole("textbox", { name: "Ta demande pour l'agent" });
     await expect(page.getByRole("button", { name: "Envoyer" })).toBeDisabled();
 
