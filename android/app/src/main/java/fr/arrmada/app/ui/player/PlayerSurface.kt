@@ -2,35 +2,20 @@ package fr.arrmada.app.ui.player
 
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.core.view.WindowInsetsControllerCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowCompat
-import android.content.pm.ActivityInfo
 import fr.arrmada.app.ui.components.LocalScreen
-import fr.arrmada.app.ui.components.gutter
 import fr.arrmada.app.data.TrackLanguageLogic
 import fr.arrmada.app.data.TrackPreference
 import fr.arrmada.app.data.TrickplayLogic
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.offset
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -42,11 +27,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -54,54 +37,29 @@ import androidx.compose.ui.input.key.nativeKeyCode
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.datasource.DefaultDataSource
-import androidx.media3.datasource.okhttp.OkHttpDataSource
-import androidx.media3.exoplayer.DefaultRenderersFactory
-import androidx.media3.exoplayer.ExoPlaybackException
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
-import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.PlayerView
-import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Text
 import fr.arrmada.app.ArrMadaApplication
-import fr.arrmada.app.data.AmpDevice
 import fr.arrmada.app.data.SoundAdvisor
 import fr.arrmada.app.data.DolbyVisionLogic
 import fr.arrmada.app.data.PlayInfo
-import fr.arrmada.app.data.DefaultQuality
 import fr.arrmada.app.data.HlsAudioLogic
-import fr.arrmada.app.data.LateSubtitleLogic
 import fr.arrmada.app.data.Quality
 import fr.arrmada.app.data.QualityLogic
 import fr.arrmada.app.data.RemoteCommand
-import fr.arrmada.app.data.ScrobbleCast
-import fr.arrmada.app.data.VideoRescueLogic
 import fr.arrmada.app.data.ScrobbleLogic
-import fr.arrmada.app.data.ScrobbleSkip
-import fr.arrmada.app.data.ScrobbleTrack
 import fr.arrmada.app.data.StreamSwitchLogic
 import fr.arrmada.app.ui.detail.techBadges
 import fr.arrmada.app.data.PlaybackLogic
 import fr.arrmada.app.data.PlayerKeyLogic
-import fr.arrmada.app.data.Repository
-import fr.arrmada.app.data.WatchStateUpdate
 import fr.arrmada.app.ui.components.MessageScreen
-import fr.arrmada.app.ui.components.ProgressBar
-import fr.arrmada.app.ui.components.formatClock
-import fr.arrmada.app.ui.theme.ArrColors
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonPrimitive
 
@@ -126,20 +84,8 @@ internal fun PlayerSurface(
     val uiScope = rememberCoroutineScope()
     val touch = LocalScreen.current.isTouch
 
-    // Téléphone / tablette : plein écran, à l'horizontale, pendant la lecture
-    DisposableEffect(touch) {
-        val activity = context.findActivity()
-        if (!touch || activity == null) return@DisposableEffect onDispose {}
-        val previous = activity.requestedOrientation
-        activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-        val bars = WindowCompat.getInsetsController(activity.window, activity.window.decorView)
-        bars.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        bars.hide(WindowInsetsCompat.Type.systemBars())
-        onDispose {
-            bars.show(WindowInsetsCompat.Type.systemBars())
-            activity.requestedOrientation = previous
-        }
-    }
+    // Téléphone / tablette : plein écran, à l'horizontale, pendant la lecture (PlayerSetup.kt)
+    LandscapeFullscreen(touch)
 
     // Dolby Vision profil 5 sur un écran sans Dolby Vision : image violette en
     // lecture directe. On part alors d'emblée sur la conversion SDR de Jellyfin.
@@ -176,86 +122,17 @@ internal fun PlayerSurface(
     }
 
     // ── Création du lecteur (une fois) ──
-    val player = remember {
-        val trackSelector = DefaultTrackSelector(context).apply {
-            setParameters(
-                buildUponParameters()
-                    // Français d'abord, sinon la piste par défaut du fichier.
-                    // Pas de langue de sous-titres préférée : seuls les sous-titres
-                    // « forcés » (passages en langue étrangère) s'affichent d'office ;
-                    // les autres se choisissent dans le menu pause.
-                    .setPreferredAudioLanguages("fr", "en")
-            )
-        }
-        // Décodeurs d'Android d'abord (passthrough vers l'ampli intact), FFmpeg
-        // ensuite : il ne sert que pour un son qu'Android ne sait pas décoder,
-        // ou en secours quand son décodeur plante (voir onPlayerError).
-        val renderers = DefaultRenderersFactory(context)
-            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
-            .setEnableDecoderFallback(true) // autre décodeur Android si le premier ne démarre pas
-        // Flux et sous-titres passent par OkHttp (jeton d'appareil) ; DefaultDataSource
-        // lit en plus les fichiers de l'appli : les pistes texte reçues en avance de
-        // Jellyfin (LateSubtitleFetcher) sont posées à côté du flux depuis le disque
-        val dataSources = DefaultDataSource.Factory(context, OkHttpDataSource.Factory(app.api.http))
-        ExoPlayer.Builder(context, renderers)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSources))
-            .setTrackSelector(trackSelector)
-            .setAudioAttributes(
-                AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),
-                true,
-            )
-            .setSeekBackIncrementMs(10_000)
-            .setSeekForwardIncrementMs(30_000)
-            .build()
-            // Le premier flux est chargé par load(), plus bas, comme un changement
-            // de flux : une lecture convertie dès le départ (réglage « 1080p »,
-            // remux) pose les pistes texte du fichier à côté du flux, et doit
-            // démarrer même si Jellyfin est encore en train de les extraire
-            .apply { playWhenReady = true }
-    }
+    val player = remember { createPlayer(context, app) } // PlayerSetup.kt
 
     var showMenu by remember { mutableStateOf(false) }
-    // Ampli de la pièce (onglet « Ampli » du menu pause) : relu à l'ouverture du menu
-    var amp by remember { mutableStateOf<AmpDevice?>(null) }
-    var ampRead by remember { mutableIntStateOf(0) }
-    LaunchedEffect(showMenu, ampRead) {
-        if (!showMenu && ampRead == 0) return@LaunchedEffect
-        val me = runCatching { repository.device() }.getOrNull()
-        amp = if (me?.hasAmp == true) runCatching { repository.ampState().devices.firstOrNull() }.getOrNull() else null
+    // Ampli de la pièce et son conseillé (enceintes × piste en cours) : RoomSound.kt
+    val roomSound = remember { RoomSound(app, repository, context, uiScope, touch) }
+    // Ampli relu à l'ouverture du menu pause (onglet « Ampli ») et après chaque commande
+    LaunchedEffect(showMenu, roomSound.ampRead) {
+        if (!showMenu && roomSound.ampRead == 0) return@LaunchedEffect
+        roomSound.readAmp()
     }
-
-    // ── Son conseillé : enceintes de la pièce × son de la piste en cours ──
-    var hasAmp by remember { mutableStateOf(false) }
-    var layout by remember { mutableStateOf<SoundAdvisor.Layout?>(null) }
-    var room by remember { mutableStateOf("") }
-    var autoSound by remember { mutableStateOf(app.prefs.autoSound) }
-    var appliedProgram by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) {
-        val me = runCatching { repository.device() }.getOrNull() ?: return@LaunchedEffect
-        hasAmp = me.hasAmp && !touch // l'ampli de la pièce ne concerne pas le téléphone
-        if (!me.hasAmp) {
-            room = if (touch) "Téléphone / tablette : son de l’appareil" else "Pas d’ampli dans cette pièce : son de la TV"
-            return@LaunchedEffect
-        }
-        val profiles = runCatching { repository.roomProfiles() }.getOrDefault(emptyMap())
-        val profile = profiles[me.room] ?: profiles[if ("cin" in me.room.lowercase()) "cinema" else "salon"]
-        // Enceintes non renseignées : on suppose un 5.1, le cas le plus courant
-        layout = SoundAdvisor.layout(profile?.speakers) ?: SoundAdvisor.layout("5.1")
-        room = listOfNotNull(
-            profile?.name?.ifBlank { null } ?: me.room.replaceFirstChar { it.uppercase() },
-            layout?.let { "enceintes ${it.label}" },
-        ).joinToString(" · ")
-    }
-
-    /** Commande à l'ampli, puis relecture de son état (le réglage choisi s'entoure). */
-    fun ampCommand(action: String, value: JsonPrimitive) {
-        uiScope.launch {
-            runCatching { repository.ampControl(action, value) }
-                .onSuccess { if (!it.ok) Toast.makeText(context, it.message ?: "L’ampli a refusé le réglage", Toast.LENGTH_SHORT).show() }
-                .onFailure { Toast.makeText(context, it.message ?: "Ampli injoignable", Toast.LENGTH_SHORT).show() }
-            ampRead++
-        }
-    }
+    LaunchedEffect(Unit) { roomSound.readRoom() }
     var osdUntil by remember { mutableLongStateOf(0L) }
     var position by remember { mutableLongStateOf(request.startSeconds * 1000L) }
     // Aperçu en image (trickplay) : ←/→ déplacent une position visée, vignette
@@ -263,72 +140,42 @@ internal fun PlayerSurface(
     var scrubTarget by remember { mutableStateOf<Long?>(null) }
     var duration by remember { mutableLongStateOf(info.duration * 1000L) }
     var tracks by remember { mutableStateOf(Tracks.EMPTY) }
-    var playbackError by remember { mutableStateOf<String?>(null) }
-    var remuxed by remember { mutableStateOf(info.mode == "remux" || startQuality != Quality.ORIGINAL) } // flux converti par Jellyfin
-    var toneMapped by remember { mutableStateOf(startQuality == Quality.HD_SDR) } // image convertie en SDR (DV profil 5, 1080p SDR)
-    // Qualité lue (menu pause › Qualité) ; « Original » : le direct, ou le remux
-    // si le direct a échoué ; le DV profil 5 a-t-il imposé le SDR sur cet écran ?
-    var quality by remember { mutableStateOf(startQuality) }
-    var originalSource by remember { mutableStateOf(QualityLogic.source(info, Quality.ORIGINAL)) }
-    var doviForcedSdr by remember { mutableStateOf(sdrAtStart) }
-    // Coupures en pleine lecture (ADR-012) : 3 en 5 min → proposer le 1080p
-    var readyOnce by remember { mutableStateOf(false) } // première image du flux en cours affichée
-    var lastSeekAt by remember { mutableLongStateOf(0L) } // dernier saut ou changement de flux
-    var rebuffers by remember { mutableStateOf(emptyList<Long>()) }
-    var qualityDeclined by remember { mutableStateOf(false) } // « Non merci » : plus de proposition
-    var qualityCard by remember { mutableStateOf<QualityCardKind?>(null) }
-    var dolbyVisionWarned by remember { mutableStateOf(false) }
-    // Image que l'appareil ne décode pas et rien pour la convertir (VideoRescueLogic) : dit une fois
-    var noPictureWarned by remember { mutableStateOf(false) }
-    var source by remember { mutableStateOf(initialSource) }
-    // Piste audio demandée à Jellyfin pour le flux converti en cours (index
-    // MediaStreams), null : sa piste par défaut. Sa liste HLS n'en porte qu'une :
-    // sans ça, la VF choisie en direct serait perdue en 1080p (HlsAudioLogic).
-    // Converti dès le départ : la piste de la règle des langues d'office
-    var hlsAudio by remember { mutableStateOf(initialHlsAudio) }
-    // Flux converti : les pistes du serveur pour le panneau Audio et la tablette
-    // (le lecteur n'en voit qu'une) ; vide en lecture directe
-    val hlsChoices = remember(source, hlsAudio) {
-        if (source.second) HlsAudioLogic.choices(info.audioTracks, hlsAudio, ::languageName) else emptyList()
-    }
     // Outils Sous-titres (Bazarr, resynchro, décalage) et leur état : SubtitleTools.kt
     val subtitles = remember { SubtitleTools(info, request, player, repository, uiScope, context) }
     // Choix des pistes (langues d'office, mémoire par profil) : TrackChooser.kt
     val trackChooser = remember { TrackChooser(player, request, repository, app.appScope) }
     // Pistes texte extraites par Jellyfin, qui peuvent répondre dans des minutes :
     // demandées en arrière-plan avec le client patient de l'API, gardées en local
-    // (LateSubtitleFetcher) ; lateLoad : l'attente en cours pour le flux lu
+    // (LateSubtitleFetcher)
     val lateSubtitles = remember { LateSubtitleFetcher(app.api.slowHttp, app.api.baseUrl, uiScope, context.cacheDir) }
-    var lateLoad by remember { mutableStateOf<Job?>(null) }
+    // Flux lu, qualité, piste audio du flux converti, reprises automatiques : StreamSwitcher.kt
+    val streams = remember {
+        StreamSwitcher(
+            info, request, player, app, repository, uiScope, context, subtitles, trackChooser, lateSubtitles,
+            startQuality, reducedQuality, initialSource, initialHlsAudio, sdrAtStart, screenDolbyVision,
+        )
+    }
+    // Flux converti : les pistes du serveur pour le panneau Audio et la tablette
+    // (le lecteur n'en voit qu'une) ; vide en lecture directe
+    val hlsChoices = remember(streams.source, streams.hlsAudio) {
+        if (streams.source.second) HlsAudioLogic.choices(info.audioTracks, streams.hlsAudio, ::languageName) else emptyList()
+    }
     val currentMeta by rememberUpdatedState(meta) // la fiche peut arriver après le lecteur
     val currentPreference by rememberUpdatedState(trackPreference)
     // Le bouton central ouvre le menu à l'appui : son relâchement est avalé
     // (sinon il « clique » sur « Reprendre », qui a le focus, et relance aussitôt)
     var swallowOkUp by remember { mutableStateOf(false) }
-    var softwareAudio by remember { mutableStateOf(false) } // son décodé par FFmpeg (secours)
     var finished by remember { mutableStateOf(false) } // fin enregistrée (vu)
     var upNextDismissed by remember { mutableStateOf(false) }
     var countdown by remember { mutableIntStateOf(PlaybackLogic.UP_NEXT_SECONDS) }
     val keyFocus = remember { FocusRequester() }
 
     val sound = remember(tracks, meta) { selectedSound(tracks, meta?.file?.audioCodec) }
-    val advice = SoundAdvisor.advise(if (hasAmp) layout else null, sound, screenName = if (touch) "l’appareil" else "la TV")
+    val advice = SoundAdvisor.advise(if (roomSound.hasAmp) roomSound.layout else null, sound, screenName = if (touch) "l’appareil" else "la TV")
 
     // Décodage auto : dès que le son du film est connu (ou change de piste),
     // l'ampli prend le programme conseillé, une fois le préréglage terminé
-    LaunchedEffect(advice.program, autoSound, hasAmp) {
-        val program = advice.program ?: return@LaunchedEffect
-        if (!autoSound || !hasAmp || program == appliedProgram) return@LaunchedEffect
-        withTimeoutOrNull(10_000) { presetDone.await() }
-        delay(800) // l'ampli finit d'appliquer le préréglage
-        runCatching { repository.ampControl("sound_program", JsonPrimitive(program)) }.onSuccess {
-            if (it.ok) {
-                appliedProgram = program
-                Toast.makeText(context, "Son : ${advice.headline}", Toast.LENGTH_SHORT).show()
-            }
-        }
-        ampRead++
-    }
+    LaunchedEffect(advice.program, roomSound.autoSound, roomSound.hasAmp) { roomSound.autoProgram(advice, presetDone) }
 
     // Fin du défilement : un seul saut, 0,8 s après le dernier appui
     LaunchedEffect(scrubTarget) {
@@ -364,21 +211,7 @@ internal fun PlayerSurface(
         if (pos < 5 && !done) return // rien de commencé
         val watched = done || (total > 0 && pos >= total * WATCHED_RATIO)
         if (watched) finished = true
-        // Vidéo de l'écran Vidéos : repérée par l'empreinte de son chemin (fournie par le serveur)
-        val file = request.kind == "file"
-        if (file && info.watchId.isBlank()) return
-        val update = WatchStateUpdate(
-            mediaType = when { file -> "file"; request.kind == "movie" -> "movie"; else -> "episode" },
-            idType = when { file -> "sha1"; request.kind == "movie" -> "tmdb"; else -> "tvdb" },
-            id = if (file) info.watchId else request.id.toString(),
-            season = request.season.takeIf { request.kind == "episode" },
-            episode = request.episode.takeIf { request.kind == "episode" },
-            title = meta?.subtitle?.substringAfter(" · ", "") ?: meta?.title ?: info.title.orEmpty(),
-            watched = watched,
-            position = if (watched) 0 else pos,
-            total = total,
-            lastPlayed = Repository.nowLastPlayed(),
-        )
+        val update = watchStateUpdate(request, info, meta, pos, total, watched) ?: return
         app.appScope.launch { runCatching { repository.saveWatchState(update) } }
     }
 
@@ -398,181 +231,10 @@ internal fun PlayerSurface(
         if (next != null && !upNextDismissed) onPlayNext(next.request) else onExit()
     }
 
-    /**
-     * Recharge le flux [url] (remux, SDR, 1080p, nouveaux sous-titres) à la
-     * position [at]. [before] : pistes lues jusque-là, dont la piste audio
-     * entendue et les sous-titres affichés, à retrouver dans le nouveau flux
-     * (HlsAudioLogic, TrackChooser) ; à passer soi-même si le lecteur a été
-     * arrêté entre-temps.
-     *
-     * En HLS, le flux de Jellyfin n'a que l'image et une seule piste de son :
-     * la piste audio entendue lui est demandée (« ?audio=N ») et les pistes
-     * texte du fichier sont posées à côté, avec les sous-titres externes.
-     *
-     * Les pistes texte extraites par Jellyfin peuvent mettre des minutes à
-     * répondre, et Media3 ne démarre pas tant qu'une piste posée à côté n'a
-     * pas répondu (LateSubtitleLogic) : si elles arrivent dans la foulée
-     * (déjà extraites), elles partent avec le flux, comme avant ; sinon la
-     * vidéo démarre sans elles, elles sont demandées en arrière-plan
-     * (LateSubtitleFetcher) et le même flux est relu, au même endroit, quand
-     * elles sont là. Le lecteur les lit alors depuis le disque de l'appli.
-     */
-    fun load(url: String, hls: Boolean, at: Long, before: Tracks = player.currentTracks) {
-        // Flux converti : la piste audio entendue, retrouvée parmi celles du
-        // serveur (déjà converti : la même qu'avant, le lecteur n'en voit qu'une).
-        // Lue AVANT de changer d'élément : le lecteur oublie alors ses pistes.
-        hlsAudio = if (hls) HlsAudioLogic.indexForSwitch(source.second, hlsAudio, heardAudio(before), info.audioTracks) else null
-        source = url to hls
-        val subs = StreamSwitchLogic.sideloaded(hls, subtitles.sideSubs, info.embeddedSubtitles)
-        val target = app.api.baseUrl + HlsAudioLogic.withAudio(url, hlsAudio)
-        // L'attente de pistes lancée pour le flux précédent ne vaut plus
-        lateLoad?.cancel()
-        lateLoad = null
-        lateSubtitles.cancel()
-
-        /** Charge le flux à [position] avec les sous-titres disponibles maintenant (reçus : depuis le disque). */
-        fun post(position: Long) {
-            // Le nouveau flux remplit sa mémoire tampon : ce n'est pas une coupure
-            readyOnce = false
-            lastSeekAt = System.currentTimeMillis()
-            trackChooser.keepSubtitle(before)
-            val posted = LateSubtitleLogic.split(subs, info.embeddedSubtitles, lateSubtitles.ready, lateSubtitles.failed).now
-            player.setMediaItem(mediaItem(target, hls, sideSubtitles(posted, app.api.baseUrl, lateSubtitles::localUri)), position)
-            player.prepare()
-        }
-
-        val later = LateSubtitleLogic.split(subs, info.embeddedSubtitles, lateSubtitles.ready, lateSubtitles.failed).later
-        if (later.isEmpty()) {
-            post(at)
-            return
-        }
-        lateLoad = uiScope.launch {
-            val fetch = lateSubtitles.fetch(later)
-            // Déjà extraites : reçues en moins de PROBE_MS, un seul chargement, comme avant
-            val quick = withTimeoutOrNull(LateSubtitleLogic.PROBE_MS) { fetch.join() } != null
-            post(at)
-            if (!quick) fetch.join() // des minutes, peut-être ; la vidéo joue pendant ce temps
-            val message = lateSubtitles.outcomeMessage(later)
-            if (!quick && later.any { it.url in lateSubtitles.ready }) {
-                lateLoad = null // cette attente est finie : rien à interrompre
-                load(url, hls, player.currentPosition) // relecture au même endroit, pistes reçues depuis le disque
-            }
-            message?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
-        }
-    }
-
     // Premier flux, par load() : une lecture convertie dès le départ (réglage
     // « 1080p » de la TV, remux .m2ts / .iso, SDR) pose les pistes texte du
     // fichier à côté du flux, Jellyfin peut encore être en train de les extraire
-    LaunchedEffect(Unit) { load(initialSource.first, initialSource.second, request.startSeconds * 1000L, Tracks.EMPTY) }
-
-    /** Même flux, même position : relu après un changement de sous-titres (SubtitleTools). */
-    fun reloadSameStream() = load(source.first, source.second, player.currentPosition)
-
-    /**
-     * Menu pause › Qualité, ou carte « Passer en 1080p ? » : même position,
-     * même état lecture / pause. Une conversion Jellyfin en cours est arrêtée
-     * AVANT de lancer le nouveau flux : remux, SDR et 1080p partagent la même
-     * session chez Jellyfin, l'arrêt après coup couperait aussi le nouveau.
-     * Cet arrêt efface aussi les morceaux déjà produits : indispensable quand
-     * la piste audio change, Jellyfin les resservirait sinon (son dossier de
-     * sortie ne dépend que de la session, pas de la piste demandée).
-     */
-    fun setQuality(target: Quality, message: String? = null) {
-        if (target == quality) return
-        val (url, hls) = if (target == Quality.ORIGINAL) originalSource else QualityLogic.source(info, target)
-        if (url.isBlank()) return
-        val at = player.currentPosition.takeIf { it > 0 } ?: (request.startSeconds * 1000L)
-        val wasPlaying = player.playWhenReady
-        val before = player.currentTracks // les sous-titres affichés, avant l'arrêt du lecteur
-        val stopFirst = remuxed && info.itemId.isNotBlank()
-        quality = target
-        toneMapped = target == Quality.HD_SDR
-        remuxed = target != Quality.ORIGINAL || hls
-        rebuffers = emptyList()
-        Toast.makeText(context, message ?: QualityLogic.switchMessage(target), if (message != null) Toast.LENGTH_LONG else Toast.LENGTH_SHORT).show()
-        if (!stopFirst) {
-            load(url, hls, at, before)
-            player.playWhenReady = wasPlaying
-            return
-        }
-        player.stop() // plus aucune requête vers la conversion qu'on arrête
-        uiScope.launch {
-            runCatching { repository.stopRemux(info.itemId) }
-            load(url, hls, at, before)
-            player.playWhenReady = wasPlaying
-        }
-    }
-
-    /**
-     * Écran noir avec le son (VideoRescueLogic) : l'appareil ne décode pas
-     * l'image de format [mime] (AV1 sur une Shield…), ou son décodeur a
-     * planté. Jellyfin la réencode, un cran plus bas à chaque appel (1080p de
-     * cet écran, puis H.264), là où on en était. Faux : plus rien à tenter.
-     */
-    fun rescuePicture(mime: String?): Boolean {
-        val target = VideoRescueLogic.next(quality, reducedQuality, info) ?: return false
-        if (QualityLogic.source(info, target).first.isBlank()) return false
-        setQuality(target, VideoRescueLogic.rescueMessage(mime))
-        player.playWhenReady = true
-        return true
-    }
-
-    /**
-     * Panneau Audio (ou tablette) pendant un flux converti : Jellyfin n'y met
-     * qu'une piste, on recharge le MÊME flux avec la piste [index] (« ?audio=N »),
-     * même position, même état lecture / pause. La conversion en cours est
-     * arrêtée AVANT (comme setQuality) : son dossier de sortie ne dépend que de
-     * la session, Jellyfin resservirait sinon les morceaux déjà produits avec
-     * l'ancienne piste.
-     */
-    fun setHlsAudio(index: Int) {
-        if (!source.second || !HlsAudioLogic.switchNeeded(info.audioTracks, hlsAudio, index)) return
-        val (url, hls) = source
-        val at = player.currentPosition.takeIf { it > 0 } ?: (request.startSeconds * 1000L)
-        val wasPlaying = player.playWhenReady
-        // Mémoire du profil (l'épisode suivant repartira dans cette langue) : la
-        // langue de la piste du serveur, avec les sous-titres en cours, rangée
-        // avant le rechargement (le lecteur ne saura pas celle qu'il reçoit)
-        trackChooser.saveHlsAudioChoice(HlsAudioLogic.playedLanguage(info.audioTracks, index))
-        hlsAudio = index // load() le garde : déjà sur un flux converti
-        rebuffers = emptyList()
-        player.stop() // plus aucune requête vers la conversion qu'on arrête
-        uiScope.launch {
-            if (info.itemId.isNotBlank()) runCatching { repository.stopRemux(info.itemId) }
-            load(url, hls, at)
-            player.playWhenReady = wasPlaying
-        }
-    }
-
-    /** Carte de qualité : OK / « Passer en 1080p » (ou « Oui » à la seconde question). */
-    fun acceptQualityCard() {
-        when (qualityCard) {
-            QualityCardKind.SUGGEST -> {
-                reducedQuality?.let { setQuality(it) }
-                // Une seule fois par TV : en faire le réglage par défaut ?
-                val ask = app.prefs.defaultQuality == DefaultQuality.ORIGINAL && !app.prefs.qualityAsked
-                qualityCard = if (ask) QualityCardKind.ALWAYS else null
-            }
-            QualityCardKind.ALWAYS -> {
-                app.prefs.defaultQuality = DefaultQuality.HD_1080
-                app.prefs.qualityAsked = true
-                qualityCard = null
-                Toast.makeText(context, "Cette TV lira en 1080p (modifiable dans Réglages)", Toast.LENGTH_LONG).show()
-            }
-            null -> Unit
-        }
-    }
-
-    /** Carte de qualité : Retour / « Non merci » (la proposition ne revient plus de la séance). */
-    fun declineQualityCard() {
-        when (qualityCard) {
-            QualityCardKind.SUGGEST -> qualityDeclined = true
-            QualityCardKind.ALWAYS -> app.prefs.qualityAsked = true
-            null -> Unit
-        }
-        qualityCard = null
-    }
+    LaunchedEffect(Unit) { streams.load(initialSource.first, initialSource.second, request.startSeconds * 1000L, Tracks.EMPTY) }
 
     LaunchedEffect(Unit) {
         if (sdrAtStart) {
@@ -585,12 +247,12 @@ internal fun PlayerSurface(
 
     // Carte de qualité : non bloquante, elle s'efface seule après 20 s (sans
     // réponse : pas un refus, mais le compte des coupures repart de zéro)
-    LaunchedEffect(qualityCard) {
-        if (qualityCard == null) return@LaunchedEffect
+    LaunchedEffect(streams.qualityCard) {
+        if (streams.qualityCard == null) return@LaunchedEffect
         delay(QUALITY_CARD_MS)
-        if (qualityCard == QualityCardKind.ALWAYS) app.prefs.qualityAsked = true
-        qualityCard = null
-        rebuffers = emptyList()
+        if (streams.qualityCard == QualityCardKind.ALWAYS) app.prefs.qualityAsked = true
+        streams.qualityCard = null
+        streams.rebuffers = emptyList()
     }
 
     // Écran d'appoint (tablette sous la TV) : « lecture en cours » envoyée au
@@ -600,44 +262,8 @@ internal fun PlayerSurface(
     var scrobbleStarted by remember { mutableStateOf(false) }
     val sendScrobble by rememberUpdatedState<(String, Boolean) -> Unit> { event, ended ->
         if (!touch) {
-            val what = ScrobbleLogic.identity(
-                request.kind, request.id, request.season, request.episode,
-                title = meta?.title ?: info.title.orEmpty(),
-                subtitle = meta?.subtitle,
-                localSeries = request.localSeries > 0,
-            )
-            val total = (player.duration.takeIf { it > 0 } ?: duration) / 1000.0
-            val positionS = player.currentPosition / 1000.0
-            // Flux converti : les pistes du serveur (le lecteur n'en voit qu'une), sinon celles du lecteur
-            val audioChoices = if (hlsChoices.isNotEmpty()) {
-                hlsChoices.map { TrackChoice(it.label, it.detail, it.selected, supported = true, group = null, index = it.index) }
-            } else {
-                trackChoices(tracks, C.TRACK_TYPE_AUDIO)
-            }
-            val textChoices = trackChoices(tracks, C.TRACK_TYPE_TEXT)
-            // Ce que la tablette affiche en plus pendant la séance
-            val rich = what.copy(
-                video = ScrobbleLogic.videoLabel(selectedVideoFormat(tracks)?.height, techBadges(meta?.file), info.videoRange, toneMapped),
-                audio = audioChoices.firstOrNull { it.selected }
-                    ?.let { listOf(it.label, it.detail).filter { part -> part.isNotBlank() }.joinToString(" · ") }.orEmpty(),
-                subtitleTrack = textChoices.firstOrNull { it.selected }?.label.orEmpty(),
-                chapter = ScrobbleLogic.chapterAt(info.chapters, positionS),
-                creditsAt = if (total > 0) PlaybackLogic.creditsStart(info, total) ?: 0.0 else 0.0,
-                nextUp = upNext?.let { "${it.code} · ${it.title}" }.orEmpty(),
-                skips = skips.map { ScrobbleSkip(it.kind, PlaybackLogic.skipLabel(it), it.start, it.end) },
-                overview = meta?.overview ?: info.overview.orEmpty(),
-                metaLine = meta?.metaLine.orEmpty(),
-                cast = meta?.cast.orEmpty().take(8).map { ScrobbleCast(it.name, it.character, it.photo.orEmpty(), it.tmdbId) },
-                subtitleTracks = textChoices.mapIndexed { i, c -> ScrobbleTrack(i, c.label, c.detail, c.selected) },
-                audioTracks = audioChoices.mapIndexed { i, c -> ScrobbleTrack(i, c.label, c.detail, c.selected) },
-                remote = true,
-                subtitleTools = subtitles.request != null,
-                subtitleBusy = subtitles.busy,
-                subtitleNote = subtitles.note.orEmpty(),
-                subtitleShiftMs = subtitles.shiftMs,
-            )
-            val payload = ScrobbleLogic.payload(
-                event, rich, positionS, total, paused = !player.playWhenReady, ended = ended,
+            val payload = scrobblePayload(
+                event, ended, request, info, meta, player, duration, tracks, hlsChoices, streams.toneMapped, upNext, skips, subtitles,
             )
             app.appScope.launch { runCatching { repository.scrobble(payload) } }
         }
@@ -647,90 +273,19 @@ internal fun PlayerSurface(
         val listener = object : Player.Listener {
             override fun onTracksChanged(newTracks: Tracks) {
                 tracks = newTracks
-                // Langues d'office au premier jeu de pistes, choix de l'utilisateur rangé,
-                // sous-titres d'avant repris après un changement de flux (qualité, remux)
-                trackChooser.onTracksChanged(
-                    newTracks,
-                    originalLanguage = currentMeta?.originalLanguage,
-                    preference = currentPreference,
-                    waitingSubtitle = subtitles.pendingLabel != null,
-                    // Flux converti : la langue de la piste que Jellyfin y a mise (le lecteur ne la voit pas)
-                    hlsAudioLanguage = if (source.second) HlsAudioLogic.playedLanguage(info.audioTracks, hlsAudio) else null,
-                    // Piste extraite par Jellyfin encore attendue : elle reviendra à la relecture du flux
-                    comingLater = { shown -> LateSubtitleLogic.comingLater(shown, lateSubtitles.pending) },
-                    onSubtitleLost = { label, image, later ->
-                        // Piste image (PGS, VobSub) : pas de version texte à poser à côté du flux converti
-                        val text = when {
-                            later -> LateSubtitleLogic.waitingMessage(label)
-                            image -> "Sous-titres « $label » : pas de version texte pour ce flux"
-                            else -> "Sous-titres « $label » absents de ce flux"
-                        }
-                        Toast.makeText(context, text, Toast.LENGTH_LONG).show()
-                    },
-                )
-                // Flux rechargé (décalage, resynchro) : la piste voulue, dès qu'elle apparaît
-                subtitles.pendingLabel?.let { wanted ->
-                    trackChoices(newTracks, C.TRACK_TYPE_TEXT)
-                        .firstOrNull { it.group?.getTrackFormat(it.index)?.label == wanted }
-                        ?.let {
-                            subtitles.pendingLabel = null
-                            selectTrack(player, C.TRACK_TYPE_TEXT, it)
-                        }
-                }
+                // Langues d'office, choix rangé, sous-titres attendus : StreamSwitcher.onTracksChanged
+                streams.onTracksChanged(newTracks, currentMeta?.originalLanguage, currentPreference)
                 // Piste changée (menu pause ou tablette) : la tablette suit aussitôt
                 if (scrobbleStarted) sendScrobble("progress", false)
-                // Filet de sécurité : le fichier a une image, mais l'appareil n'a pas de
-                // décodeur pour elle (AV1 sur une Shield…). Le lecteur ne dit rien et
-                // joue le son sur un écran noir : Jellyfin réencode l'image.
-                val videoGroups = newTracks.groups.filter { it.type == C.TRACK_TYPE_VIDEO }
-                if (VideoRescueLogic.noPicture(videoGroups.size, videoGroups.any { it.isSelected })) {
-                    val mime = videoGroups.first().getTrackFormat(0).let { it.sampleMimeType ?: it.codecs }
-                    if (!rescuePicture(mime) && !noPictureWarned) {
-                        noPictureWarned = true
-                        Toast.makeText(context, VideoRescueLogic.stuckMessage(mime), Toast.LENGTH_LONG).show()
-                    }
-                    return
-                }
-                // Filet de sécurité : la piste vidéo se révèle Dolby Vision profil 5
-                // alors que l'écran ne le gère pas (serveur Jellyfin trop ancien
-                // pour l'annoncer, ou remux) → conversion SDR là où on en était.
-                val video = selectedVideoFormat(newTracks) ?: return
-                if (toneMapped || screenDolbyVision || !DolbyVisionLogic.withoutFallback(video.sampleMimeType, video.codecs)) return
-                if (info.sdrStream.isNotBlank()) {
-                    toneMapped = true
-                    remuxed = true
-                    quality = Quality.HD_SDR
-                    doviForcedSdr = true
-                    val at = player.currentPosition.takeIf { it > 0 } ?: (request.startSeconds * 1000L)
-                    load(info.sdrStream, hls = true, at = at)
-                    player.play()
-                    Toast.makeText(context, DV_SDR_MESSAGE, Toast.LENGTH_LONG).show()
-                } else if (!dolbyVisionWarned) {
-                    // Fichier de l'écran Vidéos : pas de Jellyfin pour le convertir
-                    dolbyVisionWarned = true
-                    Toast.makeText(
-                        context,
-                        "Dolby Vision profil 5 : couleurs fausses sur cet écran",
-                        Toast.LENGTH_LONG,
-                    ).show()
-                }
+                // Image absente ou Dolby Vision profil 5 sur cet écran : filets de sécurité
+                streams.checkVideo(newTracks)
             }
 
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == Player.STATE_READY && player.duration > 0) duration = player.duration
-                if (state == Player.STATE_READY) readyOnce = true
+                if (state == Player.STATE_READY) streams.readyOnce = true
                 // Attente de chargement en pleine lecture : le réseau suit-il le fichier ?
-                if (state == Player.STATE_BUFFERING) {
-                    val now = System.currentTimeMillis()
-                    if (QualityLogic.isRebuffer(player.playWhenReady, readyOnce, now, lastSeekAt)) {
-                        rebuffers = QualityLogic.record(rebuffers, now)
-                        if (qualityCard == null &&
-                            QualityLogic.shouldSuggest(rebuffers, now, quality, reducedQuality, qualityDeclined, info.bitrate)
-                        ) {
-                            qualityCard = QualityCardKind.SUGGEST
-                        }
-                    }
-                }
+                if (state == Player.STATE_BUFFERING) streams.onBuffering()
                 // Première image prête : la séance commence (une seule fois, même
                 // si l'on bascule ensuite en remux ou en SDR)
                 if (state == Player.STATE_READY && !scrobbleStarted) {
@@ -743,7 +298,7 @@ internal fun PlayerSurface(
             // Saut (avance rapide, chapitre, intro passée…) : l'attente qui suit n'est pas une coupure
             override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
                 if (reason == Player.DISCONTINUITY_REASON_SEEK || reason == Player.DISCONTINUITY_REASON_SEEK_ADJUSTMENT) {
-                    lastSeekAt = System.currentTimeMillis()
+                    streams.lastSeekAt = System.currentTimeMillis()
                 }
             }
 
@@ -752,60 +307,19 @@ internal fun PlayerSurface(
                 if (scrobbleStarted) sendScrobble(if (playWhenReady) "resume" else "pause", false)
             }
 
-            override fun onPlayerError(e: PlaybackException) {
-                // Décodeur audio d'Android en échec (ex. MP3 d'un vieil .avi, dont
-                // les blocs ne tombent pas sur les trames) : on le met de côté et
-                // FFmpeg, plus tolérant, reprend le son là où on en était.
-                if (!softwareAudio && audioDecoderFailed(e)) {
-                    val audio = (0 until player.rendererCount).filter { player.getRendererType(it) == C.TRACK_TYPE_AUDIO }
-                    val selector = player.trackSelector as? DefaultTrackSelector
-                    if (audio.size > 1 && selector != null) {
-                        softwareAudio = true
-                        val at = player.currentPosition.takeIf { it > 0 } ?: (request.startSeconds * 1000L)
-                        selector.setParameters(selector.buildUponParameters().setRendererDisabled(audio.first(), true))
-                        player.prepare()
-                        player.seekTo(at)
-                        player.play()
-                        Toast.makeText(context, "Son décodé par l’appli (format audio mal géré par Android)", Toast.LENGTH_LONG).show()
-                        return
-                    }
-                }
-                // Décodeur vidéo en échec (format au-delà de ce que l'appareil sait
-                // faire, décodeur qui plante) : le remux garderait la même image,
-                // Jellyfin la réencode, là où on en était
-                if (videoDecoderFailed(e) && rescuePicture((e as? ExoPlaybackException)?.rendererFormat?.sampleMimeType)) return
-                // Fichier illisible en direct : on retente une fois en remux,
-                // là où on en était
-                if (!remuxed && info.remuxStream.isNotBlank() && remuxRetry(e.errorCode, info.container)) {
-                    remuxed = true
-                    originalSource = info.remuxStream to true // « Original » = ce remux désormais
-                    val at = player.currentPosition.takeIf { it > 0 } ?: (request.startSeconds * 1000L)
-                    load(info.remuxStream, hls = true, at = at)
-                    player.play()
-                    Toast.makeText(context, "Format ${info.container.ifBlank { "inconnu" }} : conversion par Jellyfin…", Toast.LENGTH_LONG).show()
-                    return
-                }
-                playbackError = describe(
-                    e,
-                    info.container,
-                    when {
-                        toneMapped -> "converti en SDR par Jellyfin"
-                        remuxed -> "converti par Jellyfin"
-                        else -> "lecture directe"
-                    },
-                )
-            }
+            // Reprise automatique (son par FFmpeg, image réencodée, remux) ou message : StreamSwitcher
+            override fun onPlayerError(e: PlaybackException) = streams.onPlayerError(e)
         }
         player.addListener(listener)
         onDispose {
             save(false)
             if (scrobbleStarted) sendScrobble("stop", finished)
-            lateLoad?.cancel()
+            streams.lateLoad?.cancel()
             lateSubtitles.clear() // attente interrompue, fichiers de sous-titres effacés
             player.removeListener(listener)
             player.release()
             // Remux : Jellyfin arrête la conversion (sinon elle tourne à vide)
-            if (remuxed) app.appScope.launch { runCatching { repository.stopRemux(info.itemId) } }
+            if (streams.remuxed) app.appScope.launch { runCatching { repository.stopRemux(info.itemId) } }
         }
     }
 
@@ -872,16 +386,16 @@ internal fun PlayerSurface(
             }
             "next" -> if (upNext != null) playNext()
             // Outils sous-titres (feuille Sous-titres de la tablette)
-            "subtitle_download" -> subtitles.download(::reloadSameStream)
-            "subtitle_sync" -> subtitles.sync(::reloadSameStream)
-            "subtitle_shift" -> command.seconds?.let { subtitles.shift(it, tracks, ::reloadSameStream) } // valeur en ms
+            "subtitle_download" -> subtitles.download(streams::reloadSameStream)
+            "subtitle_sync" -> subtitles.sync(streams::reloadSameStream)
+            "subtitle_shift" -> command.seconds?.let { subtitles.shift(it, tracks, streams::reloadSameStream) } // valeur en ms
             "track" -> command.track?.let { (kind, index) ->
                 val type = if (kind == "audio") C.TRACK_TYPE_AUDIO else C.TRACK_TYPE_TEXT
                 if (index < 0) {
                     if (type == C.TRACK_TYPE_TEXT) trackChooser.select(type, null)
                 } else if (type == C.TRACK_TYPE_AUDIO && hlsChoices.isNotEmpty()) {
                     // Flux converti : la tablette a reçu les pistes du serveur (même rang)
-                    hlsChoices.getOrNull(index)?.let { setHlsAudio(it.index) }
+                    hlsChoices.getOrNull(index)?.let { streams.setHlsAudio(it.index) }
                 } else {
                     trackChoices(tracks, type).getOrNull(index)?.takeIf { it.supported }?.let { trackChooser.select(type, it) }
                 }
@@ -912,7 +426,7 @@ internal fun PlayerSurface(
     BackHandler {
         when {
             showUpNext -> upNextDismissed = true
-            qualityCard != null && !showMenu -> declineQualityCard()
+            streams.qualityCard != null && !showMenu -> streams.declineQualityCard()
             showMenu -> onExit()
             else -> pause()
         }
@@ -929,7 +443,7 @@ internal fun PlayerSurface(
                 if (touch) {
                     Modifier.pointerInput(Unit) {
                         detectTapGestures(
-                            onTap = { if (!showMenu && playbackError == null) pause() },
+                            onTap = { if (!showMenu && streams.playbackError == null) pause() },
                             onDoubleTap = { offset ->
                                 if (!showMenu) {
                                     if (offset.x < size.width / 2) player.seekBack() else player.seekForward()
@@ -949,17 +463,17 @@ internal fun PlayerSurface(
                     swallowOkUp = false
                     return@onPreviewKeyEvent true
                 }
-                if (showMenu || playbackError != null || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                if (showMenu || streams.playbackError != null || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 // Quelle action pour cette touche (règle dans PlayerKeyLogic, testée), puis on l'exécute
                 val screen = PlayerKeyLogic.Screen(
                     upNextShown = showUpNext,
-                    qualityCardShown = qualityCard != null,
+                    qualityCardShown = streams.qualityCard != null,
                     skipShown = activeSkip != null,
                     hasNext = upNext != null,
                 )
                 when (PlayerKeyLogic.action(code, screen)) {
                     PlayerKeyLogic.Action.PLAY_NEXT -> { playNext(); true }
-                    PlayerKeyLogic.Action.ACCEPT_QUALITY -> { acceptQualityCard(); true }
+                    PlayerKeyLogic.Action.ACCEPT_QUALITY -> { streams.acceptQualityCard(); true }
                     PlayerKeyLogic.Action.SKIP_SEGMENT -> {
                         activeSkip?.let { player.seekTo((it.end * 1000).toLong()) }
                         true
@@ -987,90 +501,23 @@ internal fun PlayerSurface(
             modifier = Modifier.fillMaxSize(),
         )
 
-        // Barre discrète après une avance / un retour rapide
-        AnimatedVisibility(
-            visible = !showMenu && System.currentTimeMillis() < osdUntil,
-            enter = fadeIn(),
-            exit = fadeOut(),
-            modifier = Modifier.align(Alignment.BottomCenter),
-        ) {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xCC000000))))
-                    .padding(horizontal = gutter, vertical = 24.dp)
-            ) {
-                val shown = scrubTarget ?: position // pendant le défilement : l'instant visé
-                val fraction = if (duration > 0) (shown.toFloat() / duration).coerceIn(0f, 1f) else 0f
-                val trickplay = info.trickplay
-                if (scrubTarget != null && trickplay != null) {
-                    // Vignette au-dessus de l'instant visé, sans sortir de l'écran
-                    BoxWithConstraints(Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
-                        val thumb = 240.dp
-                        val x = (maxWidth * fraction - thumb / 2).coerceIn(0.dp, (maxWidth - thumb).coerceAtLeast(0.dp))
-                        Column(Modifier.offset(x = x)) {
-                            TrickplayThumb(trickplay, shown / 1000.0, app.api::absolute, width = thumb)
-                            Text(
-                                formatClock(shown / 1000),
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.padding(top = 4.dp).align(Alignment.CenterHorizontally),
-                            )
-                        }
-                    }
-                }
-                ProgressBar(fraction, Modifier.fillMaxWidth(), height = 4.dp)
-                Row(Modifier.fillMaxWidth().padding(top = 6.dp)) {
-                    Text(formatClock(shown / 1000), style = MaterialTheme.typography.labelLarge)
-                    Text(" / " + formatClock(duration / 1000), style = MaterialTheme.typography.labelLarge, color = ArrColors.TextSecondary)
-                }
-            }
-        }
-
-        // « Passer l'intro » (en bas à droite, comme dans l'add-on)
-        AnimatedVisibility(
-            visible = activeSkip != null && !showMenu && !showUpNext,
-            enter = fadeIn() + slideInHorizontally { it / 2 },
-            exit = fadeOut(),
-            modifier = Modifier.align(Alignment.BottomEnd).padding(end = gutter, bottom = 48.dp),
-        ) {
-            SkipButton(activeSkip?.let { PlaybackLogic.skipLabel(it) } ?: "")
-        }
-
-        // Carte « Épisode suivant »
-        AnimatedVisibility(
-            visible = showUpNext,
-            enter = fadeIn() + slideInHorizontally { it },
-            exit = fadeOut() + slideOutHorizontally { it },
-            modifier = Modifier.align(Alignment.BottomEnd).padding(end = gutter, bottom = 48.dp),
-        ) {
-            upNext?.let { UpNextCard(it, countdown, app.api::absolute) }
-        }
-
-        // Carte « Le réseau ne suit pas ce fichier… Passer en 1080p ? » (ADR-012)
-        AnimatedVisibility(
-            visible = qualityCard != null && !showMenu && !showUpNext,
-            enter = fadeIn() + slideInHorizontally { it },
-            exit = fadeOut() + slideOutHorizontally { it },
-            modifier = Modifier.align(Alignment.BottomEnd).padding(end = gutter, bottom = 48.dp),
-        ) {
-            when (qualityCard) {
-                QualityCardKind.SUGGEST -> QualityCard(
-                    QualityLogic.suggestMessage(info.bitrate),
-                    accept = "Passer en 1080p",
-                    decline = "Non merci",
-                    onAccept = ::acceptQualityCard,
-                    onDecline = ::declineQualityCard,
-                )
-                QualityCardKind.ALWAYS -> QualityCard(
-                    "Toujours lire en 1080p sur cette TV ?",
-                    accept = "Oui, toujours",
-                    decline = "Non",
-                    onAccept = ::acceptQualityCard,
-                    onDecline = ::declineQualityCard,
-                )
-                null -> Unit
-            }
-        }
+        // Barre d'avance rapide, « Passer l'intro », « Épisode suivant », carte de qualité : PlayerHud.kt
+        PlayerHud(
+            info = info,
+            showMenu = showMenu,
+            osdUntil = osdUntil,
+            scrubTarget = scrubTarget,
+            position = position,
+            duration = duration,
+            activeSkip = activeSkip,
+            showUpNext = showUpNext,
+            upNext = upNext,
+            countdown = countdown,
+            qualityCard = streams.qualityCard,
+            absolute = app.api::absolute,
+            onAcceptQuality = streams::acceptQualityCard,
+            onDeclineQuality = streams::declineQualityCard,
+        )
 
         // Menu pause façon Apple TV
         AnimatedVisibility(visible = showMenu, enter = fadeIn(), exit = fadeOut()) {
@@ -1090,20 +537,20 @@ internal fun PlayerSurface(
                 onSelectTrack = { type, choice -> trackChooser.select(type, choice) },
                 onQuit = onExit,
                 onSkip = { seconds -> player.seekTo((player.currentPosition + seconds * 1000L).coerceAtLeast(0)) },
-                audio = AudioContext(room, hasAmp, advice, autoSound),
-                amp = amp,
-                onAmp = ::ampCommand,
+                audio = AudioContext(roomSound.room, roomSound.hasAmp, advice, roomSound.autoSound),
+                amp = roomSound.amp,
+                onAmp = roomSound::ampCommand,
                 onAuto = { on ->
-                    autoSound = on
+                    roomSound.autoSound = on
                     app.prefs.autoSound = on
                 },
-                onApplyAdvice = { advice.program?.let { ampCommand("sound_program", JsonPrimitive(it)) } },
+                onApplyAdvice = { advice.program?.let { roomSound.ampCommand("sound_program", JsonPrimitive(it)) } },
                 subtitleDownload = SubtitleDownload(
                     busy = subtitles.busy,
                     note = subtitles.note,
-                    onClick = subtitles.request?.let { { subtitles.download(::reloadSameStream) } },
-                    onSync = subtitles.request?.let { { subtitles.sync(::reloadSameStream) } },
-                    onShift = { deltaMs -> subtitles.shift(deltaMs, tracks, ::reloadSameStream) },
+                    onClick = subtitles.request?.let { { subtitles.download(streams::reloadSameStream) } },
+                    onSync = subtitles.request?.let { { subtitles.sync(streams::reloadSameStream) } },
+                    onShift = { deltaMs -> subtitles.shift(deltaMs, tracks, streams::reloadSameStream) },
                     shiftMs = subtitles.shiftMs,
                 ),
                 quality = QualityChoice(
@@ -1112,21 +559,21 @@ internal fun PlayerSurface(
                         screenHdr10,
                         // Format de l'original : la piste lue si c'est lui, sinon la fiche du titre
                         originalFormat = ScrobbleLogic.videoLabel(
-                            selectedVideoFormat(tracks)?.height?.takeIf { quality == Quality.ORIGINAL },
+                            selectedVideoFormat(tracks)?.height?.takeIf { streams.quality == Quality.ORIGINAL },
                             techBadges(meta?.file),
                             info.videoRange,
                             toneMapped = false,
                         ),
-                        doviForcedSdr = doviForcedSdr,
+                        doviForcedSdr = streams.doviForcedSdr,
                     ),
-                    current = quality,
-                    onSelect = { setQuality(it) },
+                    current = streams.quality,
+                    onSelect = { streams.setQuality(it) },
                 ),
-                hlsAudio = HlsAudioChoice(hlsChoices, ::setHlsAudio).takeIf { hlsChoices.isNotEmpty() },
+                hlsAudio = HlsAudioChoice(hlsChoices, streams::setHlsAudio).takeIf { hlsChoices.isNotEmpty() },
             )
         }
 
-        playbackError?.let { message ->
+        streams.playbackError?.let { message ->
             MessageScreen("Lecture interrompue", message, "Retour", onExit)
         }
     }
