@@ -364,6 +364,8 @@ async def search_trash_guides(args: TrashSearchArgs) -> dict[str, Any]:
             "profiles": [
                 {
                     "name": qp.get("name"),
+                    # Ce qu'attend apply_trash_profile (nom du fichier TRaSH)
+                    "id": str(qp.get("_source_file", "")).removesuffix(".json"),
                     "description": _strip_html(qp.get("trash_description")),
                     "url": qp.get("trash_url"),
                     "score_set": qp.get("trash_score_set"),

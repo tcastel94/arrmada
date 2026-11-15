@@ -155,6 +155,11 @@ def test_action_tools_are_declared_with_a_preview() -> None:
         "arr_command",
         "sabnzbd_action",
         "media_action",
+        # Profils qualité (ADR-020)
+        "update_quality_profile",
+        "clone_quality_profile",
+        "assign_quality_profile",
+        "apply_trash_profile",
     }
     for tool in tools.all_tools():
         if tool.preview is not None:

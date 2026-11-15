@@ -146,8 +146,8 @@ function PrivacyNote({ webSearch, mode }: { webSearch: boolean; mode?: "confirm"
             <span>
                 {mode === "auto"
                     ? "Mode « agir tout de suite » : l'agent exécute ses actions sans attendre ton clic. "
-                    : "Chaque action (débloquer, importer, relancer, ajouter) attend ta validation. "}
-                Il ne supprime jamais rien de la médiathèque et ne change pas tes réglages (
+                    : "Chaque action (débloquer, importer, relancer, ajouter, modifier un profil qualité) attend ta validation. "}
+                Il ne supprime jamais rien de la médiathèque ; côté réglages, il ne touche qu&apos;aux profils qualité, à ta demande (
                 <Link href="/settings" className="text-primary hover:underline">
                     Paramètres › Agent IA
                 </Link>
