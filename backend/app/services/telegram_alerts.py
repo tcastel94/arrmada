@@ -26,7 +26,10 @@ conversation configurée (``TELEGRAM_CHAT_ID``) sont acceptés.
 
 Piège : un bot ne peut avoir qu'UN lecteur. Si le même bot est déjà lu par
 un autre programme, ou a un webhook, Telegram répond 409 : on le journalise
-une fois, et les alertes partent quand même (sans boutons utilisables).
+une fois, et les alertes partent quand même (sans boutons utilisables). Pire,
+deux programmes qui lisent le même bot se volent les messages : celui qui
+répond aux commandes (recherche de films…) n'en reçoit plus qu'une partie.
+Couper les alertes (Paramètres › Agent IA) arrête aussi la lecture.
 """
 
 from __future__ import annotations
@@ -328,6 +331,11 @@ async def poll_once(timeout: int = LONG_POLL_SECONDS) -> int:
     if not configured():
         return 0
     data = _load()
+    if not data["enabled"]:
+        # Alertes coupées : on ne lit plus rien chez Telegram. Indispensable si
+        # le même bot sert aussi à un autre programme (Searcharr, Requestrr…) :
+        # deux lecteurs se volent les messages, et l'autre ne répond plus.
+        return 0
     try:
         updates = await _api(
             "getUpdates",

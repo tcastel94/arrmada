@@ -197,3 +197,13 @@ async def test_settings_toggle(client: AsyncClient, auth_headers: dict, telegram
     assert r.status_code == 200, r.text
     assert r.json()["telegram"]["alerts"] is False
     assert r.json()["mode"] == "confirm"  # le mode n'a pas bougé
+
+
+async def test_disabled_alerts_stop_reading_telegram(telegram: FakeTelegram) -> None:
+    """Bot partagé avec un autre programme : couper les alertes doit arrêter getUpdates."""
+    telegram_alerts.set_enabled(False)
+    assert await telegram_alerts.poll_once(timeout=0) == 0
+    assert "getUpdates" not in telegram.methods()
+    telegram_alerts.set_enabled(True)
+    await telegram_alerts.poll_once(timeout=0)
+    assert "getUpdates" in telegram.methods()

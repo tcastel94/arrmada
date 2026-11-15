@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Telegram : ne plus gêner un autre bot
+
+#### Fixed
+- Alertes Telegram coupées (Paramètres › Agent IA) : ArrMada arrête aussi de **lire** le bot. Sinon, un bot partagé avec un autre programme (Searcharr, Requestrr…) se faisait voler ses messages, et ce programme ne répondait plus aux recherches
+
+#### Added
+- `scripts/diag-bot-telegram.sh` : diagnostic d'un bot Telegram externe qui ne répond plus. Il vérifie que son conteneur tourne, relève ses erreurs (clé d'API, adresse, 409), regarde s'il partage le bot d'ArrMada (empreintes, aucun jeton affiché) et teste s'il joint Radarr / Sonarr
+- `scripts/separer-bot-telegram.sh` : donne à ArrMada son propre bot quand il partageait celui d'un autre programme. Il vérifie le nouveau jeton, met à jour le `.env` après une sauvegarde, recrée le conteneur et lève chez Telegram le filtre « que les clics » sur l'ancien bot. Aucun jeton n'est affiché
+- `scripts/test-telegram.sh` : test de bout en bout des alertes d'ArrMada (jeton, webhook, message, puis boutons sur une fausse alerte)
+
 ### TV : la musique dans l'écran Téléchargements
 
 #### Added
