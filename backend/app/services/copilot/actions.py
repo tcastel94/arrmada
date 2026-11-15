@@ -36,7 +36,7 @@ from pydantic import Field
 
 from app.services import ai_actions, unstick
 from app.services.copilot import tools
-from app.services.copilot.tools import ManagerType, Tool, _Args
+from app.services.copilot.tools import Tool, _Args
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -79,7 +79,19 @@ async def _candidates(client: Any, download_id: str) -> list[dict[str, Any]]:
 
 
 def _target(service: str, candidate: dict[str, Any]) -> str:
-    """« Oppenheimer (2023) », « The Expanse S02E03 », ou « non reconnu »."""
+    """« Oppenheimer (2023) », « The Expanse S02E03 », « Radiohead – OK Computer, piste 3 »."""
+    if service == "lidarr":
+        artist = (candidate.get("artist") or {}).get("artistName")
+        album = (candidate.get("album") or {}).get("title")
+        if not artist or not album:
+            return "album non reconnu"
+        tracks = candidate.get("tracks") or []
+        if not tracks:
+            return f"{artist} – {album}, piste non reconnue"
+        numbers = ", ".join(
+            str(t.get("trackNumber") or t.get("absoluteTrackNumber") or "?") for t in tracks
+        )
+        return f"{artist} – {album}, piste {numbers}"
     if service == "radarr":
         movie = candidate.get("movie") or {}
         if not movie:
@@ -113,8 +125,16 @@ _REPLACES = ("not an upgrade", "upgrade", "existing", "already", "same file")
 # ══════════════════════════════════════════════════════════════
 
 
+DownloadService = Literal["radarr", "sonarr", "lidarr"]
+
+_APP = {"radarr": "Radarr", "sonarr": "Sonarr", "lidarr": "Lidarr"}
+
+
 class DownloadArgs(_Args):
-    service: ManagerType = Field(description="radarr (films) ou sonarr (séries).")
+    service: DownloadService = Field(
+        description="radarr (films), sonarr (séries) ou lidarr (musique) : le champ "
+        "`service_type` renvoyé par get_download_queue."
+    )
     download_id: str = Field(
         min_length=1,
         description="Identifiant du téléchargement : le champ `download_id` renvoyé par "
@@ -290,7 +310,7 @@ async def preview_import(args: ImportArgs) -> Preview:
     if not files:
         reason = lines[0] if lines else "aucun fichier vidéo à importer"
         return Preview(f"Rien d'importable dans « {title} » : {reason}", actionable=False)
-    app = "Radarr" if args.service == "radarr" else "Sonarr"
+    app = _APP[args.service]
     return Preview(
         f"Importer {len(files)} fichier{'s' if len(files) > 1 else ''} de « {title} » dans {app}",
         details=lines[:25],
@@ -304,9 +324,10 @@ async def import_download(args: ImportArgs) -> dict[str, Any]:
         return {"status": "nothing", "message": "Plus rien d'importable", "details": lines}
     client = await _arr(args.service)
     try:
-        await client.post(
-            "/command", data={"name": "ManualImport", "files": files, "importMode": "auto"}
-        )
+        command: dict[str, Any] = {"name": "ManualImport", "files": files, "importMode": "auto"}
+        if args.service == "lidarr" and not args.include_rejected:
+            command["replaceExistingFiles"] = False  # jamais écraser une piste sans accord
+        await client.post("/command", data=command)
     finally:
         await client.close()
     return {
@@ -351,6 +372,8 @@ async def replace_download(args: ReplaceArgs) -> dict[str, Any]:
         if args.search:
             if args.service == "radarr":
                 await client.search_movie(first["movieId"])
+            elif args.service == "lidarr":
+                await client.search_albums([first["albumId"]])
             else:
                 episode_ids = sorted({r["episodeId"] for r in records if r.get("episodeId")})
                 if episode_ids:
@@ -519,9 +542,10 @@ TOOLS: tuple[Tool, ...] = (
     Tool(
         "diagnose_download",
         "Diagnostic d'un téléchargement",
-        "Pourquoi un téléchargement de la file Radarr / Sonarr est bloqué : état, messages du "
-        "*arr, remède connu, et pour un téléchargement terminé, chaque fichier avec ce qu'il "
-        "devient (film ou épisodes reconnus) et les raisons de refus d'import. Lecture seule. "
+        "Pourquoi un téléchargement de la file Radarr, Sonarr ou Lidarr est bloqué : état, "
+        "messages du *arr, remède connu, et pour un téléchargement terminé, chaque fichier avec "
+        "ce qu'il devient (film, épisodes, ou album et pistes reconnus) et les raisons de refus "
+        "d'import. Lecture seule. "
         "À appeler avant import_download ou replace_download.",
         DownloadArgs,
         diagnose_download,
@@ -532,7 +556,8 @@ TOOLS: tuple[Tool, ...] = (
         "AGIT. Applique le remède connu d'un téléchargement bloqué (le même que le bouton "
         "« Débloquer » de la TV) : pack de saison refusé → import épisode par épisode ; "
         "terminé mais pas importé → import des fichiers que le *arr accepte ; en échec ou "
-        "release morte → liste noire et recherche d'une autre version. N'écrase rien. "
+        "release morte → liste noire et recherche d'une autre version. N'écrase rien. Marche "
+        "aussi pour la musique (lidarr). "
         "Premier recours pour un téléchargement bloqué.",
         DownloadArgs,
         unblock_download,
@@ -541,7 +566,8 @@ TOOLS: tuple[Tool, ...] = (
     Tool(
         "import_download",
         "Importer des fichiers",
-        "AGIT. Import manuel des fichiers d'un téléchargement terminé, choisis un par un "
+        "AGIT. Import manuel des fichiers d'un téléchargement terminé (films, séries ou "
+        "musique), choisis un par un "
         "(champ `files`, chemins de diagnose_download). Par défaut seuls les fichiers sans "
         "refus et reconnus sont importés ; include_rejected=true importe aussi ceux que le "
         "*arr refuse (peut remplacer un fichier existant).",
@@ -554,7 +580,8 @@ TOOLS: tuple[Tool, ...] = (
         "Changer de version",
         "AGIT. Retire un téléchargement de la file (et du client de téléchargement), met la "
         "release en liste noire pour qu'elle ne revienne pas, puis cherche une autre version "
-        "(search=false pour ne pas chercher). Pour une release morte, bloquée ou en échec. "
+        "(search=false pour ne pas chercher). Pour une release morte, bloquée ou en échec, "
+        "film, série ou album. "
         "Ne touche pas à la médiathèque.",
         ReplaceArgs,
         replace_download,
