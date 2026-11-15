@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Agent IA : il modifie les profils qualité
+
+#### Added
+- **L'agent change lui-même un profil qualité** de Radarr ou de Sonarr quand tu le lui demandes ([ADR-020](docs/adr/020-agent-ia-profils-qualite.md)) : décocher ou cocher des qualités, changer le seuil, autoriser ou non les mises à niveau. Avant, il listait les clics à faire
+- Il sait aussi **copier un profil** (garder un profil « Remux » pour quelques films), **passer des titres d'un profil à un autre**, et **appliquer un profil des TRaSH Guides** avec ses formats et ses scores
+- Même validation que ses autres actions : la carte montre les qualités retirées, le seuil avant → après et le nombre de titres concernés
+- Aucun fichier n'est supprimé ni re-téléchargé par ces actions. Les fichiers déjà présents restent : baisser un profil ne libère pas de place tout seul
+
+#### Changed
+- Une question (« que me conseilles-tu ? ») reçoit toujours un conseil ; une demande (« fais-le ») déclenche l'action
+
 ### Telegram : ne plus gêner un autre bot
 
 #### Fixed
