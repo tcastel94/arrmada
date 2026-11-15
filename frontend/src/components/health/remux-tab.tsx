@@ -108,7 +108,7 @@ export function RemuxTab() {
         try {
             await replace.mutateAsync({ movieIds: toReplace.map((i) => i.movie_id), include1080p });
             setSelected(new Set());
-            toast.success(`Lot lancé : ${toReplace.length} ${plural(toReplace.length, "film")}`, {
+            toast.success(`Lot lancé : ${plural(toReplace.length, "film")}`, {
                 description: "L'avancement s'affiche en haut de la liste.",
             });
         } catch (e) {
@@ -184,7 +184,7 @@ export function RemuxTab() {
             </motion.div>
 
             <motion.div variants={fadeUp} className="grid gap-3 sm:grid-cols-3">
-                <Figure label="Remplaçables" value={`${data.ready} ${plural(data.ready, "film")}`} />
+                <Figure label="Remplaçables" value={plural(data.ready, "film")} />
                 <Figure label="Place occupée aujourd'hui" value={formatBytes(data.size_bytes)} />
                 <Figure label="Gain estimé" value={`≈ ${formatBytes(data.reclaimable_bytes)}`} tone="success" />
             </motion.div>
@@ -403,7 +403,7 @@ function JobPanel({ job, stopping, onStop }: { job: RemuxJob; stopping: boolean;
         ? `Lot en cours : ${job.done}/${job.total}`
         : job.state === "stopped"
           ? `Lot arrêté : ${job.done}/${job.total} traités`
-          : `Dernier lot : ${job.replaced} ${plural(job.replaced, "remplacé")}, ${job.skipped} ${plural(job.skipped, "conservé")}`;
+          : `Dernier lot : ${plural(job.replaced, "remplacé")}, ${plural(job.skipped, "conservé")}`;
     return (
         <Panel
             title={title}
