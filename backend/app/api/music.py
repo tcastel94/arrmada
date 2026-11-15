@@ -275,7 +275,10 @@ async def album_releases(album_id: int, db: AsyncSession = Depends(get_db)) -> d
 
 
 class GrabRelease(BaseModel):
-    guid: str = Field(..., min_length=1, max_length=2000)
+    # Pour un torrent, le guid est souvent le lien magnet complet, avec la
+    # liste de ses trackers : 2 000 caractères ne suffisaient pas (kickass…).
+    # La borne reste là pour refuser un corps de requête absurde.
+    guid: str = Field(..., min_length=1, max_length=32_000)
     indexer_id: int
 
 
