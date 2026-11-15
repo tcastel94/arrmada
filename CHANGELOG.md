@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Les films non surveillés, ou trop petits pour être de vrais remux (qualité mal détectée), sont affichés avec la raison et ne sont pas remplaçables
 - **Agent IA** : `list_heavy_remux` (inventaire complet côté serveur, sans la limite de 100 résultats de la recherche) et `replace_remux` (même remplacement, avec la carte de validation). Chaque remplacement est inscrit au journal d'activité
 
+#### Fixed
+- Un remux bien retiré n'est plus annoncé en erreur. Déplacer 78 Go vers la corbeille de Radarr prend plus de 30 secondes : ArrMada cessait d'attendre et affichait « le remux n'a pas pu être retiré () » alors qu'il l'était. Il attend maintenant jusqu'à 15 minutes, et relit le film dans Radarr avant de parler d'erreur
+- La tuile « Remplaçables » n'affiche plus le nombre deux fois (« 147 147 films »)
+
 #### Changed
 - L'agent pouvait baisser un profil mais pas remplacer les remux déjà présents : c'est désormais sa seule suppression de fichier, limitée à ce cas. Il ne supprime toujours aucun titre
 

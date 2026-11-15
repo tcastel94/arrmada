@@ -259,6 +259,29 @@ async def test_refused_download_deletes_nothing(radarr: FakeServarr) -> None:
     assert radarr.deleted_files == [] and _movie_of(radarr, 1)["hasFile"] is True
 
 
+async def test_a_lost_answer_to_a_done_deletion_is_not_an_error(radarr: FakeServarr) -> None:
+    # Vu sur l'installation : 78 Go déplacés vers la corbeille, Radarr répond
+    # trop tard. Le remux est bien parti, ce n'est pas une erreur.
+    radarr.delete_mode = "lost"
+    client = radarr.client()
+    result = await remux_slim.replace_one(client, 1)
+    await client.close()
+    assert result["status"] == "replaced"
+    assert result["freed_bytes"] == 70 * GIB
+    assert _movie_of(radarr, 1)["hasFile"] is False
+
+
+async def test_a_failed_deletion_says_the_remux_is_still_there(radarr: FakeServarr) -> None:
+    radarr.delete_mode = "failed"
+    client = radarr.client()
+    result = await remux_slim.replace_one(client, 1)
+    await client.close()
+    assert result["status"] == "error"
+    assert "encore là" in result["message"] and "500" in result["message"]
+    assert result["freed_bytes"] == 0
+    assert radarr.grabs and _movie_of(radarr, 1)["hasFile"] is True
+
+
 async def test_a_replacement_as_heavy_as_the_remux_is_not_one(radarr: FakeServarr) -> None:
     radarr.releases[1] = [
         _release("Dune.2021.2160p.BluRay.FULL", BLURAY_2160, EXISTING, size_gib=60)

@@ -63,6 +63,9 @@ class FakeServarr:
         self.grabs: list[dict[str, Any]] = []
         self.grab_status = 200
         self.deleted_files: list[int] = []
+        # Suppression d'un fichier : "lost" = faite, mais la réponse n'arrive
+        # jamais (gros fichier déplacé vers la corbeille) ; "failed" = refusée.
+        self.delete_mode = "ok"
         #: (méthode, chemin) de chaque écriture reçue
         self.writes: list[tuple[str, str]] = []
         self._next_id = 100
@@ -144,11 +147,15 @@ class FakeServarr:
         m = re.fullmatch(r"/moviefile/(\d+)", path)
         if method == "DELETE" and m:
             file_id = int(m.group(1))
+            if self.delete_mode == "failed":
+                return httpx.Response(500, json={"message": "disque en lecture seule"})
             for item in self.library:
                 if (item.get("movieFile") or {}).get("id") == file_id:
                     item["hasFile"] = False
                     item.pop("movieFile", None)
                     self.deleted_files.append(file_id)
+                    if self.delete_mode == "lost":
+                        raise httpx.ReadTimeout("", request=request)
                     return httpx.Response(200, json={})
             return httpx.Response(404, json={"message": "NotFound"})
         if method == "POST" and path == "/release":
