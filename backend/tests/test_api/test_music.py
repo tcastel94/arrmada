@@ -580,6 +580,21 @@ async def test_album_releases_and_grab(
         {"guid": "g-new", "indexerId": 2}
     ]
 
+    # Torrent : le guid est un lien magnet avec tous ses trackers (> 2 000 caractères)
+    magnet = (
+        "magnet:?xt=urn:btih:"
+        + "a" * 40
+        + "".join(f"&tr=udp%3A%2F%2Ftracker{i}.example.org%3A1337%2Fannounce" for i in range(60))
+    )
+    assert len(magnet) > 2000
+    resp = await client.post(
+        "/api/music/albums/13/grab", json={"guid": magnet, "indexer_id": 5}, headers=lidarr
+    )
+    assert resp.status_code == 200, resp.text
+    assert {"guid": magnet, "indexerId": 5} in [
+        b for _h, p, b in fake_arr.POSTS if p == "/api/v1/release"
+    ]
+
 
 # ── Musique restée dans les téléchargements ──────────────────
 

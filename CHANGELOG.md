@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Musique : « Télécharger » marche aussi pour les torrents
+
+#### Fixed
+- Recherche manuelle d'un album, bouton **Télécharger** : « Envoi impossible : String should have at most 2000 characters » sur les releases torrent (kickasstorrents…). Leur identifiant est le lien magnet complet, avec tous ses trackers, et il dépasse 2 000 caractères. La limite passe à 32 000
+
 ### TV : la musique dans l'écran Téléchargements
 
 #### Added
