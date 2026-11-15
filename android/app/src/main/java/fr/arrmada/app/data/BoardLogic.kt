@@ -183,7 +183,10 @@ object BoardLogic {
 
     fun rowActions(item: QueueItem, family: Family): List<Action> = buildList {
         val usenet = !item.downloadId.isNullOrBlank() && item.protocol == "usenet"
-        if (family == Family.ERROR && !item.downloadId.isNullOrBlank()) add(Action.UNSTICK)
+        // Bloqué, ou import en attente AVEC une raison (« album reconnu à 74 % »,
+        // « épisode inconnu »…) : il ne se fera pas tout seul, on propose Débloquer
+        val waitingWithReason = family == Family.IMPORT && item.trackedState.equals("importPending", ignoreCase = true) && item.detail.isNotBlank()
+        if ((family == Family.ERROR || waitingWithReason) && !item.downloadId.isNullOrBlank()) add(Action.UNSTICK)
         if (usenet && family in listOf(Family.ACTIVE, Family.QUEUED, Family.PAUSED)) {
             add(Action.TOP)
             add(if (family == Family.PAUSED) Action.RESUME else Action.PAUSE)
@@ -224,7 +227,7 @@ object BoardLogic {
         val running = board.tonight.count { it.status == "open" }
         val parts = mutableListOf<String>()
         if (running > 0) parts += "$running pour ce soir"
-        parts += if (board.queue.isNotEmpty()) "${board.queue.size} en file" else "file vide"
+        parts += if (board.rows.isNotEmpty()) "${board.rows.size} en file" else "file vide"
         board.sab?.let { sab ->
             val speed = sab.kbpersec * 1024
             if (speed > 0) parts += "${Fr.bytes(speed)}/s"

@@ -89,6 +89,24 @@ class LiveLogicTest {
         assertEquals("OK : En tête · Reprendre · Fiche", BoardLogic.hint(row.actions))
     }
 
+    @Test
+    fun `album Lidarr : pas de fiche, Débloquer si l'import attend avec une raison, compté dans la file`() {
+        val album = QueueItem(
+            id = 7, title = "Radiohead – OK Computer", serviceType = "lidarr", status = "completed",
+            trackedState = "importPending", detail = "Album match is not close enough: 74%",
+            downloadId = "SABnzbd_nzo_okc", protocol = "usenet", movieId = 99,
+        )
+        assertEquals(null, album.arrId) // pas de fiche film pour un album, même avec un movieId parasite
+        val row = BoardLogic.row(album)
+        assertEquals(BoardLogic.Family.IMPORT, row.family)
+        assertEquals(listOf(BoardLogic.Action.UNSTICK), row.actions)
+        // Import en attente SANS raison : il va se faire tout seul, rien à proposer
+        assertEquals(emptyList<BoardLogic.Action>(), BoardLogic.row(album.copy(detail = "")).actions)
+        val board = Board(queue = emptyList(), music = listOf(album))
+        assertEquals(listOf(album), board.rows)
+        assertEquals("1 en file", BoardLogic.summary(board))
+    }
+
     // ── Événements ──
 
     private fun event(id: String, type: String, vararg data: Pair<String, Any?>) = ServerEvent(

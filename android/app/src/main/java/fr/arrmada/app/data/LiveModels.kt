@@ -19,8 +19,12 @@ import kotlinx.serialization.json.contentOrNull
 data class Board(
     val tonight: List<BoardCard> = emptyList(), // demandes « Pour ce soir » des TV
     val queue: List<QueueItem> = emptyList(), // file de Radarr / Sonarr
+    val music: List<QueueItem> = emptyList(), // file de Lidarr (une ligne par album)
     val sab: SabInfo? = null, // null : pas de SABnzbd configuré
-)
+) {
+    /** Ce que l'écran affiche : films et séries, puis la musique à la suite. */
+    val rows: List<QueueItem> get() = queue + music
+}
 
 /** Demande lancée depuis une TV (« Pour ce soir »), suivie jusqu'à « Prêt à regarder ». */
 @Serializable
@@ -56,7 +60,7 @@ data class BlockedDownload(
     @SerialName("download_id") val downloadId: String = "",
 )
 
-/** Élément de la file de Radarr / Sonarr. */
+/** Élément de la file de Radarr / Sonarr, ou un album de la file de Lidarr. */
 @Serializable
 data class QueueItem(
     val id: Long = 0,
@@ -80,8 +84,12 @@ data class QueueItem(
     @SerialName("poster_url") val posterUrl: String? = null,
     @SerialName("fanart_url") val fanartUrl: String? = null,
 ) {
-    /** Fiche Radarr (film) ou Sonarr (série) du titre téléchargé. */
-    val arrId: Int? get() = if (serviceType == "sonarr") seriesId else movieId
+    /** Fiche Radarr (film) ou Sonarr (série) du titre téléchargé ; pas de fiche pour un album. */
+    val arrId: Int? get() = when (serviceType) {
+        "sonarr" -> seriesId
+        "lidarr" -> null
+        else -> movieId
+    }
 }
 
 @Serializable

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### TV : la musique dans l'écran Téléchargements
+
+#### Added
+- **Appli TV, écran Téléchargements** : la file de Lidarr apparaît sous son propre titre « Musique », une ligne par album (« Radiohead – OK Computer »), avec sa pochette, sa progression et son état
+- OK sur un album bloqué → **Débloquer** : même diagnostic et même remède que pour un film (import des pistes reconnues sans en écraser aucune, ou autre version)
+- Films, séries et musique : un import « en attente » accompagné d'une raison (album reconnu à 74 %, épisode inconnu…) propose maintenant Débloquer. Il ne se ferait pas tout seul
+- Serveur : `GET /api/kodi/downloads/board` renvoie un champ `music`, à part de `queue` pour que l'add-on Kodi n'en soit pas perturbé
+
 ### Agent IA : la musique aussi
 
 #### Added

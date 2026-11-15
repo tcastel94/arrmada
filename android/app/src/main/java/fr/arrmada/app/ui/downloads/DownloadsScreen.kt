@@ -107,7 +107,7 @@ fun DownloadsScreen(
                 .onSuccess { b ->
                     val now = System.currentTimeMillis()
                     val next = mutableMapOf<String, Double>()
-                    b.queue.forEach { item ->
+                    b.rows.forEach { item ->
                         val key = item.serviceType + ":" + item.id
                         samples[key]?.let { (then, left) ->
                             val elapsed = (now - then) / 1000.0
@@ -186,6 +186,7 @@ fun DownloadsScreen(
         error != null && b == null -> return MessageScreen("Téléchargements indisponibles", error, "Réessayer") { error = null; refresh++ }
         b == null -> return MessageScreen("Chargement…")
     }
+    // Pause / reprise de toute la file passent par Radarr ou Sonarr (SABnzbd), jamais par Lidarr
     val service = b!!.queue.firstOrNull()?.serviceType?.ifBlank { null } ?: "radarr"
     DownloadsContent(
         board = b,
@@ -271,7 +272,7 @@ fun DownloadsContent(
             }
             item {
                 Text(
-                    if (board.queue.isEmpty()) "File d’attente vide" else "File d’attente",
+                    if (board.queue.isEmpty()) (if (board.music.isEmpty()) "File d’attente vide" else "Films et séries : rien en file") else "File d’attente",
                     style = MaterialTheme.typography.titleMedium,
                     color = ArrColors.TextSecondary,
                     modifier = Modifier.padding(start = gutter, top = 10.dp),
@@ -285,9 +286,23 @@ fun DownloadsContent(
                     modifier = if (board.tonight.isEmpty() && item == board.queue.first()) Modifier.focusRequester(firstFocus) else Modifier,
                 )
             }
+            // Musique (Lidarr) : mêmes lignes, sous leur propre titre ; OK → Débloquer si un album cale
+            if (board.music.isNotEmpty()) {
+                item {
+                    Text("Musique", style = MaterialTheme.typography.titleMedium, color = ArrColors.TextSecondary, modifier = Modifier.padding(start = gutter, top = 10.dp))
+                }
+                items(board.music, key = { "m:" + it.downloadId.orEmpty() + it.id }) { item ->
+                    QueueRow(
+                        item, BoardLogic.row(item, speeds[item.serviceType + ":" + item.id] ?: 0.0), absolute,
+                        onClick = { onRow(item) },
+                        onFocus = { backdrop = null },
+                        modifier = if (board.tonight.isEmpty() && board.queue.isEmpty() && item == board.music.first()) Modifier.focusRequester(firstFocus) else Modifier,
+                    )
+                }
+            }
         }
     }
-    LaunchedEffect(board.tonight.isNotEmpty() || board.queue.isNotEmpty()) { runCatching { firstFocus.requestFocus() } }
+    LaunchedEffect(board.tonight.isNotEmpty() || board.rows.isNotEmpty()) { runCatching { firstFocus.requestFocus() } }
 }
 
 /** Carte « Pour ce soir » : affiche, titre, TV d'origine, heure « Prêt vers », barre, étapes. */
