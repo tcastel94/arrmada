@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, require_admin
-from app.services import ai_actions
+from app.services import ai_actions, telegram_alerts
 from app.services.llm import LLMUnavailableError, ai_configured
 
 router = APIRouter(prefix="/api/ai", tags=["ai-actions"], dependencies=[Depends(get_current_user)])
@@ -68,16 +68,36 @@ async def cancel(proposal_id: str) -> dict:
     return p.public()
 
 
+def _settings() -> dict:
+    return {
+        "mode": ai_actions.get_mode(),
+        "configured": ai_configured(),
+        # Alertes Telegram des téléchargements bloqués (boutons Débloquer / Ignorer)
+        "telegram": {
+            "configured": telegram_alerts.configured(),
+            "alerts": telegram_alerts.is_enabled(),
+        },
+    }
+
+
 @router.get("/settings")
 async def get_settings() -> dict:
-    return {"mode": ai_actions.get_mode(), "configured": ai_configured()}
+    return _settings()
 
 
 class ModeBody(BaseModel):
-    mode: str = Field(..., pattern="^(confirm|auto)$")
+    mode: str | None = Field(default=None, pattern="^(confirm|auto)$")
+    telegram_alerts: bool | None = None
 
 
 @router.put("/settings", dependencies=[Depends(require_admin)])
 async def put_settings(body: ModeBody) -> dict:
-    """« confirm » : chaque action attend un clic ; « auto » : l'IA agit seule et rend compte."""
-    return {"mode": ai_actions.set_mode(body.mode), "configured": ai_configured()}
+    """« confirm » : chaque action attend un clic ; « auto » : l'IA agit seule et rend compte.
+
+    ``telegram_alerts`` : alerter (ou non) sur Telegram des téléchargements bloqués.
+    """
+    if body.mode is not None:
+        ai_actions.set_mode(body.mode)
+    if body.telegram_alerts is not None:
+        telegram_alerts.set_enabled(body.telegram_alerts)
+    return _settings()

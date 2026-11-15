@@ -85,3 +85,32 @@ inchangée) et l'ancienne page `/assistant` renvoie vers lui.
   une recherche de l'album (`AlbumSearch`). Les dossiers restés dans les
   téléchargements hors de la file passent toujours par
   `import_music_downloads`.
+
+## Complément : alertes Telegram avec boutons
+
+Un téléchargement qu'on ne voit pas bloqué ne sera jamais débloqué : l'agent
+n'aide que si on va le voir. D'où une alerte qui vient à soi :
+
+- **Détection** (`services/telegram_alerts.py`, toutes les 5 minutes) : les
+  files de Radarr, Sonarr et Lidarr passent par le diagnostic du bouton
+  « Débloquer » (ADR-005). Seuls les cas réparables comptent, et seulement
+  s'ils sont bloqués depuis **10 minutes** au moins (un import en attente se
+  règle souvent tout seul). Une alerte par blocage, sans rappel ; un blocage
+  résolu puis revenu réalerte.
+- **Message** : titre, étapes du diagnostic, boutons **Débloquer** /
+  **Ignorer**. Le clic refait le diagnostic au moment d'agir (comme la TV) et
+  le message est remplacé par le résultat. En mode « agir tout de suite », le
+  déblocage est fait et seul le résultat est envoyé.
+- **Réception des clics** par `getUpdates` (long polling) plutôt que par
+  webhook : rien à exposer sur Internet. Seuls les clics de la conversation
+  `TELEGRAM_CHAT_ID` sont acceptés ; un bouton ne sert qu'une fois et expire
+  au bout d'une semaine.
+- **Pas de LLM ici** : le remède est le runbook connu, gratuit et
+  déterministe. Pour un cas que ce runbook ne règle pas, c'est l'Agent IA
+  (web app) qui creuse.
+- Réglage : Paramètres › Agent IA › « Alertes Telegram des blocages »
+  (activé par défaut dès que Telegram est configuré).
+
+Piège : un bot Telegram n'a qu'un seul lecteur. Si le même bot est déjà lu
+par un autre programme (ou a un webhook), Telegram répond 409 et les boutons
+ne répondent pas : il faut un bot dédié à ArrMada.

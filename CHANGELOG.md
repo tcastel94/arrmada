@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Alertes Telegram : débloquer depuis le téléphone
+
+#### Added
+- **Téléchargement bloqué → message Telegram** avec son diagnostic et deux boutons, **Débloquer** et **Ignorer** ([ADR-019](docs/adr/019-agent-ia.md)). Films, séries et musique. Seuls les blocages réparables qui durent depuis 10 minutes sont envoyés, une seule fois chacun
+- « Débloquer » applique le même remède que le bouton de la TV ; le message est remplacé par le résultat. En mode « agir tout de suite », ArrMada débloque sans attendre et t'envoie le résultat
+- Rien à ouvrir sur Internet : ArrMada va lire les clics chez Telegram. Seuls les clics de ta conversation (`TELEGRAM_CHAT_ID`) sont acceptés
+- Paramètres › Agent IA : interrupteur « Alertes Telegram des blocages »
+
 ### Agent IA : la musique aussi
 
 #### Added
