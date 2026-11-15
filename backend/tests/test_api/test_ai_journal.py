@@ -16,15 +16,15 @@ from httpx import AsyncClient
 
 from app.api import ai_actions as ai_api
 from app.services import activity_log, ai_actions, ai_journal
-from app.services.copilot import actions
+from app.services.copilot import actions, tools
 from app.services.copilot.actions import SabArgs
 from tests import fake_arr
-from tests.conftest import TestSessionFactory
 
 
 @pytest.fixture(autouse=True)
 def _setup(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(activity_log, "async_session_factory", TestSessionFactory)
+    # Base de test (conftest la branche sur les outils de l'agent) : le journal y écrit
+    monkeypatch.setattr(activity_log, "async_session_factory", tools.session_factory)
     monkeypatch.setattr(ai_actions, "_store", lambda: tmp_path / "ai_actions.json")
     monkeypatch.setattr(ai_api, "ai_configured", lambda: True)
     ai_actions._PROPOSALS.clear()
