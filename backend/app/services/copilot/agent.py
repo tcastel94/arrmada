@@ -177,11 +177,12 @@ def _request_parameters() -> dict[str, Any]:
     }
 
 
-async def _run_action(block: Any, tool: tools.Tool, redactor: Redactor, mode: str):
+async def _run_action(block: Any, tool: tools.Tool, redactor: Redactor, mode: str, why: str = ""):
     """Outil qui agit : aperçu → validation de l'utilisateur → exécution.
 
     Émet les événements ``confirm`` (carte Valider / Annuler), ``confirm_result``
     et ``action_result`` ; termine par le ``ToolOutcome`` rendu au modèle.
+    [why] : la question de l'utilisateur, gardée au journal de l'agent.
     """
     from app.services.activity_log import log_event
 
@@ -247,7 +248,12 @@ async def _run_action(block: Any, tool: tools.Tool, redactor: Redactor, mode: st
         )
         return
 
-    outcome = await tools.run_handler(tool, args, redactor)
+    # La demande suit l'action jusqu'au journal, même passée par ai_actions (media_action)
+    token = ai_actions.CURRENT_REQUEST.set(why)
+    try:
+        outcome = await tools.run_handler(tool, args, redactor)
+    finally:
+        ai_actions.CURRENT_REQUEST.reset(token)
     message = outcome.content
     try:
         data = json.loads(outcome.content)
@@ -264,11 +270,14 @@ async def _run_action(block: Any, tool: tools.Tool, redactor: Redactor, mode: st
         source="copilot",
         title=preview.summary[:250],
         detail=message[:500],
+        meta=ai_actions.journal_meta(why, None if failed else actions.undo_for(tool.name, args)),
     )
     yield outcome
 
 
-async def _run_tools(tool_uses: list[Any], redactor: Redactor) -> AsyncIterator[Event | list[Any]]:
+async def _run_tools(
+    tool_uses: list[Any], redactor: Redactor, why: str = ""
+) -> AsyncIterator[Event | list[Any]]:
     """Exécute les outils demandés.
 
     Lectures en parallèle d'abord ; puis les outils qui agissent, un par un,
@@ -305,7 +314,7 @@ async def _run_tools(tool_uses: list[Any], redactor: Redactor) -> AsyncIterator[
         mode = ai_actions.get_mode()
         for block in writes:
             tool = tools.resolve(block.name)
-            async for item in _run_action(block, tool, redactor, mode):
+            async for item in _run_action(block, tool, redactor, mode, why):
                 if isinstance(item, tools.ToolOutcome):
                     outcomes[block.id] = item
                 else:
@@ -473,7 +482,7 @@ async def run_turn(
                 break
 
             messages.append({"role": "assistant", "content": response.content})
-            async for item in _run_tools(tool_uses, redactor):
+            async for item in _run_tools(tool_uses, redactor, user_text):
                 if isinstance(item, list):
                     messages.append({"role": "user", "content": item})
                 else:
