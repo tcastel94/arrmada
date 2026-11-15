@@ -4,6 +4,8 @@
             ou introuvables depuis moins de 12 h) : phase, progression, temps
             restant, TV d'origine, annulable ou non ;
   queue   : le reste de la file Radarr / Sonarr (format de /api/downloads) ;
+  music   : la file de Lidarr, au même format (une ligne par album) ; à part
+            pour que l'add-on Kodi, qui ne connaît pas la musique, l'ignore ;
   sab     : débit et état global de SABnzbd.
 
 La TV rafraîchit toutes les 5 s : tout est calculé ici, en une passe, pour
@@ -19,7 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.service import Service
-from app.services import media_aggregator, tv_priority
+from app.services import media_aggregator, tv_priority, unstick
 from app.services.encryption import decrypt_api_key
 from app.services.sabnzbd import SabnzbdClient
 from app.utils.logger import get_logger
@@ -152,6 +154,73 @@ async def _sab(db: AsyncSession) -> dict[str, Any] | None:
         await sab.close()
 
 
+def music_item(record: dict[str, Any]) -> dict[str, Any]:
+    """Ligne de la file Lidarr → format d'une ligne de /api/downloads (pur, testé)."""
+    artist = (record.get("artist") or {}).get("artistName") or ""
+    album = record.get("album") or {}
+    title = " – ".join(p for p in (artist, album.get("title") or "") if p) or str(
+        record.get("title") or "Album"
+    )
+    size = float(record.get("size") or 0)
+    left = float(record.get("sizeleft") or 0)
+    cover = next(
+        (
+            img.get("remoteUrl") or img.get("url")
+            for img in album.get("images") or []
+            if img.get("coverType") == "cover"
+        ),
+        "",
+    )
+    return {
+        "id": record.get("id"),
+        "title": title,
+        "status": record.get("status", "unknown"),
+        "progress": round((size - left) * 100 / size, 1) if size else 0.0,
+        "size_bytes": size,
+        "size_left_bytes": left,
+        "time_left": record.get("timeleft"),
+        "service_type": "lidarr",
+        "download_client": record.get("downloadClient", ""),
+        "protocol": record.get("protocol", ""),
+        "tracked_state": record.get("trackedDownloadState", ""),
+        "error": record.get("errorMessage") or "",
+        "detail": next(
+            (
+                msg
+                for m in record.get("statusMessages") or []
+                for msg in m.get("messages") or []
+                if msg
+            ),
+            "",
+        ),
+        "indexer": record.get("indexer", ""),
+        "quality": ((record.get("quality") or {}).get("quality") or {}).get("name", ""),
+        "download_id": record.get("downloadId") or "",
+        "poster_url": cover,
+        "fanart_url": "",
+    }
+
+
+async def _music(db: AsyncSession) -> list[dict[str, Any]]:
+    """File de Lidarr, une ligne par album (vide sans Lidarr ou s'il ne répond pas)."""
+    client = await unstick._client(db, "lidarr")
+    if client is None:
+        return []
+    try:
+        queue = await client.get_queue()
+    except Exception as exc:
+        logger.debug("Lidarr injoignable pour le tableau TV : %s", exc)
+        return []
+    finally:
+        await client.close()
+    rows: dict[str, dict[str, Any]] = {}
+    for record in (queue.get("records") or []) if isinstance(queue, dict) else []:
+        if isinstance(record, dict):
+            # Lidarr peut renvoyer une ligne par piste d'un même téléchargement
+            rows.setdefault(str(record.get("downloadId") or record.get("id")), record)
+    return [music_item(r) for r in rows.values()]
+
+
 async def build_board(
     db: AsyncSession, viewer_device_id: int | None = None, viewer_profile_id: int | None = None
 ) -> dict[str, Any]:
@@ -179,5 +248,6 @@ async def build_board(
     return {
         "tonight": order_cards(cards),
         "queue": [i for i in items if not i.get("tv_request")],
+        "music": await _music(db),
         "sab": await _sab(db),
     }

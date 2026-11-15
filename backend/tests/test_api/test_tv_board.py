@@ -221,6 +221,7 @@ async def test_board(client: AsyncClient, stack: dict[str, str]) -> None:
     # Le reste de la file, sans le téléchargement de la demande TV
     assert [i["download_id"] for i in board["queue"]] == ["SABnzbd_nzo_2"]
     assert board["sab"] is None  # pas de SABnzbd déclaré
+    assert board["music"] == []  # pas de Lidarr déclaré
 
 
 async def test_unstick_failed_download_takes_another_release(
@@ -311,3 +312,49 @@ def test_tv_scope() -> None:
     assert may("POST", "/api/kodi/downloads/radarr/SABnzbd_nzo_1/unstick")
     assert not may("POST", "/api/kodi/downloads/radarr/12/remove")
     assert not may("POST", "/api/kodi/downloads/lidarr/x/unstick")
+
+
+# ── Musique (Lidarr) ─────────────────────────────────────────
+
+_ALBUM = {
+    "id": 7, "downloadId": "SABnzbd_nzo_okc", "title": "Radiohead-OK_Computer-FLAC",
+    "size": 400.0, "sizeleft": 100.0, "timeleft": "00:02:00", "status": "downloading",
+    "trackedDownloadState": "importPending", "protocol": "usenet", "downloadClient": "SABnzbd",
+    "statusMessages": [{"messages": ["Album match is not close enough: 74%"]}],
+    "quality": {"quality": {"name": "FLAC"}},
+    "artist": {"artistName": "Radiohead"},
+    "album": {"title": "OK Computer",
+              "images": [{"coverType": "cover", "remoteUrl": "https://img.test/okc.jpg"}]},
+}  # fmt: skip
+
+
+def test_music_item_has_the_queue_row_format() -> None:
+    row = tb.music_item(_ALBUM)
+    assert row["title"] == "Radiohead – OK Computer"
+    assert row["service_type"] == "lidarr" and row["download_id"] == "SABnzbd_nzo_okc"
+    assert row["progress"] == 75.0 and row["quality"] == "FLAC"
+    assert row["detail"] == "Album match is not close enough: 74%"
+    assert row["poster_url"] == "https://img.test/okc.jpg"
+    # Sans artiste ni album (Lidarr pas encore relié) : le nom de la release
+    assert tb.music_item({"title": "Inconnu.FLAC"})["title"] == "Inconnu.FLAC"
+
+
+async def test_board_lists_music_once_per_album(
+    client: AsyncClient,
+    stack: dict[str, str],
+    auth_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    second_track = {**_ALBUM, "id": 8}  # même téléchargement, autre piste
+    monkeypatch.setitem(
+        fake_arr.ROUTES,
+        "lidarr.test",
+        [(r"/api/v1/queue", lambda _p, _m: {"records": [_ALBUM, second_track]})],
+    )
+    svc = {"name": "Lidarr", "type": "lidarr", "url": "http://lidarr.test:8686", "api_key": "l"}
+    resp = await client.post("/api/services", json=svc, headers=auth_headers)
+    assert resp.status_code == 201, resp.text
+
+    board = (await client.get("/api/kodi/downloads/board", headers=stack)).json()
+    assert [m["title"] for m in board["music"]] == ["Radiohead – OK Computer"]
+    assert board["queue"] == []  # la musique reste à part (l'add-on Kodi ne la connaît pas)
