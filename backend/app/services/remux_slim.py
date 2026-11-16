@@ -57,6 +57,10 @@ PAUSE_SECONDS = 20
 #: La recherche interactive interroge tous les indexeurs : elle peut être longue.
 RELEASE_TIMEOUT_SECONDS = 120
 ARR_TIMEOUT_SECONDS = 30
+#: Supprimer un remux, c'est le déplacer dans la corbeille de Radarr : quand
+#: elle est sur un autre disque, c'est une copie de 40 à 100 Go, et Radarr ne
+#: répond qu'à la fin. Vu sur l'installation : plus de 30 s pour 78 Go.
+DELETE_TIMEOUT_SECONDS = 900
 
 #: Taille attendue du remplaçant, en Go par heure de film (ordre de grandeur :
 #: un Bluray-2160p de 2 h pèse environ 20 Go, un Bluray-1080p environ 10 Go).
@@ -392,6 +396,15 @@ def _result(item: dict[str, Any] | None, movie_id: int, status: str, message: st
     }
 
 
+async def _file_is_gone(client: Any, movie_id: int, file_id: int) -> bool:
+    """Le fichier n'est plus celui du film (relu dans Radarr). Faux dans le doute."""
+    try:
+        movie = await client.get(f"/movie/{movie_id}")
+    except Exception:  # noqa: BLE001 : sans réponse, on ne prétend pas qu'il est parti
+        return False
+    return ((movie or {}).get("movieFile") or {}).get("id") != file_id
+
+
 async def replace_one(
     client: Any, movie_id: int, *, include_1080p: bool = False, source: str = "arrmada"
 ) -> dict[str, Any]:
@@ -446,14 +459,26 @@ async def replace_one(
         )
         result["replacement"] = public
         try:
-            await client.delete(f"/moviefile/{item['file_id']}")
+            response = await client.client.delete(
+                f"{client.API_PREFIX}/moviefile/{item['file_id']}",
+                timeout=DELETE_TIMEOUT_SECONDS,
+            )
+            response.raise_for_status()
             result["freed_bytes"] = item["size_bytes"]
         except Exception as exc:  # noqa: BLE001 : le téléchargement est parti, on le dit
-            result["status"] = "error"
-            result["message"] = (
-                f"{replacement['quality']} en téléchargement, mais le remux n'a pas pu être "
-                f"retiré ({exc}) : Radarr refusera l'import tant que le remux est là"
-            )
+            # Une réponse perdue ne dit pas que la suppression a échoué : Radarr
+            # a pu finir de son côté. On relit le film avant de crier à l'erreur.
+            if await _file_is_gone(client, movie_id, item["file_id"]):
+                result["freed_bytes"] = item["size_bytes"]
+            else:
+                result["status"] = "error"
+                reason = str(exc) or type(exc).__name__
+                result["message"] = (
+                    f"{replacement['quality']} en téléchargement, mais le remux est encore là "
+                    f"({reason}) : Radarr refusera l'import tant qu'il n'est pas retiré. "
+                    "S'il est en cours de déplacement vers la corbeille, il partira tout seul ; "
+                    "sinon supprime le fichier dans Radarr"
+                )
         await activity_log.log_event(
             category="library",
             action="remux_replaced",
