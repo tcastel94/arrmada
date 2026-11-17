@@ -125,6 +125,23 @@ class Settings(BaseSettings):
     # dans l'image, sinon la racine du dépôt.
     COPILOT_KNOWLEDGE_DIR: str = ""
 
+    # ── Agent local (Ollama avec appel d'outils) ──────────────
+    # Même Ollama que ci-dessus (OLLAMA_URL), mais un modèle plus gros : il
+    # faut qu'il sache choisir un outil et remplir ses paramètres. Vide
+    # d'OLLAMA_URL = agent local désactivé.
+    LOCAL_AGENT_MODEL: str = "qwen3.5:9b"
+    # Taille de la « mémoire de travail » du modèle, en jetons. À fixer
+    # explicitement : la valeur par défaut d'Ollama est basse et ce qui dépasse
+    # est coupé SANS message d'erreur (le modèle oublie le début de l'échange).
+    # 16384 tient dans ~6,2 Go de VRAM avec qwen3.5:9b (mesuré le 17/11/2026).
+    LOCAL_AGENT_NUM_CTX: int = 16384
+    # Durée pendant laquelle le modèle reste chargé en VRAM après une réponse.
+    # Court exprès : la carte est partagée avec Frigate, Jellyfin et Immich.
+    LOCAL_AGENT_KEEP_ALIVE: str = "10m"
+    # Réflexion préalable du modèle (modèles « thinking ») : plus lent, à
+    # n'activer que si le banc de test montre un gain.
+    LOCAL_AGENT_THINK: bool = False
+
     # ── Auto-import ───────────────────────────────────────────
     # Scheduled job that imports completed-but-orphaned downloads.
     # Set AUTO_IMPORT_ENABLED=false to stop it entirely.

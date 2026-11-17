@@ -13,6 +13,11 @@
  * - Zone de saisie collée en bas (au-dessus de la barre d'onglets sur mobile).
  * États gérés : non configuré (clé d'API absente), chargement, erreur du
  * serveur, réponse interrompue, conversation perdue après un redémarrage.
+ *
+ * Deux moteurs au choix (sélecteur en haut à droite) : « Claude » (API
+ * d'Anthropic) et « Local » (IA du NAS par Ollama, lecture seule pour
+ * l'instant). Même conversation, mêmes cartes : seul le serveur interrogé
+ * change (`hooks/use-copilot.ts`).
  */
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import {
@@ -20,6 +25,8 @@ import {
     ArrowUp,
     Check,
     CircleSlash,
+    Cloud,
+    Cpu,
     Globe,
     KeyRound,
     Loader2,
@@ -27,11 +34,13 @@ import {
     ShieldCheck,
     Sparkles,
     Square,
+    ServerOff,
     Wrench,
     X,
     Zap,
 } from "lucide-react";
 import Link from "next/link";
+import { SegmentedControl } from "@/components/library/segmented-control";
 import { PageHeader } from "@/components/shared/page-header";
 import { ErrorState } from "@/components/shared/empty-state";
 import { Shimmer } from "@/components/shared/loading-skeleton";
@@ -40,14 +49,19 @@ import {
     answerCopilotAction,
     resetCopilot,
     sendCopilotMessage,
+    setCopilotEngine,
     stopCopilot,
+    storedCopilotEngine,
     useCopilot,
     useCopilotStatus,
+    useLocalAgentStatus,
     type CopilotAction,
+    type CopilotEngine,
     type CopilotMessage,
     type CopilotStatus,
     type CopilotTool,
     type CopilotUsage,
+    type LocalAgentStatus,
 } from "@/hooks/use-copilot";
 import { formatNumber, plural } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -64,38 +78,145 @@ const SUGGESTIONS = [
     "Mes hardlinks et mes chemins sont-ils bien configurés entre SABnzbd, Radarr et Sonarr ?",
 ] as const;
 
+/** Amorces du moteur local : ce que ses outils de lecture savent faire aujourd'hui. */
+const LOCAL_SUGGESTIONS = [
+    "Qu'est-ce qui sort cette semaine dans mes séries suivies ?",
+    "Qu'est-ce qui est en cours de téléchargement ?",
+    "Liste les films manquants de ma bibliothèque.",
+    "Est-ce que mes indexeurs fonctionnent ?",
+    "Il me reste de la place sur les disques ?",
+    "Est-ce que j'ai déjà la série Severance ?",
+] as const;
+
+const ENGINE_OPTIONS = [
+    {
+        value: "claude" as const,
+        label: "Claude",
+        icon: Cloud,
+        title: "Claude, par l'API d'Anthropic : le plus capable, il agit ; payant, et ce qu'il consulte sort du réseau local",
+    },
+    {
+        value: "local" as const,
+        label: "Local",
+        icon: Cpu,
+        title: "IA du NAS (Ollama) : gratuit, rien ne sort du réseau local ; lecture seule pour l'instant",
+    },
+];
+
 export function CopilotChat() {
     const status = useCopilotStatus();
-    const { messages, busy } = useCopilot();
+    const local = useLocalAgentStatus();
+    const { messages, busy, engine } = useCopilot();
+
+    // À l'arrivée sur la page : le moteur choisi lors de la dernière visite ;
+    // à défaut, le local quand Claude n'a pas de clé mais qu'Ollama est branché.
+    const picked = useRef(false);
+    useEffect(() => {
+        if (picked.current) return;
+        const stored = storedCopilotEngine();
+        if (stored) {
+            picked.current = true;
+            setCopilotEngine(stored, false);
+            return;
+        }
+        if (status.isLoading || local.isLoading) return;
+        picked.current = true;
+        if (!status.data?.configured && local.data?.configured) setCopilotEngine("local", false);
+    }, [status.isLoading, local.isLoading, status.data, local.data]);
+
+    const current = engine === "local" ? local : status;
+    const localReady = Boolean(local.data?.configured && local.data.reachable && local.data.model_installed);
 
     return (
         <>
             <PageHeader
                 title="Agent IA"
-                description="Décris le problème : l'agent lit l'état réel de ta stack, trouve la cause et la règle avec ta validation."
+                description={
+                    engine === "local"
+                        ? "Pose ta question : l'IA de ton NAS lit l'état réel de ta médiathèque pour y répondre. Rien ne sort de ton réseau."
+                        : "Décris le problème : l'agent lit l'état réel de ta stack, trouve la cause et la règle avec ta validation."
+                }
                 actions={
-                    messages.length > 0 ? (
-                        <Button variant="ghost" size="sm" onClick={resetCopilot}>
-                            <RotateCcw />
-                            Nouvelle conversation
-                        </Button>
-                    ) : undefined
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                        {messages.length > 0 && (
+                            <Button variant="ghost" size="sm" onClick={resetCopilot}>
+                                <RotateCcw />
+                                Nouvelle conversation
+                            </Button>
+                        )}
+                        <SegmentedControl<CopilotEngine>
+                            value={engine}
+                            onChange={(value) => setCopilotEngine(value)}
+                            options={ENGINE_OPTIONS}
+                            layoutId="copilot-engine"
+                            size="sm"
+                            ariaLabel="Moteur de l'agent"
+                        />
+                    </div>
                 }
             />
 
-            {status.isLoading ? (
+            {current.isLoading ? (
                 <div className="space-y-3" aria-hidden>
                     <Shimmer className="h-24 rounded-xl" />
                     <Shimmer className="h-12 rounded-xl" />
                 </div>
-            ) : status.isError ? (
-                <ErrorState error={status.error} onRetry={() => status.refetch()} title="Agent injoignable" />
+            ) : current.isError ? (
+                <ErrorState error={current.error} onRetry={() => current.refetch()} title="Agent injoignable" />
+            ) : engine === "local" ? (
+                local.data && !localReady ? (
+                    <LocalNotReady status={local.data} />
+                ) : (
+                    <Conversation messages={messages} busy={busy} status={status.data} local={local.data} />
+                )
             ) : status.data && !status.data.configured ? (
                 <NotConfigured status={status.data} />
             ) : (
                 <Conversation messages={messages} busy={busy} status={status.data} />
             )}
         </>
+    );
+}
+
+/* ── IA locale pas prête ────────────────────────────────────── */
+
+/** Ollama absent du .env, injoignable, ou modèle pas encore téléchargé : la marche à suivre. */
+function LocalNotReady({ status }: { status: LocalAgentStatus }) {
+    const code = "rounded bg-white/[0.08] px-1 font-mono text-[13px] text-foreground";
+    const reason = !status.configured
+        ? "L'adresse d'Ollama n'est pas renseignée."
+        : !status.reachable
+          ? "Ollama ne répond pas sur le réseau."
+          : `Le modèle ${status.model} n'est pas installé dans Ollama.`;
+    return (
+        <div className="surface space-y-4 rounded-xl p-5">
+            <div className="flex items-start gap-3">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-warning/15 text-warning">
+                    <ServerOff className="h-5 w-5" />
+                </span>
+                <div className="min-w-0">
+                    <p className="text-[17px] font-semibold tracking-tight">L&apos;IA locale n&apos;est pas prête</p>
+                    <p className="mt-0.5 text-[15px] leading-snug text-muted-foreground">{reason}</p>
+                </div>
+            </div>
+            <p className="text-[15px] leading-snug text-muted-foreground">
+                {!status.configured ? (
+                    <>
+                        Ajoute <code className={code}>OLLAMA_URL=http://adresse-du-nas:11434</code> dans le fichier <code className={code}>.env</code>, puis
+                        relance le conteneur : <code className={code}>docker compose up -d</code>.
+                    </>
+                ) : !status.reachable ? (
+                    <>
+                        Vérifie que le conteneur Ollama tourne : <code className={code}>docker ps | grep ollama</code>, puis recharge cette page.
+                    </>
+                ) : (
+                    <>
+                        Télécharge-le : <code className={code}>docker exec ollama ollama pull {status.model}</code>, ou choisis un autre modèle avec{" "}
+                        <code className={code}>LOCAL_AGENT_MODEL</code> dans le <code className={code}>.env</code>.
+                    </>
+                )}
+            </p>
+        </div>
     );
 }
 
@@ -165,7 +286,18 @@ function PrivacyNote({ webSearch, mode }: { webSearch: boolean; mode?: "confirm"
 
 /* ── Conversation ───────────────────────────────────────────── */
 
-function Conversation({ messages, busy, status }: { messages: CopilotMessage[]; busy: boolean; status?: CopilotStatus }) {
+function Conversation({
+    messages,
+    busy,
+    status,
+    local,
+}: {
+    messages: CopilotMessage[];
+    busy: boolean;
+    status?: CopilotStatus;
+    /** Renseigné quand la conversation est menée par l'IA locale. */
+    local?: LocalAgentStatus;
+}) {
     const endRef = useRef<HTMLDivElement>(null);
     /** Vrai tant que l'utilisateur est en bas de page : on suit alors la réponse qui s'écrit. */
     const pinned = useRef(true);
@@ -190,7 +322,7 @@ function Conversation({ messages, busy, status }: { messages: CopilotMessage[]; 
     return (
         <div className="flex flex-col gap-6">
             {messages.length === 0 ? (
-                <Intro onPick={send} webSearch={status?.web_search ?? false} mode={status?.action_mode} />
+                local ? <LocalIntro onPick={send} status={local} /> : <Intro onPick={send} webSearch={status?.web_search ?? false} mode={status?.action_mode} />
             ) : (
                 <ol className="flex flex-col gap-6" aria-live="polite">
                     {messages.map((message) => (
@@ -227,6 +359,51 @@ function Intro({ onPick, webSearch, mode }: { onPick: (text: string) => void; we
                 <p className="eyebrow mb-2 px-0.5">Pour commencer</p>
                 <div className="grid gap-2 sm:grid-cols-2">
                     {SUGGESTIONS.map((suggestion) => (
+                        <button
+                            key={suggestion}
+                            type="button"
+                            onClick={() => onPick(suggestion)}
+                            className="surface glass-hover rounded-xl p-3.5 text-left text-[15px] leading-snug text-foreground/90 transition-transform active:scale-[0.99]"
+                        >
+                            {suggestion}
+                        </button>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+/** Écran vide du moteur local : ce qu'il sait faire aujourd'hui, et ses limites. */
+function LocalIntro({ onPick, status }: { onPick: (text: string) => void; status: LocalAgentStatus }) {
+    return (
+        <div className="space-y-5">
+            <div className="surface space-y-3 rounded-xl p-5">
+                <div className="flex items-start gap-3">
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/20 text-primary">
+                        <Cpu className="h-5 w-5" />
+                    </span>
+                    <p className="text-[15px] leading-relaxed text-muted-foreground">
+                        L&apos;IA de ton NAS (<span className="text-foreground">{status.model}</span>) répond en{" "}
+                        <span className="text-foreground">lisant ta médiathèque</span> : recherche d&apos;un film ou d&apos;une série, file de
+                        téléchargement, historique, calendrier des sorties, titres manquants, indexeurs, espace disque. Si un titre est ambigu, elle
+                        te demande lequel au lieu de choisir.
+                    </p>
+                </div>
+                <p className="flex items-start gap-2 text-[13px] leading-snug text-muted-foreground">
+                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+                    <span>
+                        Lecture seule pour l&apos;instant : elle n&apos;ajoute, ne relance et ne modifie rien. Elle ne peut rien supprimer, ni toucher
+                        aux profils ou aux indexeurs : ces actions ne lui sont pas données. Tout reste sur ton réseau local, et chaque demande est
+                        notée dans un journal d&apos;audit (<code className="font-mono text-[12px]">data/local_agent_audit.jsonl</code>).
+                    </span>
+                </p>
+            </div>
+
+            <div>
+                <p className="eyebrow mb-2 px-0.5">Pour commencer</p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                    {LOCAL_SUGGESTIONS.map((suggestion) => (
                         <button
                             key={suggestion}
                             type="button"
@@ -428,7 +605,14 @@ function UsageLine({ usage }: { usage: CopilotUsage }) {
         usage.model,
     ].filter(Boolean);
     return (
-        <p className="text-[12px] tabular-nums text-muted-foreground/70" title="Coût estimé de ce tour d'après les tarifs publics (hors recherches web). La facture Anthropic fait foi.">
+        <p
+            className="text-[12px] tabular-nums text-muted-foreground/70"
+            title={
+                cost === null
+                    ? "Réponse produite par l'IA locale : aucun coût."
+                    : "Coût estimé de ce tour d'après les tarifs publics (hors recherches web). La facture Anthropic fait foi."
+            }
+        >
             {facts.join(" · ")}
         </p>
     );

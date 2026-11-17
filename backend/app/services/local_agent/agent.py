@@ -1,0 +1,249 @@
+"""Boucle de l'agent local : le modèle demande des outils, le code les exécute.
+
+@author : Jeff Pomponne <jpomponne@gmail.com>
+
+Un « tour » = un message de l'utilisateur et tout ce qu'il déclenche :
+
+1. on envoie à Ollama la consigne, l'historique et la liste d'outils ;
+2. le modèle répond soit par du texte (fin du tour), soit par un ou plusieurs
+   « bons de commande » (appels d'outils) ;
+3. chaque bon est validé puis exécuté par ``tools.execute`` ; le résultat est
+   ajouté à l'historique et on retourne en 1.
+
+Garde-fous de la boucle :
+
+- ``MAX_MODEL_CALLS``   : nombre d'allers-retours par tour. Un modèle qui
+  tourne en rond est arrêté, comme un ``timeout`` devant une commande ;
+- ``MAX_INVALID_CALLS`` : un appel invalide (outil inconnu, paramètres
+  refusés) est renvoyé au modèle avec l'erreur. Deux corrections sont
+  tolérées ; à la troisième erreur, le tour s'arrête ;
+- un tour qui échoue est retiré en entier de l'historique : la conversation
+  reste dans son dernier état sain.
+
+Les événements émis ont les mêmes noms que ceux de l'agent Claude
+(``text``, ``tool_start``, ``tool_end``, ``notice``, ``error``, ``usage``,
+``done``) : l'interface de chat existante les affiche sans modification.
+"""
+
+from __future__ import annotations
+
+import json
+from collections.abc import AsyncIterator, Callable
+from typing import Any
+
+from app.config import settings
+from app.services.copilot import tools as copilot_tools
+from app.services.copilot.redaction import Redactor
+from app.services.local_agent import audit, ollama, tools
+from app.services.local_agent.conversations import Conversation
+from app.services.local_agent.prompt import system_prompt
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
+
+Event = tuple[str, dict[str, Any]]
+ChatBackend = Callable[..., AsyncIterator[tuple[str, Any]]]
+
+MAX_MODEL_CALLS = 8
+MAX_INVALID_CALLS = 2
+
+# Remplacé par les tests (faux modèle qui rejoue un scénario).
+chat_backend: ChatBackend = ollama.chat_stream
+
+# Estimation prudente : 1 jeton ≈ 2,5 caractères (le JSON des résultats
+# d'outils « coûte » plus de jetons que du texte courant).
+CHARS_PER_TOKEN = 2.5
+# Part du contexte réservée à la consigne, aux outils et à la réponse.
+RESERVED_TOKENS = 4_000
+
+
+def _history_budget_chars() -> int:
+    return int(max(settings.LOCAL_AGENT_NUM_CTX - RESERVED_TOKENS, 2_000) * CHARS_PER_TOKEN)
+
+
+def _size(message: dict[str, Any]) -> int:
+    return len(json.dumps(message, ensure_ascii=False, default=str))
+
+
+def fit_history(messages: list[dict[str, Any]], budget_chars: int) -> list[dict[str, Any]]:
+    """Historique qui tient dans le contexte : les tours les plus anciens sautent.
+
+    Sans cela, c'est Ollama qui coupe, sans prévenir et par le début : la
+    consigne ou la question disparaît. On retire des tours ENTIERS (de la
+    demande de l'utilisateur à la réponse) pour ne jamais laisser un résultat
+    d'outil sans l'appel qui l'a provoqué. Le tour en cours est toujours gardé.
+    """
+    starts = [i for i, m in enumerate(messages) if m.get("role") == "user"]
+    kept = messages
+    for start in starts:
+        kept = messages[start:]
+        if sum(_size(m) for m in kept) <= budget_chars:
+            break
+    return kept
+
+
+async def run_turn(
+    conversation: Conversation,
+    user_text: str,
+    *,
+    redactor: Redactor | None = None,
+) -> AsyncIterator[Event]:
+    """Déroule un tour et émet ses événements. L'appelant tient ``conversation.lock``."""
+    messages = conversation.messages
+    start_length = len(messages)
+    completed = False
+    failure: str | None = None
+    model_calls = 0
+    invalid_calls = 0
+    prompt_tokens = 0
+    output_tokens = 0
+    wrote_text = False
+
+    audit.record("request", conversation.id, text=user_text, model=settings.LOCAL_AGENT_MODEL)
+    try:
+        messages.append({"role": "user", "content": user_text})
+        if redactor is None:
+            # Même masqueur que l'agent Claude : clés des services et secrets
+            # du .env sont remplacés par *** avant d'atteindre le modèle.
+            redactor = await copilot_tools.build_redactor()
+        definitions = tools.definitions()
+
+        while True:
+            model_calls += 1
+            if model_calls > MAX_MODEL_CALLS:
+                failure = (
+                    f"Arrêt après {MAX_MODEL_CALLS} étapes sans conclusion : "
+                    "reformule ou découpe la question."
+                )
+                break
+
+            request = [
+                {"role": "system", "content": system_prompt()},
+                *fit_history(messages, _history_budget_chars()),
+            ]
+            result: ollama.ChatResult | None = None
+            try:
+                async for kind, payload in chat_backend(request, definitions):
+                    if kind == "text":
+                        if not wrote_text:
+                            payload = payload.lstrip()
+                        if payload:
+                            wrote_text = True
+                            yield ("text", {"delta": payload})
+                    elif kind == "final":
+                        result = payload
+            except ollama.OllamaError as exc:
+                logger.warning("Agent local : %s", exc)
+                failure = str(exc)
+                break
+            if result is None:
+                failure = "Ollama n'a renvoyé aucune réponse."
+                break
+            prompt_tokens += result.prompt_tokens
+            output_tokens += result.output_tokens
+            if result.prompt_tokens >= settings.LOCAL_AGENT_NUM_CTX * 0.95:
+                yield (
+                    "notice",
+                    {
+                        "message": "Contexte du modèle presque plein : la réponse peut être "
+                        "incomplète. Démarre une nouvelle conversation."
+                    },
+                )
+
+            if not result.tool_calls:
+                if not result.content.strip():
+                    failure = "Le modèle local n'a rien répondu : reformule la question."
+                    break
+                messages.append({"role": "assistant", "content": result.content})
+                audit.record("answer", conversation.id, text=result.content)
+                completed = True
+                break
+
+            # Le modèle demande des outils : on garde sa demande dans l'historique…
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": result.content,
+                    "tool_calls": [
+                        {"function": {"name": c["name"], "arguments": c["arguments"]}}
+                        for c in result.tool_calls
+                    ],
+                }
+            )
+            if wrote_text:
+                yield ("text", {"delta": "\n\n"})
+            # … puis on exécute, un par un (des lectures rapides : le parallélisme
+            # n'apporterait que de la complexité).
+            for call in result.tool_calls:
+                yield (
+                    "tool_start",
+                    {
+                        "id": call["id"],
+                        "name": call["name"],
+                        "label": tools.label_of(call["name"]),
+                        "input": call["arguments"],
+                        "server": False,
+                    },
+                )
+                outcome = await tools.execute(call["name"], call["arguments"], redactor)
+                if outcome.invalid:
+                    invalid_calls += 1
+                audit.record(
+                    "tool_call",
+                    conversation.id,
+                    tool=call["name"],
+                    arguments=call["arguments"],
+                    valid=not outcome.invalid,
+                )
+                audit.record(
+                    "tool_result",
+                    conversation.id,
+                    tool=call["name"],
+                    ok=not outcome.is_error,
+                    duration_ms=outcome.duration_ms,
+                    result=outcome.content,
+                )
+                yield (
+                    "tool_end",
+                    {
+                        "id": call["id"],
+                        "ok": not outcome.is_error,
+                        "duration_ms": outcome.duration_ms,
+                    },
+                )
+                messages.append(
+                    {"role": "tool", "tool_name": call["name"], "content": outcome.content}
+                )
+
+            if invalid_calls > MAX_INVALID_CALLS:
+                failure = (
+                    "Le modèle local s'est trompé plusieurs fois dans ses appels d'outils : "
+                    "reformule la demande plus simplement."
+                )
+                break
+
+        if failure is not None:
+            audit.record("error", conversation.id, message=failure)
+            yield ("error", {"message": failure})
+        if prompt_tokens or output_tokens:
+            yield (
+                "usage",
+                {
+                    "turn": {
+                        "input_tokens": prompt_tokens,
+                        "output_tokens": output_tokens,
+                        "cache_read_tokens": 0,
+                        "cache_write_tokens": 0,
+                        "cost_usd": None,  # local : pas de facturation
+                        "web_searches": 0,
+                    },
+                    "model": settings.LOCAL_AGENT_MODEL,
+                    "model_calls": min(model_calls, MAX_MODEL_CALLS),
+                },
+            )
+        yield ("done", {"ok": completed, "stop_reason": "end_turn" if completed else None})
+    finally:
+        if not completed:
+            # Échec ou interruption (navigateur parti, bouton Arrêter) : le tour
+            # entier est retiré, la conversation reste dans son dernier état sain.
+            del messages[start_length:]

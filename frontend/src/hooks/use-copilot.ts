@@ -17,6 +17,12 @@
  * réponse en cours continue d'arriver pendant ce temps. Côté serveur,
  * l'historique complet est gardé en mémoire ; le navigateur n'envoie que le
  * nouveau message et l'identifiant de la conversation.
+ *
+ * Deux moteurs, une seule interface : « claude » (API d'Anthropic, routes
+ * /api/copilot) et « local » (Ollama sur le NAS, routes /api/local-agent).
+ * Les deux parlent le même flux SSE ; seul le préfixe des routes change.
+ * Changer de moteur repart d'une conversation vide : chaque moteur garde son
+ * propre historique côté serveur.
  */
 import { useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -31,6 +37,28 @@ export interface CopilotStatus {
     documents: number;
     /** confirm : chaque action attend un clic ; auto : l'agent agit seul. */
     action_mode?: "confirm" | "auto";
+}
+
+/** Moteur de la conversation : Claude (cloud) ou l'IA locale du NAS (Ollama). */
+export type CopilotEngine = "claude" | "local";
+
+const ENGINE_PATH: Record<CopilotEngine, string> = {
+    claude: "/api/copilot",
+    local: "/api/local-agent",
+};
+
+/** Réponse de `GET /api/local-agent/status`. */
+export interface LocalAgentStatus {
+    /** OLLAMA_URL renseigné dans le .env. */
+    configured: boolean;
+    /** Ollama répond sur le réseau. */
+    reachable: boolean;
+    /** Le modèle de l'agent est téléchargé dans Ollama. */
+    model_installed: boolean;
+    model: string;
+    num_ctx: number;
+    keep_alive: string;
+    tools: string[];
 }
 
 /** Une action que l'agent veut faire, avec son aperçu et son sort. */
@@ -87,6 +115,7 @@ export interface CopilotMessage {
 }
 
 interface CopilotState {
+    engine: CopilotEngine;
     conversationId: string | null;
     messages: CopilotMessage[];
     busy: boolean;
@@ -94,7 +123,10 @@ interface CopilotState {
 
 /* ── Magasin ─────────────────────────────────────────────────── */
 
-const EMPTY: CopilotState = { conversationId: null, messages: [], busy: false };
+const EMPTY: CopilotState = { engine: "claude", conversationId: null, messages: [], busy: false };
+
+/** Dernier moteur choisi, retenu par le navigateur. */
+const ENGINE_KEY = "arrmada.copilot.engine";
 
 let state: CopilotState = EMPTY;
 const listeners = new Set<() => void>();
@@ -343,7 +375,7 @@ export async function sendCopilotMessage(text: string): Promise<void> {
 
     try {
         const token = getToken();
-        const response = await fetch(`${API_URL}/api/copilot/chat`, {
+        const response = await fetch(`${API_URL}${ENGINE_PATH[state.engine]}/chat`, {
             method: "POST",
             headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
             body: JSON.stringify({ message: question, conversation_id: state.conversationId }),
@@ -416,11 +448,39 @@ export function stopCopilot() {
 /** Repart d'une conversation vide ; le serveur oublie l'ancienne. */
 export function resetCopilot() {
     const previous = state.conversationId;
+    const path = ENGINE_PATH[state.engine];
     draft = null;
     controller?.abort();
-    publish(EMPTY);
+    publish({ ...EMPTY, engine: state.engine });
     if (previous) {
-        void apiFetch(`/api/copilot/conversations/${previous}`, { method: "DELETE" }).catch(() => undefined);
+        void apiFetch(`${path}/conversations/${previous}`, { method: "DELETE" }).catch(() => undefined);
+    }
+}
+
+/** Moteur retenu par le navigateur lors d'une visite précédente (null : jamais choisi). */
+export function storedCopilotEngine(): CopilotEngine | null {
+    try {
+        const value = window.localStorage.getItem(ENGINE_KEY);
+        return value === "claude" || value === "local" ? value : null;
+    } catch {
+        return null; // navigation privée : pas de stockage
+    }
+}
+
+/**
+ * Change de moteur. La conversation en cours est abandonnée (et oubliée côté
+ * serveur) : l'historique d'un moteur n'a pas de sens pour l'autre.
+ */
+export function setCopilotEngine(engine: CopilotEngine, remember = true) {
+    if (engine !== state.engine) {
+        resetCopilot();
+        publish({ ...EMPTY, engine });
+    }
+    if (!remember) return;
+    try {
+        window.localStorage.setItem(ENGINE_KEY, engine);
+    } catch {
+        // navigation privée : le choix vaudra pour cette visite seulement
     }
 }
 
@@ -447,6 +507,15 @@ export function useCopilotStatus() {
     return useQuery<CopilotStatus>({
         queryKey: ["copilot", "status"],
         queryFn: () => apiFetch<CopilotStatus>("/api/copilot/status"),
+        staleTime: 60_000,
+    });
+}
+
+/** L'agent local est-il utilisable (Ollama configuré, joignable, modèle installé) ? */
+export function useLocalAgentStatus() {
+    return useQuery<LocalAgentStatus>({
+        queryKey: ["local-agent", "status"],
+        queryFn: () => apiFetch<LocalAgentStatus>("/api/local-agent/status"),
         staleTime: 60_000,
     });
 }

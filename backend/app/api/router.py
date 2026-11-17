@@ -32,6 +32,7 @@ from app.api.files import router as files_router
 from app.api.kodi import router as kodi_router
 from app.api.kodi_repo import router as kodi_repo_router
 from app.api.links import router as links_router
+from app.api.local_agent import router as local_agent_router
 from app.api.local_series import router as local_series_router
 from app.api.media import router as media_router
 from app.api.music import router as music_router
@@ -110,6 +111,7 @@ api_router.include_router(remux_router)  # Santé › Remux à alléger (ADR-021
 api_router.include_router(cleanup_router)
 api_router.include_router(ai_search_router)
 api_router.include_router(copilot_router)  # Copilote : IA avec outils en lecture (ADR-017)
+api_router.include_router(local_agent_router)  # Agent local : outils via Ollama
 api_router.include_router(ai_journal_router)  # Journal de l'agent IA : quoi, pourquoi, annuler
 api_router.include_router(subtitles_router)
 api_router.include_router(cameras_router)  # Caméras Eufy : pop-up sur la TV
