@@ -83,6 +83,16 @@ services:
       - AI_MODEL=${AI_MODEL:-google/gemini-3.5-flash-lite}
       - OLLAMA_URL=${OLLAMA_URL:-}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-}
+      # Agent local (Agent IA › Local) : même Ollama, avec des outils. Les
+      # valeurs par défaut conviennent ; pour en changer une, mets-la dans le .env.
+      - LOCAL_AGENT_MODEL=${LOCAL_AGENT_MODEL:-qwen3.5:9b}
+      - LOCAL_AGENT_NUM_CTX=${LOCAL_AGENT_NUM_CTX:-16384}
+      - LOCAL_AGENT_KEEP_ALIVE=${LOCAL_AGENT_KEEP_ALIVE:-10m}
+      - LOCAL_AGENT_THINK=${LOCAL_AGENT_THINK:-false}
+      - LOCAL_AGENT_WRITE_TOOLS=${LOCAL_AGENT_WRITE_TOOLS:-true}
+      - LOCAL_AGENT_DRY_RUN=${LOCAL_AGENT_DRY_RUN:-false}
+      - LOCAL_AGENT_DELETE_TOOL=${LOCAL_AGENT_DELETE_TOOL:-true}
+      - LOCAL_AGENT_MAX_DELETIONS_PER_HOUR=${LOCAL_AGENT_MAX_DELETIONS_PER_HOUR:-3}
       # Copilote : IA qui lit ta stack avant de conseiller. Clé de l'API Anthropic
       # (platform.claude.com), facturée à l'usage ; vide = copilote désactivé.
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
