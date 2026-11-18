@@ -238,3 +238,33 @@ async def test_phantom_button_is_corrected_by_the_loop(monkeypatch: pytest.Monke
     correction = model.requests[1][-1]
     assert correction["role"] == "user" and "aucun bouton" in correction["content"]
     assert "auto" not in correction  # marqueur interne, jamais envoyé à Ollama
+
+
+# ── Verrou « pas d'action pendant un diagnostic » ───────────────
+
+
+async def test_action_is_refused_after_a_diagnostic_tool(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Après l'historique, le modèle veut lancer une recherche : refusé, rien n'est proposé."""
+    model = use_model(
+        monkeypatch,
+        calls("get_queue", title="Tulsa King"),
+        calls("get_history", title="Tulsa King"),
+        calls("trigger_search", type="series", title="Tulsa King"),
+        calls("get_indexer_status"),
+        says("Trois indexeurs sur quatre sont désactivés : aucune release n'est trouvée."),
+    )
+    result = await runner.run_case(case("D03"))
+
+    assert result.passed, result.turns[0].failures
+    assert result.unsolicited_writes == 0
+    refusal = model.requests[3][-1]
+    assert refusal["role"] == "tool" and refusal["content"].startswith("REFUSÉ")
+
+
+async def test_queue_can_be_filtered_by_title() -> None:
+    world = World("disk_full")
+    found = await world.get_queue(tools.QueueArgs(title="The Bear"))
+    nothing = await world.get_queue(tools.QueueArgs(title="Tulsa King"))
+
+    assert [item["id"] for item in found["items"]] == [4021]
+    assert nothing["count"] == 0 and "get_history" in nothing["note"]

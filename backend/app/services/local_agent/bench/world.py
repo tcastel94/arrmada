@@ -37,6 +37,7 @@ from app.services.local_agent.tools import (
     CalendarArgs,
     HistoryArgs,
     MissingArgs,
+    QueueArgs,
     TitleSearchArgs,
     Tool,
 )
@@ -467,20 +468,23 @@ class World:
     async def search_movie(self, args: TitleSearchArgs) -> dict[str, Any]:
         return tools.rank_candidates("movie", args, lookup(self.data["movies"], args.title))
 
-    async def get_queue(self, _: NoArgs) -> dict[str, Any]:
-        items = self.data["queue"]
+    async def get_queue(self, args: QueueArgs) -> dict[str, Any]:
+        items, no_match = tools.filter_queue(self.data["queue"], args.title)
         blocked = [
             i
             for i in items
             if i.get("error") or i.get("detail") or str(i.get("status")).lower() in _BLOCKED
         ]
         ordered = blocked + [i for i in items if i not in blocked]
-        return {
+        result = {
             "count": len(items),
             "blocked_count": len(blocked),
             "items": ordered,
             "sabnzbd": [self.data["sabnzbd"]],
         }
+        if no_match:
+            result["note"] = no_match
+        return result
 
     async def get_history(self, args: HistoryArgs) -> dict[str, Any]:
         events = self.data["history"]

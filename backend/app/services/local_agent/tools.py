@@ -89,6 +89,14 @@ class TitleSearchArgs(_Args):
     )
 
 
+class QueueArgs(_Args):
+    title: str = Field(
+        default="",
+        max_length=120,
+        description="Mots du titre pour ne garder que ce média. Vide : toute la file.",
+    )
+
+
 class HistoryArgs(_Args):
     type: MediaType = Field(default="all", description="series, movie, ou all pour les deux.")
     title: str = Field(
@@ -266,13 +274,38 @@ def _is_blocked(item: dict[str, Any]) -> bool:
     )
 
 
-async def get_queue(_: NoArgs) -> dict[str, Any]:
+def filter_queue(items: list[dict[str, Any]], title: str) -> tuple[list[dict[str, Any]], str]:
+    """Garde les téléchargements dont le nom contient tous les mots du titre.
+
+    Renvoie aussi la note à rendre au modèle quand rien ne correspond. Les noms
+    de release séparent les mots par des points (« The.Bear.S04E03 ») : on les
+    traite comme des espaces. Partagé avec le banc de test.
+    """
+    words = _fold(title).split()
+    if not words:
+        return items, ""
+    kept = [
+        item
+        for item in items
+        if all(word in _fold(item.get("title")).replace(".", " ") for word in words)
+    ]
+    note = (
+        ""
+        if kept
+        else f"Aucun téléchargement pour « {title} » dans la file ({len(items)} autres en cours). "
+        "Appelle get_history avec ce titre pour voir s'il a échoué."
+    )
+    return kept, note
+
+
+async def get_queue(args: QueueArgs) -> dict[str, Any]:
     """File d'attente de Sonarr / Radarr et état de SABnzbd, en version courte."""
     raw = await copilot_tools.get_download_queue(NoArgs())
     items = [
         _clean({key: item.get(key) for key in _QUEUE_KEYS})
         for item in (raw.get("arr_queue") or {}).get("items") or []
     ]
+    items, no_match = filter_queue(items, args.title)
     blocked = [item for item in items if _is_blocked(item)]
     # Les bloqués d'abord : ce sont eux qu'on vient chercher.
     ordered = blocked + [item for item in items if not _is_blocked(item)]
@@ -283,6 +316,8 @@ async def get_queue(_: NoArgs) -> dict[str, Any]:
     }
     if len(items) > 20:
         result["note"] = f"{len(items) - 20} téléchargements de plus, non listés."
+    if no_match:
+        result["note"] = no_match
     clients = []
     for sab in raw.get("sabnzbd") or []:
         if sab.get("error"):
@@ -319,8 +354,9 @@ NO_HISTORY_NOTE = "Aucun événement ne correspond dans l'historique récent."
 # cause est en amont (recherche), donc du côté des indexeurs. On le dit au
 # modèle plutôt que d'espérer qu'il fasse le lien tout seul.
 NO_HISTORY_FOR_TITLE_NOTE = (
-    "Aucun événement pour ce titre : aucune release n'a été récupérée récemment. "
-    "Appelle get_indexer_status pour vérifier que les indexeurs répondent."
+    "Aucun événement pour ce titre dans l'historique récent. Si tu n'as pas encore appelé "
+    "get_queue, appelle-le maintenant : un téléchargement bloqué s'y trouve. Si la file ne "
+    "contient pas ce titre non plus, appelle get_indexer_status : aucune release n'a été trouvée."
 )
 
 
@@ -655,6 +691,9 @@ class Tool:
     # True : l'outil modifie quelque chose. Aucun dans TOOLS pour l'instant ;
     # le banc de test en ajoute de faux pour mesurer le comportement du modèle.
     write: bool = False
+    # True : outil d'enquête (historique, indexeurs, disque). Après l'un d'eux,
+    # la boucle refuse toute action dans le même tour (voir agent.py).
+    diagnostic: bool = False
 
 
 TOOLS: tuple[Tool, ...] = (
@@ -680,19 +719,21 @@ TOOLS: tuple[Tool, ...] = (
         "get_queue",
         "File de téléchargement",
         "Téléchargements en cours ou bloqués dans Sonarr et Radarr (état, progression, message "
-        "d'erreur, indexeur) et état de SABnzbd. À appeler pour « où en est… », « pourquoi … "
-        "ne se télécharge pas », « qu'est-ce qui télécharge ».",
-        NoArgs,
+        "d'erreur, indexeur) et état de SABnzbd. Filtrable par titre. PREMIER outil à appeler "
+        "pour « où en est… », « pourquoi … ne se télécharge pas », « … n'apparaît pas », "
+        "« qu'est-ce qui télécharge ».",
+        QueueArgs,
         get_queue,
     ),
     Tool(
         "get_history",
         "Historique des téléchargements",
         "Derniers événements de Sonarr et Radarr : release récupérée, importée, échouée, avec "
-        "la raison de l'échec. Filtrable par titre. À appeler pour comprendre ce qui est "
-        "arrivé à un titre précis.",
+        "la raison de l'échec. Filtrable par titre. À appeler APRÈS get_queue, pour comprendre "
+        "ce qui est arrivé à un titre précis.",
         HistoryArgs,
         get_history,
+        diagnostic=True,
     ),
     Tool(
         "get_calendar",
@@ -719,6 +760,7 @@ TOOLS: tuple[Tool, ...] = (
         "marchent-ils ».",
         NoArgs,
         get_indexer_status,
+        diagnostic=True,
     ),
     Tool(
         "get_disk_space",
@@ -727,6 +769,7 @@ TOOLS: tuple[Tool, ...] = (
         "appeler pour « reste-t-il de la place » ou quand un import échoue.",
         NoArgs,
         get_disk_space,
+        diagnostic=True,
     ),
 )
 

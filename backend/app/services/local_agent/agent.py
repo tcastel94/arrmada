@@ -19,6 +19,9 @@ Garde-fous de la boucle :
   tolérées ; à la troisième erreur, le tour s'arrête ;
 - ``MAX_EMPTY_ANSWERS``  : une réponse vide est redemandée une fois, de même
   qu'un appel qu'Ollama rejette en erreur 5xx (réponse mal formée du modèle) ;
+- pas d'action pendant un diagnostic : après un outil d'enquête (historique,
+  indexeurs, disque), un outil d'écriture demandé dans le même tour est
+  refusé sans être exécuté (voir ``NO_ACTION_DURING_DIAGNOSTIC``) ;
 - bouton fantôme : si le modèle écrit « confirme avec le bouton » sans avoir
   appelé d'outil d'action, aucun bouton n'existe. Le code le lui signale une
   fois et le laisse se corriger (voir ``PHANTOM_BUTTON``) ;
@@ -58,6 +61,16 @@ MAX_EMPTY_ANSWERS = 1
 # avec le bouton » sans avoir appelé l'outil qui la crée. L'utilisateur
 # chercherait un bouton qui n'existe pas. Ce contrôle ne dépend pas de la bonne
 # volonté du modèle : c'est le code qui compare ce qui est dit à ce qui a été fait.
+# « Un diagnostic propose une action sans l'exécuter seul » : garanti par le code.
+# Dès que le modèle a consulté l'historique, les indexeurs ou le disque dans un
+# tour, il enquête ; une action demandée ensuite dans ce même tour est refusée.
+# L'utilisateur lit l'explication, puis demande l'action s'il la veut.
+NO_ACTION_DURING_DIAGNOSTIC = (
+    "REFUSÉ : pas d'action pendant un diagnostic. Rien n'est proposé à l'utilisateur. "
+    "Termine ton enquête avec les outils de lecture, explique la cause, puis suggère "
+    "l'action en une phrase : l'utilisateur la demandera s'il la veut."
+)
+
 PHANTOM_BUTTON = re.compile(r"\bbouton\b", re.IGNORECASE)
 PHANTOM_BUTTON_CORRECTION = (
     "[Contrôle automatique] Tu parles d'un bouton de confirmation, mais tu n'as appelé aucun "
@@ -118,6 +131,7 @@ async def run_turn(
     empty_answers = 0
     action_called = False  # un outil d'écriture a été appelé pendant ce tour
     button_corrected = False
+    diagnostic_called = False  # historique, indexeurs ou disque consultés pendant ce tour
     server_retried = False
     prompt_tokens = 0
     output_tokens = 0
@@ -243,9 +257,15 @@ async def run_turn(
                         "server": False,
                     },
                 )
-                outcome = await tools.execute(call["name"], call["arguments"], redactor)
                 called = tools.resolve(call["name"])
-                action_called = action_called or bool(called and called.write)
+                if called and called.write and diagnostic_called:
+                    # Verrou : pas d'action au milieu d'une enquête. L'outil
+                    # n'est pas exécuté, le modèle reçoit le refus et conclut.
+                    outcome = tools.ToolOutcome(NO_ACTION_DURING_DIAGNOSTIC, True, False, 0)
+                else:
+                    outcome = await tools.execute(call["name"], call["arguments"], redactor)
+                    action_called = action_called or bool(called and called.write)
+                diagnostic_called = diagnostic_called or bool(called and called.diagnostic)
                 if outcome.invalid:
                     invalid_calls += 1
                 audit.record(
