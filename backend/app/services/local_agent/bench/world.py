@@ -790,6 +790,18 @@ class World:
             queue_id=item["id"],
         )
 
+    async def remove_download(self, args: write_tools.RemoveDownloadArgs) -> Plan:
+        item, empty = self._failed(args.title)
+        if item is None:
+            return empty
+        return self._plan(
+            "remove_download",
+            f"Retirer « {item['title']} » de la file et le mettre en liste noire, sans "
+            "nouvelle recherche",
+            write_tools.REMOVE_DONE,
+            queue_id=item["id"],
+        )
+
     async def unblock_import(self, args: write_tools.UnblockImportArgs) -> Plan:
         item, empty = self._failed(args.title)
         if item is None:

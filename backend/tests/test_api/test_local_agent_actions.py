@@ -44,6 +44,7 @@ WRITE_TOOLS = {
     "add_movie",
     "trigger_search",
     "retry_download",
+    "remove_download",
     "unblock_import",
     "resume_downloads",
     "search_missing",
@@ -96,7 +97,7 @@ def of(events: Events, name: str) -> list[dict[str, Any]]:
 # ── Liste blanche ───────────────────────────────────────────────
 
 
-def test_whitelist_is_exactly_seventeen_tools(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_whitelist_is_exactly_eighteen_tools(monkeypatch: pytest.MonkeyPatch) -> None:
     names = {tool.name for tool in tools.exposed()}
     assert names == READ_TOOLS | WRITE_TOOLS
     assert {tool.name for tool in tools.exposed() if tool.write} == WRITE_TOOLS
@@ -395,6 +396,51 @@ async def test_retry_removes_the_failed_release_then_searches(
     ]
 
 
+async def test_remove_takes_the_failed_release_out_without_searching(
+    arr_stack: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """« Supprime-le » après un diagnostic : retrait de la file, rien d'autre."""
+    record = fake_arr.RADARR_QUEUE["records"][0]
+    monkeypatch.setitem(record, "status", "failed")
+    monkeypatch.setitem(record, "errorMessage", "Caution: Found executable file")
+    use_model(monkeypatch, calls("remove_download", title="Oppenheimer"), says("Retiré."))
+
+    events = await turn("supprime le", confirmer=yes)
+
+    card = of(events, "confirm")[0]
+    assert card["summary"].endswith("sans nouvelle recherche")
+    assert card["destructive"] is False
+    assert [(post[1], post[2]) for post in writes()] == [("/api/v3/queue/501", {})]
+
+
+async def test_remove_ignores_healthy_downloads(
+    arr_stack: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    use_model(monkeypatch, calls("remove_download", title="Oppenheimer"), says("Rien à retirer."))
+
+    events = await turn("Retire Oppenheimer de la file", confirmer=yes)
+
+    assert of(events, "confirm") == [] and writes() == []
+
+
+async def test_deletion_is_refused_when_the_user_did_not_name_the_title(
+    arr_stack: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """« Supprime-le » ne nomme rien : le modèle ne peut pas en tirer une suppression de la
+    bibliothèque, même s'il fournit lui-même un titre exact."""
+    _library_lookup(monkeypatch)
+    model = use_model(
+        monkeypatch,
+        calls("delete_media", type="movie", title="Dune"),
+        says("Dis-moi quel titre supprimer."),
+    )
+
+    events = await turn("supprime le", confirmer=yes)
+
+    assert of(events, "confirm") == [] and writes() == []
+    assert "ne nomme pas ce titre" in model.requests[1][-1]["content"]
+
+
 async def test_retry_ignores_healthy_downloads(
     arr_stack: dict, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -466,12 +512,13 @@ async def test_no_deletion_can_ever_be_sent(
 
 
 def test_removal_calls_are_counted() -> None:
-    """Garde-fou de relecture : le code d'action ne contient que trois appels qui retirent
-    quelque chose. En ajouter un quatrième doit faire échouer ce test, donc faire réfléchir."""
+    """Garde-fou de relecture : le code d'action ne contient que quatre appels qui retirent
+    quelque chose. En ajouter un cinquième doit faire échouer ce test, donc faire réfléchir."""
     from pathlib import Path
 
     source = Path(write_tools.__file__).read_text(encoding="utf-8")
-    assert source.count(".remove_queue_item(") == 1  # retry_download, un élément en échec
+    # retry_download et remove_download : un élément de la file EN ÉCHEC, jamais un sain.
+    assert source.count(".remove_queue_item(") == 2
     assert source.count(".delete_movie(") == 1  # delete_media, un film
     assert source.count(".delete_series(") == 1  # delete_media, une série
     for banned in (".delete(", ".put(", ".pause(", "delete_files=False"):

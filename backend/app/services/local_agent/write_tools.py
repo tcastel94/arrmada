@@ -157,6 +157,15 @@ class RetryDownloadArgs(_Args):
     )
 
 
+class RemoveDownloadArgs(_Args):
+    title: str = Field(
+        min_length=1,
+        max_length=120,
+        description="Mots du titre du téléchargement en échec ou bloqué à retirer de la file "
+        "(ex. « MobLand »).",
+    )
+
+
 class UnblockImportArgs(_Args):
     title: str = Field(
         min_length=1,
@@ -428,6 +437,13 @@ SEVERAL_FAILED_DOWNLOADS = (
     "une seule action à la fois."
 )
 RETRY_DONE = "Release retirée de la file et mise en liste noire, nouvelle recherche lancée."
+REMOVE_DONE = (
+    "Release retirée de la file et mise en liste noire. Aucune nouvelle recherche n'a été lancée."
+)
+_REMOVED_FILES = (
+    "Les fichiers déjà téléchargés de cette release sont effacés du client de "
+    "téléchargement. Rien n'est touché dans la médiathèque."
+)
 
 
 def is_failed(record: dict[str, Any]) -> bool:
@@ -515,13 +531,41 @@ async def retry_download(args: RetryDownloadArgs) -> Plan:
     return Plan(
         True,
         summary=f"Retirer « {name} » de la file, le mettre en liste noire et relancer une recherche",
-        details=[
-            f"Erreur relevée : {_message(first)[:160]}",
-            "Les fichiers déjà téléchargés de cette release sont effacés du client de "
-            "téléchargement. Rien n'est touché dans la médiathèque.",
-        ],
+        details=[f"Erreur relevée : {_message(first)[:160]}", _REMOVED_FILES],
         call=f"{arr} DELETE /api/v3/queue/{queue_id}?removeFromClient=true&blocklist=true, "
         f"puis {arr} POST /api/v3/command (nouvelle recherche)",
+        target={"queue_id": queue_id},
+        run=run,
+    )
+
+
+async def remove_download(args: RemoveDownloadArgs) -> Plan:
+    """Retrait simple : sortir de la file une release en échec ou bloquée, sans en chercher
+    une autre. « Supprime-le » après un diagnostic.
+
+    Même périmètre que ``retry_download`` : uniquement un téléchargement en
+    échec ou bloqué (``is_failed``), un seul à la fois. Un téléchargement qui
+    avance n'est jamais retiré. La release part en liste noire, pour que
+    Sonarr / Radarr ne reprenne pas la même (un faux ``.exe`` reviendrait).
+    """
+    service, records, empty = await _blocked_download(args.title)
+    if not records:
+        return empty
+    first = records[0]
+    name, queue_id = str(first.get("title")), int(first["id"])
+    arr = service.type.capitalize()
+
+    async def run() -> str:
+        async with _client(service) as client:
+            await client.remove_queue_item(queue_id, remove_from_client=True, blocklist=True)
+        return REMOVE_DONE
+
+    return Plan(
+        True,
+        summary=f"Retirer « {name} » de la file et le mettre en liste noire, sans nouvelle "
+        "recherche",
+        details=[f"Erreur relevée : {_message(first)[:160]}", _REMOVED_FILES],
+        call=f"{arr} DELETE /api/v3/queue/{queue_id}?removeFromClient=true&blocklist=true",
         target={"queue_id": queue_id},
         run=run,
     )
@@ -743,10 +787,22 @@ WRITE_TOOLS: tuple[Tool, ...] = (
         "Relance d'un téléchargement",
         "RELANCER un téléchargement en échec ou bloqué, à partir de son titre : retire cette "
         "release de la file, la met en liste noire et lance une nouvelle recherche. Un seul à "
-        f"la fois. {_CONFIRM} À appeler quand l'utilisateur demande de relancer, de retirer "
-        "un téléchargement en échec ou de chercher une autre version.",
+        f"la fois. {_CONFIRM} À appeler quand l'utilisateur demande de relancer ou de chercher "
+        "une autre version.",
         RetryDownloadArgs,
         retry_download,
+        write=True,
+    ),
+    Tool(
+        "remove_download",
+        "Retrait d'un téléchargement",
+        "RETIRER de la file un téléchargement en échec ou bloqué, à partir de son titre, et le "
+        "mettre en liste noire, SANS nouvelle recherche. Un seul à la fois. "
+        f"{_CONFIRM} À appeler quand l'utilisateur dit « supprime-le », « retire-le », "
+        "« vire-le », « enlève-le » à propos d'un téléchargement en échec ou bloqué. Ne touche "
+        "pas à la bibliothèque.",
+        RemoveDownloadArgs,
+        remove_download,
         write=True,
     ),
     Tool(

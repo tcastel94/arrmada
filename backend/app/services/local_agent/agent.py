@@ -56,7 +56,7 @@ from app.services.copilot import actions as copilot_actions
 from app.services.copilot import tools as copilot_tools
 from app.services.copilot.redaction import Redactor
 from app.services.copilot.tools.common import _error
-from app.services.local_agent import audit, ollama, tools
+from app.services.local_agent import audit, diagnosis, ollama, tools
 from app.services.local_agent.conversations import Conversation
 from app.services.local_agent.prompt import system_prompt
 from app.utils.logger import get_logger
@@ -156,8 +156,9 @@ def fit_history(messages: list[dict[str, Any]], budget_chars: int) -> list[dict[
 #
 # Ces contrôles sont faits par le CODE, avant même de préparer la carte. Ils ne
 # dépendent ni de la consigne ni du modèle : un modèle manipulé peut demander
-# la suppression, il ne peut pas la faire passer. Trois refus possibles :
-# demande en masse, déjà une suppression dans le tour, plafond horaire atteint.
+# la suppression, il ne peut pas la faire passer. Quatre refus possibles :
+# demande en masse, titre absent du message de l'utilisateur, déjà une
+# suppression dans le tour, plafond horaire atteint.
 
 # « Supprime tous mes films », « vide la bibliothèque », « efface toutes les
 # séries »… Le message de l'utilisateur est lu sans accents ni majuscules.
@@ -180,11 +181,33 @@ ONE_DELETION_PER_TURN = (
 _deletions: list[float] = []
 
 
-def _destructive_refusal(user_text: str, cards_this_turn: int) -> str | None:
+TITLE_NOT_NAMED = (
+    "REFUSÉ PAR LE SYSTÈME : le message de l'utilisateur ne nomme pas ce titre. Une "
+    "suppression de la bibliothèque exige qu'il écrive lui-même le titre (« supprime le film "
+    "Dune »). Rien n'est proposé. S'il parlait d'un téléchargement bloqué ou en échec, c'est "
+    "remove_download qu'il faut appeler. Sinon, demande-lui de nommer le titre."
+)
+
+
+def _names_title(user_text: str, title: str) -> bool:
+    """Le message de l'utilisateur contient-il au moins un vrai mot du titre visé ?
+
+    « Supprime-le » ne nomme rien : le titre viendrait alors de la mémoire du
+    modèle (ou d'un résultat d'outil), pas de l'utilisateur.
+    """
+    said = set(diagnosis.tokens(user_text))
+    words = diagnosis.tokens(title)
+    significant = [word for word in words if len(word) >= 3] or words
+    return any(word in said for word in significant)
+
+
+def _destructive_refusal(user_text: str, cards_this_turn: int, title: str = "") -> str | None:
     """Raison de refuser une suppression avant toute carte, ou ``None`` si elle est permise."""
     folded = unicodedata.normalize("NFKD", user_text).encode("ascii", "ignore").decode().lower()
     if MASS_DELETION.search(folded):
         return MASS_DELETION_REFUSED
+    if title and not _names_title(user_text, title):
+        return TITLE_NOT_NAMED
     if cards_this_turn:
         return ONE_DELETION_PER_TURN
     limit = settings.LOCAL_AGENT_MAX_DELETIONS_PER_HOUR
@@ -513,7 +536,11 @@ async def run_turn(
                 if called is not None and called.write:
                     write_attempted = True
                     blocked = (
-                        _destructive_refusal(user_text, destructive_cards)
+                        _destructive_refusal(
+                            user_text,
+                            destructive_cards,
+                            str(getattr(checked[1], "title", "")),  # type: ignore[index]
+                        )
                         if called.destructive
                         else None
                     )

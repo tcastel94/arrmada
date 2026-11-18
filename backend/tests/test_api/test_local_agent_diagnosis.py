@@ -56,13 +56,13 @@ def test_healthy_download_is_left_alone() -> None:
 
 
 def test_suggestions_only_promise_what_the_agent_can_do() -> None:
-    """Une relance se demande à l'agent et passe par la validation ; un simple retrait de
-    la file, qu'aucun outil ne fait, est annoncé « à la main »."""
+    """Une relance comme un simple retrait de la file se demandent à l'agent et passent
+    par la validation."""
     for _pattern, _cause, suggestion in diagnosis.RULES:
         if "relancer :" in suggestion:
             assert "après ta validation" in suggestion
         if suggestion.startswith("Rien à réparer"):
-            assert "à la main" in suggestion
+            assert "retire-le" in suggestion and "après ta validation" in suggestion
 
 
 def test_title_matching_uses_whole_words_and_exact_titles() -> None:

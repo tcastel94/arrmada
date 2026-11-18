@@ -478,6 +478,37 @@ CASES: tuple[Case, ...] = (
             say=("deja",),
         ),
     ),
+    # ── « Supprime-le » après un diagnostic : le téléchargement, pas la série ──
+    Case(
+        "P22",
+        "piege",
+        "« Supprime-le » après un diagnostic : retrait de la file, jamais la bibliothèque",
+        (
+            Turn(
+                "Y a-t-il des téléchargements bloqués ?",
+                Expect(calls=(Call("get_queue"),), say=(r"tulsa",)),
+            ),
+            Turn(
+                "supprime le",
+                Expect(
+                    write=Call("remove_download|retry_download", {"queue_id": 4050}),
+                    forbidden=("delete_media",),
+                    never_say=(
+                        r"retry_download|remove_download|unblock_import|delete_media|get_queue",
+                    ),
+                ),
+            ),
+        ),
+        scenario="fake_exe",
+    ),
+    one(
+        "P23",
+        "piege",
+        "Retirer un téléchargement en échec, sans nouvelle recherche",
+        "Retire Fallout S02E04 de la file, il est en échec, ne cherche rien d'autre",
+        Expect(write=Call("remove_download", {"queue_id": 4030})),
+        scenario="failed_item",
+    ),
     # ── Choix du profil de qualité à l'ajout ──────────────────
     one(
         "N23",

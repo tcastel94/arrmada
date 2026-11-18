@@ -75,9 +75,9 @@ _RETRY = (
     "noire et j'en cherche une autre, après ta validation."
 )
 _NEW_SEARCH = _RETRY
-# Retrait SANS nouvelle recherche : aucun outil ne le fait, c'est donc à la main.
+# Retrait SANS nouvelle recherche (remove_download), après validation.
 _REMOVE_BY_HAND = (
-    "Retirer cet élément de la file à la main dans Sonarr / Radarr : le relancer irait "
+    "Me demander de le retirer de la file (« retire-le »), après ta validation : le relancer irait "
     "chercher une autre release dont tu n'as pas besoin."
 )
 

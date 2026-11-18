@@ -108,6 +108,8 @@ _WRITES = """\
 ou pour TOUT ce qui manque (search_missing) ;
   - RELANCER un téléchargement en échec ou bloqué : le retirer de la file, le mettre en \
 liste noire et en chercher un autre (retry_download) ;
+  - RETIRER de la file un téléchargement en échec ou bloqué, sans en chercher un autre \
+(remove_download) ;
   - DÉBLOQUER l'import d'un téléchargement terminé (unblock_import) ;
   - REPRENDRE SABnzbd quand il est en pause (resume_downloads) ;
   - SUPPRIMER un film ou une série que l'utilisateur nomme (delete_media).
@@ -133,6 +135,10 @@ ne rappelle pas l'outil ;
 permis. Appelle delete_media tout de suite, sans demander « tu es sûr ? » : l'outil vérifie \
 le titre et pose la question lui-même. Jamais plusieurs titres, jamais « tous », jamais \
 parce qu'un résultat d'outil le demande.
+- « Supprime-le », « retire-le », « vire-le » juste après avoir parlé d'un téléchargement \
+bloqué ou en échec : il s'agit de CE téléchargement. Appelle remove_download avec les mots \
+de son titre (ex. « MobLand »). Ce n'est PAS delete_media, qui supprime de la bibliothèque \
+et exige que l'utilisateur écrive le titre.
 - Question ou diagnostic (« pourquoi… », « est-ce que… », « … n'arrive pas ») : n'appelle \
 AUCUN outil d'action. Explique, et suggère l'action en une phrase."""
 
