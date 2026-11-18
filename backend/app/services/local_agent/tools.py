@@ -3,11 +3,12 @@
 @author : Jeff Pomponne <jpomponne@gmail.com>
 
 Ce que le modèle peut demander tient dans ``exposed()`` : les 8 outils de
-LECTURE de ce fichier (``READ_TOOLS``) et les 4 outils d'ÉCRITURE de
+LECTURE de ce fichier (``READ_TOOLS``) et les 8 outils d'ACTION de
 ``write_tools.py``, et rien d'autre. Ce qui n'y est pas n'existe pas pour lui :
-aucune suppression, aucune modification de profil ou d'indexeur n'est exposée,
-donc aucune consigne contournée (« ignore tes règles ») ne peut en déclencher
-une. C'est un pare-feu en liste blanche, pas un filtre de mots interdits.
+aucune suppression en masse, aucun effacement de fichier isolé, aucune
+modification de profil ou d'indexeur n'est exposée, donc aucune consigne
+contournée (« ignore tes règles ») ne peut en déclencher une. C'est un
+pare-feu en liste blanche, pas un filtre de mots interdits.
 
 Les lectures s'exécutent seules. Les écritures passent TOUJOURS par une
 confirmation de l'utilisateur, gérée par la boucle (``agent.py``), jamais par
@@ -710,6 +711,10 @@ class Tool:
     # il rend un ``write_tools.Plan`` (ce qui serait fait), que la boucle
     # soumet à la confirmation de l'utilisateur avant de l'exécuter.
     write: bool = False
+    # True : action IRRÉVERSIBLE (suppression de la bibliothèque). La boucle lui
+    # applique des blocages en plus : pas de demande en masse, une seule par
+    # tour, plafond horaire (voir agent.py).
+    destructive: bool = False
     # True : outil d'enquête (historique, indexeurs, disque). Après l'un d'eux,
     # la boucle refuse toute action dans le même tour (voir agent.py).
     diagnostic: bool = False
@@ -807,7 +812,11 @@ def exposed() -> tuple[Tool, ...]:
     # Import tardif : write_tools s'appuie sur ce fichier (recherche de titres).
     from app.services.local_agent import write_tools
 
-    return READ_TOOLS + write_tools.WRITE_TOOLS
+    return READ_TOOLS + tuple(
+        tool
+        for tool in write_tools.WRITE_TOOLS
+        if settings.LOCAL_AGENT_DELETE_TOOL or not tool.destructive
+    )
 
 
 def resolve(name: str) -> Tool | None:

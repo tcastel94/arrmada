@@ -526,9 +526,15 @@ function ActionCard({ action }: { action: CopilotAction }) {
             )}
             {waiting ? (
                 <div className="flex flex-wrap gap-2 pl-9">
-                    <Button size="sm" onClick={() => void answerCopilotAction(action.id, true)} disabled={action.state === "sending"}>
-                        {action.state === "sending" ? <Loader2 className="animate-spin" /> : <Check />}
-                        Valider
+                    {/* Action irréversible : bouton rouge et libellé explicite, pour qu'un clic réflexe sur « Valider » ne suffise pas. */}
+                    <Button
+                        size="sm"
+                        variant={action.destructive ? "destructive" : "default"}
+                        onClick={() => void answerCopilotAction(action.id, true)}
+                        disabled={action.state === "sending"}
+                    >
+                        {action.state === "sending" ? <Loader2 className="animate-spin" /> : action.destructive ? <AlertTriangle /> : <Check />}
+                        {action.destructive ? "Supprimer définitivement" : "Valider"}
                     </Button>
                     <Button size="sm" variant="secondary" onClick={() => void answerCopilotAction(action.id, false)} disabled={action.state === "sending"}>
                         <X />

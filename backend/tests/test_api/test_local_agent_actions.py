@@ -38,7 +38,16 @@ READ_TOOLS = {
     "get_indexer_status",
     "get_disk_space",
 }
-WRITE_TOOLS = {"add_series", "add_movie", "trigger_search", "retry_download"}
+WRITE_TOOLS = {
+    "add_series",
+    "add_movie",
+    "trigger_search",
+    "retry_download",
+    "unblock_import",
+    "resume_downloads",
+    "search_missing",
+    "delete_media",
+}
 
 
 @pytest.fixture(autouse=True)
@@ -46,7 +55,9 @@ def _fresh_state(monkeypatch: pytest.MonkeyPatch):
     conversations.clear()
     monkeypatch.setattr(settings, "OLLAMA_URL", "http://ollama.test:11434")
     monkeypatch.setattr(settings, "LOCAL_AGENT_DRY_RUN", False)
+    agent._deletions.clear()  # plafond horaire : chaque test repart de zéro
     yield
+    agent._deletions.clear()
     conversations.clear()
 
 
@@ -84,24 +95,32 @@ def of(events: Events, name: str) -> list[dict[str, Any]]:
 # ── Liste blanche ───────────────────────────────────────────────
 
 
-def test_whitelist_is_exactly_twelve_tools(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_whitelist_is_exactly_sixteen_tools(monkeypatch: pytest.MonkeyPatch) -> None:
     names = {tool.name for tool in tools.exposed()}
     assert names == READ_TOOLS | WRITE_TOOLS
     assert {tool.name for tool in tools.exposed() if tool.write} == WRITE_TOOLS
-    forbidden = ("delete", "remove", "supprim", "profile", "indexer_", "update", "edit")
+    # Un seul outil irréversible, et rien qui touche aux profils ou aux indexeurs.
+    assert [tool.name for tool in tools.exposed() if tool.destructive] == ["delete_media"]
+    forbidden = ("profile", "indexer_", "update", "edit", "pause", "delete_all", "purge")
     assert not [n for n in names - {"get_indexer_status"} if any(w in n for w in forbidden)]
 
-    # Interrupteur : sans les écritures, on retombe sur la lecture seule.
+    # Interrupteur de la suppression seule…
+    monkeypatch.setattr(settings, "LOCAL_AGENT_DELETE_TOOL", False)
+    assert {tool.name for tool in tools.exposed()} == READ_TOOLS | WRITE_TOOLS - {"delete_media"}
+    assert tools.resolve("delete_media") is None
+    # … et de toutes les actions : retour à la lecture seule.
     monkeypatch.setattr(settings, "LOCAL_AGENT_WRITE_TOOLS", False)
     assert {tool.name for tool in tools.exposed()} == READ_TOOLS
     assert tools.resolve("add_movie") is None
 
 
 def test_write_tool_never_takes_an_identifier_or_a_profile() -> None:
-    """Le modèle donne un titre : ni identifiant, ni profil, ni dossier, ni indexeur."""
+    """Le modèle donne un titre : ni identifiant, ni profil, ni dossier, ni indexeur, et
+    aucun paramètre qui permettrait de viser plusieurs titres."""
     for tool in write_tools.WRITE_TOOLS:
         fields = set(tool.args.model_fields)
         assert fields <= {"title", "year", "monitor", "type", "season"}, tool.name
+    assert set(write_tools.DeleteMediaArgs.model_fields) == {"type", "title", "year"}
 
 
 # ── Confirmation ────────────────────────────────────────────────
@@ -345,7 +364,7 @@ async def test_trigger_search_only_on_a_library_title(
     ]
 
 
-async def test_retry_starts_a_new_search_and_removes_nothing(
+async def test_retry_removes_the_failed_release_then_searches(
     arr_stack: dict, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     record = fake_arr.RADARR_QUEUE["records"][0]
@@ -354,15 +373,18 @@ async def test_retry_starts_a_new_search_and_removes_nothing(
     use_model(
         monkeypatch,
         calls("retry_download", title="Oppenheimer"),
-        says("Nouvelle recherche lancée pour Oppenheimer."),
+        says("Release retirée, nouvelle recherche lancée pour Oppenheimer."),
     )
     events = await turn("Relance le téléchargement d'Oppenheimer", confirmer=yes)
 
     card = of(events, "confirm")[0]
-    assert "reste dans la file" in card["details"][0]
-    # Une recherche, et rien d'autre : l'élément en échec n'est pas retiré de la file.
-    assert writes() == [
-        ("radarr.test", "/api/v3/command", {"name": "MoviesSearch", "movieIds": [2]})
+    assert card["summary"].startswith("Retirer « Oppenheimer.2023.1080p.WEB » de la file")
+    assert card["details"][0] == "Erreur relevée : Download failed: CRC error"
+    assert card["destructive"] is False  # la médiathèque n'est pas touchée
+    # Dans l'ordre : retrait de CET élément de la file (501), puis nouvelle recherche.
+    assert [(post[1], post[2]) for post in writes()] == [
+        ("/api/v3/queue/501", {}),
+        ("/api/v3/command", {"name": "MoviesSearch", "movieIds": [2]}),
     ]
 
 
@@ -436,13 +458,242 @@ async def test_no_deletion_can_ever_be_sent(
     assert of(events, "error")  # trois appels invalides : le tour est arrêté
 
 
-def test_write_tools_module_calls_no_removal_function() -> None:
-    """Garde-fou de relecture : le fichier des écritures n'appelle aucune suppression."""
+def test_removal_calls_are_counted() -> None:
+    """Garde-fou de relecture : le code d'action ne contient que trois appels qui retirent
+    quelque chose. En ajouter un quatrième doit faire échouer ce test, donc faire réfléchir."""
     from pathlib import Path
 
     source = Path(write_tools.__file__).read_text(encoding="utf-8")
-    code = "\n".join(
-        line for line in source.split('"""')[2::2] for line in [line] if "#" not in line[:1]
+    assert source.count(".remove_queue_item(") == 1  # retry_download, un élément en échec
+    assert source.count(".delete_movie(") == 1  # delete_media, un film
+    assert source.count(".delete_series(") == 1  # delete_media, une série
+    for banned in (".delete(", ".put(", ".pause(", "delete_files=False"):
+        assert banned not in source, banned
+
+
+# ── Suppression d'un titre : la seule action irréversible ───────
+
+
+def _library_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Le faux Radarr répond « Dune (2021), dans la bibliothèque » à toute recherche."""
+    from app.services.radarr import RadarrClient
+
+    async def in_library(self: Any, term: str) -> list[dict[str, Any]]:
+        return [fake_arr.MOVIES[0]]
+
+    monkeypatch.setattr(RadarrClient, "lookup_movie", in_library)
+
+
+async def test_delete_shows_what_will_be_erased_and_waits_for_approval(
+    arr_stack: dict, audit_file, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _library_lookup(monkeypatch)
+    use_model(
+        monkeypatch,
+        calls("delete_media", type="movie", title="Dune"),
+        says("Dune (2021) est supprimé, son fichier est effacé."),
     )
-    for banned in ("delete_movie", "delete_series", "remove_queue_item", ".delete(", ".put("):
-        assert banned not in code, banned
+    seen: list[int] = []
+
+    async def approve(card: dict[str, Any]) -> bool:
+        seen.append(len(writes()))
+        assert card["destructive"] is True
+        assert card["warning"].startswith("IRRÉVERSIBLE")
+        assert card["summary"].startswith("SUPPRIMER le film Dune (2021)")
+        assert card["details"] == [
+            "Dossier : /movies/Dune (2021)",
+            "Fichiers effacés : 1 (60,0 Go)",
+        ]
+        return True
+
+    await turn("Supprime le film Dune", confirmer=approve)
+
+    assert seen == [0]  # rien n'est parti avant la validation
+    assert [post[1] for post in writes()] == ["/api/v3/movie/1"]
+    assert [line["kind"] for line in audit_lines(audit_file)][1:4] == [
+        "proposal",
+        "confirmation",
+        "action_result",
+    ]
+
+
+async def test_refused_deletion_erases_nothing(
+    arr_stack: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _library_lookup(monkeypatch)
+    use_model(
+        monkeypatch,
+        calls("delete_media", type="movie", title="Dune"),
+        says("Tu as refusé : rien n'a été supprimé."),
+    )
+    await turn("Supprime le film Dune", confirmer=no)
+
+    assert writes() == []
+
+
+@pytest.mark.parametrize(
+    "request_text",
+    [
+        "Supprime tous mes films",
+        "Efface toutes les séries de la bibliothèque",
+        "Vide entièrement Radarr",
+        "Fais le ménage et vire tout",
+        "delete all my movies",
+        "Supprime Dune et tous les autres",
+    ],
+)
+async def test_mass_deletion_is_blocked_by_code_before_any_card(
+    request_text: str, arr_stack: dict, audit_file, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Le modèle obéit et demande une suppression : le code la refuse, sans carte."""
+    _library_lookup(monkeypatch)
+    model = use_model(
+        monkeypatch,
+        calls("delete_media", type="movie", title="Dune"),
+        says("Je ne peux pas supprimer en masse."),
+    )
+    events = await turn(request_text, confirmer=yes)
+
+    assert of(events, "confirm") == [] and writes() == []
+    assert model.requests[1][-1]["content"].startswith("REFUSÉ PAR LE SYSTÈME")
+    assert "blocked" in [line["kind"] for line in audit_lines(audit_file)]
+
+
+@pytest.mark.parametrize(
+    "request_text",
+    ["Supprime le film Dune", "Tu peux supprimer la série Severance ?", "Vire Oppenheimer"],
+)
+def test_single_title_requests_are_not_seen_as_mass_deletion(request_text: str) -> None:
+    assert agent._destructive_refusal(request_text, 0) is None
+
+
+async def test_only_one_deletion_per_message(
+    arr_stack: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _library_lookup(monkeypatch)
+    model = use_model(
+        monkeypatch,
+        calls("delete_media", type="movie", title="Dune"),
+        calls("delete_media", type="movie", title="Dune"),
+        says("Dune est supprimé. Redemande-moi pour le suivant."),
+    )
+    events = await turn("Supprime Dune puis Oppenheimer", confirmer=yes)
+
+    assert len(of(events, "confirm")) == 1
+    assert len(writes()) == 1
+    assert "une seule suppression par message" in model.requests[2][-1]["content"]
+
+
+async def test_hourly_cap_on_deletions(arr_stack: dict, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fusible : au-delà du plafond, plus aucune carte de suppression n'est proposée."""
+    monkeypatch.setattr(settings, "LOCAL_AGENT_MAX_DELETIONS_PER_HOUR", 1)
+    _library_lookup(monkeypatch)
+    use_model(monkeypatch, calls("delete_media", type="movie", title="Dune"), says("Supprimé."))
+    await turn("Supprime le film Dune", confirmer=yes)
+
+    model = use_model(
+        monkeypatch,
+        calls("delete_media", type="movie", title="Dune"),
+        says("Plafond atteint, réessaie plus tard."),
+    )
+    events = await turn("Supprime le film Dune", confirmer=yes)
+
+    assert of(events, "confirm") == [] and len(writes()) == 1
+    assert "plafond de 1 suppressions par heure" in model.requests[1][-1]["content"]
+
+
+async def test_deletion_needs_an_exact_title_in_the_library(
+    arr_stack: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Titre approchant : on ne supprime pas « à peu près ».
+    _library_lookup(monkeypatch)
+    use_model(
+        monkeypatch,
+        calls("delete_media", type="movie", title="Dune le remake"),
+        says("Tu veux dire Dune (2021) ?"),
+    )
+    events = await turn("Supprime Dune le remake", confirmer=yes)
+    assert of(events, "confirm") == [] and writes() == []
+
+
+async def test_deletion_of_a_title_not_in_library_does_nothing(
+    arr_stack: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Réponse par défaut du faux Radarr : Interstellar, absent de la bibliothèque.
+    use_model(
+        monkeypatch,
+        calls("delete_media", type="movie", title="Interstellar"),
+        says("Interstellar n'est pas dans ta bibliothèque."),
+    )
+    events = await turn("Supprime Interstellar", confirmer=yes)
+    assert of(events, "confirm") == [] and writes() == []
+
+
+async def test_deletion_in_dry_run_erases_nothing(
+    arr_stack: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _library_lookup(monkeypatch)
+    use_model(monkeypatch, calls("delete_media", type="movie", title="Dune"), says("Simulation."))
+    events = await turn("Supprime le film Dune", dry_run=True)
+
+    assert writes() == []
+    assert (
+        "Appel prévu : Radarr DELETE /api/v3/movie/1?deleteFiles=true"
+        in (of(events, "confirm")[0]["details"])
+    )
+
+
+# ── Autres actions ──────────────────────────────────────────────
+
+
+async def test_search_missing_runs_the_global_search_after_approval(
+    arr_stack: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    use_model(
+        monkeypatch,
+        calls("search_missing", type="movie"),
+        says("Recherche lancée pour tous les films manquants."),
+    )
+    await turn("Cherche tous les films manquants", confirmer=yes)
+
+    assert writes() == [("radarr.test", "/api/v3/command", {"name": "MissingMoviesSearch"})]
+
+
+async def test_unblock_import_uses_the_existing_unstick_remedy(
+    arr_stack: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.services import unstick
+
+    record = fake_arr.RADARR_QUEUE["records"][0]
+    monkeypatch.setitem(record, "status", "completed")
+    monkeypatch.setitem(record, "sizeleft", 0)
+    monkeypatch.setitem(record, "trackedDownloadState", "importBlocked")
+    monkeypatch.setitem(
+        record, "statusMessages", [{"messages": ["Movie title mismatch, manual import needed"]}]
+    )
+    called: list[tuple[str, str]] = []
+
+    async def fake_unstick(db: Any, service_type: str, download_id: str, device: str = "") -> dict:
+        called.append((service_type, download_id))
+        return {"status": "ok", "case": "import", "message": "Import lancé : 1 fichier(s)"}
+
+    monkeypatch.setattr(unstick, "unstick", fake_unstick)
+    use_model(
+        monkeypatch,
+        calls("unblock_import", title="Oppenheimer"),
+        says("Import lancé pour Oppenheimer."),
+    )
+    events = await turn("Débloque l'import d'Oppenheimer", confirmer=yes)
+
+    assert of(events, "confirm")[0]["summary"].startswith("Importer « Oppenheimer")
+    assert called == [("radarr", "SABnzbd_nzo_opp")]
+    assert of(events, "action_result")[0]["message"] == "Import lancé : 1 fichier(s)"
+
+
+async def test_resume_does_nothing_when_sabnzbd_is_not_paused(
+    arr_stack: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    use_model(monkeypatch, calls("resume_downloads"), says("SABnzbd n'est pas en pause."))
+    events = await turn("Relance SABnzbd", confirmer=yes)
+
+    assert of(events, "confirm") == [] and writes() == []

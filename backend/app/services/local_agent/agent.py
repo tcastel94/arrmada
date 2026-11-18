@@ -43,6 +43,7 @@ import json
 import re
 import secrets
 import time
+import unicodedata
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
@@ -83,8 +84,7 @@ RETRY_TEMPERATURE = 0.6
 # confirmer. Ce contrôle ne dépend pas de la bonne volonté du modèle : c'est le
 # code qui compare ce qui est dit à ce qui a été fait.
 PHANTOM_CONFIRMATION = re.compile(
-    r"\bbouton\b|\bconfirme[sz]?[- ](tu|moi|le|la|pour|si|que)\b|\btu confirmes\b"
-    r"|\bta confirmation\b",
+    r"\bbouton\b|\bconfirm\w*|\b(tu veux|veux-tu) vraiment\b|\bes-tu s[uû]r\b",
     re.IGNORECASE,
 )
 PHANTOM_CONFIRMATION_CORRECTION = (
@@ -141,6 +141,55 @@ def fit_history(messages: list[dict[str, Any]], budget_chars: int) -> list[dict[
     return kept
 
 
+# ══════════════════════════════════════════════════════════════
+# Blocages propres à l'action irréversible (suppression de la bibliothèque)
+# ══════════════════════════════════════════════════════════════
+#
+# Ces contrôles sont faits par le CODE, avant même de préparer la carte. Ils ne
+# dépendent ni de la consigne ni du modèle : un modèle manipulé peut demander
+# la suppression, il ne peut pas la faire passer. Trois refus possibles :
+# demande en masse, déjà une suppression dans le tour, plafond horaire atteint.
+
+# « Supprime tous mes films », « vide la bibliothèque », « efface toutes les
+# séries »… Le message de l'utilisateur est lu sans accents ni majuscules.
+MASS_DELETION = re.compile(
+    r"\b(supprim|efface|vire|degage|retire|enleve|nettoie|purge|vide|detrui|delete|remove)\w*\b"
+    r".*\b(tous|toutes|tout|toute|ensemble|chaque|integralite|entiere?|all|everything)\b"
+    r"|\b(vide|purge|nettoie|rase)\w*\b.*\b(bibliotheque|mediatheque|radarr|sonarr)\b"
+)
+MASS_DELETION_REFUSED = (
+    "REFUSÉ PAR LE SYSTÈME : cette demande vise plusieurs titres ou toute la bibliothèque. "
+    "L'agent ne supprime qu'UN film ou UNE série nommé, jamais en masse. Rien n'est proposé "
+    "à l'utilisateur. Dis-le-lui en une phrase et n'appelle plus cet outil."
+)
+ONE_DELETION_PER_TURN = (
+    "REFUSÉ PAR LE SYSTÈME : une seule suppression par message. Rien d'autre n'est proposé. "
+    "Dis à l'utilisateur de redemander pour le titre suivant."
+)
+# Heures (horloge monotone) des suppressions réellement exécutées, toutes
+# conversations confondues. En mémoire : remis à zéro au redémarrage.
+_deletions: list[float] = []
+
+
+def _destructive_refusal(user_text: str, cards_this_turn: int) -> str | None:
+    """Raison de refuser une suppression avant toute carte, ou ``None`` si elle est permise."""
+    folded = unicodedata.normalize("NFKD", user_text).encode("ascii", "ignore").decode().lower()
+    if MASS_DELETION.search(folded):
+        return MASS_DELETION_REFUSED
+    if cards_this_turn:
+        return ONE_DELETION_PER_TURN
+    limit = settings.LOCAL_AGENT_MAX_DELETIONS_PER_HOUR
+    recent = [moment for moment in _deletions if time.monotonic() - moment < 3600]
+    _deletions[:] = recent
+    if len(recent) >= limit:
+        return (
+            f"REFUSÉ PAR LE SYSTÈME : plafond de {limit} suppressions par heure atteint. Rien "
+            "n'est proposé. Dis-le à l'utilisateur ; il pourra réessayer plus tard ou passer "
+            "par l'interface de Sonarr / Radarr."
+        )
+    return None
+
+
 async def _run_action(
     call: dict[str, Any],
     tool: tools.Tool,
@@ -194,7 +243,10 @@ async def _run_action(
         "label": tool.label,
         "summary": plan.summary,
         "details": plan.details,
-        "warning": "",
+        "warning": plan.warning,
+        # Action irréversible : l'interface et la ligne de commande demandent
+        # une validation plus appuyée qu'un simple oui.
+        "destructive": tool.destructive,
         "auto": False,
     }
 
@@ -267,6 +319,8 @@ async def _run_action(
     except Exception as exc:  # noqa: BLE001 : l'échec est rendu au modèle et à l'utilisateur
         logger.warning("Agent local : %s en échec : %s", tool.name, exc)
         failed, message = True, redactor.text(f"Échec : {_error(exc)}")
+    if tool.destructive and not failed:
+        _deletions.append(time.monotonic())
     yield ("action_result", {"id": confirmation_id, "ok": not failed, "message": message[:300]})
     audit.record("action_result", conversation_id, tool=tool.name, ok=not failed, message=message)
     # Même journal que l'agent Claude : l'action apparaît dans l'Activité d'ArrMada.
@@ -306,6 +360,7 @@ async def run_turn(
     invalid_calls = 0
     empty_answers = 0
     write_attempted = False  # un outil d'écriture a été appelé pendant ce tour
+    destructive_cards = 0  # cartes de suppression montrées pendant ce tour
     button_corrected = False
     diagnostic_called = False  # historique, indexeurs ou disque consultés pendant ce tour
     server_retries = 0
@@ -446,10 +501,20 @@ async def run_turn(
                 called = None if isinstance(checked, tools.ToolOutcome) else checked[0]
                 if called is not None and called.write:
                     write_attempted = True
+                    blocked = (
+                        _destructive_refusal(user_text, destructive_cards)
+                        if called.destructive
+                        else None
+                    )
                     if diagnostic_called:
                         # Verrou : pas d'action au milieu d'une enquête. L'outil
                         # n'est pas exécuté, le modèle reçoit le refus et conclut.
                         outcome = tools.ToolOutcome(NO_ACTION_DURING_DIAGNOSTIC, True, False, 0)
+                    elif blocked:
+                        audit.record(
+                            "blocked", conversation.id, tool=called.name, reason=blocked[:120]
+                        )
+                        outcome = tools.ToolOutcome(blocked, True, False, 0)
                     else:
                         async for item in _run_action(
                             call,
@@ -464,6 +529,8 @@ async def run_turn(
                             if isinstance(item, tools.ToolOutcome):
                                 outcome = item
                             else:
+                                if item[0] == "confirm" and called.destructive:
+                                    destructive_cards += 1
                                 yield item
                 else:
                     outcome = await tools.execute(call["name"], call["arguments"], redactor)

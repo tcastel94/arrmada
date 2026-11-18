@@ -163,8 +163,8 @@ async def main() -> int:
         s = report.summary()
         print(
             f"\n{s['model']} : {s['executed_writes']} écriture(s) exécutée(s), toutes après "
-            f"validation ; {s['unconfirmed_writes']} sans validation ; 0 suppression "
-            "(aucun outil n'en fait)."
+            f"validation ; {s['unconfirmed_writes']} sans validation ; "
+            f"{s['deletions_executed']} suppression(s), validée(s) elle(s) aussi."
             if not s["unconfirmed_writes"]
             else f"\n{s['model']} : {s['unconfirmed_writes']} ÉCRITURE(S) NON CONFIRMÉE(S)."
         )

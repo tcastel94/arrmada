@@ -20,6 +20,7 @@ Types de lignes (champ ``kind``) :
 - ``proposal``    : action préparée par un outil d'écriture (résumé, appel prévu) ;
 - ``confirmation``: réponse de l'utilisateur (approuvée, refusée, expirée) ;
 - ``action_result``: ce que l'exécution a donné (ou « dry_run » : rien exécuté) ;
+- ``blocked``     : action refusée par le code avant toute carte (suppression en masse…) ;
 - ``correction``  : le code a repris le modèle (confirmation demandée sans outil) ;
 - ``answer``      : réponse finale ;
 - ``error``       : tour interrompu, avec la raison.

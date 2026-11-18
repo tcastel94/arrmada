@@ -28,10 +28,18 @@ manipule aucun identifiant (tvdb_id, tmdb_id…). Deux raisons, mesurées au ban
 
 Ce qui n'est volontairement PAS ici :
 
-- aucune suppression (série, film, fichier, élément de la file) ;
+- aucune action sur plusieurs titres à la fois, sauf « chercher tout ce qui
+  manque » (qui n'efface rien) ;
+- aucun retrait d'un téléchargement qui avance : seuls ceux en échec ou
+  bloqués peuvent être retirés de la file ;
+- aucun effacement de fichier isolé, aucune mise en pause ;
 - aucun choix de profil de qualité, de dossier racine ou d'indexeur : ils
   viennent des réglages par défaut d'ArrMada, comme pour le bouton « Demander »
   de l'interface. Le modèle ne peut donc pas les modifier.
+
+Un seul outil est irréversible, ``delete_media`` (supprimer UN film ou UNE
+série, fichiers compris). Il est marqué ``destructive`` : la boucle lui
+applique des blocages supplémentaires, par du code (voir ``agent.py``).
 
 L'ajout passe par ``request_service.create_request`` : la même fonction que les
 boutons de la web app et de la TV. Un ajout fait par l'agent apparaît donc dans
@@ -48,7 +56,7 @@ from pydantic import Field
 
 from app.services import request_service
 from app.services.copilot import tools as copilot_tools
-from app.services.copilot.tools.args import _Args
+from app.services.copilot.tools.args import NoArgs, _Args
 from app.services.copilot.tools.common import _client, _services
 from app.services.local_agent import diagnosis, tools
 from app.services.local_agent.tools import TitleSearchArgs, Tool
@@ -75,6 +83,8 @@ class Plan:
     call: str = ""
     # Cible retenue par le code (journal d'audit, banc de test).
     target: dict[str, Any] = field(default_factory=dict)
+    # Mise en garde affichée en évidence sur la carte (action irréversible…).
+    warning: str = ""
     # L'exécution réelle. Appelée par la boucle, après confirmation uniquement.
     run: Callable[[], Awaitable[str]] | None = None
 
@@ -134,6 +144,28 @@ class RetryDownloadArgs(_Args):
         max_length=120,
         description="Mots du titre du téléchargement en échec (ex. « Fallout »).",
     )
+
+
+class UnblockImportArgs(_Args):
+    title: str = Field(
+        min_length=1,
+        max_length=120,
+        description="Mots du titre du téléchargement terminé mais non importé.",
+    )
+
+
+class SearchMissingArgs(_Args):
+    type: Literal["movie", "series", "all"] = Field(
+        default="all", description="movie (films), series (épisodes), ou all pour les deux."
+    )
+
+
+class DeleteMediaArgs(_Args):
+    type: Kind = Field(description="series ou movie.")
+    title: str = Field(
+        min_length=1, max_length=120, description="Titre EXACT du film ou de la série à supprimer."
+    )
+    year: int = Field(default=0, ge=0, le=2100, description=_YEAR)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -335,36 +367,51 @@ async def trigger_search(args: TriggerSearchArgs) -> Plan:
 
 
 # États d'un élément de la file qui n'avancera plus sans intervention.
-_FAILED_STATES = {"failed", "failedpending", "importblocked", "importfailed"}
+_FAILED_STATES = {"failed", "failedpending", "importblocked", "importfailed", "importpending"}
 _FAILED_STATUS = {"failed", "warning", "error"}
 
 NO_FAILED_DOWNLOAD = (
-    "Aucun téléchargement en échec ne correspond à ce titre dans la file. Dis-le à l'utilisateur."
+    "Aucun téléchargement en échec ou bloqué ne correspond à ce titre dans la file. Dis-le à "
+    "l'utilisateur."
 )
 SEVERAL_FAILED_DOWNLOADS = (
-    "Plusieurs téléchargements en échec correspondent. Cite-les et demande lequel relancer."
+    "Plusieurs téléchargements en échec correspondent. Cite-les et demande lequel traiter : "
+    "une seule action à la fois."
 )
+RETRY_DONE = "Release retirée de la file et mise en liste noire, nouvelle recherche lancée."
 
 
 def is_failed(record: dict[str, Any]) -> bool:
+    """Élément de la file en échec ou bloqué. Un téléchargement sain ne l'est jamais."""
+    state = str(record.get("trackedDownloadState", "")).lower()
+    if state == "importpending":
+        # « Import en attente » est normal quelques instants : bloqué seulement s'il y a un message.
+        return bool(record.get("errorMessage") or record.get("statusMessages"))
     return bool(
         record.get("errorMessage")
         or str(record.get("status", "")).lower() in _FAILED_STATUS
         or str(record.get("trackedDownloadStatus", "")).lower() in _FAILED_STATUS
-        or str(record.get("trackedDownloadState", "")).lower() in _FAILED_STATES
+        or state in _FAILED_STATES
     )
 
 
-async def retry_download(args: RetryDownloadArgs) -> Plan:
-    """Relance pour un téléchargement en échec : une NOUVELLE recherche du même média.
+def _message(record: dict[str, Any]) -> str:
+    """Premier message d'erreur d'une ligne de la file."""
+    for status in record.get("statusMessages") or []:
+        for message in status.get("messages") or []:
+            if message:
+                return str(message)
+    return str(record.get("errorMessage") or record.get("status") or "")
 
-    Choix assumé : on ne retire rien de la file. Dans Sonarr / Radarr, « relancer »
-    veut d'habitude dire « retirer l'élément en échec, le mettre en liste noire
-    et rechercher ». Retirer de la file est une suppression, et aucune
-    suppression n'est permise à l'agent. On relance donc seulement la
-    recherche ; l'élément en échec reste dans la file, à retirer à la main.
+
+async def _blocked_download(title: str) -> tuple[Any, list[dict[str, Any]], Plan]:
+    """LE téléchargement en échec visé par un titre : (service, ses lignes, plan vide).
+
+    Une sortie de saison occupe plusieurs lignes de la file (une par épisode)
+    pour un seul téléchargement : on regroupe par ``downloadId``. Zéro ou
+    plusieurs téléchargements = rien à proposer, on ne choisit pas.
     """
-    failed: list[tuple[Any, dict[str, Any]]] = []
+    groups: dict[tuple[int, str], tuple[Any, list[dict[str, Any]]]] = {}
     for service in await _services("sonarr", "radarr"):
         try:
             async with _client(service) as client:
@@ -372,57 +419,234 @@ async def retry_download(args: RetryDownloadArgs) -> Plan:
         except Exception:  # noqa: BLE001, S112 : un *arr en panne n'empêche pas l'autre
             continue
         for record in (queue or {}).get("records") or []:
-            if is_failed(record) and diagnosis.matches(record.get("title"), args.title):
-                failed.append((service, record))
+            if is_failed(record) and diagnosis.matches(record.get("title"), title):
+                key = (service.id, str(record.get("downloadId") or record.get("id")))
+                groups.setdefault(key, (service, []))[1].append(record)
+    if not groups:
+        return None, [], nothing(NO_FAILED_DOWNLOAD)
+    if len(groups) > 1:
+        names = [str(records[0].get("title")) for _, records in groups.values()]
+        return None, [], nothing(SEVERAL_FAILED_DOWNLOADS, candidates=names[:8])
+    service, records = next(iter(groups.values()))
+    return service, records, Plan(False)
 
-    if not failed:
-        return nothing(NO_FAILED_DOWNLOAD)
-    if len(failed) > 1:
-        return nothing(
-            SEVERAL_FAILED_DOWNLOADS,
-            candidates=[str(record.get("title")) for _, record in failed[:8]],
-        )
 
-    service, record = failed[0]
+async def retry_download(args: RetryDownloadArgs) -> Plan:
+    """Vraie relance : retirer la release en échec, la mettre en liste noire, rechercher.
+
+    C'est ce que fait le bouton « Chercher une autre version » d'ArrMada. Ne
+    vise QUE des téléchargements en échec ou bloqués : un téléchargement qui
+    avance ne peut pas être retiré par l'agent. Un seul à la fois.
+    """
+    service, records, empty = await _blocked_download(args.title)
+    if not records:
+        return empty
+    first = records[0]
     is_movie = service.type.lower() == "radarr"
-    media_id = record.get("movieId") if is_movie else record.get("episodeId")
-    if not media_id:
+    episode_ids = sorted({int(r["episodeId"]) for r in records if r.get("episodeId")})
+    if not (first.get("movieId") if is_movie else episode_ids or first.get("seriesId")):
         return nothing(
-            "Ce téléchargement en échec n'est rattaché à aucun film ni épisode : il ne peut "
-            "pas être relancé d'ici. Dis-le à l'utilisateur."
+            "Ce téléchargement n'est rattaché à aucun film ni épisode : il ne peut pas être "
+            "relancé d'ici. Dis-le à l'utilisateur."
         )
-    name = str(record.get("title"))
-    command = (
-        f"MoviesSearch movieIds=[{media_id}]"
-        if is_movie
-        else f"EpisodeSearch episodeIds=[{media_id}]"
-    )
+    name, queue_id = str(first.get("title")), int(first["id"])
+    arr = service.type.capitalize()
 
     async def run() -> str:
         async with _client(service) as client:
+            await client.remove_queue_item(queue_id, remove_from_client=True, blocklist=True)
             if is_movie:
-                await client.search_movie(int(media_id))
+                await client.search_movie(int(first["movieId"]))
+            elif episode_ids:
+                await client.search_episodes(episode_ids)
             else:
-                await client.search_episodes([int(media_id)])
+                await client.search_series(int(first["seriesId"]))
         return RETRY_DONE
 
     return Plan(
         True,
-        summary=f"Relancer une recherche pour « {name} »",
+        summary=f"Retirer « {name} » de la file, le mettre en liste noire et relancer une recherche",
         details=[
-            "L'élément en échec reste dans la file : l'agent ne supprime rien.",
-            f"Erreur relevée : {str(record.get('errorMessage') or record.get('status'))[:160]}",
+            f"Erreur relevée : {_message(first)[:160]}",
+            "Les fichiers déjà téléchargés de cette release sont effacés du client de "
+            "téléchargement. Rien n'est touché dans la médiathèque.",
         ],
-        call=f"{service.type.capitalize()} POST /api/v3/command name={command}",
-        target={"queue_id": record.get("id")},
+        call=f"{arr} DELETE /api/v3/queue/{queue_id}?removeFromClient=true&blocklist=true, "
+        f"puis {arr} POST /api/v3/command (nouvelle recherche)",
+        target={"queue_id": queue_id},
         run=run,
     )
 
 
-RETRY_DONE = (
-    "Nouvelle recherche lancée. L'élément en échec n'a pas été retiré de la file : à retirer "
-    "à la main dans l'interface si besoin."
+async def unblock_import(args: UnblockImportArgs) -> Plan:
+    """Importer un téléchargement terminé que Sonarr / Radarr n'importe pas tout seul.
+
+    S'appuie sur le « Débloquer » d'ArrMada (``services/unstick.py``) : même
+    diagnostic, même remède, jamais d'écrasement d'un fichier existant.
+    """
+    from app.services import unstick
+
+    service, records, empty = await _blocked_download(args.title)
+    if not records:
+        return empty
+    service_type = service.type.lower()
+    found = unstick.diagnose_records(service_type, records)
+    name = str(records[0].get("title"))
+    if found["case"] not in ("import", "pack"):
+        return nothing(
+            f"« {name} » n'est pas un import bloqué mais un téléchargement en échec : rien à "
+            "importer. Dis-le, et propose de le relancer (retirer, liste noire, nouvelle recherche)."
+        )
+    download_id = str(records[0].get("downloadId"))
+
+    async def run() -> str:
+        async with copilot_tools.session_factory() as db:
+            result = await unstick.unstick(db, service_type, download_id, device="Agent local")
+        if result.get("status") != "ok" or result.get("case") == "refused":
+            raise RuntimeError(str(result.get("message") or "import refusé"))
+        return str(result.get("message") or "Import lancé.")
+
+    return Plan(
+        True,
+        summary=f"Importer « {name} » dans la médiathèque",
+        details=[
+            f"Message relevé : {_message(records[0])[:160]}",
+            "Seuls les fichiers reconnus sont importés, sans écraser de fichier existant.",
+        ],
+        call=f"{service.type.capitalize()} POST /api/v3/command name=ManualImport "
+        f"downloadId={download_id}",
+        target={"queue_id": records[0].get("id")},
+        run=run,
+    )
+
+
+async def resume_downloads(_: NoArgs) -> Plan:
+    """Reprendre SABnzbd quand il est en pause. Ne sait PAS mettre en pause."""
+    paused = []
+    for service in await _services("sabnzbd"):
+        try:
+            async with _client(service) as client:
+                queue = await client.get_queue()
+        except Exception:  # noqa: BLE001, S112
+            continue
+        state = queue.get("queue", queue) if isinstance(queue, dict) else {}
+        if state.get("paused") in (True, "True", "true", 1):
+            paused.append(service)
+    if not paused:
+        return nothing("SABnzbd n'est pas en pause : rien à reprendre. Dis-le à l'utilisateur.")
+
+    async def run() -> str:
+        for service in paused:
+            async with _client(service) as client:
+                await client.resume()
+        return "SABnzbd a repris les téléchargements."
+
+    return Plan(
+        True,
+        summary="Reprendre les téléchargements de SABnzbd (actuellement en pause)",
+        call="SABnzbd GET /api?mode=resume",
+        target={"services": [service.name for service in paused]},
+        run=run,
+    )
+
+
+async def search_missing(args: SearchMissingArgs) -> Plan:
+    """Chercher d'un coup tous les films et / ou épisodes manquants."""
+    wanted = {"movie": ("radarr",), "series": ("sonarr",)}.get(args.type, ("radarr", "sonarr"))
+    services = await _services(*wanted)
+    if not services:
+        return nothing("Ni Radarr ni Sonarr n'est actif dans ArrMada. Dis-le.")
+    commands = {"radarr": "MissingMoviesSearch", "sonarr": "MissingEpisodeSearch"}
+    what = {"movie": "films", "series": "épisodes"}.get(args.type, "films et épisodes")
+    missing = await tools.get_missing(tools.MissingArgs(type=args.type, limit=1))
+    count = (missing.get("movies") or {}).get("missing_total", 0) + (
+        missing.get("series") or {}
+    ).get("missing_episodes_total", 0)
+
+    async def run() -> str:
+        for service in services:
+            async with _client(service) as client:
+                await client.command(commands[service.type.lower()])
+        return f"Recherche lancée pour tous les {what} manquants."
+
+    return Plan(
+        True,
+        summary=f"Chercher tous les {what} manquants ({count} à trouver)",
+        details=["Une recherche par titre manquant : cela sollicite fortement les indexeurs."],
+        call=" + ".join(
+            f"{s.type.capitalize()} POST /api/v3/command name={commands[s.type.lower()]}"
+            for s in services
+        ),
+        target={"type": args.type},
+        warning="Beaucoup de recherches d'un coup : certains indexeurs limitent le nombre de "
+        "requêtes par jour."
+        if count > 50
+        else "",
+        run=run,
+    )
+
+
+def _size(amount: Any) -> str:
+    gigabytes = float(amount or 0) / 1024**3
+    return f"{gigabytes:.1f} Go".replace(".", ",")
+
+
+DELETE_WARNING = (
+    "IRRÉVERSIBLE : les fichiers sont effacés du disque. Vérifie le titre et l'année avant "
+    "de valider."
 )
+
+
+async def delete_media(args: DeleteMediaArgs) -> Plan:
+    """Supprimer UN film ou UNE série de la bibliothèque, fichiers compris.
+
+    Le seul outil irréversible. Ce que ce code impose, en plus des blocages de
+    la boucle (pas de demande en masse, une suppression par tour, plafond
+    horaire) :
+
+    - un seul titre par appel : il n'existe aucun paramètre « tous » ;
+    - le titre doit être EXACT et unique dans la bibliothèque. Un titre
+      approchant ou des homonymes = aucune carte, une question ;
+    - la carte montre le dossier, la taille et le nombre de fichiers effacés.
+    """
+    service, item, empty = await _single(args.type, args.title, args.year)
+    if item is None:
+        return empty
+    label, arr_id = _label(item), item.get("id")
+    if not arr_id:
+        return nothing(f"{label} n'est pas dans la bibliothèque : rien à supprimer. Dis-le.")
+
+    if args.type == "movie":
+        files = 1 if item.get("hasFile") else 0
+        size = item.get("sizeOnDisk")
+        summary = f"SUPPRIMER le film {label} de Radarr et effacer son fichier du disque"
+        call = f"Radarr DELETE /api/v3/movie/{arr_id}?deleteFiles=true"
+    else:
+        stats = item.get("statistics") or {}
+        files, size = stats.get("episodeFileCount", 0), stats.get("sizeOnDisk")
+        summary = f"SUPPRIMER la série {label} de Sonarr et effacer tous ses épisodes du disque"
+        call = f"Sonarr DELETE /api/v3/series/{arr_id}?deleteFiles=true"
+
+    async def run() -> str:
+        async with _client(service) as client:
+            if args.type == "movie":
+                await client.delete_movie(int(arr_id), delete_files=True)
+            else:
+                await client.delete_series(int(arr_id), delete_files=True)
+        return f"{label} supprimé de la bibliothèque, {files} fichier(s) effacé(s) du disque."
+
+    return Plan(
+        True,
+        summary=summary,
+        details=[
+            f"Dossier : {item.get('path') or '?'}",
+            f"Fichiers effacés : {files} ({_size(size)})",
+        ],
+        call=call,
+        target={"type": args.type, "id": int(item[_ID[args.type]])},
+        warning=DELETE_WARNING,
+        run=run,
+    )
 
 
 # ══════════════════════════════════════════════════════════════
@@ -468,11 +692,52 @@ WRITE_TOOLS: tuple[Tool, ...] = (
     Tool(
         "retry_download",
         "Relance d'un téléchargement",
-        "RELANCER un téléchargement en échec de la file d'attente, à partir de son titre : "
-        f"lance une nouvelle recherche, sans rien retirer de la file. {_CONFIRM} À appeler "
-        "seulement quand l'utilisateur demande de relancer.",
+        "RELANCER un téléchargement en échec ou bloqué, à partir de son titre : retire cette "
+        "release de la file, la met en liste noire et lance une nouvelle recherche. Un seul à "
+        f"la fois. {_CONFIRM} À appeler quand l'utilisateur demande de relancer, de retirer "
+        "un téléchargement en échec ou de chercher une autre version.",
         RetryDownloadArgs,
         retry_download,
         write=True,
+    ),
+    Tool(
+        "unblock_import",
+        "Déblocage d'un import",
+        "IMPORTER dans la médiathèque un téléchargement terminé à 100 % mais resté bloqué dans "
+        f"la file, à partir de son titre. {_CONFIRM} À appeler quand l'utilisateur demande de "
+        "débloquer ou de forcer un import.",
+        UnblockImportArgs,
+        unblock_import,
+        write=True,
+    ),
+    Tool(
+        "resume_downloads",
+        "Reprise de SABnzbd",
+        f"REPRENDRE les téléchargements quand SABnzbd est en pause. {_CONFIRM} À appeler quand "
+        "l'utilisateur demande de reprendre ou de relancer SABnzbd.",
+        NoArgs,
+        resume_downloads,
+        write=True,
+    ),
+    Tool(
+        "search_missing",
+        "Recherche de tout ce qui manque",
+        "CHERCHER d'un coup tous les films et / ou épisodes manquants de la bibliothèque. "
+        f"{_CONFIRM} À appeler seulement quand l'utilisateur demande de chercher TOUT ce qui "
+        "manque (pour un seul titre : trigger_search).",
+        SearchMissingArgs,
+        search_missing,
+        write=True,
+    ),
+    Tool(
+        "delete_media",
+        "Suppression d'un film ou d'une série",
+        "SUPPRIMER UN film ou UNE série de la bibliothèque, fichiers compris (irréversible), à "
+        f"partir de son titre exact. Un seul titre par appel, jamais plusieurs. {_CONFIRM} À "
+        "appeler seulement quand l'utilisateur demande de supprimer un titre précis qu'il nomme.",
+        DeleteMediaArgs,
+        delete_media,
+        write=True,
+        destructive=True,
     ),
 )

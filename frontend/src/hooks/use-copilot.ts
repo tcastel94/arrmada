@@ -72,6 +72,8 @@ export interface CopilotAction {
     summary: string;
     details: string[];
     warning: string;
+    /** Action irréversible (suppression) : bouton rouge et libellé explicite. */
+    destructive: boolean;
     auto: boolean;
     /** pending : attend ton clic ; sending : réponse en route ; running : validée, en cours. */
     state: "pending" | "sending" | "running" | "done" | "failed" | "refused" | "expired";
@@ -258,6 +260,7 @@ function applyEvent(message: CopilotMessage, event: string, data: Payload) {
                     summary: String(data.summary ?? ""),
                     details: Array.isArray(data.details) ? data.details.map(String) : [],
                     warning: String(data.warning ?? ""),
+                    destructive: Boolean(data.destructive),
                     auto: Boolean(data.auto),
                     state: data.auto ? "running" : "pending",
                 },

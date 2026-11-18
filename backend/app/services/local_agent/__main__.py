@@ -34,12 +34,21 @@ async def _confirm(card: dict) -> bool:
     print(f"\n\n  ┌─ ACTION PROPOSÉE : {card['summary']}")
     for line in card.get("details") or []:
         print(f"  │  {line}")
+    if card.get("warning"):
+        print(f"  │  ⚠ {card['warning']}")
+    # Irréversible : un « o » tapé par réflexe ne suffit pas, il faut écrire le mot.
+    expected = ("supprimer",) if card.get("destructive") else ("o", "oui")
+    prompt = (
+        "  └─ Tape SUPPRIMER pour confirmer, autre chose pour annuler : "
+        if card.get("destructive")
+        else "  └─ Confirmer ? [o/N] "
+    )
     try:
         # input() bloque : on le sort de la boucle asynchrone.
-        answer = await asyncio.to_thread(input, "  └─ Confirmer ? [o/N] ")
+        answer = await asyncio.to_thread(input, prompt)
     except EOFError:
         answer = ""  # pas de terminal (-it oublié) : refus
-    return answer.strip().lower() in ("o", "oui")
+    return answer.strip().lower() in expected
 
 
 async def _ask(conversation: conversations.Conversation, question: str, dry_run: bool) -> None:
@@ -58,6 +67,8 @@ async def _ask(conversation: conversations.Conversation, question: str, dry_run:
             print(f"\n\n  ┌─ {data['summary']}")
             for line in data.get("details") or []:
                 print(f"  │  {line}")
+            if data.get("warning"):
+                print(f"  │  ⚠ {data['warning']}")
         elif event == "confirm_result" and not data["approved"]:
             print("  Refusé : rien n'a été fait.", flush=True)
         elif event == "action_result":

@@ -147,6 +147,13 @@ class Settings(BaseSettings):
     LOCAL_AGENT_WRITE_TOOLS: bool = True
     # Simulation : l'agent montre l'appel qu'il ferait, sans l'exécuter.
     LOCAL_AGENT_DRY_RUN: bool = False
+    # Suppression d'UN film ou d'UNE série, fichiers compris (irréversible),
+    # après validation. false = l'outil n'est plus proposé au modèle.
+    LOCAL_AGENT_DELETE_TOOL: bool = True
+    # Plafond de suppressions réellement exécutées par heure, toutes
+    # conversations confondues. Un fusible : même validées une à une, on ne
+    # vide pas une bibliothèque par l'agent.
+    LOCAL_AGENT_MAX_DELETIONS_PER_HOUR: int = 3
 
     # ── Auto-import ───────────────────────────────────────────
     # Scheduled job that imports completed-but-orphaned downloads.

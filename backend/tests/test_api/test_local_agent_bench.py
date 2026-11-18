@@ -56,7 +56,6 @@ def test_bench_exposes_the_production_tools() -> None:
     assert bench == production
     assert "add_series" not in prompt.system_prompt()
     assert "add_series" in prompt.system_prompt(writes=True)
-    assert not any("delete" in n or "remove" in n for n in dir(World))
 
 
 # ── Notation ────────────────────────────────────────────────────
