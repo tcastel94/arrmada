@@ -55,11 +55,14 @@ def test_healthy_download_is_left_alone() -> None:
     assert diagnosis.annotate(item) is item
 
 
-def test_no_suggestion_asks_the_agent_to_delete() -> None:
-    """Quand il faut retirer un élément, la suggestion dit que c'est à faire à la main."""
+def test_suggestions_only_promise_what_the_agent_can_do() -> None:
+    """Une relance se demande à l'agent et passe par la validation ; un simple retrait de
+    la file, qu'aucun outil ne fait, est annoncé « à la main »."""
     for _pattern, _cause, suggestion in diagnosis.RULES:
-        if "Retirer" in suggestion:
-            assert "à la main" in suggestion and "je ne supprime rien" in suggestion
+        if "relancer :" in suggestion:
+            assert "après ta validation" in suggestion
+        if suggestion.startswith("Rien à réparer"):
+            assert "à la main" in suggestion
 
 
 def test_title_matching_uses_whole_words_and_exact_titles() -> None:

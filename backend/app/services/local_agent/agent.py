@@ -301,13 +301,12 @@ async def _run_action(
     )
 
     if approved is not True:
-        reason = "sans réponse depuis 10 minutes" if expired else "refusée par l'utilisateur"
+        said = "Tu n'as pas répondu à temps" if expired else "Tu as refusé"
         yield outcome(
             {
                 "done": False,
-                "reason": f"Action {reason} : rien n'a été fait. Dis-le-lui en une phrase, en "
-                "le tutoyant (« Tu as refusé… » ou « Tu n'as pas répondu… »), et ne la "
-                "relance pas, sauf s'il te le redemande.",
+                "reason": f"Rien n'a été fait. Réponds seulement : « {said} : rien n'a été "
+                "fait. » N'ajoute rien et ne rappelle pas l'outil.",
             }
         )
         return

@@ -183,7 +183,7 @@ async def test_refusal_writes_nothing(arr_stack: dict, monkeypatch: pytest.Monke
     ]
     assert of(events, "action_result") == []
     outcome = json.loads(model.requests[1][-1]["content"])
-    assert outcome["done"] is False and "refusée" in outcome["reason"]
+    assert outcome["done"] is False and "Tu as refusé" in outcome["reason"]
 
 
 async def test_no_answer_expires_and_writes_nothing(

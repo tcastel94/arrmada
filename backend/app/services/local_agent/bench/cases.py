@@ -564,7 +564,9 @@ CASES: tuple[Case, ...] = (
             ),
             Turn(
                 "D'accord, lance une nouvelle recherche pour ce film.",
-                Expect(write=Call("trigger_search", {"type": "movie", "id": 693134})),
+                # Les deux remèdes sont bons pour un torrent sans source : la relance
+                # (retrait, liste noire, nouvelle recherche) ou la recherche seule.
+                Expect(write=Call("retry_download|trigger_search")),
             ),
         ),
         scenario="stalled",

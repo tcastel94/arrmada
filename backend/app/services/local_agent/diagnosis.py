@@ -22,8 +22,8 @@ Ce fichier ne fait aucun appel réseau et ne modifie rien : il trie et annote
 des données déjà lues. Il est partagé par les vrais outils (``tools.py``) et
 par le faux monde du banc de test, pour que les deux se comportent pareil.
 
-Les « suggestions » sont des phrases pour l'utilisateur. Aucune n'est exécutée
-ici, et la boucle refuse toute action lancée pendant un diagnostic
+Les « suggestions » sont des phrases pour l'utilisateur ; elles renvoient aux
+actions que l'agent sait faire sur demande. Aucune n'est exécutée ici, et la boucle refuse toute action lancée pendant un diagnostic
 (``agent.NO_ACTION_DURING_DIAGNOSTIC``).
 """
 
@@ -69,12 +69,16 @@ def matches(name: Any, title: str, alternates: Iterable[str] = ()) -> bool:
 # La table : message connu → cause et suggestion
 # ══════════════════════════════════════════════════════════════
 
-_NEW_SEARCH = (
-    "Lancer une nouvelle recherche pour récupérer une autre release (tu peux me le demander)."
+# Ce que l'agent sait faire sur demande (retry_download), après validation.
+_RETRY = (
+    "Me demander de le relancer : je retire cette release de la file, je la mets en liste "
+    "noire et j'en cherche une autre, après ta validation."
 )
+_NEW_SEARCH = _RETRY
+# Retrait SANS nouvelle recherche : aucun outil ne le fait, c'est donc à la main.
 _REMOVE_BY_HAND = (
-    "Retirer cet élément de la file à la main dans Sonarr / Radarr, en cochant la liste noire : "
-    "je ne supprime rien moi-même."
+    "Retirer cet élément de la file à la main dans Sonarr / Radarr : le relancer irait "
+    "chercher une autre release dont tu n'as pas besoin."
 )
 
 # (motif cherché dans le message, sans accents ni majuscules ; cause ; suggestion)
@@ -84,7 +88,7 @@ RULES: tuple[tuple[str, str, str], ...] = (
         r"\.(exe|scr|lnk|bat|msi)\b|executable|dangerous|malware|virus",
         "La release contient un fichier exécutable au lieu d'une vidéo : c'est un faux, "
         "probablement piégé.",
-        f"Ne pas ouvrir ce fichier. {_REMOVE_BY_HAND} Puis lancer une nouvelle recherche.",
+        f"Ne pas ouvrir ce fichier. {_RETRY}",
     ),
     (
         r"not enough free space|no space left|insufficient (disk )?space|disk (is )?full"
@@ -126,7 +130,7 @@ RULES: tuple[tuple[str, str, str], ...] = (
     (
         r"no files found are eligible|no video files|no files found|sample",
         "Le téléchargement est terminé, mais il ne contient aucun fichier vidéo exploitable.",
-        f"{_REMOVE_BY_HAND} Puis lancer une nouvelle recherche.",
+        _RETRY,
     ),
     (
         r"unable to parse|unknown (series|movie)|title mismatch|matched to (series|movie) by id"
