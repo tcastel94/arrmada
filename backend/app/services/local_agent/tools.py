@@ -2,14 +2,16 @@
 
 @author : Jeff Pomponne <jpomponne@gmail.com>
 
-Ce que le modèle peut demander tient dans ``TOOLS`` ci-dessous, et nulle part
-ailleurs. Ce qui n'y est pas n'existe pas pour lui : aucune suppression, aucune
-modification de profil ou d'indexeur n'est exposée, donc aucune consigne
-contournée (« ignore tes règles ») ne peut en déclencher une. C'est un
-pare-feu en liste blanche, pas un filtre de mots interdits.
+Ce que le modèle peut demander tient dans ``exposed()`` : les 8 outils de
+LECTURE de ce fichier (``READ_TOOLS``) et les 4 outils d'ÉCRITURE de
+``write_tools.py``, et rien d'autre. Ce qui n'y est pas n'existe pas pour lui :
+aucune suppression, aucune modification de profil ou d'indexeur n'est exposée,
+donc aucune consigne contournée (« ignore tes règles ») ne peut en déclencher
+une. C'est un pare-feu en liste blanche, pas un filtre de mots interdits.
 
-Phase 1 : uniquement de la LECTURE (8 outils). Les outils d'écriture
-(ajouter, relancer) arriveront avec leur confirmation explicite.
+Les lectures s'exécutent seules. Les écritures passent TOUJOURS par une
+confirmation de l'utilisateur, gérée par la boucle (``agent.py``), jamais par
+le modèle. ``LOCAL_AGENT_WRITE_TOOLS=false`` les retire de la liste.
 
 Un outil = un modèle pydantic pour ses paramètres + une fonction asynchrone.
 Le modèle pydantic sert deux fois :
@@ -39,6 +41,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.config import settings
 from app.services.copilot import tools as copilot_tools
 from app.services.copilot.redaction import Redactor
 from app.services.copilot.tools.args import NoArgs, _Args
@@ -688,15 +691,16 @@ class Tool:
     description: str  # lue par le modèle pour choisir l'outil
     args: type[BaseModel]
     handler: Callable[[Any], Awaitable[Any]]
-    # True : l'outil modifie quelque chose. Aucun dans TOOLS pour l'instant ;
-    # le banc de test en ajoute de faux pour mesurer le comportement du modèle.
+    # True : l'outil modifie quelque chose. Son ``handler`` ne fait alors RIEN :
+    # il rend un ``write_tools.Plan`` (ce qui serait fait), que la boucle
+    # soumet à la confirmation de l'utilisateur avant de l'exécuter.
     write: bool = False
     # True : outil d'enquête (historique, indexeurs, disque). Après l'un d'eux,
     # la boucle refuse toute action dans le même tour (voir agent.py).
     diagnostic: bool = False
 
 
-TOOLS: tuple[Tool, ...] = (
+READ_TOOLS: tuple[Tool, ...] = (
     Tool(
         "search_series",
         "Recherche d'une série",
@@ -774,9 +778,26 @@ TOOLS: tuple[Tool, ...] = (
 )
 
 
+# Remplace toute la liste quand il est renseigné : le banc de test y met ses
+# faux outils. ``None`` en fonctionnement normal.
+OVERRIDE: tuple[Tool, ...] | None = None
+
+
+def exposed() -> tuple[Tool, ...]:
+    """LA liste blanche : les outils proposés au modèle à cet instant."""
+    if OVERRIDE is not None:
+        return OVERRIDE
+    if not settings.LOCAL_AGENT_WRITE_TOOLS:
+        return READ_TOOLS
+    # Import tardif : write_tools s'appuie sur ce fichier (recherche de titres).
+    from app.services.local_agent import write_tools
+
+    return READ_TOOLS + write_tools.WRITE_TOOLS
+
+
 def resolve(name: str) -> Tool | None:
     """Outil par son nom EXACT. Un nom approchant n'est pas deviné : il est rejeté."""
-    for tool in TOOLS:
+    for tool in exposed():
         if tool.name == name:
             return tool
     return None
@@ -784,7 +805,7 @@ def resolve(name: str) -> Tool | None:
 
 def writes_exposed() -> bool:
     """Des outils d'écriture sont-ils proposés au modèle ? (choix de la consigne)"""
-    return any(tool.write for tool in TOOLS)
+    return any(tool.write for tool in exposed())
 
 
 def label_of(name: str) -> str:
@@ -803,7 +824,7 @@ def definitions() -> list[dict[str, Any]]:
                 "parameters": copilot_tools._strip_titles(tool.args.model_json_schema()),
             },
         }
-        for tool in TOOLS
+        for tool in exposed()
     ]
 
 
@@ -820,7 +841,7 @@ class ToolOutcome:
     duration_ms: int
 
 
-def _serialise(result: Any, redactor: Redactor) -> str:
+def serialise(result: Any, redactor: Redactor) -> str:
     text = json.dumps(redactor.data(result), ensure_ascii=False, default=str)
     if len(text) > MAX_RESULT_CHARS:
         text = (
@@ -838,20 +859,15 @@ _REJECTED = (
 )
 
 
-async def execute(name: str, raw_arguments: Any, redactor: Redactor) -> ToolOutcome:
-    """Valide le « bon de commande » puis l'exécute. Ne lève jamais d'exception.
+def validate(name: str, raw_arguments: Any) -> tuple[Tool, BaseModel] | ToolOutcome:
+    """Contrôle du « bon de commande » : outil de la liste blanche, paramètres conformes.
 
-    Trois issues, toutes rendues au modèle sous forme de texte :
-
-    - appel invalide (``invalid``) : outil hors liste blanche ou paramètres
-      refusés par le schéma. Rien n'a été exécuté ;
-    - échec (``is_error``) : l'outil a tourné, le service derrière a répondu
-      une erreur ou n'a pas répondu ;
-    - succès : le résultat JSON, sans secret et borné en taille.
+    Rend l'outil et ses paramètres validés, ou le rejet à rendre au modèle.
+    Rien n'est exécuté ici.
     """
     tool = resolve(name)
     if tool is None:
-        known = ", ".join(t.name for t in TOOLS)
+        known = ", ".join(t.name for t in exposed())
         return ToolOutcome(
             f"Outil inconnu : {name!r}. Seuls ces outils existent : {known}. {_REJECTED}",
             True,
@@ -868,6 +884,31 @@ async def execute(name: str, raw_arguments: Any, redactor: Redactor) -> ToolOutc
     args = copilot_tools.parse_args(tool, raw_arguments)  # type: ignore[arg-type]
     if isinstance(args, str):
         return ToolOutcome(f"{args}. {_REJECTED}", True, True, 0)
+    return tool, args
+
+
+async def execute(name: str, raw_arguments: Any, redactor: Redactor) -> ToolOutcome:
+    """Valide le « bon de commande » puis exécute un outil de LECTURE. Ne lève jamais.
+
+    Trois issues, toutes rendues au modèle sous forme de texte :
+
+    - appel invalide (``invalid``) : outil hors liste blanche ou paramètres
+      refusés par le schéma. Rien n'a été exécuté ;
+    - échec (``is_error``) : l'outil a tourné, le service derrière a répondu
+      une erreur ou n'a pas répondu ;
+    - succès : le résultat JSON, sans secret et borné en taille.
+
+    Un outil d'écriture n'est JAMAIS exécuté ici : il passe par la
+    confirmation de la boucle (``agent._run_action``).
+    """
+    checked = validate(name, raw_arguments)
+    if isinstance(checked, ToolOutcome):
+        return checked
+    tool, args = checked
+    if tool.write:
+        return ToolOutcome(
+            f"{tool.name} est une action : elle passe par la confirmation.", True, True, 0
+        )
 
     started = time.monotonic()
 
@@ -886,4 +927,4 @@ async def execute(name: str, raw_arguments: Any, redactor: Redactor) -> ToolOutc
         logger.warning("Agent local : outil %s en échec : %s", tool.name, exc)
         return outcome(redactor.text(f"{tool.name} a échoué : {_error(exc)}"), is_error=True)
     is_error = isinstance(result, dict) and set(result) == {"error"}
-    return outcome(_serialise(result, redactor), is_error=is_error)
+    return outcome(serialise(result, redactor), is_error=is_error)

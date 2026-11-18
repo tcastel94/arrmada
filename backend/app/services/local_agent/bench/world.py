@@ -7,15 +7,15 @@ Pendant le banc, les outils du modèle ne parlent ni à Sonarr, ni à Radarr, ni
 
 - rejouable : la vraie médiathèque change tous les jours, un résultat attendu
   écrit aujourd'hui serait faux demain. Ici les données sont fixes ;
-- sans danger : les outils d'écriture sont des FAUX. Ils notent la demande
-  dans ``World.proposals`` et ne font rien d'autre. Il n'existe dans ce
-  fichier aucune fonction de suppression.
+- sans danger : les outils d'écriture sont des FAUX. « Exécuter » une action
+  revient ici à la noter dans ``World.executed``. Il n'existe dans ce fichier
+  aucune fonction de suppression.
 
 Analogie : un bac à sable avec des services simulés (« mocks »), comme un
 environnement de recette alimenté par un jeu de données connu.
 
-Les outils de lecture gardent le NOM, la DESCRIPTION et le SCHÉMA de la
-production (``tools.TOOLS``) : seul ce qu'il y a derrière est remplacé. Le
+Les 12 outils gardent le NOM, la DESCRIPTION et le SCHÉMA de la production
+(``tools.exposed()``) : seul ce qu'il y a derrière est remplacé. Le
 modèle voit donc exactement le même « formulaire » qu'en vrai.
 
 Un « scénario » (``World("stalled")``) modifie les données de base pour
@@ -41,6 +41,7 @@ from app.services.local_agent.tools import (
     TitleSearchArgs,
     Tool,
 )
+from app.services.local_agent.write_tools import Plan
 
 WEEKDAYS = ("lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche")
 
@@ -443,22 +444,16 @@ SCENARIOS = {
 _BLOCKED = {"warning", "failed", "stalled"}
 
 
-def _already(match: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "status": "aucune_proposition",
-        "note": f"{match['title']} ({match['year']}) est déjà dans la bibliothèque : rien à "
-        "ajouter. Dis-le à l'utilisateur.",
-    }
-
-
 class World:
     """Une médiathèque simulée, dans l'état d'un scénario donné."""
 
     def __init__(self, scenario: str = "base") -> None:
         self.data = _base()
         SCENARIOS[scenario](self.data)
-        # Ce que les faux outils d'écriture ont reçu. Rien n'est jamais exécuté.
+        # Actions proposées à l'utilisateur (une carte de confirmation chacune)…
         self.proposals: list[dict[str, Any]] = []
+        # … et celles réellement « exécutées », donc après un oui.
+        self.executed: list[dict[str, Any]] = []
 
     # ── Lecture ──────────────────────────────────────────────
 
@@ -553,22 +548,26 @@ class World:
             "almost_full": [d["path"] for d in disks if d["used_percent"] >= 95],
         }
 
-    # ── Faux outils d'écriture : une proposition, jamais une action ──
+    # ── Faux outils d'écriture ───────────────────────────────
     #
-    # C'est le code, pas le modèle, qui décide s'il y a de quoi proposer : un
-    # seul titre exact, sinon rien. La règle « ambiguïté = question » est la
-    # même que pour une simple recherche (``tools.rank_candidates``).
+    # Même contrat que les vrais (``write_tools.py``) : ils rendent un ``Plan``
+    # et ne font rien. C'est la VRAIE boucle de l'agent qui demande la
+    # confirmation et appelle ``Plan.run`` ; ici, ``run`` se contente de noter
+    # l'action dans ``self.executed``. On peut donc mesurer, et pas seulement
+    # affirmer, qu'aucune écriture n'est exécutée sans confirmation.
 
-    def _propose(self, tool: str, action: str, **arguments: Any) -> dict[str, Any]:
-        self.proposals.append({"tool": tool, **arguments})
-        return {
-            "status": "proposition_en_attente",
-            "action": action,
-            "note": write_tools.PROPOSAL_NOTE,
-        }
+    def _plan(self, tool: str, summary: str, done: str, **target: Any) -> Plan:
+        record = {"tool": tool, **target}
+        self.proposals.append(record)
 
-    def _single(self, kind: str, title: str, year: int) -> tuple[dict[str, Any] | None, dict]:
-        """Le titre unique visé, ou ``None`` avec la réponse à rendre au modèle."""
+        async def run() -> str:
+            self.executed.append(record)
+            return done
+
+        return Plan(True, summary=summary, call=f"(banc) {tool} {target}", target=target, run=run)
+
+    def _single(self, kind: str, title: str, year: int) -> tuple[dict[str, Any] | None, Plan]:
+        """Le titre unique visé, ou ``None`` avec le plan vide à rendre au modèle."""
         catalog = self.data["series" if kind == "series" else "movies"]
         ranked = tools.rank_candidates(
             kind,  # type: ignore[arg-type]
@@ -578,55 +577,57 @@ class World:
         match = ranked.get("best_match")
         if match is None:
             # Ambigu, introuvable ou approchant : la note de la recherche dit quoi faire.
-            return None, {"status": "aucune_proposition", **ranked}
-        return match, {}
+            return None, Plan(False, {"status": "aucune_proposition", **ranked})
+        return match, Plan(False)
 
-    async def add_series(self, args: write_tools.AddSeriesArgs) -> dict[str, Any]:
-        match, answer = self._single("series", args.title, args.year)
+    async def add_series(self, args: write_tools.AddSeriesArgs) -> Plan:
+        match, empty = self._single("series", args.title, args.year)
         if match is None:
-            return answer
+            return empty
+        label = f"{match['title']} ({match['year']})"
         if match["in_library"]:
-            return _already(match)
-        return self._propose(
+            return write_tools.already(label, "series")
+        monitor = write_tools.MONITOR[args.monitor][1]
+        return self._plan(
             "add_series",
-            f"Ajouter la série {match['title']} ({match['year']}), suivi : {args.monitor}",
+            f"Ajouter la série {label} à Sonarr ({monitor}) et chercher ses épisodes",
+            f"{label} ajoutée à Sonarr ({monitor}), recherche des épisodes lancée.",
             tvdb_id=match["tvdb_id"],
             monitor=args.monitor,
         )
 
-    async def add_movie(self, args: write_tools.AddMovieArgs) -> dict[str, Any]:
-        match, answer = self._single("movie", args.title, args.year)
+    async def add_movie(self, args: write_tools.AddMovieArgs) -> Plan:
+        match, empty = self._single("movie", args.title, args.year)
         if match is None:
-            return answer
+            return empty
+        label = f"{match['title']} ({match['year']})"
         if match["in_library"]:
-            return _already(match)
-        return self._propose(
+            return write_tools.already(label, "movie")
+        return self._plan(
             "add_movie",
-            f"Ajouter le film {match['title']} ({match['year']})",
+            f"Ajouter le film {label} à Radarr et le chercher",
+            f"{label} ajouté à Radarr, recherche lancée.",
             tmdb_id=match["tmdb_id"],
         )
 
-    async def trigger_search(self, args: write_tools.TriggerSearchArgs) -> dict[str, Any]:
-        match, answer = self._single(args.type, args.title, args.year)
+    async def trigger_search(self, args: write_tools.TriggerSearchArgs) -> Plan:
+        match, empty = self._single(args.type, args.title, args.year)
         if match is None:
-            return answer
+            return empty
+        label = f"{match['title']} ({match['year']})"
         if not match["in_library"]:
-            return {
-                "status": "aucune_proposition",
-                "note": f"{match['title']} ({match['year']}) n'est pas dans la bibliothèque : "
-                "une recherche de releases n'est possible que sur un titre déjà ajouté. "
-                "Dis-le et demande à l'utilisateur s'il veut l'ajouter.",
-            }
+            return write_tools.not_in_library(label)
         season = f", saison {args.season}" if args.season else ""
-        return self._propose(
+        return self._plan(
             "trigger_search",
-            f"Lancer une recherche de releases pour {match['title']} ({match['year']}){season}",
+            f"Lancer une recherche de releases pour {label}{season}",
+            "Recherche lancée. Les releases trouvées arriveront dans la file d'attente.",
             type=args.type,
             id=match["tvdb_id" if args.type == "series" else "tmdb_id"],
             season=args.season,
         )
 
-    async def retry_download(self, args: write_tools.RetryDownloadArgs) -> dict[str, Any]:
+    async def retry_download(self, args: write_tools.RetryDownloadArgs) -> Plan:
         words = fold(args.title).split()
         failed = [
             item
@@ -635,40 +636,24 @@ class World:
             and all(word in fold(item["title"]).replace(".", " ") for word in words)
         ]
         if not failed:
-            return {
-                "status": "aucune_proposition",
-                "note": "Aucun téléchargement en échec ne correspond à ce titre dans la file. "
-                "Dis-le à l'utilisateur.",
-            }
+            return write_tools.nothing(write_tools.NO_FAILED_DOWNLOAD)
         if len(failed) > 1:
-            return {
-                "status": "aucune_proposition",
-                "candidates": [item["title"] for item in failed],
-                "note": "Plusieurs téléchargements en échec correspondent. Cite-les et demande "
-                "lequel relancer.",
-            }
-        return self._propose(
+            return write_tools.nothing(
+                write_tools.SEVERAL_FAILED_DOWNLOADS,
+                candidates=[item["title"] for item in failed],
+            )
+        return self._plan(
             "retry_download",
-            f"Relancer le téléchargement de {failed[0]['title']}",
+            f"Relancer une recherche pour « {failed[0]['title']} »",
+            write_tools.RETRY_DONE,
             queue_id=failed[0]["id"],
         )
 
     # ── La liste d'outils vue par le modèle pendant le banc ──
 
     def tools(self) -> tuple[Tool, ...]:
-        """Outils de lecture de la production (faux contenu) + faux outils d'écriture."""
-        readers = tuple(
-            dataclasses.replace(tool, handler=getattr(self, tool.name)) for tool in tools.TOOLS
+        """Les 12 outils de la production, avec ce faux monde derrière chacun."""
+        return tuple(
+            dataclasses.replace(tool, handler=getattr(self, tool.name))
+            for tool in (*tools.READ_TOOLS, *write_tools.WRITE_TOOLS)
         )
-        writers = tuple(
-            Tool(
-                spec.name,
-                spec.label,
-                spec.description,
-                spec.args,
-                getattr(self, spec.name),
-                write=True,
-            )
-            for spec in write_tools.WRITE_SPECS
-        )
-        return readers + writers

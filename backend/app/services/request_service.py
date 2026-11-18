@@ -130,6 +130,7 @@ async def create_request(
     poster_url: str | None = None,
     quality_profile: str | None = None,
     tvdb_id: int | None = None,
+    monitor: str | None = None,
 ) -> MediaRequest:
     """Create a new media request and attempt to add it to the target service.
 
@@ -158,7 +159,7 @@ async def create_request(
 
     # Try to auto-add to the target *arr service
     try:
-        await _send_to_arr(db, req, series_tmdb_id=None if is_movie else tmdb_id)
+        await _send_to_arr(db, req, series_tmdb_id=None if is_movie else tmdb_id, monitor=monitor)
     except Exception as exc:
         logger.error("Failed to auto-add request %s: %s", title, exc)
         req.status = "failed"
@@ -174,12 +175,19 @@ async def create_request(
 
 
 async def _send_to_arr(
-    db: AsyncSession, req: MediaRequest, series_tmdb_id: int | None = None
+    db: AsyncSession,
+    req: MediaRequest,
+    series_tmdb_id: int | None = None,
+    monitor: str | None = None,
 ) -> None:
     """Send the request to the appropriate *arr service.
 
     ``series_tmdb_id`` : ID TMDB d'une série (suggestions TMDB), à convertir
     en ID TVDB avant de l'envoyer à Sonarr.
+
+    ``monitor`` : pour une série, quoi suivre à l'ajout (valeur de Sonarr :
+    ``all``, ``lastSeason``, ``firstSeason``, ``future``). ``None`` : le
+    comportement par défaut de Sonarr (toute la série).
     """
     stmt = select(Service).where(
         Service.is_enabled == True,  # noqa: E712
@@ -300,7 +308,10 @@ async def _send_to_arr(
                 ),
                 "rootFolderPath": root_folders[0]["path"],
                 "monitored": True,
-                "addOptions": {"searchForMissingEpisodes": True},
+                "addOptions": {
+                    "searchForMissingEpisodes": True,
+                    **({"monitor": monitor} if monitor else {}),
+                },
                 "images": series_data.get("images", []),
                 "seasonFolder": True,
             }

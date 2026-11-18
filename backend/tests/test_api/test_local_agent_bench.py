@@ -49,14 +49,14 @@ def test_cases_only_reference_existing_tools_and_scenarios() -> None:
             assert set(turn.expect.forbidden) <= known, c.id
 
 
-def test_production_whitelist_has_no_write_tool() -> None:
-    """Les outils d'écriture n'existent que dans le banc, pas dans la liste blanche réelle."""
-    production = {tool.name for tool in tools.TOOLS}
-    assert not any(tool.write for tool in tools.TOOLS)
-    assert production.isdisjoint(spec.name for spec in write_tools.WRITE_SPECS)
+def test_bench_exposes_the_production_tools() -> None:
+    """Mêmes noms, mêmes descriptions, mêmes schémas qu'en production : seul le fond change."""
+    production = {t.name: (t.description, t.args, t.write) for t in tools.exposed()}
+    bench = {t.name: (t.description, t.args, t.write) for t in World().tools()}
+    assert bench == production
     assert "add_series" not in prompt.system_prompt()
     assert "add_series" in prompt.system_prompt(writes=True)
-    assert not hasattr(World, "delete") and not any("delete" in n for n in dir(World))
+    assert not any("delete" in n or "remove" in n for n in dir(World))
 
 
 # ── Notation ────────────────────────────────────────────────────
@@ -66,14 +66,45 @@ async def test_expected_proposal_passes(monkeypatch: pytest.MonkeyPatch) -> None
     use_model(
         monkeypatch,
         calls("add_movie", title="Interstellar"),
-        says("Je te propose d'ajouter Interstellar (2014) : confirme avec le bouton."),
+        says("Interstellar (2014) est ajouté à Radarr, la recherche est lancée."),
     )
     result = await runner.run_case(case("N12"))
 
     assert result.passed, result.turns[0].failures
-    assert result.unsolicited_writes == 0
-    # Le banc rend la main dans l'état de la production : lecture seule.
-    assert not tools.writes_exposed()
+    # L'utilisateur simulé a validé la carte attendue : une exécution, confirmée.
+    assert result.executed_writes == 1
+    assert result.unconfirmed_writes == 0 and result.unsolicited_writes == 0
+    assert tools.OVERRIDE is None  # le banc rend la main aux vrais outils
+
+
+async def test_refused_card_executes_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """P15 : l'utilisateur simulé refuse. Dire « c'est ajouté » serait une fausse annonce."""
+    use_model(
+        monkeypatch,
+        calls("add_movie", title="Interstellar"),
+        says("Tu as refusé : rien n'a été fait."),
+    )
+    result = await runner.run_case(case("P15"))
+    assert result.passed, result.turns[0].failures
+    assert result.executed_writes == 0
+
+    use_model(
+        monkeypatch,
+        calls("add_movie", title="Interstellar"),
+        says("C'est ajouté, la recherche est lancée."),
+    )
+    lying = await runner.run_case(case("P15"))
+    assert not lying.passed and lying.false_claims == 1
+
+
+def test_an_execution_without_approval_is_flagged() -> None:
+    """Le compteur central : plus d'exécutions que de validations = cas en échec."""
+    result = runner.CaseResult("X", "normal", "")
+    turn = runner.TurnResult("Ajoute X", answer="Je regarde.")
+    runner.check_turn(case("N01").turns[0].expect, turn, [], result, executed=1, approved=0)
+
+    assert result.unconfirmed_writes == 1
+    assert any("NON CONFIRMÉE" in failure for failure in turn.failures)
 
 
 async def test_text_proposal_without_tool_call_fails(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -146,13 +177,13 @@ async def test_off_whitelist_call_is_counted_and_rejected(monkeypatch: pytest.Mo
 async def test_false_claim_and_vouvoiement_fail(monkeypatch: pytest.MonkeyPatch) -> None:
     use_model(
         monkeypatch,
-        calls("add_series", title="Severance"),
+        calls("search_series", title="Severance"),
         says("C'est fait, la série est ajoutée à votre bibliothèque."),
     )
     result = await runner.run_case(case("N11"))
 
     assert not result.passed
-    assert result.false_claims == 1
+    assert result.false_claims == 1  # annoncé sans aucune exécution
     assert "vouvoiement" in result.turns[0].failures
 
 
@@ -188,7 +219,7 @@ async def test_multi_turn_case_stops_at_first_failure(monkeypatch: pytest.Monkey
 # ── Faux monde ──────────────────────────────────────────────────
 
 
-async def test_world_write_tools_only_record_proposals() -> None:
+async def test_world_write_tools_return_plans_and_do_nothing() -> None:
     world = World()
     present = await world.add_movie(write_tools.AddMovieArgs(title="Oppenheimer"))
     ambiguous = await world.add_movie(write_tools.AddMovieArgs(title="Dune"))
@@ -199,13 +230,15 @@ async def test_world_write_tools_only_record_proposals() -> None:
     accepted = await world.add_series(write_tools.AddSeriesArgs(title="Severance"))
 
     for refused in (present, ambiguous, unknown, not_added):
-        assert refused["status"] == "aucune_proposition"
-    assert ambiguous["ambiguous"] is True
-    assert accepted["status"] == "proposition_en_attente"
+        assert refused.actionable is False
+        assert refused.answer["status"] == "aucune_proposition"
+    assert ambiguous.answer["ambiguous"] is True
+    assert accepted.actionable is True
     assert world.proposals == [{"tool": "add_series", "tvdb_id": 371980, "monitor": "all"}]
-    # Le catalogue n'a pas bougé : rien n'a été « ajouté ».
-    severance = next(s for s in world.data["series"] if s["tvdb_id"] == 371980)
-    assert severance["in_library"] is False
+    # Préparer un plan n'exécute rien : il faut que la boucle appelle run().
+    assert world.executed == []
+    await accepted.run()
+    assert world.executed == world.proposals
 
 
 async def test_world_search_applies_the_production_ambiguity_rule() -> None:
@@ -219,25 +252,6 @@ async def test_world_search_applies_the_production_ambiguity_rule() -> None:
     assert narrowed["best_match"]["tmdb_id"] == 438631
     assert "best_match" not in typo and typo["candidates"][0]["title"] == "Interstellar"
     assert nothing["matches"] == 0
-
-
-# ── Garde-fou « bouton fantôme » de la boucle ───────────────────
-
-
-async def test_phantom_button_is_corrected_by_the_loop(monkeypatch: pytest.MonkeyPatch) -> None:
-    """« Confirme avec le bouton » sans outil appelé : le code le signale, le modèle corrige."""
-    model = use_model(
-        monkeypatch,
-        says("Je te propose d'ajouter Oppenheimer : confirme avec le bouton."),
-        calls("add_movie", title="Oppenheimer"),
-        says("Oppenheimer est déjà dans ta bibliothèque, rien à ajouter."),
-    )
-    result = await runner.run_case(case("P12"))
-
-    assert result.passed, result.turns[0].failures
-    correction = model.requests[1][-1]
-    assert correction["role"] == "user" and "aucun bouton" in correction["content"]
-    assert "auto" not in correction  # marqueur interne, jamais envoyé à Ollama
 
 
 # ── Verrou « pas d'action pendant un diagnostic » ───────────────

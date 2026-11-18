@@ -59,6 +59,10 @@ export interface LocalAgentStatus {
     num_ctx: number;
     keep_alive: string;
     tools: string[];
+    /** Les outils d'écriture (ajout, recherche, relance) sont proposés au modèle. */
+    write_tools: boolean;
+    /** Simulation : les actions sont montrées, jamais exécutées. */
+    dry_run: boolean;
 }
 
 /** Une action que l'agent veut faire, avec son aperçu et son sort. */
@@ -431,7 +435,11 @@ export async function answerCopilotAction(id: string, approve: boolean): Promise
     action.state = "sending";
     touch();
     try {
-        await apiFetch(`/api/copilot/actions/${id}`, { method: "POST", body: JSON.stringify({ approve }) });
+        // Chaque moteur a sa propre route : la réponse part à celui qui a posé la question.
+        await apiFetch(`${ENGINE_PATH[state.engine]}/actions/${id}`, {
+            method: "POST",
+            body: JSON.stringify({ approve }),
+        });
     } catch (error) {
         // Expirée ou déjà traitée côté serveur : la carte le dit
         action.state = "expired";

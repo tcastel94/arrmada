@@ -98,8 +98,13 @@ async def chat_stream(
     tools: list[dict[str, Any]],
     *,
     model: str | None = None,
+    temperature: float = TEMPERATURE,
 ) -> AsyncIterator[tuple[str, Any]]:
-    """Un appel au modèle. Émet ``("text", fragment)`` puis ``("final", ChatResult)``."""
+    """Un appel au modèle. Émet ``("text", fragment)`` puis ``("final", ChatResult)``.
+
+    ``temperature`` : relevée par la boucle pour une seconde tentative, afin
+    que le modèle ne reproduise pas à l'identique une réponse mal formée.
+    """
     url = base_url()
     if not url:
         raise OllamaError("OLLAMA_URL n'est pas renseigné dans le .env.")
@@ -111,7 +116,7 @@ async def chat_stream(
         "stream": True,
         "think": settings.LOCAL_AGENT_THINK,
         "keep_alive": settings.LOCAL_AGENT_KEEP_ALIVE,
-        "options": {"num_ctx": settings.LOCAL_AGENT_NUM_CTX, "temperature": TEMPERATURE},
+        "options": {"num_ctx": settings.LOCAL_AGENT_NUM_CTX, "temperature": temperature},
     }
     result = ChatResult()
     try:

@@ -15,8 +15,8 @@
  * serveur, réponse interrompue, conversation perdue après un redémarrage.
  *
  * Deux moteurs au choix (sélecteur en haut à droite) : « Claude » (API
- * d'Anthropic) et « Local » (IA du NAS par Ollama, lecture seule pour
- * l'instant). Même conversation, mêmes cartes : seul le serveur interrogé
+ * d'Anthropic) et « Local » (IA du NAS par Ollama : lecture, et quatre actions
+ * toujours soumises à la carte Valider / Annuler). Même conversation, mêmes cartes : seul le serveur interrogé
  * change (`hooks/use-copilot.ts`).
  */
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
@@ -78,14 +78,14 @@ const SUGGESTIONS = [
     "Mes hardlinks et mes chemins sont-ils bien configurés entre SABnzbd, Radarr et Sonarr ?",
 ] as const;
 
-/** Amorces du moteur local : ce que ses outils de lecture savent faire aujourd'hui. */
+/** Amorces du moteur local : ce que ses outils savent faire aujourd'hui. */
 const LOCAL_SUGGESTIONS = [
     "Qu'est-ce qui sort cette semaine dans mes séries suivies ?",
     "Qu'est-ce qui est en cours de téléchargement ?",
     "Liste les films manquants de ma bibliothèque.",
     "Est-ce que mes indexeurs fonctionnent ?",
     "Il me reste de la place sur les disques ?",
-    "Est-ce que j'ai déjà la série Severance ?",
+    "Ajoute le film Dune de 2021.",
 ] as const;
 
 const ENGINE_OPTIONS = [
@@ -99,7 +99,7 @@ const ENGINE_OPTIONS = [
         value: "local" as const,
         label: "Local",
         icon: Cpu,
-        title: "IA du NAS (Ollama) : gratuit, rien ne sort du réseau local ; lecture seule pour l'instant",
+        title: "IA du NAS (Ollama) : gratuit, rien ne sort du réseau local ; il lit, et n'agit qu'après ta validation",
     },
 ];
 
@@ -393,9 +393,17 @@ function LocalIntro({ onPick, status }: { onPick: (text: string) => void; status
                 <p className="flex items-start gap-2 text-[13px] leading-snug text-muted-foreground">
                     <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-success" />
                     <span>
-                        Lecture seule pour l&apos;instant : elle n&apos;ajoute, ne relance et ne modifie rien. Elle ne peut rien supprimer, ni toucher
-                        aux profils ou aux indexeurs : ces actions ne lui sont pas données. Tout reste sur ton réseau local, et chaque demande est
-                        notée dans un journal d&apos;audit (<code className="font-mono text-[12px]">data/local_agent_audit.jsonl</code>).
+                        {status.write_tools
+                            ? "Elle peut aussi ajouter un film ou une série, lancer une recherche et relancer un téléchargement en échec : chaque action s'affiche d'abord sur une carte, et rien ne part sans ton clic sur Valider."
+                            : "Lecture seule : les actions sont désactivées (LOCAL_AGENT_WRITE_TOOLS=false)."}{" "}
+                        Elle ne peut rien supprimer, ni toucher aux profils ou aux indexeurs : ces actions ne lui sont pas données. Tout reste sur
+                        ton réseau local, et chaque demande est notée dans un journal d&apos;audit (
+                        <code className="font-mono text-[12px]">data/local_agent_audit.jsonl</code>).
+                        {status.dry_run && (
+                            <span className="mt-1 block text-warning">
+                                Mode simulation actif (LOCAL_AGENT_DRY_RUN=true) : les actions sont montrées, jamais exécutées.
+                            </span>
+                        )}
                     </span>
                 </p>
             </div>

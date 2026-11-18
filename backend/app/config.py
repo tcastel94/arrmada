@@ -141,6 +141,12 @@ class Settings(BaseSettings):
     # Réflexion préalable du modèle (modèles « thinking ») : plus lent, à
     # n'activer que si le banc de test montre un gain.
     LOCAL_AGENT_THINK: bool = False
+    # Outils d'écriture (ajouter, lancer une recherche, relancer). false =
+    # l'agent repasse en lecture seule : ces outils ne sont plus proposés au
+    # modèle. Chaque action reste de toute façon soumise à confirmation.
+    LOCAL_AGENT_WRITE_TOOLS: bool = True
+    # Simulation : l'agent montre l'appel qu'il ferait, sans l'exécuter.
+    LOCAL_AGENT_DRY_RUN: bool = False
 
     # ── Auto-import ───────────────────────────────────────────
     # Scheduled job that imports completed-but-orphaned downloads.

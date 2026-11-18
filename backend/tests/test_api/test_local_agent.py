@@ -47,8 +47,9 @@ class FakeModel:
         self.tools: list[dict[str, Any]] = []
 
     async def __call__(
-        self, messages: list[dict[str, Any]], definitions: list[dict[str, Any]]
+        self, messages: list[dict[str, Any]], definitions: list[dict[str, Any]], **options: Any
     ) -> AsyncIterator[tuple[str, Any]]:
+        self.options = options
         self.requests.append([dict(m) for m in messages])
         self.tools = definitions
         step = self.script.pop(0)
@@ -123,10 +124,9 @@ async def test_status_and_chat_without_ollama(
 # ── Liste blanche ───────────────────────────────────────────────
 
 
-def test_whitelist_is_read_only() -> None:
-    """Phase 1 : huit outils de lecture, et rien qui supprime ou modifie."""
-    names = {tool.name for tool in tools.TOOLS}
-    assert names == {
+def test_read_tools_are_the_eight_expected() -> None:
+    """Les huit lectures. Les quatre écritures sont testées dans test_local_agent_actions."""
+    assert {tool.name for tool in tools.READ_TOOLS} == {
         "search_series",
         "search_movie",
         "get_queue",
@@ -136,8 +136,7 @@ def test_whitelist_is_read_only() -> None:
         "get_indexer_status",
         "get_disk_space",
     }
-    forbidden = ("delete", "remove", "supprim", "profile", "update", "edit")
-    assert not [n for n in names if any(word in n for word in forbidden)]
+    assert not any(tool.write for tool in tools.READ_TOOLS)
 
 
 def test_definitions_follow_ollama_format() -> None:
@@ -319,7 +318,7 @@ async def test_malformed_model_answer_is_retried_once(
 ) -> None:
     """HTTP 500 d'Ollama (appel d'outil mal formé par le modèle) : une seconde tentative."""
     broken = ollama.OllamaError("Ollama a refusé l'appel (HTTP 500)", retryable=True)
-    use_model(monkeypatch, broken, says("Rien de prévu cette semaine."))
+    model = use_model(monkeypatch, broken, says("Rien de prévu cette semaine."))
 
     response = await client.post(
         "/api/local-agent/chat", json={"message": "Quoi de neuf ?"}, headers=auth_headers
@@ -330,3 +329,4 @@ async def test_malformed_model_answer_is_retried_once(
         {"ok": True, "stop_reason": "end_turn"}
     ]
     assert not [name for name, _ in events if name == "error"]
+    assert model.options == {"temperature": agent.RETRY_TEMPERATURE}

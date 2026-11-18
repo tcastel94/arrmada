@@ -7,6 +7,8 @@ autre préfixe : l'interface de chat sert les deux, seul le préfixe change.
 
 - ``GET  /api/local-agent/status``              : configuré ? Ollama répond ? modèle installé ?
 - ``POST /api/local-agent/chat``                : un message, réponse en flux SSE ;
+- ``POST /api/local-agent/actions/{id}``        : réponse de l'utilisateur à une action
+  proposée (``{"approve": true|false}``). C'est le SEUL moyen de confirmer ;
 - ``DELETE /api/local-agent/conversations/{id}``: oublie une conversation ;
 - ``GET  /api/local-agent/audit``               : dernières lignes du journal d'audit.
 
@@ -31,6 +33,7 @@ from pydantic import BaseModel, Field
 
 from app.api.deps import require_admin
 from app.config import settings
+from app.services.copilot import actions as copilot_actions
 from app.services.local_agent import agent, audit, conversations, ollama, tools
 from app.utils.logger import get_logger
 
@@ -50,6 +53,13 @@ SSE_HEARTBEAT_SECONDS = 15
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
     conversation_id: str | None = Field(default=None, max_length=64)
+    # Simulation pour ce message : l'agent montre l'appel prévu sans l'exécuter.
+    # Ne peut qu'ACTIVER le dry-run : si LOCAL_AGENT_DRY_RUN=true, il reste actif.
+    dry_run: bool = False
+
+
+class ActionAnswer(BaseModel):
+    approve: bool
 
 
 def _sse(event: str, data: dict[str, Any]) -> str:
@@ -64,13 +74,15 @@ async def local_agent_status() -> dict[str, Any]:
         "model": settings.LOCAL_AGENT_MODEL,
         "num_ctx": settings.LOCAL_AGENT_NUM_CTX,
         "keep_alive": settings.LOCAL_AGENT_KEEP_ALIVE,
-        "tools": [tool.name for tool in tools.TOOLS],
+        "tools": [tool.name for tool in tools.exposed()],
+        "write_tools": tools.writes_exposed(),
+        "dry_run": settings.LOCAL_AGENT_DRY_RUN,
         **probe,
     }
 
 
 async def _stream(
-    conversation: conversations.Conversation, message: str, *, restarted: bool
+    conversation: conversations.Conversation, message: str, *, restarted: bool, dry_run: bool
 ) -> AsyncIterator[str]:
     """Relaie les événements du tour en SSE, avec un battement quand rien ne sort."""
     queue: asyncio.Queue[tuple[str, dict[str, Any]] | None] = asyncio.Queue()
@@ -78,7 +90,7 @@ async def _stream(
     async def pump() -> None:
         try:
             async with conversation.lock:
-                async for event in agent.run_turn(conversation, message):
+                async for event in agent.run_turn(conversation, message, dry_run=dry_run):
                     await queue.put(event)
         except asyncio.CancelledError:
             raise
@@ -134,7 +146,7 @@ async def chat(body: ChatRequest) -> StreamingResponse:
         )
 
     return StreamingResponse(
-        _stream(conversation, body.message.strip(), restarted=restarted),
+        _stream(conversation, body.message.strip(), restarted=restarted, dry_run=body.dry_run),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -142,6 +154,17 @@ async def chat(body: ChatRequest) -> StreamingResponse:
             "X-Accel-Buffering": "no",  # pas de mise en tampon par nginx
         },
     )
+
+
+@router.post("/actions/{action_id}", summary="Valide ou refuse une action proposée par l'agent")
+async def answer_action(action_id: str, body: ActionAnswer) -> dict[str, Any]:
+    """Le clic sur Valider / Annuler. Le tour en attente reprend aussitôt."""
+    if not copilot_actions.answer(action_id, body.approve):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Action inconnue, expirée ou déjà traitée.",
+        )
+    return {"ok": True, "approved": body.approve}
 
 
 @router.delete(

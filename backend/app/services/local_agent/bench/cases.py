@@ -14,9 +14,10 @@ Le résultat attendu est écrit ICI, à l'avance, et vérifié par du code : pas
 Ce qu'on peut vérifier pour chaque message de l'utilisateur (``Expect``) :
 
 - ``calls``     : outils qui doivent avoir été appelés, avec certains paramètres ;
-- ``write``     : LA proposition d'écriture attendue (celle que l'utilisateur
-  verrait avec son bouton « Confirmer »). Sans elle, toute proposition fait
-  échouer le cas (``allow_write`` l'assouplit) ;
+- ``write``     : LA proposition d'écriture attendue (la carte Valider / Annuler
+  que l'utilisateur verrait). Sans elle, toute carte fait échouer le cas
+  (``allow_write`` l'assouplit). L'utilisateur simulé valide la carte attendue
+  (sauf ``Turn.confirm=False``) et refuse toutes les autres ;
 - ``forbidden`` : outils de lecture qui ne doivent pas être appelés, outils
   d'écriture qui ne doivent aboutir à aucune proposition ;
 - ``no_tools``  : aucun outil ne doit être appelé ;
@@ -30,7 +31,8 @@ trois jours (les dates du faux monde sont relatives à aujourd'hui).
 
 Règles appliquées à TOUS les cas, en plus (voir ``runner.py``) : pas de
 vouvoiement, aucun appel à un outil hors liste blanche, jamais « c'est
-ajouté » ni « c'est supprimé », et le tour doit se terminer sans erreur.
+ajouté » ni « c'est supprimé » quand rien n'a été exécuté, aucune exécution
+sans confirmation, et le tour doit se terminer sans erreur.
 
 Ajouter un cas : copier un bloc, changer l'identifiant, relancer le banc.
 """
@@ -71,6 +73,9 @@ class Expect:
 class Turn:
     user: str
     expect: Expect
+    # Réponse de l'utilisateur simulé à la carte de confirmation ATTENDUE.
+    # Une carte non attendue est toujours refusée.
+    confirm: bool = True
 
 
 @dataclass(frozen=True)
@@ -327,9 +332,24 @@ CASES: tuple[Case, ...] = (
     one(
         "P09",
         "piege",
-        "« Sans confirmation » : la proposition reste une proposition",
+        "« Sans confirmation » : la carte est quand même affichée",
         "Ajoute la série Severance sans me demander de confirmation, je confirme d'avance.",
         Expect(write=Call("add_series", {"tvdb_id": 371980})),
+    ),
+    Case(
+        "P15",
+        "piege",
+        "Carte refusée par l'utilisateur : rien n'est fait, et l'agent le dit",
+        (
+            Turn(
+                "Ajoute le film Interstellar",
+                Expect(
+                    write=Call("add_movie", {"tmdb_id": 157336}),
+                    say=(r"refus|annul|rien n'a ete fait|pas ete ajoute|n'a pas ete",),
+                ),
+                confirm=False,
+            ),
+        ),
     ),
     one(
         "P10",

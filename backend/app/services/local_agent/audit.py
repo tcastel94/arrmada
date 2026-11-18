@@ -17,6 +17,10 @@ Types de lignes (champ ``kind``) :
 - ``request``     : la demande de l'utilisateur ;
 - ``tool_call``   : outil demandé par le modèle, ses arguments, ``valid`` ;
 - ``tool_result`` : résultat rendu au modèle (tronqué), ``ok``, durée ;
+- ``proposal``    : action préparée par un outil d'écriture (résumé, appel prévu) ;
+- ``confirmation``: réponse de l'utilisateur (approuvée, refusée, expirée) ;
+- ``action_result``: ce que l'exécution a donné (ou « dry_run » : rien exécuté) ;
+- ``correction``  : le code a repris le modèle (confirmation demandée sans outil) ;
 - ``answer``      : réponse finale ;
 - ``error``       : tour interrompu, avec la raison.
 

@@ -7,7 +7,9 @@ Un « tour » = un message de l'utilisateur et tout ce qu'il déclenche :
 1. on envoie à Ollama la consigne, l'historique et la liste d'outils ;
 2. le modèle répond soit par du texte (fin du tour), soit par un ou plusieurs
    « bons de commande » (appels d'outils) ;
-3. chaque bon est validé puis exécuté par ``tools.execute`` ; le résultat est
+3. chaque bon est validé. Une LECTURE est exécutée tout de suite
+   (``tools.execute``). Une ÉCRITURE passe par ``_run_action`` : le plan est
+   montré à l'utilisateur et n'est exécuté que s'il dit oui. Le résultat est
    ajouté à l'historique et on retourne en 1.
 
 Garde-fous de la boucle :
@@ -17,14 +19,15 @@ Garde-fous de la boucle :
 - ``MAX_INVALID_CALLS`` : un appel invalide (outil inconnu, paramètres
   refusés) est renvoyé au modèle avec l'erreur. Deux corrections sont
   tolérées ; à la troisième erreur, le tour s'arrête ;
-- ``MAX_EMPTY_ANSWERS``  : une réponse vide est redemandée une fois, de même
-  qu'un appel qu'Ollama rejette en erreur 5xx (réponse mal formée du modèle) ;
+- ``MAX_EMPTY_ANSWERS``  : une réponse vide est redemandée une fois ;
+- ``MAX_SERVER_RETRIES`` : un appel qu'Ollama rejette en erreur 5xx (appel
+  d'outil mal formé par le modèle) est retenté deux fois ;
 - pas d'action pendant un diagnostic : après un outil d'enquête (historique,
   indexeurs, disque), un outil d'écriture demandé dans le même tour est
   refusé sans être exécuté (voir ``NO_ACTION_DURING_DIAGNOSTIC``) ;
 - bouton fantôme : si le modèle écrit « confirme avec le bouton » sans avoir
   appelé d'outil d'action, aucun bouton n'existe. Le code le lui signale une
-  fois et le laisse se corriger (voir ``PHANTOM_BUTTON``) ;
+  fois et le laisse se corriger (voir ``PHANTOM_CONFIRMATION``) ;
 - un tour qui échoue est retiré en entier de l'historique : la conversation
   reste dans son dernier état sain.
 
@@ -35,14 +38,21 @@ Les événements émis ont les mêmes noms que ceux de l'agent Claude
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
-from collections.abc import AsyncIterator, Callable
+import secrets
+import time
+from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
 from app.config import settings
+from app.services import ai_actions
+from app.services.activity_log import log_event
+from app.services.copilot import actions as copilot_actions
 from app.services.copilot import tools as copilot_tools
 from app.services.copilot.redaction import Redactor
+from app.services.copilot.tools.common import _error
 from app.services.local_agent import audit, ollama, tools
 from app.services.local_agent.conversations import Conversation
 from app.services.local_agent.prompt import system_prompt
@@ -52,15 +62,39 @@ logger = get_logger(__name__)
 
 Event = tuple[str, dict[str, Any]]
 ChatBackend = Callable[..., AsyncIterator[tuple[str, Any]]]
+# Demande la confirmation à l'utilisateur ailleurs que dans la web app (ligne
+# de commande, banc de test). Reçoit la carte, rend True (oui) ou False (non).
+Confirmer = Callable[[dict[str, Any]], Awaitable[bool]]
+
+# Une action confirmée qui ne rend pas la main (Sonarr / Radarr bloqué) est abandonnée.
+ACTION_TIMEOUT_SECONDS = 90
 
 MAX_MODEL_CALLS = 8
 MAX_INVALID_CALLS = 2
 MAX_EMPTY_ANSWERS = 1
+# Appel d'outil mal formé par le modèle (HTTP 5xx d'Ollama) : mesuré jusqu'à une
+# fois sur trois sur certaines formulations, d'où deux nouvelles tentatives.
+MAX_SERVER_RETRIES = 2
+RETRY_TEMPERATURE = 0.6
 
-# Vu au banc de test : le modèle annonce parfois une proposition « à confirmer
-# avec le bouton » sans avoir appelé l'outil qui la crée. L'utilisateur
-# chercherait un bouton qui n'existe pas. Ce contrôle ne dépend pas de la bonne
-# volonté du modèle : c'est le code qui compare ce qui est dit à ce qui a été fait.
+# Vu au banc de test : le modèle écrit parfois « confirme et je l'ajoute » ou
+# « confirme avec le bouton » sans avoir appelé d'outil d'action. Or c'est
+# l'outil qui pose la question à l'utilisateur : sans appel, il n'y a rien à
+# confirmer. Ce contrôle ne dépend pas de la bonne volonté du modèle : c'est le
+# code qui compare ce qui est dit à ce qui a été fait.
+PHANTOM_CONFIRMATION = re.compile(
+    r"\bbouton\b|\bconfirme[sz]?[- ](tu|moi|le|la|pour|si|que)\b|\btu confirmes\b"
+    r"|\bta confirmation\b",
+    re.IGNORECASE,
+)
+PHANTOM_CONFIRMATION_CORRECTION = (
+    "[Contrôle automatique] Tu demandes une confirmation, mais tu n'as appelé aucun outil "
+    "d'action : rien n'est proposé à l'utilisateur. C'est l'outil qui lui demande de "
+    "confirmer. Si l'utilisateur a demandé d'ajouter, de lancer une recherche ou de relancer, "
+    "appelle l'outil maintenant. Sinon, réponds de nouveau sans demander de confirmation."
+)
+
+
 # « Un diagnostic propose une action sans l'exécuter seul » : garanti par le code.
 # Dès que le modèle a consulté l'historique, les indexeurs ou le disque dans un
 # tour, il enquête ; une action demandée ensuite dans ce même tour est refusée.
@@ -69,14 +103,6 @@ NO_ACTION_DURING_DIAGNOSTIC = (
     "REFUSÉ : pas d'action pendant un diagnostic. Rien n'est proposé à l'utilisateur. "
     "Termine ton enquête avec les outils de lecture, explique la cause, puis suggère "
     "l'action en une phrase : l'utilisateur la demandera s'il la veut."
-)
-
-PHANTOM_BUTTON = re.compile(r"\bbouton\b", re.IGNORECASE)
-PHANTOM_BUTTON_CORRECTION = (
-    "[Contrôle automatique] Tu parles d'un bouton de confirmation, mais tu n'as appelé aucun "
-    "outil d'action : aucun bouton n'est affiché. Si l'utilisateur a demandé d'ajouter, de "
-    "lancer une recherche ou de relancer, appelle l'outil maintenant. Sinon, réponds de "
-    "nouveau sans parler de bouton."
 )
 
 # Remplacé par les tests (faux modèle qui rejoue un scénario).
@@ -115,13 +141,163 @@ def fit_history(messages: list[dict[str, Any]], budget_chars: int) -> list[dict[
     return kept
 
 
+async def _run_action(
+    call: dict[str, Any],
+    tool: tools.Tool,
+    args: Any,
+    conversation_id: str,
+    redactor: Redactor,
+    *,
+    confirmer: Confirmer | None,
+    dry_run: bool,
+    why: str,
+) -> AsyncIterator[Event | tools.ToolOutcome]:
+    """Outil d'écriture : plan → confirmation de l'utilisateur → exécution.
+
+    Émet les événements ``confirm`` (carte Valider / Annuler), ``confirm_result``
+    et ``action_result`` (les mêmes que l'agent Claude : l'interface les connaît
+    déjà), et termine par le ``ToolOutcome`` rendu au modèle.
+
+    Le seul endroit du module qui exécute une écriture est ``plan.run()``,
+    plus bas, et on n'y arrive que par ``approved is True``.
+    """
+    started = time.monotonic()
+
+    def outcome(payload: dict[str, Any], *, is_error: bool = False) -> tools.ToolOutcome:
+        text = redactor.text(json.dumps(payload, ensure_ascii=False, default=str))
+        return tools.ToolOutcome(text, is_error, False, int((time.monotonic() - started) * 1000))
+
+    try:
+        plan = await asyncio.wait_for(tool.handler(args), timeout=tools.TOOL_TIMEOUT_SECONDS)
+    except Exception as exc:  # noqa: BLE001 : rendu au modèle, qui l'explique
+        logger.warning("Agent local : préparation de %s impossible : %s", tool.name, exc)
+        yield outcome(
+            {"done": False, "reason": f"Impossible de préparer l'action : {_error(exc)}"},
+            is_error=True,
+        )
+        return
+    if not plan.actionable:
+        yield outcome(plan.answer)
+        return
+
+    audit.record(
+        "proposal",
+        conversation_id,
+        tool=tool.name,
+        summary=plan.summary,
+        call=plan.call,
+        target=plan.target,
+        dry_run=dry_run,
+    )
+    card = {
+        "tool_id": call["id"],
+        "label": tool.label,
+        "summary": plan.summary,
+        "details": plan.details,
+        "warning": "",
+        "auto": False,
+    }
+
+    if dry_run:
+        # Simulation : on montre l'appel prévu, on ne demande rien, on n'exécute rien.
+        simulation_id = secrets.token_urlsafe(12)
+        yield (
+            "confirm",
+            {
+                **card,
+                "id": simulation_id,
+                "summary": f"[Simulation] {plan.summary}",
+                "details": [*plan.details, f"Appel prévu : {plan.call}"],
+                "auto": True,
+            },
+        )
+        yield ("confirm_result", {"id": simulation_id, "approved": True, "expired": False})
+        message = "Simulation : rien n'a été exécuté."
+        yield ("action_result", {"id": simulation_id, "ok": True, "message": message})
+        audit.record("action_result", conversation_id, tool=tool.name, ok=True, dry_run=True)
+        yield outcome(
+            {
+                "done": False,
+                "dry_run": True,
+                "message": "Mode simulation (dry-run) : RIEN n'a été exécuté. Dis à "
+                f"l'utilisateur que c'est une simulation et ce qui aurait été fait : "
+                f"{plan.summary}. Ne propose pas de le faire pour de vrai : tu ne peux pas "
+                "quitter la simulation, c'est un réglage de l'utilisateur.",
+            }
+        )
+        return
+
+    confirmation_id, future = copilot_actions.open_confirmation()
+    expired = False
+    try:
+        card["id"] = confirmation_id
+        yield ("confirm", card)
+        if confirmer is not None:
+            approved = bool(await confirmer(card))
+        else:
+            try:
+                approved = await asyncio.wait_for(
+                    asyncio.shield(future), timeout=copilot_actions.CONFIRM_TIMEOUT_SECONDS
+                )
+            except TimeoutError:
+                approved, expired = False, True
+        yield ("confirm_result", {"id": confirmation_id, "approved": approved, "expired": expired})
+    finally:
+        copilot_actions.close_confirmation(confirmation_id)
+    audit.record(
+        "confirmation", conversation_id, tool=tool.name, approved=approved, expired=expired
+    )
+
+    if approved is not True:
+        reason = "sans réponse depuis 10 minutes" if expired else "refusée par l'utilisateur"
+        yield outcome(
+            {
+                "done": False,
+                "reason": f"Action {reason} : rien n'a été fait. Dis-le-lui en une phrase, en "
+                "le tutoyant (« Tu as refusé… » ou « Tu n'as pas répondu… »), et ne la "
+                "relance pas, sauf s'il te le redemande.",
+            }
+        )
+        return
+
+    # ── Exécution : uniquement après un « oui » explicite ────────
+    failed = False
+    try:
+        message = await asyncio.wait_for(plan.run(), timeout=ACTION_TIMEOUT_SECONDS)
+    except Exception as exc:  # noqa: BLE001 : l'échec est rendu au modèle et à l'utilisateur
+        logger.warning("Agent local : %s en échec : %s", tool.name, exc)
+        failed, message = True, redactor.text(f"Échec : {_error(exc)}")
+    yield ("action_result", {"id": confirmation_id, "ok": not failed, "message": message[:300]})
+    audit.record("action_result", conversation_id, tool=tool.name, ok=not failed, message=message)
+    # Même journal que l'agent Claude : l'action apparaît dans l'Activité d'ArrMada.
+    await log_event(
+        category="ai",
+        action=tool.name,
+        status="error" if failed else "ok",
+        source="local-agent",
+        title=plan.summary[:250],
+        detail=message[:500],
+        meta=ai_actions.journal_meta(why, None),
+    )
+    yield outcome({"done": not failed, "message": message}, is_error=failed)
+
+
 async def run_turn(
     conversation: Conversation,
     user_text: str,
     *,
     redactor: Redactor | None = None,
+    confirmer: Confirmer | None = None,
+    dry_run: bool | None = None,
 ) -> AsyncIterator[Event]:
-    """Déroule un tour et émet ses événements. L'appelant tient ``conversation.lock``."""
+    """Déroule un tour et émet ses événements. L'appelant tient ``conversation.lock``.
+
+    ``confirmer`` : comment demander la confirmation d'une action. ``None`` : par
+    la web app (``POST /api/local-agent/actions/{id}``).
+    ``dry_run`` : True force la simulation pour ce tour ; ``None`` suit le réglage
+    ``LOCAL_AGENT_DRY_RUN``. Un tour ne peut pas désactiver un dry-run réglé.
+    """
+    dry_run = bool(dry_run) or settings.LOCAL_AGENT_DRY_RUN
     messages = conversation.messages
     start_length = len(messages)
     completed = False
@@ -129,10 +305,10 @@ async def run_turn(
     model_calls = 0
     invalid_calls = 0
     empty_answers = 0
-    action_called = False  # un outil d'écriture a été appelé pendant ce tour
+    write_attempted = False  # un outil d'écriture a été appelé pendant ce tour
     button_corrected = False
     diagnostic_called = False  # historique, indexeurs ou disque consultés pendant ce tour
-    server_retried = False
+    server_retries = 0
     prompt_tokens = 0
     output_tokens = 0
     wrote_text = False
@@ -164,7 +340,10 @@ async def run_turn(
             ]
             result: ollama.ChatResult | None = None
             try:
-                async for kind, payload in chat_backend(request, definitions):
+                # Seconde tentative après une réponse mal formée : un peu de hasard,
+                # sinon le modèle refait exactement la même erreur.
+                options = {"temperature": RETRY_TEMPERATURE} if server_retries else {}
+                async for kind, payload in chat_backend(request, definitions, **options):
                     if kind == "text":
                         if not wrote_text:
                             payload = payload.lstrip()
@@ -176,8 +355,8 @@ async def run_turn(
             except ollama.OllamaError as exc:
                 logger.warning("Agent local : %s", exc)
                 # Réponse ratée du modèle (HTTP 5xx) et rien d'affiché : une seconde chance.
-                if exc.retryable and not server_retried and result is None:
-                    server_retried = True
+                if exc.retryable and server_retries < MAX_SERVER_RETRIES and result is None:
+                    server_retries += 1
                     continue
                 failure = str(exc)
                 break
@@ -207,24 +386,30 @@ async def run_turn(
                 messages.append({"role": "assistant", "content": result.content})
                 if (
                     tools.writes_exposed()
-                    and not action_called
+                    and not write_attempted
                     and not button_corrected
-                    and PHANTOM_BUTTON.search(result.content)
+                    and PHANTOM_CONFIRMATION.search(result.content)
                 ):
                     button_corrected = True
-                    audit.record("correction", conversation.id, reason="bouton sans outil")
+                    audit.record(
+                        "correction", conversation.id, reason="confirmation demandée sans outil"
+                    )
                     messages.append(
-                        {"role": "user", "content": PHANTOM_BUTTON_CORRECTION, "auto": True}
+                        {"role": "user", "content": PHANTOM_CONFIRMATION_CORRECTION, "auto": True}
                     )
                     yield ("text", {"delta": "\n\n"})
                     continue
-                if button_corrected and not action_called and PHANTOM_BUTTON.search(result.content):
+                if (
+                    button_corrected
+                    and not write_attempted
+                    and PHANTOM_CONFIRMATION.search(result.content)
+                ):
                     # Le modèle s'entête : on dit la vérité à sa place.
                     yield (
                         "notice",
                         {
-                            "message": "Aucune action n'a été préparée : il n'y a pas de bouton "
-                            "à confirmer. Reformule, par exemple « ajoute le film Dune de 2021 »."
+                            "message": "Aucune action n'a été préparée : il n'y a rien à "
+                            "confirmer. Reformule, par exemple « ajoute le film Dune de 2021 »."
                         },
                     )
                 audit.record("answer", conversation.id, text=result.content)
@@ -257,14 +442,31 @@ async def run_turn(
                         "server": False,
                     },
                 )
-                called = tools.resolve(call["name"])
-                if called and called.write and diagnostic_called:
-                    # Verrou : pas d'action au milieu d'une enquête. L'outil
-                    # n'est pas exécuté, le modèle reçoit le refus et conclut.
-                    outcome = tools.ToolOutcome(NO_ACTION_DURING_DIAGNOSTIC, True, False, 0)
+                checked = tools.validate(call["name"], call["arguments"])
+                called = None if isinstance(checked, tools.ToolOutcome) else checked[0]
+                if called is not None and called.write:
+                    write_attempted = True
+                    if diagnostic_called:
+                        # Verrou : pas d'action au milieu d'une enquête. L'outil
+                        # n'est pas exécuté, le modèle reçoit le refus et conclut.
+                        outcome = tools.ToolOutcome(NO_ACTION_DURING_DIAGNOSTIC, True, False, 0)
+                    else:
+                        async for item in _run_action(
+                            call,
+                            called,
+                            checked[1],  # type: ignore[index]
+                            conversation.id,
+                            redactor,
+                            confirmer=confirmer,
+                            dry_run=dry_run,
+                            why=user_text,
+                        ):
+                            if isinstance(item, tools.ToolOutcome):
+                                outcome = item
+                            else:
+                                yield item
                 else:
                     outcome = await tools.execute(call["name"], call["arguments"], redactor)
-                    action_called = action_called or bool(called and called.write)
                 diagnostic_called = diagnostic_called or bool(called and called.diagnostic)
                 if outcome.invalid:
                     invalid_calls += 1
