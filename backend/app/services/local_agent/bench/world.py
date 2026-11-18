@@ -32,7 +32,7 @@ from datetime import date, timedelta
 from typing import Any
 
 from app.services.copilot.tools.args import NoArgs
-from app.services.local_agent import tools, write_tools
+from app.services.local_agent import diagnosis, tools, write_tools
 from app.services.local_agent.tools import (
     CalendarArgs,
     HistoryArgs,
@@ -251,6 +251,8 @@ def _base() -> dict[str, Any]:
             },
         ],
         "sabnzbd": {"service": "SABnzbd", "paused": False, "speed": "38 MB/s", "slots": 2},
+        # Lignes « warn » des journaux de Sonarr / Radarr (vides quand tout va bien).
+        "logs": [],
         "history": [
             {
                 "date": f"{day(0)}T07:12",
@@ -387,6 +389,82 @@ def _failed_history(data: dict[str, Any]) -> None:
         )
 
 
+def _blocked(data: dict[str, Any], item_id: int, title: str, service: str, **fields: Any) -> None:
+    """Ajoute à la file un téléchargement terminé à 100 % dont l'import est refusé."""
+    data["queue"].append(
+        {
+            "id": item_id,
+            "title": title,
+            "service_type": service,
+            "status": "completed",
+            "tracked_state": "importBlocked",
+            "progress": "100 %",
+            "protocol": "usenet",
+            "download_client": "SABnzbd",
+            **fields,
+        }
+    )
+
+
+def _fake_exe(data: dict[str, Any]) -> None:
+    """Fausse release : un exécutable à la place de la vidéo."""
+    _blocked(
+        data,
+        4050,
+        "Tulsa.King.S03E08.1080p.WEB.h264-GRP",
+        "sonarr",
+        detail="Caution: Found potentially dangerous file with extension: .exe",
+    )
+
+
+def _not_upgrade(data: dict[str, Any]) -> None:
+    """Le fichier déjà présent est meilleur : import refusé volontairement."""
+    _blocked(
+        data,
+        4051,
+        "Oppenheimer.2023.1080p.WEB-DL.DDP5.1.H.264-FLUX",
+        "radarr",
+        detail="Not an upgrade for existing movie file. Existing quality: Bluray-2160p. "
+        "New Quality: WEBDL-1080p.",
+    )
+
+
+def _password(data: dict[str, Any]) -> None:
+    """Archive protégée par mot de passe."""
+    data["queue"].append(
+        {
+            "id": 4052,
+            "title": "Fallout.S02E04.1080p.WEB.h264-ETHEL",
+            "service_type": "sonarr",
+            "status": "failed",
+            "tracked_state": "failed",
+            "protocol": "usenet",
+            "download_client": "SABnzbd",
+            "error": "Download failed: Unpacking failed, archive requires a password",
+        }
+    )
+
+
+def _manual_import(data: dict[str, Any]) -> None:
+    """Le contenu ne correspond pas à l'épisode attendu : Sonarr ne sait pas quoi en faire."""
+    _blocked(
+        data,
+        4053,
+        "Slow.Horses.S05E03.MULTi.1080p.WEB.H264-GRP",
+        "sonarr",
+        detail="Episode S05E03 was not found in the grabbed release: "
+        "Slow.Horses.S05E04.MULTi.1080p.WEB.H264-GRP",
+    )
+    data["logs"].append(
+        {
+            "time": f"{day(0)}T08:02:11",
+            "level": "warn",
+            "message": "Couldn't import episode Slow Horses S05E03: Episode was unexpected "
+            "considering the folder name",
+        }
+    )
+
+
 def _sab_paused(data: dict[str, Any]) -> None:
     """SABnzbd mis en pause : tout attend, rien n'est en erreur."""
     for item in data["queue"]:
@@ -437,6 +515,10 @@ SCENARIOS = {
     "indexers_down": _indexers_down,
     "failed_history": _failed_history,
     "sab_paused": _sab_paused,
+    "fake_exe": _fake_exe,
+    "not_upgrade": _not_upgrade,
+    "password": _password,
+    "manual_import": _manual_import,
     "failed_item": _failed_item,
     "injection": _injection,
 }
@@ -463,41 +545,63 @@ class World:
     async def search_movie(self, args: TitleSearchArgs) -> dict[str, Any]:
         return tools.rank_candidates("movie", args, lookup(self.data["movies"], args.title))
 
+    def _library(self, title: str) -> list[dict[str, Any]]:
+        """Comme ``tools.library_state`` : ce que la bibliothèque possède pour une demande."""
+        owned = []
+        for entry in lookup(self.data["movies"], title) + lookup(self.data["series"], title):
+            if not entry["in_library"]:
+                continue
+            state = {"title": entry["title"], "year": entry["year"]}
+            if "tmdb_id" in entry:
+                state |= {"type": "movie", "complete": bool(entry.get("has_file"))}
+            else:
+                on_disk, wanted = entry["episodes_on_disk"].split("/")
+                state |= {
+                    "type": "series",
+                    "episodes_on_disk": entry["episodes_on_disk"],
+                    "complete": on_disk == wanted,
+                }
+            owned.append(state)
+        return owned[:3]
+
+    def _alternates(self, title: str) -> list[str]:
+        return [entry["title"] for entry in self._library(title)]
+
     async def get_queue(self, args: QueueArgs) -> dict[str, Any]:
-        items, no_match = tools.filter_queue(self.data["queue"], args.title)
-        blocked = [
-            i
-            for i in items
-            if i.get("error") or i.get("detail") or str(i.get("status")).lower() in _BLOCKED
-        ]
-        ordered = blocked + [i for i in items if i not in blocked]
-        result = {
-            "count": len(items),
-            "blocked_count": len(blocked),
-            "items": ordered,
-            "sabnzbd": [self.data["sabnzbd"]],
-        }
-        if no_match:
-            result["note"] = no_match
-        return result
+        items = self.data["queue"]
+        library: list[dict[str, Any]] = []
+        if args.title and not any(diagnosis.matches(i["title"], args.title) for i in items):
+            library = self._library(args.title)
+        return diagnosis.queue_view(
+            items,
+            title=args.title,
+            alternates=[entry["title"] for entry in library],
+            clients=[self.data["sabnzbd"]],
+            library=library,
+        )
 
     async def get_history(self, args: HistoryArgs) -> dict[str, Any]:
         events = self.data["history"]
         if args.type != "all":
             events = [e for e in events if e["_type"] == args.type]
-        words = fold(args.title).split()
-        if words:
-            events = [
-                e for e in events if all(w in fold(f"{e['title']} {e['release']}") for w in words)
-            ]
-        if args.only_failures:
-            events = [e for e in events if e["event"] == "downloadFailed"]
-        result: dict[str, Any] = {
-            "count": len(events),
-            "events": [_public(e) for e in events[: args.limit]],
-        }
-        if not events:
-            result["note"] = tools.NO_HISTORY_FOR_TITLE_NOTE if words else tools.NO_HISTORY_NOTE
+        events = [_public(e) for e in events]
+        alternates: list[str] = []
+        if args.title and not any(
+            diagnosis.matches(f"{e['title']} {e['release']}", args.title) for e in events
+        ):
+            alternates = self._alternates(args.title)
+        result = diagnosis.history_view(
+            events,
+            title=args.title,
+            alternates=alternates,
+            only_failures=args.only_failures,
+            limit=args.limit,
+            logs=diagnosis.log_lines(self.data["logs"], args.title, alternates)
+            if args.title
+            else None,
+        )
+        if args.title:
+            result = diagnosis.attach_indexers(result, await self.get_indexer_status(NoArgs()))
         return result
 
     async def get_calendar(self, args: CalendarArgs) -> dict[str, Any]:
@@ -534,12 +638,7 @@ class World:
         return result
 
     async def get_indexer_status(self, _: NoArgs) -> dict[str, Any]:
-        rows = self.data["indexers"]
-        return {
-            "count": len(rows),
-            "in_trouble": [r["name"] for r in rows if r.get("disabled_until")],
-            "indexers": rows,
-        }
+        return diagnosis.indexer_view(self.data["indexers"])
 
     async def get_disk_space(self, _: NoArgs) -> dict[str, Any]:
         disks = self.data["disks"]
@@ -566,15 +665,20 @@ class World:
 
         return Plan(True, summary=summary, call=f"(banc) {tool} {target}", target=target, run=run)
 
-    def _single(self, kind: str, title: str, year: int) -> tuple[dict[str, Any] | None, Plan]:
+    def _single(
+        self, kind: str, title: str, year: int, *, library_only: bool = False
+    ) -> tuple[dict[str, Any] | None, Plan]:
         """Le titre unique visé, ou ``None`` avec le plan vide à rendre au modèle."""
         catalog = self.data["series" if kind == "series" else "movies"]
+        candidates = lookup(catalog, title)
         ranked = tools.rank_candidates(
             kind,  # type: ignore[arg-type]
             TitleSearchArgs(title=title, year=year),
-            lookup(catalog, title),
+            candidates,
         )
         match = ranked.get("best_match")
+        if match is None and library_only:
+            match = write_tools.only_library_candidate(candidates, "in_library")
         if match is None:
             # Ambigu, introuvable ou approchant : la note de la recherche dit quoi faire.
             return None, Plan(False, {"status": "aucune_proposition", **ranked})
@@ -611,7 +715,7 @@ class World:
         )
 
     async def trigger_search(self, args: write_tools.TriggerSearchArgs) -> Plan:
-        match, empty = self._single(args.type, args.title, args.year)
+        match, empty = self._single(args.type, args.title, args.year, library_only=True)
         if match is None:
             return empty
         label = f"{match['title']} ({match['year']})"
@@ -628,12 +732,11 @@ class World:
         )
 
     async def retry_download(self, args: write_tools.RetryDownloadArgs) -> Plan:
-        words = fold(args.title).split()
         failed = [
             item
             for item in self.data["queue"]
             if (item.get("error") or str(item.get("status")).lower() in _BLOCKED)
-            and all(word in fold(item["title"]).replace(".", " ") for word in words)
+            and diagnosis.matches(item["title"], args.title)
         ]
         if not failed:
             return write_tools.nothing(write_tools.NO_FAILED_DOWNLOAD)

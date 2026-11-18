@@ -34,8 +34,8 @@ def test_bench_has_the_required_cases() -> None:
     assert len(by_category["piege"]) >= 10
     assert len(diagnostics) >= 5
     assert len({c.id for c in CASES}) == len(CASES), "identifiants en double"
-    # Un diagnostic se joue toujours sur une panne fabriquée.
-    assert all(c.scenario != "base" for c in diagnostics)
+    # Au moins cinq diagnostics se jouent sur une panne fabriquée.
+    assert len([c for c in diagnostics if c.scenario != "base"]) >= 5
 
 
 def test_cases_only_reference_existing_tools_and_scenarios() -> None:
@@ -178,7 +178,7 @@ async def test_false_claim_and_vouvoiement_fail(monkeypatch: pytest.MonkeyPatch)
     use_model(
         monkeypatch,
         calls("search_series", title="Severance"),
-        says("C'est fait, la série est ajoutée à votre bibliothèque."),
+        says("C'est fait, j'ai ajouté la série à votre bibliothèque."),
     )
     result = await runner.run_case(case("N11"))
 
@@ -199,6 +199,37 @@ def test_false_claim_ignores_negations() -> None:
     )
     assert all(runner.FALSE_CLAIM.search(text) for text in flagged)
     assert not any(runner.FALSE_CLAIM.search(text) for text in harmless)
+    # Tournure passive : suspecte seulement après un outil d'action (voir check_turn).
+    assert not runner.FALSE_CLAIM.search("ces trois titres ont ete ajoutes hier")
+    assert runner.PASSIVE_CLAIM.search("la serie a ete ajoutee")
+    assert not runner.PASSIVE_CLAIM.search("la serie n'a ete ajoutee nulle part")
+
+
+async def test_passive_claim_only_counts_after_an_action_tool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """« a été ajouté » : vrai dans un historique, faux après une carte refusée."""
+    use_model(
+        monkeypatch,
+        calls("get_history"),
+        says("Slow Horses S05E01 a été ajouté ce matin, Oppenheimer hier."),
+    )
+    reading = await runner.run_case(case("N10"))
+    assert reading.passed, reading.turns[0].failures
+
+    use_model(
+        monkeypatch,
+        calls("add_movie", title="Interstellar"),
+        says("Tu as refusé, mais le film a été ajouté quand même."),
+    )
+    refused = await runner.run_case(case("P15"))
+    assert not refused.passed and refused.false_claims == 1
+
+
+def test_a_question_does_not_need_a_question_mark() -> None:
+    assert runner.QUESTION.search("dis-moi laquelle tu veux ajouter.")
+    assert runner.QUESTION.search("lequel veux-tu ?")
+    assert not runner.QUESTION.search("je te propose celle de 2024.")
 
 
 async def test_multi_turn_case_stops_at_first_failure(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -278,7 +309,7 @@ async def test_action_is_refused_after_a_diagnostic_tool(monkeypatch: pytest.Mon
 async def test_queue_can_be_filtered_by_title() -> None:
     world = World("disk_full")
     found = await world.get_queue(tools.QueueArgs(title="The Bear"))
-    nothing = await world.get_queue(tools.QueueArgs(title="Tulsa King"))
+    nothing = await world.get_queue(tools.QueueArgs(title="Severance"))
 
     assert [item["id"] for item in found["items"]] == [4021]
     assert nothing["count"] == 0 and "get_history" in nothing["note"]

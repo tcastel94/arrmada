@@ -46,6 +46,7 @@ from app.services.copilot import tools as copilot_tools
 from app.services.copilot.redaction import Redactor
 from app.services.copilot.tools.args import NoArgs, _Args
 from app.services.copilot.tools.common import _client, _error, _fold, _services
+from app.services.local_agent import diagnosis
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -264,63 +265,70 @@ _QUEUE_KEYS = (
     "error",
     "detail",
 )
-# États où un téléchargement n'avance plus sans intervention.
-_BLOCKED_STATES = {"importpending", "importblocked", "importfailed", "failedpending", "failed"}
-_BLOCKED_STATUS = {"warning", "failed", "stalled"}
 
 
-def _is_blocked(item: dict[str, Any]) -> bool:
-    return bool(
-        item.get("error")
-        or str(item.get("tracked_state", "")).lower() in _BLOCKED_STATES
-        or str(item.get("status", "")).lower() in _BLOCKED_STATUS
-    )
+async def library_titles(title: str) -> list[str]:
+    """Titres exacts de la bibliothèque pour une demande approximative (voir ``library_state``)."""
+    return [str(entry["title"]) for entry in await library_state(title)]
 
 
-def filter_queue(items: list[dict[str, Any]], title: str) -> tuple[list[dict[str, Any]], str]:
-    """Garde les téléchargements dont le nom contient tous les mots du titre.
+async def library_state(title: str) -> list[dict[str, Any]]:
+    """Ce que la bibliothèque possède pour une demande, même approximative.
 
-    Renvoie aussi la note à rendre au modèle quand rien ne correspond. Les noms
-    de release séparent les mots par des points (« The.Bear.S04E03 ») : on les
-    traite comme des espaces. Partagé avec le banc de test.
+    Rend le titre EXACT et s'il est complet (film avec son fichier, série avec
+    tous ses épisodes).
+
+    « Dune 2 » ne figure dans aucun nom de release ; « Dune: Part Two », si.
+    On demande donc à Radarr / Sonarr ce qu'ils comprennent, et on ne garde que
+    ce qui est déjà dans la bibliothèque (un téléchargement en cours concerne
+    forcément un titre suivi). Appelé seulement quand le filtre direct ne
+    trouve rien : deux recherches de plus, environ 300 ms chacune.
     """
-    words = _fold(title).split()
-    if not words:
-        return items, ""
-    kept = [
-        item
-        for item in items
-        if all(word in _fold(item.get("title")).replace(".", " ") for word in words)
-    ]
-    note = (
-        ""
-        if kept
-        else f"Aucun téléchargement pour « {title} » dans la file ({len(items)} autres en cours). "
-        "Appelle get_history avec ce titre pour voir s'il a échoué."
-    )
-    return kept, note
+    found: list[dict[str, Any]] = []
+    for service_type in ("radarr", "sonarr"):
+        services = await _services(service_type)
+        if not services:
+            continue
+        try:
+            async with _client(services[0]) as client:
+                items = await (
+                    client.lookup_movie(title)
+                    if service_type == "radarr"
+                    else client.lookup_series(title)
+                )
+        except Exception:  # noqa: BLE001, S112 : une aide en plus, pas indispensable
+            continue
+        owned = [
+            item
+            for item in items or []
+            if isinstance(item, dict) and item.get("id") and item.get("title")
+        ][:2]
+        for item in owned:
+            if service_type == "radarr":
+                entry = {"type": "movie", "complete": bool(item.get("hasFile"))}
+            else:
+                stats = item.get("statistics") or {}
+                on_disk, wanted = stats.get("episodeFileCount", 0), stats.get("episodeCount", 0)
+                entry = {
+                    "type": "series",
+                    "episodes_on_disk": f"{on_disk}/{wanted}",
+                    "complete": bool(wanted) and on_disk >= wanted,
+                }
+            found.append({"title": str(item["title"]), "year": item.get("year"), **entry})
+    return found[:3]
 
 
 async def get_queue(args: QueueArgs) -> dict[str, Any]:
-    """File d'attente de Sonarr / Radarr et état de SABnzbd, en version courte."""
+    """File d'attente de Sonarr / Radarr et état de SABnzbd, bloqués d'abord et expliqués."""
     raw = await copilot_tools.get_download_queue(NoArgs())
     items = [
         _clean({key: item.get(key) for key in _QUEUE_KEYS})
         for item in (raw.get("arr_queue") or {}).get("items") or []
     ]
-    items, no_match = filter_queue(items, args.title)
-    blocked = [item for item in items if _is_blocked(item)]
-    # Les bloqués d'abord : ce sont eux qu'on vient chercher.
-    ordered = blocked + [item for item in items if not _is_blocked(item)]
-    result: dict[str, Any] = {
-        "count": len(items),
-        "blocked_count": len(blocked),
-        "items": ordered[:20],
-    }
-    if len(items) > 20:
-        result["note"] = f"{len(items) - 20} téléchargements de plus, non listés."
-    if no_match:
-        result["note"] = no_match
+    library: list[dict[str, Any]] = []
+    if args.title and not any(diagnosis.matches(i.get("title"), args.title) for i in items):
+        library = await library_state(args.title)
+    alternates = [str(entry["title"]) for entry in library]
     clients = []
     for sab in raw.get("sabnzbd") or []:
         if sab.get("error"):
@@ -342,25 +350,14 @@ async def get_queue(args: QueueArgs) -> dict[str, Any]:
                 }
             )
         )
-    if clients:
-        result["sabnzbd"] = clients
-    return result
+    return diagnosis.queue_view(
+        items, title=args.title, alternates=alternates, clients=clients, library=library
+    )
 
 
 # ══════════════════════════════════════════════════════════════
 # Historique
 # ══════════════════════════════════════════════════════════════
-
-_FAILURE_EVENTS = {"downloadfailed", "downloadignored"}
-NO_HISTORY_NOTE = "Aucun événement ne correspond dans l'historique récent."
-# Un titre sans aucune trace dans l'historique n'a jamais été « attrapé » : la
-# cause est en amont (recherche), donc du côté des indexeurs. On le dit au
-# modèle plutôt que d'espérer qu'il fasse le lien tout seul.
-NO_HISTORY_FOR_TITLE_NOTE = (
-    "Aucun événement pour ce titre dans l'historique récent. Si tu n'as pas encore appelé "
-    "get_queue, appelle-le maintenant : un téléchargement bloqué s'y trouve. Si la file ne "
-    "contient pas ce titre non plus, appelle get_indexer_status : aucune release n'a été trouvée."
-)
 
 
 def _records(payload: Any) -> list[dict[str, Any]]:
@@ -398,14 +395,14 @@ def _service_types(media: str) -> tuple[str, ...]:
 
 
 async def get_history(args: HistoryArgs) -> dict[str, Any]:
-    """Derniers événements de Sonarr / Radarr : récupéré, importé, échoué…"""
+    """Derniers événements de Sonarr / Radarr, échecs expliqués, et leurs journaux."""
     services = await _services(*_service_types(args.type))
     if not services:
         return {"error": "Aucun Sonarr / Radarr actif dans ArrMada."}
-    words = [w for w in _fold(args.title).split() if w]
     # Avec un filtre, on lit plus large : le tri se fait ici, pas dans l'*arr.
-    page_size = 200 if words or args.only_failures else args.limit
+    page_size = 200 if args.title or args.only_failures else args.limit
     events: list[dict[str, Any]] = []
+    log_records: list[dict[str, Any]] = []
     errors: list[str] = []
     for svc in services:
         service_type = svc.type.lower()
@@ -422,26 +419,51 @@ async def get_history(args: HistoryArgs) -> dict[str, Any]:
         try:
             async with _client(svc) as client:
                 records = _records(await client.get("/history", params=params))
+                if args.title:
+                    log_records += await _warnings(client)
         except Exception as exc:  # noqa: BLE001 : la panne est une information pour le modèle
             errors.append(f"{svc.name} : {_error(exc)}")
             continue
         events += [_history_event(record, service_type) for record in records]
 
-    if words:
-        events = [
-            e
-            for e in events
-            if all(w in _fold(f"{e.get('title', '')} {e.get('release', '')}") for w in words)
-        ]
-    if args.only_failures:
-        events = [e for e in events if str(e.get("event", "")).lower() in _FAILURE_EVENTS]
-    events.sort(key=lambda e: e.get("date", ""), reverse=True)
-    result: dict[str, Any] = {"count": len(events), "events": events[: args.limit]}
+    alternates: list[str] = []
+    if args.title and not any(
+        diagnosis.matches(f"{e.get('title', '')} {e.get('release', '')}", args.title)
+        for e in events
+    ):
+        alternates = await library_titles(args.title)
+    result = diagnosis.history_view(
+        events,
+        title=args.title,
+        alternates=alternates,
+        only_failures=args.only_failures,
+        limit=args.limit,
+        logs=diagnosis.log_lines(log_records, args.title, alternates) if args.title else None,
+    )
     if errors:
         result["errors"] = errors
-    if not events and not errors:
-        result["note"] = NO_HISTORY_FOR_TITLE_NOTE if words else NO_HISTORY_NOTE
+        result.pop("note", None)
+    elif args.title:
+        result = diagnosis.attach_indexers(result, await get_indexer_status(NoArgs()))
     return result
+
+
+async def _warnings(client: Any) -> list[dict[str, Any]]:
+    """Dernières lignes « warn » et « error » du journal d'un *arr (Système › Journaux)."""
+    try:
+        payload = await client.get(
+            "/log",
+            params={
+                "page": 1,
+                "pageSize": 100,
+                "sortKey": "time",
+                "sortDirection": "descending",
+                "level": "warn",
+            },
+        )
+    except Exception:  # noqa: BLE001 : un complément d'enquête, jamais bloquant
+        return []
+    return _records(payload)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -638,14 +660,7 @@ async def get_indexer_status(_: NoArgs) -> dict[str, Any]:
                 }
             )
         )
-    in_trouble = [
-        r["name"] for r in rows if not r["enabled"] or r.get("disabled_until") or r.get("messages")
-    ]
-    return {
-        "count": len(rows),
-        "in_trouble": in_trouble,
-        "indexers": rows[:40],
-    }
+    return diagnosis.indexer_view(rows)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -733,8 +748,8 @@ READ_TOOLS: tuple[Tool, ...] = (
         "get_history",
         "Historique des téléchargements",
         "Derniers événements de Sonarr et Radarr : release récupérée, importée, échouée, avec "
-        "la raison de l'échec. Filtrable par titre. À appeler APRÈS get_queue, pour comprendre "
-        "ce qui est arrivé à un titre précis.",
+        "la raison de l'échec, plus les avertissements des journaux sur ce titre. Filtrable par "
+        "titre. À appeler APRÈS get_queue, pour comprendre ce qui est arrivé à un titre précis.",
         HistoryArgs,
         get_history,
         diagnostic=True,

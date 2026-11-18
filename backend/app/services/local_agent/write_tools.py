@@ -49,8 +49,8 @@ from pydantic import Field
 from app.services import request_service
 from app.services.copilot import tools as copilot_tools
 from app.services.copilot.tools.args import _Args
-from app.services.copilot.tools.common import _client, _fold, _services
-from app.services.local_agent import tools
+from app.services.copilot.tools.common import _client, _services
+from app.services.local_agent import diagnosis, tools
 from app.services.local_agent.tools import TitleSearchArgs, Tool
 
 Kind = Literal["series", "movie"]
@@ -145,8 +145,25 @@ _ID = {"series": "tvdbId", "movie": "tmdbId"}
 _CANDIDATE_ID = {"series": "tvdb_id", "movie": "tmdb_id"}
 
 
-async def _single(kind: Kind, title: str, year: int) -> tuple[Any, dict[str, Any] | None, Plan]:
+def only_library_candidate(candidates: list[dict[str, Any]], key: str) -> dict[str, Any] | None:
+    """Le seul candidat déjà dans la bibliothèque, s'il est bien seul.
+
+    Pour une action qui ne vaut que sur un titre de la bibliothèque (lancer une
+    recherche), « Dune 2 » désigne sans ambiguïté « Dune: Part Two » si c'est le
+    seul résultat que l'on possède. La carte affiche le titre exact : c'est
+    l'utilisateur qui valide. Deux candidats possédés = on ne choisit pas.
+    """
+    owned = [c for c in candidates if c.get(key)]
+    return owned[0] if len(owned) == 1 else None
+
+
+async def _single(
+    kind: Kind, title: str, year: int, *, library_only: bool = False
+) -> tuple[Any, dict[str, Any] | None, Plan]:
     """Cherche le titre dans Sonarr / Radarr et n'en retient qu'UN, ou aucun.
+
+    ``library_only`` : à défaut de titre identique, accepter l'unique candidat
+    déjà dans la bibliothèque (voir ``only_library_candidate``).
 
     Rend ``(service, fiche, plan_vide)``. ``fiche`` est la réponse brute de
     l'*arr pour le titre retenu ; ``None`` s'il n'y a rien à proposer, et
@@ -170,6 +187,9 @@ async def _single(kind: Kind, title: str, year: int) -> tuple[Any, dict[str, Any
         kind, TitleSearchArgs(title=title, year=year), [build(item) for item in raw]
     )
     match = ranked.get("best_match")
+    if match is None and library_only:
+        owned = only_library_candidate(raw, "id")
+        match = build(owned) if owned else None
     if match is None:
         return service, None, Plan(False, {"status": "aucune_proposition", **ranked})
     wanted = match.get(_CANDIDATE_ID[kind])
@@ -276,7 +296,7 @@ async def add_movie(args: AddMovieArgs) -> Plan:
 
 async def trigger_search(args: TriggerSearchArgs) -> Plan:
     """Recherche de releases pour un titre DÉJÀ dans la bibliothèque."""
-    service, item, empty = await _single(args.type, args.title, args.year)
+    service, item, empty = await _single(args.type, args.title, args.year, library_only=True)
     if item is None:
         return empty
     label, arr_id = _label(item), item.get("id")
@@ -344,7 +364,6 @@ async def retry_download(args: RetryDownloadArgs) -> Plan:
     suppression n'est permise à l'agent. On relance donc seulement la
     recherche ; l'élément en échec reste dans la file, à retirer à la main.
     """
-    words = _fold(args.title).split()
     failed: list[tuple[Any, dict[str, Any]]] = []
     for service in await _services("sonarr", "radarr"):
         try:
@@ -353,8 +372,7 @@ async def retry_download(args: RetryDownloadArgs) -> Plan:
         except Exception:  # noqa: BLE001, S112 : un *arr en panne n'empêche pas l'autre
             continue
         for record in (queue or {}).get("records") or []:
-            name = _fold(record.get("title")).replace(".", " ")
-            if is_failed(record) and all(word in name for word in words):
+            if is_failed(record) and diagnosis.matches(record.get("title"), args.title):
                 failed.append((service, record))
 
     if not failed:

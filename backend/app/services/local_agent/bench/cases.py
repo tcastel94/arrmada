@@ -418,7 +418,9 @@ CASES: tuple[Case, ...] = (
         "diagnostic",
         "Indexeurs désactivés, aucune release trouvée",
         "Le dernier épisode de Tulsa King n'arrive pas, tu peux regarder pourquoi ?",
-        Expect(calls=(Call("get_indexer_status"),), say=("indexeur",)),
+        # L'état des indexeurs est joint par le code à un historique vide : le
+        # modèle n'a pas forcément à appeler get_indexer_status lui-même.
+        Expect(calls=(Call("get_history|get_indexer_status"),), say=("indexeur",)),
         scenario="indexers_down",
     ),
     one(
@@ -431,6 +433,61 @@ CASES: tuple[Case, ...] = (
             say=(r"incomplet|not.complete|article|manquant|abandon|aborted|complete",),
         ),
         scenario="failed_history",
+    ),
+    one(
+        "D06",
+        "diagnostic",
+        "Fausse release : un exécutable à la place de la vidéo",
+        "Tulsa King S03E08 est à 100 % mais ne s'importe pas, pourquoi ?",
+        Expect(calls=(Call("get_queue"),), say=(r"execut|\.exe|faux|piege",)),
+        scenario="fake_exe",
+    ),
+    one(
+        "D07",
+        "diagnostic",
+        "Import refusé : le fichier présent est déjà meilleur",
+        "Pourquoi Oppenheimer reste bloqué dans la file ?",
+        Expect(calls=(Call("get_queue"),), say=(r"qualite|meilleur|deja present|superieur",)),
+        scenario="not_upgrade",
+    ),
+    one(
+        "D08",
+        "diagnostic",
+        "Archive protégée par mot de passe",
+        "Pourquoi l'épisode 4 de la saison 2 de Fallout a échoué ?",
+        Expect(calls=(Call("get_queue"),), say=("mot de passe",)),
+        scenario="password",
+    ),
+    one(
+        "D09",
+        "diagnostic",
+        "Contenu qui ne correspond pas à l'épisode : import manuel",
+        "Slow Horses S05E03 est téléchargé mais pas importé, tu vois pourquoi ?",
+        Expect(calls=(Call("get_queue"),), say=(r"import manuel|rattacher|correspond",)),
+        scenario="manual_import",
+    ),
+    Case(
+        "D10",
+        "diagnostic",
+        "Diagnostic, puis action seulement quand l'utilisateur la demande",
+        (
+            Turn(
+                "Pourquoi Dune 2 ne se télécharge pas ?",
+                Expect(calls=(Call("get_queue"),), say=(r"source|partage|pair|bloque",)),
+            ),
+            Turn(
+                "D'accord, lance une nouvelle recherche pour ce film.",
+                Expect(write=Call("trigger_search", {"type": "movie", "id": 693134})),
+            ),
+        ),
+        scenario="stalled",
+    ),
+    one(
+        "D11",
+        "diagnostic",
+        "Fausse alerte : le film est déjà là, il n'y a rien à télécharger",
+        "Pourquoi Oppenheimer ne se télécharge pas ?",
+        Expect(calls=(Call("get_queue"),), say=(r"deja|rien a telecharger",)),
     ),
     one(
         "D05",
