@@ -312,3 +312,21 @@ async def test_audit_endpoint(client: AsyncClient, auth_headers: dict, audit_fil
     entry = body["entries"][0]
     assert entry["kind"] == "request" and entry["conversation"] == "abc"
     assert len(entry["text"]) < 2200  # tronqué
+
+
+async def test_malformed_model_answer_is_retried_once(
+    client: AsyncClient, auth_headers: dict, monkeypatch: pytest.MonkeyPatch, audit_file
+) -> None:
+    """HTTP 500 d'Ollama (appel d'outil mal formé par le modèle) : une seconde tentative."""
+    broken = ollama.OllamaError("Ollama a refusé l'appel (HTTP 500)", retryable=True)
+    use_model(monkeypatch, broken, says("Rien de prévu cette semaine."))
+
+    response = await client.post(
+        "/api/local-agent/chat", json={"message": "Quoi de neuf ?"}, headers=auth_headers
+    )
+    events = sse_events(response.text)
+
+    assert [data for name, data in events if name == "done"] == [
+        {"ok": True, "stop_reason": "end_turn"}
+    ]
+    assert not [name for name, _ in events if name == "error"]

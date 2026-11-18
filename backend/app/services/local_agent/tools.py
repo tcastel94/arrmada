@@ -99,7 +99,7 @@ class HistoryArgs(_Args):
     only_failures: bool = Field(
         default=False, description="true : seulement les téléchargements échoués ou ignorés."
     )
-    limit: int = Field(default=15, ge=1, le=30, description="Nombre maximal d'événements.")
+    limit: int = Field(default=15, ge=1, le=30, description="Nombre d'événements, de 1 à 30.")
 
 
 class CalendarArgs(_Args):
@@ -114,7 +114,7 @@ class CalendarArgs(_Args):
 
 class MissingArgs(_Args):
     type: MediaType = Field(default="all", description="series, movie, ou all pour les deux.")
-    limit: int = Field(default=20, ge=1, le=50, description="Nombre maximal de titres listés.")
+    limit: int = Field(default=20, ge=1, le=50, description="Nombre de titres listés, de 1 à 50.")
 
 
 # ══════════════════════════════════════════════════════════════
@@ -168,7 +168,6 @@ async def _search_title(kind: Literal["series", "movie"], args: TitleSearchArgs)
     plutôt que laissée au jugement d'un petit modèle.
     """
     service_type = "sonarr" if kind == "series" else "radarr"
-    label = "série" if kind == "series" else "film"
     services = await _services(service_type)
     if not services:
         return {"error": f"Aucun {service_type.capitalize()} actif dans ArrMada."}
@@ -180,6 +179,18 @@ async def _search_title(kind: Literal["series", "movie"], args: TitleSearchArgs)
         )
     build = _series_candidate if kind == "series" else _movie_candidate
     candidates = [build(item) for item in found or [] if isinstance(item, dict)]
+    return rank_candidates(kind, args, candidates)
+
+
+def rank_candidates(
+    kind: Literal["series", "movie"], args: TitleSearchArgs, candidates: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Classe les titres trouvés : un seul bon candidat, plusieurs, ou aucun d'identique.
+
+    Fonction sans appel réseau, partagée avec le banc de test : la règle
+    « ambiguïté = question » est la même en production et dans les essais.
+    """
+    label = "série" if kind == "series" else "film"
     if args.year:
         same_year = [c for c in candidates if c.get("year") == args.year]
         candidates = same_year or candidates
@@ -303,6 +314,14 @@ async def get_queue(_: NoArgs) -> dict[str, Any]:
 # ══════════════════════════════════════════════════════════════
 
 _FAILURE_EVENTS = {"downloadfailed", "downloadignored"}
+NO_HISTORY_NOTE = "Aucun événement ne correspond dans l'historique récent."
+# Un titre sans aucune trace dans l'historique n'a jamais été « attrapé » : la
+# cause est en amont (recherche), donc du côté des indexeurs. On le dit au
+# modèle plutôt que d'espérer qu'il fasse le lien tout seul.
+NO_HISTORY_FOR_TITLE_NOTE = (
+    "Aucun événement pour ce titre : aucune release n'a été récupérée récemment. "
+    "Appelle get_indexer_status pour vérifier que les indexeurs répondent."
+)
 
 
 def _records(payload: Any) -> list[dict[str, Any]]:
@@ -382,7 +401,7 @@ async def get_history(args: HistoryArgs) -> dict[str, Any]:
     if errors:
         result["errors"] = errors
     if not events and not errors:
-        result["note"] = "Aucun événement ne correspond dans l'historique récent."
+        result["note"] = NO_HISTORY_FOR_TITLE_NOTE if words else NO_HISTORY_NOTE
     return result
 
 
@@ -633,6 +652,9 @@ class Tool:
     description: str  # lue par le modèle pour choisir l'outil
     args: type[BaseModel]
     handler: Callable[[Any], Awaitable[Any]]
+    # True : l'outil modifie quelque chose. Aucun dans TOOLS pour l'instant ;
+    # le banc de test en ajoute de faux pour mesurer le comportement du modèle.
+    write: bool = False
 
 
 TOOLS: tuple[Tool, ...] = (
@@ -717,6 +739,11 @@ def resolve(name: str) -> Tool | None:
     return None
 
 
+def writes_exposed() -> bool:
+    """Des outils d'écriture sont-ils proposés au modèle ? (choix de la consigne)"""
+    return any(tool.write for tool in TOOLS)
+
+
 def label_of(name: str) -> str:
     tool = resolve(name)
     return tool.label if tool else name
@@ -760,6 +787,14 @@ def _serialise(result: Any, redactor: Redactor) -> str:
     return text
 
 
+# Ajouté à tout appel rejeté. Sans cette phrase, un petit modèle « comble le
+# vide » : vu au banc de test, il a inventé une liste d'épisodes après un rejet.
+_REJECTED = (
+    "APPEL REJETÉ : rien n'a été exécuté et tu n'as reçu AUCUNE donnée. Corrige l'appel et "
+    "recommence, ou dis à l'utilisateur que tu n'as pas pu obtenir l'information. N'invente rien."
+)
+
+
 async def execute(name: str, raw_arguments: Any, redactor: Redactor) -> ToolOutcome:
     """Valide le « bon de commande » puis l'exécute. Ne lève jamais d'exception.
 
@@ -775,15 +810,21 @@ async def execute(name: str, raw_arguments: Any, redactor: Redactor) -> ToolOutc
     if tool is None:
         known = ", ".join(t.name for t in TOOLS)
         return ToolOutcome(
-            f"Outil inconnu : {name!r}. Seuls ces outils existent : {known}.", True, True, 0
+            f"Outil inconnu : {name!r}. Seuls ces outils existent : {known}. {_REJECTED}",
+            True,
+            True,
+            0,
         )
     if not isinstance(raw_arguments, dict):
         return ToolOutcome(
-            f"Arguments illisibles pour {tool.name} : un objet JSON est attendu.", True, True, 0
+            f"Arguments illisibles pour {tool.name} : un objet JSON est attendu. {_REJECTED}",
+            True,
+            True,
+            0,
         )
     args = copilot_tools.parse_args(tool, raw_arguments)  # type: ignore[arg-type]
     if isinstance(args, str):
-        return ToolOutcome(args, True, True, 0)
+        return ToolOutcome(f"{args}. {_REJECTED}", True, True, 0)
 
     started = time.monotonic()
 

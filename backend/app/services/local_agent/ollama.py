@@ -37,7 +37,16 @@ TEMPERATURE = 0.1
 
 
 class OllamaError(Exception):
-    """Ollama injoignable, modèle absent, ou réponse illisible. Message lisible tel quel."""
+    """Ollama injoignable, modèle absent, ou réponse illisible. Message lisible tel quel.
+
+    ``retryable`` : l'erreur vient d'une réponse ratée du modèle (HTTP 5xx), pas
+    d'une panne. Vu au banc : un appel d'outil mal formé par le modèle fait
+    répondre 500 à Ollama ; la même demande, renvoyée, passe.
+    """
+
+    def __init__(self, message: str, *, retryable: bool = False) -> None:
+        super().__init__(message)
+        self.retryable = retryable
 
 
 @dataclass
@@ -117,7 +126,8 @@ async def chat_stream(
                 except ValueError:
                     detail = body
                 raise OllamaError(
-                    f"Ollama a refusé l'appel (HTTP {response.status_code}) : {detail[:300]}"
+                    f"Ollama a refusé l'appel (HTTP {response.status_code}) : {detail[:300]}",
+                    retryable=response.status_code >= 500,
                 )
             async for line in response.aiter_lines():
                 if not line.strip():
