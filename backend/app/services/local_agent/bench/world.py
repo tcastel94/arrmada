@@ -218,6 +218,16 @@ def lookup(catalog: list[dict[str, Any]], query: str) -> list[dict[str, Any]]:
 # ══════════════════════════════════════════════════════════════
 
 
+# Profils de qualité du faux monde : les mêmes familles que sur un vrai Radarr.
+PROFILES = (
+    "HD-1080p",
+    "Ultra-HD",
+    "HD - 720p/1080p",
+    "Ultra-HD Cinema Remux",
+    "Ultra-HD Cinema & Auto-Upgrade",
+)
+
+
 def _base() -> dict[str, Any]:
     return {
         "series": copy.deepcopy(list(SERIES)),
@@ -656,7 +666,7 @@ class World:
     # affirmer, qu'aucune écriture n'est exécutée sans confirmation.
 
     def _plan(self, tool: str, summary: str, done: str, **target: Any) -> Plan:
-        record = {"tool": tool, **target}
+        record = {"tool": tool, "summary": summary, **target}
         self.proposals.append(record)
 
         async def run() -> str:
@@ -684,6 +694,19 @@ class World:
             return None, Plan(False, {"status": "aucune_proposition", **ranked})
         return match, Plan(False)
 
+    def _profile(self, quality: str, label: str) -> tuple[dict[str, str], Plan | None]:
+        """Profil demandé : ({quality_profile: nom} ou {}, plan vide si la demande est floue)."""
+        if not quality.strip():
+            return {}, None
+        chosen, choices = tools.pick_profile(list(PROFILES), quality)
+        if chosen is None:
+            return {}, write_tools.several_profiles(quality, choices, label)
+        return {"quality_profile": chosen}, None
+
+    async def get_quality_profiles(self, _: tools.ProfilesArgs) -> dict[str, Any]:
+        listing = {"profiles": list(PROFILES), "default": PROFILES[-1]}
+        return {"radarr": listing, "sonarr": listing, "note": "Cite ces profils et demande lequel."}
+
     async def add_series(self, args: write_tools.AddSeriesArgs) -> Plan:
         match, empty = self._single("series", args.title, args.year)
         if match is None:
@@ -691,6 +714,9 @@ class World:
         label = f"{match['title']} ({match['year']})"
         if match["in_library"]:
             return write_tools.already(label, "series")
+        profile, unclear = self._profile(args.quality, label)
+        if unclear is not None:
+            return unclear
         monitor = write_tools.MONITOR[args.monitor][1]
         return self._plan(
             "add_series",
@@ -698,6 +724,7 @@ class World:
             f"{label} ajoutée à Sonarr ({monitor}), recherche des épisodes lancée.",
             tvdb_id=match["tvdb_id"],
             monitor=args.monitor,
+            **profile,
         )
 
     async def add_movie(self, args: write_tools.AddMovieArgs) -> Plan:
@@ -707,11 +734,15 @@ class World:
         label = f"{match['title']} ({match['year']})"
         if match["in_library"]:
             return write_tools.already(label, "movie")
+        profile, unclear = self._profile(args.quality, label)
+        if unclear is not None:
+            return unclear
         return self._plan(
             "add_movie",
             f"Ajouter le film {label} à Radarr et le chercher",
             f"{label} ajouté à Radarr, recherche lancée.",
             tmdb_id=match["tmdb_id"],
+            **profile,
         )
 
     async def trigger_search(self, args: write_tools.TriggerSearchArgs) -> Plan:
@@ -818,7 +849,7 @@ class World:
     # ── La liste d'outils vue par le modèle pendant le banc ──
 
     def tools(self) -> tuple[Tool, ...]:
-        """Les 12 outils de la production, avec ce faux monde derrière chacun."""
+        """Les outils de la production, avec ce faux monde derrière chacun."""
         return tuple(
             dataclasses.replace(tool, handler=getattr(self, tool.name))
             for tool in (*tools.READ_TOOLS, *write_tools.WRITE_TOOLS)

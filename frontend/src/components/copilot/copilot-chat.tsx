@@ -319,6 +319,11 @@ function Conversation({
         void sendCopilotMessage(text);
     };
 
+    // IA locale : pendant qu'une carte attend, on peut écrire autre chose (la carte est alors abandonnée).
+    const lastMessage = messages[messages.length - 1];
+    const cardPending =
+        !!local && !!lastMessage && lastMessage.parts.some((part) => part.kind === "action" && part.action.state === "pending");
+
     return (
         <div className="flex flex-col gap-6">
             {messages.length === 0 ? (
@@ -330,7 +335,7 @@ function Conversation({
                     ))}
                 </ol>
             )}
-            <Composer busy={busy} onSend={send} />
+            <Composer busy={busy} cardPending={cardPending} onSend={send} />
             <div ref={endRef} aria-hidden />
         </div>
     );
@@ -469,7 +474,11 @@ function Answer({ message }: { message: CopilotMessage }) {
                 </p>
             )}
             {message.state === "stopped" && (
-                <p className="text-[13px] text-muted-foreground">Réponse interrompue. L&apos;agent ne garde pas ce tour en mémoire.</p>
+                <p className="text-[13px] text-muted-foreground">
+                    {message.parts.some((part) => part.kind === "action" && part.action.state === "expired")
+                        ? "Proposition abandonnée : rien n'a été fait."
+                        : "Réponse interrompue. L'agent ne garde pas ce tour en mémoire."}
+                </p>
             )}
             {message.usage && !streaming && <UsageLine usage={message.usage} />}
         </div>
@@ -634,7 +643,7 @@ function UsageLine({ usage }: { usage: CopilotUsage }) {
 
 /* ── Saisie ─────────────────────────────────────────────────── */
 
-function Composer({ busy, onSend }: { busy: boolean; onSend: (text: string) => void }) {
+function Composer({ busy, cardPending = false, onSend }: { busy: boolean; cardPending?: boolean; onSend: (text: string) => void }) {
     const [value, setValue] = useState("");
     const ref = useRef<HTMLTextAreaElement>(null);
 
@@ -648,7 +657,7 @@ function Composer({ busy, onSend }: { busy: boolean; onSend: (text: string) => v
 
     const submit = (event?: FormEvent) => {
         event?.preventDefault();
-        if (busy || !value.trim()) return;
+        if ((busy && !cardPending) || !value.trim()) return;
         onSend(value);
         setValue("");
     };
@@ -677,11 +686,11 @@ function Composer({ busy, onSend }: { busy: boolean; onSend: (text: string) => v
                     onKeyDown={onKeyDown}
                     rows={1}
                     maxLength={8000}
-                    placeholder="Décris le problème ou ce qu'il faut faire…"
+                    placeholder={cardPending ? "Valide, annule, ou écris ce que tu veux à la place…" : "Décris le problème ou ce qu'il faut faire…"}
                     aria-label="Ta demande pour l'agent"
                     className="min-h-10 flex-1 resize-none bg-transparent py-2 text-base leading-snug placeholder:text-muted-foreground/80 focus:outline-none md:text-[15px]"
                 />
-                {busy ? (
+                {busy && !(cardPending && value.trim()) ? (
                     <Button type="button" size="icon" variant="secondary" onClick={stopCopilot} aria-label="Arrêter la réponse">
                         <Square className="fill-current" />
                     </Button>

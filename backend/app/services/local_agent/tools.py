@@ -2,7 +2,7 @@
 
 @author : Jeff Pomponne <jpomponne@gmail.com>
 
-Ce que le modèle peut demander tient dans ``exposed()`` : les 8 outils de
+Ce que le modèle peut demander tient dans ``exposed()`` : les 9 outils de
 LECTURE de ce fichier (``READ_TOOLS``) et les 8 outils d'ACTION de
 ``write_tools.py``, et rien d'autre. Ce qui n'y est pas n'existe pas pour lui :
 aucune suppression en masse, aucun effacement de fichier isolé, aucune
@@ -43,6 +43,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from app.config import settings
+from app.services import request_service
 from app.services.copilot import tools as copilot_tools
 from app.services.copilot.redaction import Redactor
 from app.services.copilot.tools.args import NoArgs, _Args
@@ -696,6 +697,94 @@ async def get_disk_space(_: NoArgs) -> dict[str, Any]:
 
 
 # ══════════════════════════════════════════════════════════════
+# Profils de qualité : les lister, et en retrouver UN d'après une demande
+# ══════════════════════════════════════════════════════════════
+#
+# Un profil de qualité est un réglage de Radarr / Sonarr (« HD-1080p »,
+# « Ultra-HD »…) : il dit quelles qualités sont acceptées pour un titre.
+# L'agent peut en CHOISIR un existant au moment d'un ajout. Il ne peut ni en
+# créer, ni en modifier : aucun outil ne le fait.
+
+
+class ProfilesArgs(_Args):
+    type: Literal["movie", "series", "all"] = Field(
+        default="all", description="movie (Radarr), series (Sonarr), ou all pour les deux."
+    )
+
+
+# Façons courantes de dire la même chose : « 4K », « UHD », « 2160p » → « ultra ».
+_QUALITY_WORDS = {
+    "uhd": "ultra",
+    "4k": "ultra",
+    "2160p": "ultra",
+    "2160": "ultra",
+    "ultrahd": "ultra",
+    "1080": "1080p",
+    "fullhd": "1080p",
+    "fhd": "1080p",
+    "720": "720p",
+}
+# Mots qui ne désignent pas un profil, même s'ils figurent dans un nom de profil.
+_PROFILE_NOISE = {"film", "films", "serie", "series", "profil", "qualite", "the", "de", "d", "en"}
+
+
+def profile_words(text: Any) -> set[str]:
+    """Mots utiles d'un nom de profil ou d'une demande (« en 4K » → {ultra})."""
+    words = {_QUALITY_WORDS.get(word, word) for word in diagnosis.tokens(text)}
+    return words - _PROFILE_NOISE
+
+
+def pick_profile(names: list[str], wanted: str) -> tuple[str | None, list[str]]:
+    """LE profil désigné par ``wanted``, ou ``None`` avec les profils à proposer.
+
+    Même règle que pour les titres : un seul candidat ou rien. « remux » désigne
+    un profil ; « 4K » en désigne trois chez toi : on ne choisit pas, on demande.
+    Un nom recopié à l'identique l'emporte toujours (« Ultra-HD » ne se
+    confond pas avec « Ultra-HD Cinema… »).
+    """
+    spelled = " ".join(diagnosis.tokens(wanted))
+    exact = [name for name in names if " ".join(diagnosis.tokens(name)) == spelled]
+    if len(exact) == 1:
+        return exact[0], []
+    known = set().union(*(profile_words(name) for name in names)) if names else set()
+    asked = profile_words(wanted) & known
+    if not asked:
+        return None, names
+    candidates = [name for name in names if asked <= profile_words(name)]
+    if len(candidates) == 1:
+        return candidates[0], []
+    return None, candidates or names
+
+
+def default_profile(profiles: list[dict[str, Any]]) -> str:
+    """Nom du profil utilisé quand rien n'est demandé (même règle que l'interface)."""
+    chosen = request_service._resolve_quality_profile_id(profiles, None)
+    return next((str(p.get("name")) for p in profiles if p.get("id") == chosen), "?")
+
+
+async def get_quality_profiles(args: ProfilesArgs) -> dict[str, Any]:
+    wanted = {"movie": ("radarr",), "series": ("sonarr",)}.get(args.type, ("radarr", "sonarr"))
+    result: dict[str, Any] = {}
+    for service in await _services(*wanted):
+        try:
+            async with _client(service) as client:
+                profiles = await client.get_quality_profiles()
+        except Exception as exc:  # noqa: BLE001 : un *arr en panne n'empêche pas l'autre
+            result[service.type] = {"error": _error(exc)}
+            continue
+        result[service.type] = {
+            "profiles": [str(p.get("name")) for p in profiles or []],
+            "default": default_profile(profiles or []),
+        }
+    return {
+        **result,
+        "note": "Cite ces profils (radarr = films, sonarr = séries) et celui par défaut. Pour "
+        "un ajout, l'utilisateur en choisit UN : rappelle alors l'outil d'ajout avec son titre "
+        "et ce profil dans « quality ». Tu ne peux ni créer ni modifier un profil.",
+    }
+
+
+# ══════════════════════════════════════════════════════════════
 # Registre : LA liste blanche
 # ══════════════════════════════════════════════════════════════
 
@@ -794,6 +883,15 @@ READ_TOOLS: tuple[Tool, ...] = (
         NoArgs,
         get_disk_space,
         diagnostic=True,
+    ),
+    Tool(
+        "get_quality_profiles",
+        "Profils de qualité",
+        "Liste les profils de qualité existants de Radarr (films) et de Sonarr (séries), et "
+        "celui utilisé par défaut. À appeler quand l'utilisateur veut CHOISIR la qualité d'un "
+        "ajout sans dire laquelle, ou pour « quels profils de qualité j'ai ».",
+        ProfilesArgs,
+        get_quality_profiles,
     ),
 )
 

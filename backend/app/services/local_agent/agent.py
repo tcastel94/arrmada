@@ -29,7 +29,9 @@ Garde-fous de la boucle :
   appelé d'outil d'action, aucun bouton n'existe. Le code le lui signale une
   fois et le laisse se corriger (voir ``PHANTOM_CONFIRMATION``) ;
 - un tour qui échoue est retiré en entier de l'historique : la conversation
-  reste dans son dernier état sain.
+  reste dans son dernier état sain. Seule exception : un tour interrompu alors
+  qu'une carte attendait une réponse laisse deux lignes (la demande, et « j'ai
+  proposé ceci, rien n'a été fait »), pour que « plutôt en 4K » ait un sens.
 
 Les événements émis ont les mêmes noms que ceux de l'agent Claude
 (``text``, ``tool_start``, ``tool_end``, ``notice``, ``error``, ``usage``,
@@ -103,6 +105,13 @@ NO_ACTION_DURING_DIAGNOSTIC = (
     "REFUSÉ : pas d'action pendant un diagnostic. Rien n'est proposé à l'utilisateur. "
     "Termine ton enquête avec les outils de lecture, explique la cause, puis suggère "
     "l'action en une phrase : l'utilisateur la demandera s'il la veut."
+)
+
+# Trace laissée dans l'historique quand une carte est abandonnée sans réponse
+# (bouton Arrêter, ou nouveau message tapé pendant qu'elle attendait).
+ABANDONED_PROPOSAL = (
+    "J'ai proposé : {summary}. Tu n'as pas validé : rien n'a été fait. Si tu veux autre "
+    "chose pour ce titre, dis-le et je refais une proposition."
 )
 
 # Remplacé par les tests (faux modèle qui rejoue un scénario).
@@ -305,6 +314,8 @@ async def _run_action(
         yield outcome(
             {
                 "done": False,
+                # Ce qui était proposé reste dans l'historique : « plutôt en 4K » a un sens.
+                "proposed": plan.summary,
                 "reason": f"Rien n'a été fait. Réponds seulement : « {said} : rien n'a été "
                 "fait. » N'ajoute rien et ne rappelle pas l'outil.",
             }
@@ -363,6 +374,7 @@ async def run_turn(
     button_corrected = False
     diagnostic_called = False  # historique, indexeurs ou disque consultés pendant ce tour
     server_retries = 0
+    pending_summary: str | None = None  # carte affichée, réponse de l'utilisateur attendue
     prompt_tokens = 0
     output_tokens = 0
     wrote_text = False
@@ -530,6 +542,12 @@ async def run_turn(
                             else:
                                 if item[0] == "confirm" and called.destructive:
                                     destructive_cards += 1
+                                if item[0] == "confirm" and not item[1].get("auto"):
+                                    pending_summary = str(item[1].get("summary") or "")
+                                    conversation.waiting_for_user = True
+                                elif item[0] == "confirm_result":
+                                    pending_summary = None
+                                    conversation.waiting_for_user = False
                                 yield item
                 else:
                     outcome = await tools.execute(call["name"], call["arguments"], redactor)
@@ -591,7 +609,15 @@ async def run_turn(
             )
         yield ("done", {"ok": completed, "stop_reason": "end_turn" if completed else None})
     finally:
+        conversation.waiting_for_user = False
         if not completed:
             # Échec ou interruption (navigateur parti, bouton Arrêter) : le tour
             # entier est retiré, la conversation reste dans son dernier état sain.
             del messages[start_length:]
+            if pending_summary:
+                # Interrompu devant une carte : on garde de quoi comprendre la suite
+                # (« laisse-moi choisir la qualité » parle de CE titre).
+                note = ABANDONED_PROPOSAL.format(summary=pending_summary)
+                messages.append({"role": "user", "content": user_text})
+                messages.append({"role": "assistant", "content": note})
+                audit.record("confirmation", conversation.id, approved=False, abandoned=True)

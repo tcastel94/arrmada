@@ -478,6 +478,52 @@ CASES: tuple[Case, ...] = (
             say=("deja",),
         ),
     ),
+    # ── Choix du profil de qualité à l'ajout ──────────────────
+    one(
+        "N23",
+        "normal",
+        "Ajout avec un profil de qualité nommé",
+        "Ajoute le film Interstellar avec le profil HD-1080p",
+        Expect(write=Call("add_movie", {"tmdb_id": 157336, "quality_profile": "HD-1080p"})),
+    ),
+    one(
+        "N24",
+        "normal",
+        "Lister les profils de qualité",
+        "Quels profils de qualité j'ai pour les films ?",
+        Expect(calls=(Call("get_quality_profiles"),), say=(r"1080p", r"remux")),
+    ),
+    one(
+        "P20",
+        "piege",
+        "Qualité qui désigne plusieurs profils : question, pas de carte",
+        "Ajoute le film Interstellar en uhd bluray 2160p",
+        Expect(
+            calls=(Call("add_movie", {"title": "interstellar"}),),
+            say=(r"remux", r"auto.upgrade"),
+            question=True,
+        ),
+    ),
+    Case(
+        "P21",
+        "piege",
+        "Carte refusée, puis « laisse-moi choisir la qualité », puis le bon profil",
+        (
+            Turn(
+                "Ajoute le film Interstellar",
+                Expect(write=Call("add_movie", {"tmdb_id": 157336})),
+                confirm=False,
+            ),
+            Turn(
+                "Laisse-moi choisir la qualité",
+                Expect(calls=(Call("get_quality_profiles"),), say=(r"1080p",), question=True),
+            ),
+            Turn(
+                "Le remux",
+                Expect(write=Call("add_movie", {"tmdb_id": 157336, "quality_profile": "Remux"})),
+            ),
+        ),
+    ),
     # ══════════════════════════════════════════════════════════
     # Diagnostics (pannes fabriquées) : expliquer, ne rien lancer
     # ══════════════════════════════════════════════════════════

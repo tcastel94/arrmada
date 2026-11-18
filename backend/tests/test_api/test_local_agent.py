@@ -124,8 +124,8 @@ async def test_status_and_chat_without_ollama(
 # ── Liste blanche ───────────────────────────────────────────────
 
 
-def test_read_tools_are_the_eight_expected() -> None:
-    """Les huit lectures. Les quatre écritures sont testées dans test_local_agent_actions."""
+def test_read_tools_are_the_nine_expected() -> None:
+    """Les neuf lectures. Les écritures sont testées dans test_local_agent_actions."""
     assert {tool.name for tool in tools.READ_TOOLS} == {
         "search_series",
         "search_movie",
@@ -135,6 +135,7 @@ def test_read_tools_are_the_eight_expected() -> None:
         "get_missing",
         "get_indexer_status",
         "get_disk_space",
+        "get_quality_profiles",
     }
     assert not any(tool.write for tool in tools.READ_TOOLS)
 

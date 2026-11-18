@@ -37,6 +37,7 @@ READ_TOOLS = {
     "get_missing",
     "get_indexer_status",
     "get_disk_space",
+    "get_quality_profiles",
 }
 WRITE_TOOLS = {
     "add_series",
@@ -95,14 +96,16 @@ def of(events: Events, name: str) -> list[dict[str, Any]]:
 # ── Liste blanche ───────────────────────────────────────────────
 
 
-def test_whitelist_is_exactly_sixteen_tools(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_whitelist_is_exactly_seventeen_tools(monkeypatch: pytest.MonkeyPatch) -> None:
     names = {tool.name for tool in tools.exposed()}
     assert names == READ_TOOLS | WRITE_TOOLS
     assert {tool.name for tool in tools.exposed() if tool.write} == WRITE_TOOLS
     # Un seul outil irréversible, et rien qui touche aux profils ou aux indexeurs.
     assert [tool.name for tool in tools.exposed() if tool.destructive] == ["delete_media"]
     forbidden = ("profile", "indexer_", "update", "edit", "pause", "delete_all", "purge")
-    assert not [n for n in names - {"get_indexer_status"} if any(w in n for w in forbidden)]
+    # Deux lectures seulement portent ces mots : elles listent, elles ne modifient rien.
+    readers = {"get_indexer_status", "get_quality_profiles"}
+    assert not [n for n in names - readers if any(w in n for w in forbidden)]
 
     # Interrupteur de la suppression seule…
     monkeypatch.setattr(settings, "LOCAL_AGENT_DELETE_TOOL", False)
@@ -114,12 +117,16 @@ def test_whitelist_is_exactly_sixteen_tools(monkeypatch: pytest.MonkeyPatch) -> 
     assert tools.resolve("add_movie") is None
 
 
-def test_write_tool_never_takes_an_identifier_or_a_profile() -> None:
-    """Le modèle donne un titre : ni identifiant, ni profil, ni dossier, ni indexeur, et
-    aucun paramètre qui permettrait de viser plusieurs titres."""
+def test_write_tool_never_takes_an_identifier() -> None:
+    """Le modèle donne un titre : ni identifiant, ni dossier, ni indexeur, et aucun paramètre
+    qui permettrait de viser plusieurs titres. La qualité est un texte libre, réservé aux
+    deux outils d'ajout : c'est le code qui retrouve le profil existant."""
     for tool in write_tools.WRITE_TOOLS:
         fields = set(tool.args.model_fields)
-        assert fields <= {"title", "year", "monitor", "type", "season"}, tool.name
+        allowed = {"title", "year", "monitor", "type", "season"}
+        if tool.name in ("add_movie", "add_series"):
+            allowed |= {"quality"}
+        assert fields <= allowed, tool.name
     assert set(write_tools.DeleteMediaArgs.model_fields) == {"type", "title", "year"}
 
 
@@ -469,6 +476,179 @@ def test_removal_calls_are_counted() -> None:
     assert source.count(".delete_series(") == 1  # delete_media, une série
     for banned in (".delete(", ".put(", ".pause(", "delete_files=False"):
         assert banned not in source, banned
+
+
+# ── Choix du profil de qualité à l'ajout ────────────────────────
+
+PROFILES = [
+    {"id": 4, "name": "HD-1080p"},
+    {"id": 5, "name": "Ultra-HD"},
+    {"id": 6, "name": "HD - 720p/1080p"},
+    {"id": 7, "name": "Marvel"},
+    {"id": 8, "name": "👑 Ultra-HD Cinema & Auto-Upgrade"},
+    {"id": 9, "name": "👑 Ultra-HD Cinema Remux (films d'exception)"},
+]
+NAMES = [profile["name"] for profile in PROFILES]
+
+
+def _several_profiles(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.services.radarr import RadarrClient
+
+    async def profiles(self: Any) -> list[dict[str, Any]]:
+        return PROFILES
+
+    monkeypatch.setattr(RadarrClient, "get_quality_profiles", profiles)
+
+
+@pytest.mark.parametrize(
+    ("wanted", "chosen"),
+    [
+        ("HD-1080p", "HD-1080p"),
+        ("hd 1080p", "HD-1080p"),
+        ("Ultra-HD", "Ultra-HD"),  # nom exact : ne se confond pas avec les « Cinema »
+        ("remux", "👑 Ultra-HD Cinema Remux (films d'exception)"),
+        ("4K remux", "👑 Ultra-HD Cinema Remux (films d'exception)"),
+        ("Ultra-HD Cinema & Auto-Upgrade", "👑 Ultra-HD Cinema & Auto-Upgrade"),
+        ("marvel", "Marvel"),
+    ],
+)
+def test_pick_profile_finds_the_single_match(wanted: str, chosen: str) -> None:
+    assert tools.pick_profile(NAMES, wanted) == (chosen, [])
+
+
+@pytest.mark.parametrize(
+    ("wanted", "count"),
+    [
+        ("uhd bluray 2160p", 3),  # trois profils 4K : on demande
+        ("4K", 3),
+        ("1080p", 2),
+        ("cinema", 2),
+        ("la meilleure", 6),  # aucun mot connu : tous les profils sont proposés
+        ("", 6),
+    ],
+)
+def test_pick_profile_never_guesses(wanted: str, count: int) -> None:
+    chosen, choices = tools.pick_profile(NAMES, wanted)
+    assert chosen is None and len(choices) == count
+
+
+async def test_add_movie_with_a_named_profile(
+    arr_stack: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _several_profiles(monkeypatch)
+    use_model(
+        monkeypatch,
+        calls("add_movie", title="Interstellar", quality="hd-1080p"),
+        says("Interstellar (2014) est ajouté avec le profil HD-1080p."),
+    )
+
+    async def approve(card: dict[str, Any]) -> bool:
+        assert "Profil de qualité : HD-1080p (à ta demande)" in card["details"]
+        return True
+
+    events = await turn("Ajoute le film Interstellar en HD-1080p", confirmer=approve)
+
+    assert of(events, "action_result")[0]["ok"] is True
+    (post,) = writes()
+    assert post[2]["tmdbId"] == 157336 and post[2]["qualityProfileId"] == 4
+
+
+async def test_add_movie_without_quality_keeps_the_default_profile(
+    arr_stack: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _several_profiles(monkeypatch)
+    use_model(monkeypatch, calls("add_movie", title="Interstellar"), says("Ajouté."))
+
+    events = await turn("Ajoute le film Interstellar", confirmer=yes)
+
+    details = of(events, "confirm")[0]["details"]
+    assert "Profil de qualité : 👑 Ultra-HD Cinema & Auto-Upgrade (par défaut)" in details
+    assert writes()[0][2]["qualityProfileId"] == 8
+
+
+async def test_unclear_quality_gets_no_card_and_lists_the_profiles(
+    arr_stack: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """« UHD bluray 2160p » désigne trois profils : rien n'est proposé, le modèle les cite."""
+    _several_profiles(monkeypatch)
+    model = use_model(
+        monkeypatch,
+        calls("add_movie", title="Interstellar", quality="uhd bluray 2160p"),
+        says("Trois profils 4K existent : lequel veux-tu ?"),
+    )
+
+    events = await turn("Ajoute le film Interstellar en uhd bluray 2160p", confirmer=yes)
+
+    assert of(events, "confirm") == [] and writes() == []
+    outcome = json.loads(model.requests[1][-1]["content"])
+    assert outcome["status"] == "aucune_proposition"
+    assert outcome["quality_profiles"] == [NAMES[1], NAMES[4], NAMES[5]]
+
+
+async def test_quality_profiles_are_listed_read_only(
+    arr_stack: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _several_profiles(monkeypatch)
+    model = use_model(monkeypatch, calls("get_quality_profiles", type="movie"), says("Voici."))
+
+    await turn("Quels profils de qualité j'ai pour les films ?")
+
+    listing = json.loads(model.requests[1][-1]["content"])
+    assert listing["radarr"]["profiles"] == NAMES
+    assert listing["radarr"]["default"] == "👑 Ultra-HD Cinema & Auto-Upgrade"
+    assert "sonarr" not in listing and writes() == []
+
+
+# ── Écrire autre chose pendant qu'une carte attend ──────────────
+
+
+async def test_a_new_message_replaces_a_waiting_card(
+    client: AsyncClient, arr_stack: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """La carte attend, l'utilisateur écrit autre chose : la carte est abandonnée, rien ne
+    part, et l'agent garde en mémoire ce qu'il avait proposé."""
+    _several_profiles(monkeypatch)
+    model = use_model(
+        monkeypatch,
+        calls("add_movie", title="Interstellar"),
+        calls("get_quality_profiles", type="movie"),
+        says("Tu as six profils : lequel veux-tu pour Interstellar ?"),
+    )
+
+    async def write_something_else() -> Events:
+        for _ in range(250):
+            if copilot_actions._PENDING:
+                break
+            await asyncio.sleep(0.02)
+        (conversation_id,) = conversations._conversations
+        return await ask(client, arr_stack, "laisse moi choisir la qualité", conversation_id)
+
+    first, second = await asyncio.gather(
+        ask(client, arr_stack, "ajoute le film Interstellar"), write_something_else()
+    )
+
+    assert of(first, "confirm") and of(first, "action_result") == []
+    assert writes() == [] and copilot_actions._PENDING == {}
+    assert of(second, "done") == [{"ok": True, "stop_reason": "end_turn"}]
+    # Le second tour voit la demande d'origine et la proposition abandonnée.
+    history = [m["content"] for m in model.requests[1] if m["role"] != "system"]
+    assert history[0] == "ajoute le film Interstellar"
+    assert "Interstellar (2014)" in history[1] and "rien n'a été fait" in history[1]
+    assert history[2] == "laisse moi choisir la qualité"
+
+
+async def test_a_new_message_does_not_interrupt_a_running_answer(
+    client: AsyncClient, arr_stack: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Hors attente d'une carte, un second message est toujours refusé (409)."""
+    conversation = conversations.create()
+    async with conversation.lock:
+        resp = await client.post(
+            "/api/local-agent/chat",
+            json={"message": "autre chose", "conversation_id": conversation.id},
+            headers=arr_stack,
+        )
+    assert resp.status_code == 409
 
 
 # ── Suppression d'un titre : la seule action irréversible ───────

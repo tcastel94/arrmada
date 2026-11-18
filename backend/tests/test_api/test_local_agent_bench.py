@@ -264,7 +264,13 @@ async def test_world_write_tools_return_plans_and_do_nothing() -> None:
         assert refused.answer["status"] == "aucune_proposition"
     assert ambiguous.answer["ambiguous"] is True
     assert accepted.actionable is True
-    assert world.proposals == [{"tool": "add_series", "tvdb_id": 371980, "monitor": "all"}]
+    (proposal,) = world.proposals
+    assert proposal["summary"].startswith("Ajouter la série Severance (2022)")
+    assert {k: v for k, v in proposal.items() if k != "summary"} == {
+        "tool": "add_series",
+        "tvdb_id": 371980,
+        "monitor": "all",
+    }
     # Préparer un plan n'exécute rien : il faut que la boucle appelle run().
     assert world.executed == []
     await accepted.run()

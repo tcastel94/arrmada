@@ -6,7 +6,8 @@ Mêmes routes et même flux SSE que l'agent Claude (``api/copilot.py``), sous un
 autre préfixe : l'interface de chat sert les deux, seul le préfixe change.
 
 - ``GET  /api/local-agent/status``              : configuré ? Ollama répond ? modèle installé ?
-- ``POST /api/local-agent/chat``                : un message, réponse en flux SSE ;
+- ``POST /api/local-agent/chat``                : un message, réponse en flux SSE. Envoyé
+  pendant qu'une carte attend, il abandonne cette carte (rien n'est exécuté) ;
 - ``POST /api/local-agent/actions/{id}``        : réponse de l'utilisateur à une action
   proposée (``{"approve": true|false}``). C'est le SEUL moyen de confirmer ;
 - ``DELETE /api/local-agent/conversations/{id}``: oublie une conversation ;
@@ -104,6 +105,7 @@ async def _stream(
             await queue.put(None)
 
     task = asyncio.create_task(pump())
+    conversation.task = task
     try:
         yield _sse("conversation", {"id": conversation.id, "restarted": restarted})
         while True:
@@ -140,10 +142,20 @@ async def chat(body: ChatRequest) -> StreamingResponse:
     if conversation is None:
         conversation = conversations.create()
     elif conversation.lock.locked():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Une réponse est déjà en cours pour cette conversation.",
-        )
+        # Un tour qui ATTEND le clic sur une carte est remplacé par le nouveau
+        # message : écrire autre chose vaut « non, pas ça ». La carte est
+        # abandonnée et rien n'est exécuté (l'exécution ne suit qu'un oui). Dans
+        # tout autre état (le modèle écrit, une action validée s'exécute), on
+        # ne coupe rien : le message est refusé.
+        previous = conversation.task
+        if not conversation.waiting_for_user or previous is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Une réponse est déjà en cours pour cette conversation.",
+            )
+        previous.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await previous
 
     return StreamingResponse(
         _stream(conversation, body.message.strip(), restarted=restarted, dry_run=body.dry_run),

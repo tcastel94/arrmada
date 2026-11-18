@@ -33,6 +33,11 @@ class Conversation:
     last_used_at: float = field(default_factory=time.time)
     # Un seul tour à la fois : deux réponses mêlées donneraient un historique faux.
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    # Le tour en cours (tâche asyncio), et s'il ATTEND la réponse de l'utilisateur
+    # à une carte. Dans ce seul état, un nouveau message peut le remplacer : la
+    # carte est abandonnée sans rien exécuter (voir api/local_agent.py).
+    task: asyncio.Task[None] | None = None
+    waiting_for_user: bool = False
 
 
 _conversations: dict[str, Conversation] = {}

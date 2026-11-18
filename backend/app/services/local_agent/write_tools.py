@@ -33,9 +33,14 @@ Ce qui n'est volontairement PAS ici :
 - aucun retrait d'un téléchargement qui avance : seuls ceux en échec ou
   bloqués peuvent être retirés de la file ;
 - aucun effacement de fichier isolé, aucune mise en pause ;
-- aucun choix de profil de qualité, de dossier racine ou d'indexeur : ils
-  viennent des réglages par défaut d'ArrMada, comme pour le bouton « Demander »
-  de l'interface. Le modèle ne peut donc pas les modifier.
+- aucun choix de dossier racine ou d'indexeur : ils viennent des réglages par
+  défaut d'ArrMada, comme pour le bouton « Demander » de l'interface ;
+- aucune création ni modification de profil de qualité. À l'ajout, on peut en
+  revanche CHOISIR un profil existant (« en 4K », « profil HD-1080p ») : le
+  modèle transmet les mots de l'utilisateur, c'est le code qui retrouve le
+  profil (``tools.pick_profile``), et s'il y en a plusieurs possibles ou aucun,
+  rien n'est proposé : l'agent liste les profils et demande. Le profil retenu
+  est affiché sur la carte avant validation.
 
 Un seul outil est irréversible, ``delete_media`` (supprimer UN film ou UNE
 série, fichiers compris). Il est marqué ``destructive`` : la boucle lui
@@ -100,6 +105,10 @@ def nothing(note: str, **extra: Any) -> Plan:
 
 _TITLE = "Titre donné par l'utilisateur, sans la saison ni la qualité."
 _YEAR = "Année de sortie si l'utilisateur l'a donnée, sinon 0."
+_QUALITY = (
+    "Qualité ou profil de qualité demandé par l'utilisateur, avec ses mots (« 4K », "
+    "« HD-1080p », « remux »). Vide s'il n'a rien demandé : profil par défaut."
+)
 
 Monitor = Literal["all", "latest_season", "first_season", "future"]
 # Nos valeurs → celles de Sonarr v4 (addOptions.monitor) et leur libellé.
@@ -119,11 +128,13 @@ class AddSeriesArgs(_Args):
         description="Quoi suivre : all (toute la série, par défaut), latest_season (dernière "
         "saison), first_season (première saison), future (seulement les épisodes à venir).",
     )
+    quality: str = Field(default="", max_length=80, description=_QUALITY)
 
 
 class AddMovieArgs(_Args):
     title: str = Field(min_length=1, max_length=120, description=_TITLE)
     year: int = Field(default=0, ge=0, le=2100, description=_YEAR)
+    quality: str = Field(default="", max_length=80, description=_QUALITY)
 
 
 class TriggerSearchArgs(_Args):
@@ -250,19 +261,45 @@ def not_in_library(label: str) -> Plan:
     )
 
 
-async def _defaults(service: Any) -> list[str]:
-    """Dossier et profil qui seront utilisés : affichés sur la carte, non modifiables."""
+def several_profiles(wanted: str, choices: list[str], label: str) -> Plan:
+    """Qualité demandée qui ne désigne pas UN profil : rien à proposer, on demande."""
+    return nothing(
+        f"« {wanted} » ne désigne pas un seul profil de qualité. Rien n'est proposé. Cite à "
+        f"l'utilisateur les profils possibles et demande-lui lequel il veut pour {label}. "
+        "Un profil est un réglage existant, pas une release précise : on ne peut pas exiger "
+        "« Bluray » ou un groupe en particulier.",
+        quality_profiles=choices,
+    )
+
+
+async def _placement(
+    service: Any, quality: str, label: str
+) -> tuple[list[str], str | None, Plan | None]:
+    """Dossier et profil de l'ajout : (lignes de la carte, profil choisi, plan vide).
+
+    ``profil choisi`` vaut ``None`` quand rien n'est demandé : l'ajout prend alors
+    le profil par défaut, comme le bouton « Demander ». ``plan vide`` est rendu
+    quand la qualité demandée ne désigne pas un profil unique.
+    """
     try:
         async with _client(service) as client:
             folders = await client.get_root_folders()
             profiles = await client.get_quality_profiles()
     except Exception:  # noqa: BLE001 : information en plus, l'ajout la revérifie
-        return []
+        if quality.strip():
+            return [], None, nothing("Profils de qualité illisibles pour l'instant. Dis-le.")
+        return [], None, None
     if not folders or not profiles:
-        return ["Attention : aucun dossier racine ou profil de qualité trouvé, l'ajout échouera."]
-    profile_id = request_service._resolve_quality_profile_id(profiles, None)
-    profile = next((p.get("name") for p in profiles if p.get("id") == profile_id), "?")
-    return [f"Dossier : {folders[0].get('path')}", f"Profil de qualité : {profile} (par défaut)"]
+        warning = "Attention : aucun dossier racine ou profil de qualité trouvé, l'ajout échouera."
+        return [warning], None, None
+    folder = f"Dossier : {folders[0].get('path')}"
+    if not quality.strip():
+        default = tools.default_profile(profiles)
+        return [folder, f"Profil de qualité : {default} (par défaut)"], None, None
+    chosen, choices = tools.pick_profile([str(p.get("name")) for p in profiles], quality)
+    if chosen is None:
+        return [], None, several_profiles(quality, choices, label)
+    return [folder, f"Profil de qualité : {chosen} (à ta demande)"], chosen, None
 
 
 # ══════════════════════════════════════════════════════════════
@@ -270,13 +307,16 @@ async def _defaults(service: Any) -> list[str]:
 # ══════════════════════════════════════════════════════════════
 
 
-async def _add(kind: Kind, title: str, year: int, monitor: Monitor | None) -> Plan:
+async def _add(kind: Kind, title: str, year: int, monitor: Monitor | None, quality: str) -> Plan:
     service, item, empty = await _single(kind, title, year)
     if item is None:
         return empty
     label, media_id = _label(item), int(item[_ID[kind]])
     if item.get("id"):
         return already(label, kind)
+    details, profile, unclear = await _placement(service, quality, label)
+    if unclear is not None:
+        return unclear
 
     if kind == "series":
         sonarr_monitor, monitor_label = MONITOR[monitor or "all"]
@@ -291,6 +331,9 @@ async def _add(kind: Kind, title: str, year: int, monitor: Monitor | None) -> Pl
         summary = f"Ajouter le film {label} à Radarr et le chercher"
         call = f"Radarr POST /api/v3/movie tmdbId={media_id} searchForMovie=true"
         done = f"{label} ajouté à Radarr, recherche lancée."
+    if profile:
+        call += f" qualityProfile=« {profile} »"
+        done += f" Profil de qualité : {profile}."
 
     async def run() -> str:
         async with copilot_tools.session_factory() as db:
@@ -303,6 +346,8 @@ async def _add(kind: Kind, title: str, year: int, monitor: Monitor | None) -> Pl
                 year=item.get("year"),
                 # « all » est le défaut de Sonarr : on ne l'envoie que s'il diffère.
                 monitor=sonarr_monitor if sonarr_monitor != "all" else None,
+                # None : profil par défaut d'ArrMada. Sinon le nom exact retrouvé par le code.
+                quality_profile=profile,
             )
         if request.status == "failed":
             raise RuntimeError(f"{_SERVICE[kind].capitalize()} a refusé l'ajout")
@@ -311,19 +356,23 @@ async def _add(kind: Kind, title: str, year: int, monitor: Monitor | None) -> Pl
     return Plan(
         True,
         summary=summary,
-        details=await _defaults(service),
+        details=details,
         call=call,
-        target={_CANDIDATE_ID[kind]: media_id, **({"monitor": monitor} if monitor else {})},
+        target={
+            _CANDIDATE_ID[kind]: media_id,
+            **({"monitor": monitor} if monitor else {}),
+            **({"quality_profile": profile} if profile else {}),
+        },
         run=run,
     )
 
 
 async def add_series(args: AddSeriesArgs) -> Plan:
-    return await _add("series", args.title, args.year, args.monitor)
+    return await _add("series", args.title, args.year, args.monitor, args.quality)
 
 
 async def add_movie(args: AddMovieArgs) -> Plan:
-    return await _add("movie", args.title, args.year, None)
+    return await _add("movie", args.title, args.year, None, args.quality)
 
 
 async def trigger_search(args: TriggerSearchArgs) -> Plan:

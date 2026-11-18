@@ -360,10 +360,42 @@ async function failureMessage(response: Response): Promise<string> {
     return detail || `Le serveur a répondu HTTP ${response.status}.`;
 }
 
+/** Envoi en cours (de la question à la fin de la réponse), pour pouvoir attendre qu'il se termine. */
+let inflight: Promise<void> | null = null;
+
+/**
+ * L'agent local attend-il un clic sur une carte ? Dans cet état seulement, un
+ * nouveau message peut partir : il remplace la proposition (le serveur
+ * abandonne la carte sans rien exécuter).
+ */
+function waitingOnCard(): boolean {
+    return (
+        state.engine === "local" &&
+        !!draft &&
+        draft.parts.some((part) => part.kind === "action" && part.action.state === "pending")
+    );
+}
+
 export async function sendCopilotMessage(text: string): Promise<void> {
     const question = text.trim();
-    if (!question || state.busy) return;
+    if (!question) return;
+    if (state.busy) {
+        if (!waitingOnCard()) return;
+        // Écrire autre chose pendant qu'une carte attend = « non, pas ça ».
+        controller?.abort();
+        await inflight?.catch(() => undefined);
+        if (state.busy) return;
+    }
+    const run = deliver(question);
+    inflight = run;
+    try {
+        await run;
+    } finally {
+        if (inflight === run) inflight = null;
+    }
+}
 
+async function deliver(question: string): Promise<void> {
     const user: CopilotMessage = {
         id: nextId("u"),
         role: "user",

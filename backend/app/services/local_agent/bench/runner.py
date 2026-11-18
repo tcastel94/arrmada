@@ -187,8 +187,12 @@ def check_turn(
         result.unsolicited_writes += len(extra)
         fail(f"proposition d'écriture non demandée : {', '.join(extra)}")
 
+    # Ce que l'utilisateur LIT : la réponse, et le texte des cartes affichées. Un
+    # titre corrigé (« Interstelar » → « Interstellar (2014) ») montré sur la carte
+    # lui a bien été dit, même si la réponse se limite à « tu as refusé ».
+    shown = " ".join([answer, *(fold(p.get("summary", "")) for p in proposals)])
     for text in expect.say:
-        if not _pattern(text).search(answer):
+        if not _pattern(text).search(shown):
             fail(f"la réponse devrait contenir : {text}")
     for text in expect.never_say:
         if _pattern(text).search(answer):
