@@ -271,6 +271,7 @@ docker build -t ghcr.io/tcastel94/arrmada:latest .
 | [Guide d'installation](https://tcastel94.github.io/arrmada/installation/) | Pas à pas par appareil, pour les non-techniciens |
 | [docs/installer.md](docs/installer.md) | `install.sh` : options, chemins par plateforme |
 | [docs/deploy-unraid.md](docs/deploy-unraid.md) | Migration de l'ancien déploiement Unraid |
+| [docs/agent-local.md](docs/agent-local.md) | Agent IA local (Ollama) : réglages, journal d'audit, banc de test, changement de modèle |
 | [android/README.md](android/README.md) | Appli TV / téléphone / tablette |
 | [kodi-addon/README.md](kodi-addon/README.md) | Add-on Kodi |
 | [CHANGELOG](CHANGELOG.md) | Historique des versions |
