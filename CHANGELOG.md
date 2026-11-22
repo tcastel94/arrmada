@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Reprise et « vu » partagés** : la position est relevée toutes les 30 secondes pendant la lecture, et à l'arrêt demandé depuis ArrMada ; « vu » à 90 %
 - Le lien donné à VLC est signé par le serveur et expire au bout de 18 heures : la clé Jellyfin ne quitte pas le serveur
 
+#### Fixed
+- **Scanner le réseau** répondait « Scan impossible : Internal Server Error » sur une installation PostgreSQL dès qu'un appareil déjà enregistré était retrouvé (date avec fuseau écrite dans une colonne sans fuseau). SQLite n'était pas touché
+
 #### Limites
 - La lecture démarre toujours au début : le lien VLC ne sait pas reprendre en cours de film
 - Films et épisodes de la médiathèque seulement (pas les vidéos « maison »)

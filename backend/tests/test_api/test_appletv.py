@@ -367,3 +367,42 @@ async def test_signed_file_is_served_without_a_session_but_only_if_signed(
     parts[5] = "0" * 32  # signature falsifiée
     assert (await client.get("/".join(parts))).status_code == 403
     assert len(opened) == 1
+
+
+# ── Scan du réseau ───────────────────────────────────────────────────────────
+
+
+async def test_rescan_updates_a_known_apple_tv_and_keeps_its_pairing(
+    client: AsyncClient, auth_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.services import cast as cast_service
+
+    device_id = await _apple_tv()
+    found = {
+        "uuid": "A3D51893-5EAB-47A3-883D-F667F48A45AD",
+        "name": "Chambre Parentale",
+        "ip": "192.168.2.240",  # adresse changée (DHCP)
+        "port": 7000,
+        "model": "Apple TV 4K (gen 3) · tvOS 27.2.1",
+        "video_capable": True,
+        "kind": appletv.KIND,
+    }
+
+    async def no_subnets(_db: Any) -> set[str]:
+        return set()
+
+    async def apple_tvs(_db: Any) -> list[dict[str, Any]]:
+        return [dict(found)]
+
+    monkeypatch.setattr(cast_service, "_subnets", no_subnets)
+    monkeypatch.setattr(cast_service, "_discover_apple_tvs", apple_tvs)
+    for _ in range(2):  # le second passage retrouve une ligne existante
+        scan = await client.post("/api/cast/discover", headers=auth_headers)
+        assert scan.status_code == 200, scan.text
+    (device,) = scan.json()
+    assert (device["id"], device["name"], device["ip"]) == (
+        device_id,
+        "Chambre Parentale",
+        "192.168.2.240",
+    )
+    assert device["paired"] is True

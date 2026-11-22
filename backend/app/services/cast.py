@@ -14,12 +14,11 @@ import asyncio
 import contextlib
 import ipaddress
 import uuid as uuidlib
-from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.cast import CastDevice
@@ -170,7 +169,10 @@ async def discover(db: AsyncSession) -> list[dict[str, Any]]:
             existing.model = info["model"]
             existing.video_capable = info["video_capable"]
             existing.kind = info["kind"]
-            existing.last_seen = datetime.now(UTC)
+            # Heure du serveur SQL, comme à la création de la ligne : la colonne
+            # est sans fuseau, et PostgreSQL refuse une date Python avec fuseau
+            # (« can't subtract offset-naive and offset-aware datetimes »).
+            existing.last_seen = func.now()
         else:
             db.add(
                 CastDevice(
