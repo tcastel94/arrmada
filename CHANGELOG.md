@@ -16,13 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Appli Android** (téléphone, tablette) : l'Apple TV apparaît dans **Lire sur une TV**, sans mise à jour de l'appli
 - **Reprise et « vu » partagés** : la position est relevée toutes les 30 secondes pendant la lecture, et à l'arrêt demandé depuis ArrMada ; « vu » à 90 %
 - **Sous-titres de Bazarr** : le `.srt` posé à côté du fichier est joint au lien, VLC l'affiche. Même règle que l'appli Android : son étranger → sous-titres français complets ; son déjà en français → seulement les « forcés »
+- **Langue choisie d'office**, comme dans l'appli Android : titre étranger avec sous-titres français → VO + sous-titres ; sinon la piste française. Quand cette piste n'est pas celle par défaut du fichier, VLC reçoit un flux remuxé par Jellyfin qui ne porte qu'elle (image copiée telle quelle)
 - Le lien donné à VLC est signé par le serveur et expire au bout de 18 heures : la clé Jellyfin ne quitte pas le serveur
 
 #### Fixed
 - **Scanner le réseau** répondait « Scan impossible : Internal Server Error » sur une installation PostgreSQL dès qu'un appareil déjà enregistré était retrouvé (date avec fuseau écrite dans une colonne sans fuseau). SQLite n'était pas touché
 
 #### Limites
-- La piste audio ne se choisit pas depuis ArrMada : VLC démarre sur la piste par défaut du fichier, le changement se fait dans le panneau de VLC
+- La langue n'est pas modifiable depuis ArrMada : c'est la règle automatique qui décide. Pendant un flux remuxé, VLC ne propose que la piste audio choisie, et la reprise partagée est estimée à une trentaine de secondes près (tvOS ne dit plus où en est la lecture)
 - La lecture démarre toujours au début : le lien VLC ne sait pas reprendre en cours de film
 - Films et épisodes de la médiathèque seulement (pas les vidéos « maison »)
 - L'Apple TV doit pouvoir joindre le serveur ArrMada sur le réseau local. Depuis l'extérieur (VPN, nom de domaine), régler `PUBLIC_WEB_URL` sur l'adresse locale du serveur

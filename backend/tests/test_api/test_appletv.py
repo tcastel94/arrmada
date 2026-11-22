@@ -68,7 +68,11 @@ def played(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         return {"url": "http://jf/y", "content_type": "video/mp4", "title": title, "item_id": ITEM}
 
     async def source(_db: Any, _item_id: str) -> dict[str, Any]:
-        return {"suffix": ".mkv", "subtitle": seen.get("subtitle")}
+        return {
+            "suffix": ".mkv",
+            "audio_index": seen.get("audio_index"),
+            "subtitle": seen.get("subtitle"),
+        }
 
     async def play(
         ip: str, credentials: dict[str, str], url: str, subtitle_url: str | None = None
@@ -76,8 +80,10 @@ def played(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         seen.update(ip=ip, credentials=credentials, url=url, subtitle_url=subtitle_url)
         return seen["result"]
 
-    def track(device_id: int, _ip: str, _creds: dict, media: dict, name: str) -> None:
-        seen.update(tracked=media, tracked_on=name, tracked_id=device_id)
+    def track(
+        device_id: int, _ip: str, _creds: dict, media: dict, name: str, remux: str | None = None
+    ) -> None:
+        seen.update(tracked=media, tracked_on=name, tracked_id=device_id, remux=remux)
 
     monkeypatch.setattr(jellyfin, "build_movie_stream", movie)
     monkeypatch.setattr(jellyfin, "build_episode_stream", episode)
@@ -508,12 +514,163 @@ async def test_vlc_source_picks_the_file_next_to_the_video(monkeypatch: pytest.M
 
     monkeypatch.setattr(jellyfin, "get_config", config)
     monkeypatch.setattr(tv_playback, "_item_details", item)
-    # .srt sans langue dans son nom (rangement de Bazarr) : c'est la langue de la maison
+    # Polonais par défaut, VO anglaise, .srt sans langue dans son nom (rangement
+    # de Bazarr : langue de la maison) → VO par le flux remuxé + ce sous-titre
+    for stream in details["MediaSources"][0]["MediaStreams"]:
+        stream["IsOriginal"] = stream.get("Language") == "eng"
     assert await tv_playback.vlc_source(None, ITEM) == {
         "suffix": ".mkv",
+        "audio_index": 2,
         "subtitle": {"index": 0, "ext": "srt"},
     }
-    details["MediaSources"][0]["MediaStreams"][1]["Language"] = (
-        "fre"  # VF : pas de sous-titres complets
+    # La VO est déjà la piste par défaut : fichier d'origine, pas de remux
+    streams = details["MediaSources"][0]["MediaStreams"]
+    streams[1]["IsDefault"], streams[2]["IsDefault"] = False, True
+    assert (await tv_playback.vlc_source(None, ITEM))["audio_index"] is None
+    # Une VF dans le fichier mais des sous-titres complets : la règle garde la VO
+    streams[1]["Language"] = "fre"
+    assert (await tv_playback.vlc_source(None, ITEM))["audio_index"] is None
+    # Sans sous-titres français : la VF (remux), et rien à joindre
+    del streams[0]
+    assert await tv_playback.vlc_source(None, ITEM) == {
+        "suffix": ".mkv",
+        "audio_index": 1,
+        "subtitle": None,
+    }
+
+
+def test_plan_tracks_follows_the_android_rule() -> None:
+    pol = {"index": 2, "language": "pl", "default": True, "original": False}
+    eng = {"index": 3, "language": "en", "default": False, "original": True}
+    fre = {"index": 4, "language": "fr", "default": False, "original": False}
+    # 1. VO + sous-titres complets, même si une VF existe
+    plan = appletv.plan_tracks([pol, eng, fre], [FR, FR_FORCED], "fr")
+    assert (plan["audio"], plan["subtitle"], plan["remux"]) == (eng, FR, True)
+    # 2. Pas de sous-titres complets : VF + forcés
+    plan = appletv.plan_tracks([pol, eng, fre], [FR_FORCED], "fr")
+    assert (plan["audio"], plan["subtitle"], plan["remux"]) == (fre, FR_FORCED, True)
+    # 2 bis. Film français (la VO est la piste française par défaut) : rien à remuxer
+    vf = {"index": 1, "language": "fr", "default": True, "original": True}
+    plan = appletv.plan_tracks([vf, eng], [FR, FR_FORCED], "fr")
+    assert (plan["audio"], plan["subtitle"], plan["remux"]) == (vf, FR_FORCED, False)
+    # 3. Ni VF ni sous-titres : la VO ; VO inconnue : la piste par défaut, telle quelle
+    assert appletv.plan_tracks([pol, eng], [], "fr")["audio"] is eng
+    unknown = {"index": 3, "language": "en", "default": False, "original": False}
+    plan = appletv.plan_tracks([pol, unknown], [EN], "fr")
+    assert (plan["audio"], plan["subtitle"], plan["remux"]) == (pol, None, False)
+    assert appletv.plan_tracks([], [], "fr") == {"audio": None, "subtitle": None, "remux": False}
+
+
+def test_hls_link_is_signed_and_named_after_the_title() -> None:
+    path = appletv.hls_path(ITEM, 3, "Tulsa King · S04E04", now=1_000)
+    _, _, _, _, expires, signature, item_id, audio, name = path.split("/")
+    assert (item_id, audio, unquote(name)) == (ITEM, "3", "Tulsa King S04E04.m3u8")
+    assert appletv.check_link(item_id, int(expires), signature, now=2_000)
+    # La liste d'entrée (au nom du titre) est la master.m3u8 de Jellyfin
+    assert appletv.hls_upstream_path("Tulsa King S04E04.m3u8") == "master.m3u8"
+    assert appletv.hls_upstream_path("main.m3u8") == "main.m3u8"
+    assert appletv.hls_upstream_path("hls1/main/0.mp4") == "hls1/main/0.mp4"
+
+
+async def test_cast_play_uses_the_remux_when_the_wanted_audio_is_not_the_default(
+    client: AsyncClient, auth_headers: dict[str, str], played: dict[str, Any]
+) -> None:
+    device_id = await _apple_tv()
+    played["audio_index"] = 3
+    body = {"device_id": device_id, "tmdb_id": 136400}
+    await client.post("/api/cast/play", json=body, headers=auth_headers)
+    url = urlsplit(played["url"])
+    assert url.path.startswith("/api/cast/hls/") and url.path.endswith(f"/{ITEM}/3/2%20Guns.m3u8")
+    assert played["remux"] == ITEM  # le remux sera arrêté chez Jellyfin en fin de lecture
+
+
+async def test_signed_hls_relays_playlists_and_segments(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    asked: list[tuple[str, str]] = []
+
+    async def open_hls(_db: Any, item_id: str, path: str, query: str, _range: str | None):
+        asked.append((path, query))
+        if path == "main.m3u8":
+            return 200, {"content-type": "application/vnd.apple.mpegurl"}, PLAYLIST.encode()
+        if path.endswith(".m3u8"):
+            return 200, {"content-type": "application/vnd.apple.mpegurl"}, b"#EXTM3U\n"
+
+        async def body():
+            yield b"seg"
+
+        return 200, {}, body()
+
+    monkeypatch.setattr(tv_playback, "open_hls", open_hls)
+    entry = appletv.hls_path(ITEM, 3, "2 Guns")
+    prefix = entry.rsplit("/", 1)[0]
+    assert (await client.get(entry)).text == "#EXTM3U\n"
+    assert (
+        await client.get(f"{prefix}/main.m3u8?MediaSourceId={ITEM}&AudioStreamIndex=3")
+    ).status_code == 200
+    assert (await client.get(f"{prefix}/hls1/main/0.mp4?runtimeTicks=0")).content == b"seg"
+    # Le serveur sait où en est VLC d'après ce qu'il vient chercher
+    assert appletv.remux_position(ITEM) == (0, 600, True)
+    assert asked == [
+        ("master.m3u8", "audio=3"),  # la piste vient du lien signé, pas de VLC
+        ("main.m3u8", f"MediaSourceId={ITEM}&AudioStreamIndex=3"),
+        ("hls1/main/0.mp4", "runtimeTicks=0"),
+    ]
+    parts = entry.split("/")
+    parts[5] = "0" * 32
+    assert (await client.get("/".join(parts))).status_code == 403
+
+
+# 100 morceaux de 6 s : 10 minutes
+PLAYLIST = "#EXTM3U\n#EXT-X-TARGETDURATION:6\n" + "".join(
+    f"#EXTINF:6.000000, nodesc\nhls1/main/{n}.mp4?runtimeTicks={n * 60_000_000}\n"
+    for n in range(100)
+)
+
+
+def test_remux_position_is_estimated_from_requested_segments(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = [1_000.0]
+    monkeypatch.setattr(appletv.time, "monotonic", lambda: clock[0])
+    appletv._progress.clear()
+    assert appletv.remux_position(ITEM) == (0, 0, False)  # rien de relayé : inconnu
+    appletv.note_playlist(ITEM, PLAYLIST)
+    appletv.note_segment(ITEM, "hls1/main/-1.mp4")  # en-tête du flux : pas un morceau
+    appletv.note_segment(ITEM, "hls1/main/50.mp4")  # morceau qui commence à 5 min
+    assert appletv.remux_position(ITEM) == (300 - appletv.BUFFER_AHEAD, 600, True)
+    clock[0] += 20  # la lecture avance entre deux morceaux
+    assert appletv.remux_position(ITEM) == (300 - appletv.BUFFER_AHEAD + 20, 600, True)
+    clock[0] += 200  # plus rien demandé : pause ou fin, la position ne dérive pas
+    position, total, active = appletv.remux_position(ITEM)
+    assert (position, total, active) == (
+        300 - appletv.BUFFER_AHEAD + appletv.REMUX_IDLE,
+        600,
+        False,
     )
-    assert (await tv_playback.vlc_source(None, ITEM))["subtitle"] is None
+    appletv.note_segment(ITEM, "hls1/main/2.mp4")  # retour au début du film
+    assert appletv.remux_position(ITEM) == (0, 600, True)
+    appletv._progress.clear()
+
+
+async def test_stop_during_a_remux_trusts_the_segments_not_the_apple_tv(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    saved: list[tuple[int, int]] = []
+    stopped: list[str] = []
+
+    async def save(_media: dict, position: int, total: int, _name: str) -> None:
+        saved.append((position, total))
+
+    async def stop_remux(item_id: str) -> None:
+        stopped.append(item_id)
+
+    monkeypatch.setattr(appletv, "_save", save)
+    monkeypatch.setattr(appletv, "_stop_remux", stop_remux)
+    appletv.note_playlist(ITEM, PLAYLIST)
+    appletv.note_segment(ITEM, "hls1/main/50.mp4")
+    appletv._tracked[7] = ({"media_type": "movie", "id_type": "tmdb", "id": "1"}, "Chambre")
+    appletv._remuxes[7] = ITEM
+    await appletv.finish_tracking(7, 55, 2581)  # 55 s : ce que l'Apple TV a annoncé
+    assert saved == [(300 - appletv.BUFFER_AHEAD, 600)]
+    assert stopped == [ITEM] and ITEM not in appletv._progress and 7 not in appletv._remuxes

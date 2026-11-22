@@ -425,6 +425,7 @@ async def play_on_apple_tv(
     url: str,
     media: dict[str, Any] | None,
     subtitle_url: str | None = None,
+    remux_item: str | None = None,
 ) -> dict[str, Any]:
     """Fait lire `url` (fichier d'origine, lien signé) par VLC sur l'Apple TV.
 
@@ -442,5 +443,5 @@ async def play_on_apple_tv(
         }
     result = await appletv.play(d.ip, credentials, url, subtitle_url)
     if result.get("status") == "casting" and media:
-        appletv.start_tracking(d.id, d.ip, credentials, media, d.name)
+        appletv.start_tracking(d.id, d.ip, credentials, media, d.name, remux_item)
     return result

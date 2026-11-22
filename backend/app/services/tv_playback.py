@@ -427,12 +427,15 @@ def duration_seconds(item: dict[str, Any]) -> int:
 
 async def vlc_source(db: AsyncSession, item_id: str) -> dict[str, Any]:
     """Ce qu'il faut pour faire lire un titre par VLC (Apple TV) :
-    {suffix, subtitle}.
+    {suffix, audio_index, subtitle}.
 
     `suffix` : extension du fichier d'origine (« .mkv » si Jellyfin ne la
-    donne pas). `subtitle` : le sous-titre posé À CÔTÉ du fichier à joindre
-    au lien ({index, ext}), ou None. VLC ne reçoit que la vidéo : il voit
-    les pistes du MKV, jamais le .srt de Bazarr rangé dans le même dossier.
+    donne pas). `audio_index` : None = le fichier d'origine convient (VLC
+    lira de lui-même la bonne piste) ; un index = il faut le flux remuxé avec
+    cette seule piste audio. `subtitle` : le sous-titre à joindre au lien
+    ({index, ext}), ou None. VLC ne reçoit que la vidéo : il ne voit jamais
+    le .srt de Bazarr rangé à côté, et un flux remuxé n'a plus les pistes
+    de sous-titres du MKV.
     """
     from app.services import appletv, subtitle_jobs
 
@@ -443,18 +446,34 @@ async def vlc_source(db: AsyncSession, item_id: str) -> dict[str, Any]:
         details = None
     details = details or {}
     suffix = PurePosixPath(str(details.get("Path") or "").replace("\\", "/")).suffix
-    tracks = audio_tracks(details)
-    heard = next((t for t in tracks if t["default"]), tracks[0] if tracks else None)
-    chosen = appletv.pick_subtitle(
-        external_subtitles(item_id, details),
-        subtitle_jobs.code2(heard["language"]) if heard else "",
+    sources = details.get("MediaSources") or [{}]
+    streams = (sources[0] if isinstance(sources[0], dict) else {}).get("MediaStreams") or []
+    audios = [
+        {
+            "index": stream["Index"],
+            "language": subtitle_jobs.code2(stream.get("Language")),
+            "default": bool(stream.get("IsDefault")),
+            "original": bool(stream.get("IsOriginal")),
+        }
+        for stream in streams
+        if isinstance(stream, dict)
+        and stream.get("Type") == "Audio"
+        and isinstance(stream.get("Index"), int)
+    ]
+    plan = appletv.plan_tracks(
+        audios,
+        external_subtitles(item_id, details) + embedded_subtitles(item_id, details),
         subtitle_jobs.code2(settings.SUBTITLE_LANGUAGE),
     )
     subtitle = None
-    if chosen:
-        index, _, ext = chosen["url"].rsplit("/", 1)[-1].partition(".")
+    if plan["subtitle"]:
+        index, _, ext = plan["subtitle"]["url"].rsplit("/", 1)[-1].partition(".")
         subtitle = {"index": int(index), "ext": ext}
-    return {"suffix": suffix.lower() or ".mkv", "subtitle": subtitle}
+    return {
+        "suffix": suffix.lower() or ".mkv",
+        "audio_index": plan["audio"]["index"] if plan["remux"] else None,
+        "subtitle": subtitle,
+    }
 
 
 async def _item_details(base: str, key: str, item_id: str) -> dict[str, Any] | None:

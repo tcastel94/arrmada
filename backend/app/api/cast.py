@@ -70,6 +70,41 @@ async def signed_subtitle(
     return Response(content, media_type=media_type)
 
 
+@public_router.get("/hls/{expires}/{signature}/{item_id}/{audio}/{path:path}")
+async def signed_hls(
+    expires: int,
+    signature: str,
+    item_id: str,
+    audio: int,
+    path: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Flux remuxé par Jellyfin avec la piste audio `audio`, pour VLC.
+
+    Les listes de Jellyfin ont des adresses relatives : VLC redemande
+    main.m3u8 et les morceaux sous ce même préfixe signé.
+    """
+    if not appletv.check_link(item_id, expires, signature) or not 0 <= audio <= 999:
+        raise HTTPException(status_code=403, detail="Lien de lecture invalide ou expiré")
+    upstream = appletv.hls_upstream_path(path)
+    query = f"audio={audio}" if upstream == "master.m3u8" else request.url.query
+    try:
+        status_code, headers, body = await tv_playback.open_hls(
+            db, item_id, upstream, query, request.headers.get("range")
+        )
+    except tv_playback.UpstreamError as exc:
+        raise HTTPException(exc.status_code, exc.detail) from exc
+    # Seule trace de l'avancement pendant un flux remuxé (appletv._progress)
+    if upstream == "main.m3u8" and isinstance(body, bytes):
+        appletv.note_playlist(item_id, body.decode("utf-8", errors="replace"))
+    else:
+        appletv.note_segment(item_id, upstream)
+    if isinstance(body, bytes):
+        return Response(body, status_code=status_code, headers=headers)
+    return StreamingResponse(body, status_code=status_code, headers=headers)
+
+
 async def send_to_apple_tv(
     db: AsyncSession,
     request: Request,
@@ -84,14 +119,23 @@ async def send_to_apple_tv(
     """
     item_id, base = stream["item_id"], web_base_url(request)
     source = await tv_playback.vlc_source(db, item_id)
-    path = appletv.file_path(item_id, stream.get("title") or media.get("title"), source["suffix"])
+    title, audio = stream.get("title") or media.get("title"), source["audio_index"]
+    # Bonne piste audio déjà lue d'office : le fichier d'origine. Sinon le
+    # flux remuxé qui ne porte qu'elle (image intacte).
+    path = (
+        appletv.file_path(item_id, title, source["suffix"])
+        if audio is None
+        else appletv.hls_path(item_id, audio, title)
+    )
     subtitle = source["subtitle"]
     subtitle_url = (
         base + appletv.subtitle_path(item_id, subtitle["index"], subtitle["ext"])
         if subtitle
         else None
     )
-    return await cast_service.play_on_apple_tv(db, device_id, f"{base}{path}", media, subtitle_url)
+    return await cast_service.play_on_apple_tv(
+        db, device_id, f"{base}{path}", media, subtitle_url, item_id if audio is not None else None
+    )
 
 
 @router.get("/devices")
