@@ -54,7 +54,11 @@ jobs:
   # ── Frontend ───────────────────────────────────────────────
   frontend-lint-build:
     name: "Frontend — Lint, Build & E2E"
-    runs-on: ubuntu-latest
+    # Ubuntu figé : « ubuntu-latest » est passé à 26.04, où Playwright 1.56.1
+    # refuse d'installer Chromium (« does not support chromium on
+    # ubuntu26.04-x64 »). À remettre sur ubuntu-latest quand Playwright sera
+    # monté à une version qui prend en charge 26.04.
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: frontend
