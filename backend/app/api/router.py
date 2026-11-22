@@ -17,6 +17,7 @@ from app.api.artwork import router as artwork_router
 from app.api.auth import router as auth_router
 from app.api.calendar import router as calendar_router
 from app.api.cameras import router as cameras_router
+from app.api.cast import public_router as cast_public_router
 from app.api.cast import router as cast_router
 from app.api.cleanup import router as cleanup_router
 from app.api.copilot import router as copilot_router
@@ -93,6 +94,7 @@ api_router.include_router(kodi_router)
 api_router.include_router(yamaha_router)
 api_router.include_router(activity_timeline_router)
 api_router.include_router(cast_router)
+api_router.include_router(cast_public_router)  # liens signés lus par VLC (Apple TV)
 api_router.include_router(devices_router)
 api_router.include_router(links_router)  # QR codes TV → web app (ADR-003 § 7)
 api_router.include_router(ambient_router)  # Écran d'appoint du salon (tablette)

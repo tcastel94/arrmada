@@ -11,9 +11,14 @@
  *
  * Piège : une TV éteinte ne reçoit rien ; la demande expire au bout de 2 min
  * (pas de lecture surprise au rallumage). Le menu signale les TV « absentes ».
+ *
+ * Apple TV appairées (Réglages › Cast) : listées aussi. Là, pas de message
+ * relevé par la TV : le serveur lui fait ouvrir le fichier dans VLC tout de
+ * suite. Le lien VLC ne sait pas démarrer en cours de film : toujours depuis
+ * le début (la position est ensuite suivie comme sur les autres TV).
  */
 import { toast } from "sonner";
-import { Loader2, RotateCcw, Tv } from "lucide-react";
+import { Loader2, RotateCcw, Tv, TvMinimalPlay } from "lucide-react";
 import { Button, type ButtonProps } from "@/components/ui/button";
 import {
     DropdownMenu,
@@ -24,6 +29,7 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { clockLabel, usePlayOnDevice, useTvDevices, type PlayTarget } from "@/hooks/use-watch";
+import { isAppleTv, useCastDevices, useCastPlay, type CastDevice, type CastPlayBody } from "@/hooks/use-cast";
 import type { PairedDevice } from "@/hooks/use-devices";
 import type { MediaDetail } from "@/hooks/use-media";
 import type { WatchSeriesState } from "@/hooks/use-watch";
@@ -87,7 +93,24 @@ interface PlayOnTvButtonProps {
 export function PlayOnTvButton({ target, resumeAt = 0, label = "Sur la TV", size = "lg", variant = "secondary", className }: PlayOnTvButtonProps) {
     const tvs = useTvDevices();
     const play = usePlayOnDevice();
-    if (tvs.length === 0) return null; // aucune TV appairée : rien à proposer
+    const { data: castDevices } = useCastDevices();
+    const castPlay = useCastPlay();
+    // Apple TV : films et épisodes de la médiathèque seulement (pas les vidéos « maison »)
+    const appleTvs = appleTvBody(target, 0) ? (castDevices ?? []).filter((d) => isAppleTv(d) && d.paired) : [];
+    if (tvs.length === 0 && appleTvs.length === 0) return null; // aucune TV appairée : rien à proposer
+
+    const sendToAppleTv = (device: CastDevice) => {
+        const body = appleTvBody(target, device.id);
+        if (!body) return;
+        castPlay.mutate(body, {
+            onSuccess: (r) =>
+                r.status === "casting"
+                    ? toast.success(`Lecture lancée sur ${device.name}`, { description: "VLC lit le fichier d'origine." })
+                    : toast.error(`Lecture impossible sur ${device.name}`, { description: r.detail }),
+            onError: (e) => toast.error("Lecture impossible", { description: e.message }),
+        });
+    };
+    const busy = play.isPending || castPlay.isPending;
 
     const send = (device: PairedDevice, resume: boolean) =>
         play.mutate(
@@ -112,11 +135,11 @@ export function PlayOnTvButton({ target, resumeAt = 0, label = "Sur la TV", size
                     size={size}
                     variant={variant}
                     className={cn(label && "flex-1 sm:flex-none", className)}
-                    disabled={play.isPending}
+                    disabled={busy}
                     aria-label={label || "Lancer sur une TV"}
                     title="Lancer sur une TV appairée"
                 >
-                    {play.isPending ? <Loader2 className="animate-spin" /> : <Tv />}
+                    {busy ? <Loader2 className="animate-spin" /> : <Tv />}
                     {label && <span className="truncate">{label}</span>}
                 </Button>
             </DropdownMenuTrigger>
@@ -127,7 +150,18 @@ export function PlayOnTvButton({ target, resumeAt = 0, label = "Sur la TV", size
                 {tvs.map((tv) => (
                     <TvItem key={tv.id} device={tv} onSelect={() => send(tv, true)} />
                 ))}
-                {resumeAt > 0 && (
+                {appleTvs.map((tv) => (
+                    <DropdownMenuItem key={`atv-${tv.id}`} onSelect={() => sendToAppleTv(tv)} className="items-start py-2">
+                        <TvMinimalPlay className="mt-0.5 text-primary" aria-hidden />
+                        <span className="min-w-0 flex-1">
+                            <span className="block font-medium">{tv.name}</span>
+                            <span className="block text-[11px] text-muted-foreground">
+                                Apple TV · VLC{resumeAt > 0 ? " · depuis le début" : ""}
+                            </span>
+                        </span>
+                    </DropdownMenuItem>
+                ))}
+                {resumeAt > 0 && tvs.length > 0 && (
                     <>
                         <DropdownMenuSeparator />
                         <DropdownMenuLabel className="eyebrow">Depuis le début sur…</DropdownMenuLabel>
@@ -141,6 +175,17 @@ export function PlayOnTvButton({ target, resumeAt = 0, label = "Sur la TV", size
             </DropdownMenuContent>
         </DropdownMenu>
     );
+}
+
+/** Titre → corps de /api/cast/play ; null si une Apple TV ne peut pas le lire (vidéo « maison »). */
+function appleTvBody(target: PlayTarget, deviceId: number): CastPlayBody | null {
+    const id = Number(target.id);
+    if (!Number.isFinite(id)) return null;
+    if (target.media_type === "movie") return { device_id: deviceId, tmdb_id: id, title: target.title };
+    if (target.media_type === "episode" && target.season != null && target.episode != null) {
+        return { device_id: deviceId, tvdb_id: id, season: target.season, episode: target.episode, title: target.title };
+    }
+    return null;
 }
 
 function TvItem({ device, onSelect }: { device: PairedDevice; onSelect: () => void }) {

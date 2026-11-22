@@ -1,11 +1,16 @@
-"""Cast API — discover Google Cast devices and cast Jellyfin streams to them."""
+"""Cast API — Chromecast (flux Jellyfin transcodé) et Apple TV (fichier d'origine lu par VLC)."""
 
-from fastapi import APIRouter, Depends
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
+from app.api.devices import web_base_url
 from app.models.service import Service
+from app.services import appletv, tv_playback
 from app.services import cast as cast_service
 from app.services import jellyfin as jellyfin_service
 from app.services.activity_log import log_event
@@ -16,6 +21,53 @@ router = APIRouter(
     tags=["cast"],
     dependencies=[Depends(get_current_user)],
 )
+
+# Sans session : VLC (sur l'Apple TV) n'en a pas. Seuls les liens signés par
+# le serveur sont servis (services/appletv.py : file_path / check_link).
+public_router = APIRouter(prefix="/api/cast", tags=["cast"])
+
+
+@public_router.get("/file/{expires}/{signature}/{item_id}/{name}")
+async def signed_file(
+    expires: int,
+    signature: str,
+    item_id: str,
+    name: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Fichier vidéo d'origine pour VLC, relayé depuis Jellyfin (« Range » transmis).
+
+    `name` n'est là que pour VLC, qui l'affiche comme titre.
+    """
+    if not appletv.check_link(item_id, expires, signature):
+        raise HTTPException(status_code=403, detail="Lien de lecture invalide ou expiré")
+    try:
+        status_code, headers, body = await tv_playback.open_stream(
+            db, item_id, request.headers.get("range"), warm=False
+        )
+    except tv_playback.UpstreamError as exc:
+        raise HTTPException(exc.status_code, exc.detail) from exc
+    return StreamingResponse(body, status_code=status_code, headers=headers)
+
+
+async def send_to_apple_tv(
+    db: AsyncSession,
+    request: Request,
+    device_id: int,
+    stream: dict[str, Any],
+    media: dict[str, Any],
+) -> dict[str, Any]:
+    """Lance sur une Apple TV le titre résolu dans Jellyfin (`stream`).
+
+    Partagé par le bouton « Caster » de la web app et par « Sur la TV » du
+    téléphone. L'adresse du lien est celle du serveur vue du réseau local.
+    """
+    suffix = await tv_playback.file_suffix(db, stream["item_id"])
+    path = appletv.file_path(stream["item_id"], stream.get("title") or media.get("title"), suffix)
+    return await cast_service.play_on_apple_tv(
+        db, device_id, f"{web_base_url(request)}{path}", media
+    )
 
 
 @router.get("/devices")
@@ -35,10 +87,24 @@ async def delete_device(device_id: int, db: AsyncSession = Depends(get_db)):
     return await cast_service.delete_device(db, device_id)
 
 
+@router.post("/appletv/{device_id}/pair")
+async def pair_apple_tv(device_id: int, db: AsyncSession = Depends(get_db)):
+    """Démarre l'appairage : un code à 4 chiffres s'affiche sur l'Apple TV."""
+    return await cast_service.pair_start(db, device_id)
+
+
+@router.post("/appletv/{device_id}/pin")
+async def pin_apple_tv(device_id: int, data: dict, db: AsyncSession = Depends(get_db)):
+    """Valide le code lu sur la TV. Deux codes à la suite (`status: "pin"`
+    tant qu'il en reste un, puis `"paired"`)."""
+    return await cast_service.pair_pin(db, device_id, str((data or {}).get("pin") or "").strip())
+
+
 @router.post("/play")
-async def play(data: dict, db: AsyncSession = Depends(get_db)):
+async def play(data: dict, request: Request, db: AsyncSession = Depends(get_db)):
     """Cast a movie (TMDB id) or an episode (series TVDB id + season + episode)
-    to a device via a Jellyfin transcoded stream."""
+    to a device: Jellyfin transcoded stream (Chromecast) or original file
+    opened by VLC (Apple TV)."""
     tmdb_id = data.get("tmdb_id")
     tvdb_id, season, episode = data.get("tvdb_id"), data.get("season"), data.get("episode")
     device_id = data.get("device_id")
@@ -60,15 +126,26 @@ async def play(data: dict, db: AsyncSession = Depends(get_db)):
     if not stream:
         return {"status": "error", "detail": missing}
 
-    result = await cast_service.cast_stream(
-        db,
-        int(device_id),
-        stream["url"],
-        stream["content_type"],
-        stream["title"] or data.get("title"),
-    )
-
     dev = await cast_service._get(db, int(device_id))
+    if dev and dev.kind == appletv.KIND:
+        media = {
+            "media_type": "episode" if is_episode else "movie",
+            "id_type": "tvdb" if is_episode else "tmdb",
+            "id": str(tvdb_id if is_episode else tmdb_id),
+            "season": season if is_episode else None,
+            "episode": episode if is_episode else None,
+            "title": stream["title"] or data.get("title") or "",
+        }
+        result = await send_to_apple_tv(db, request, dev.id, stream, media)
+    else:
+        result = await cast_service.cast_stream(
+            db,
+            int(device_id),
+            stream["url"],
+            stream["content_type"],
+            stream["title"] or data.get("title"),
+        )
+
     ok = result.get("status") == "casting"
     await log_event(
         category="playback",

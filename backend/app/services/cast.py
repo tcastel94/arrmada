@@ -1,8 +1,11 @@
-"""Google Cast control via pychromecast.
+"""Google Cast control via pychromecast, et aiguillage vers les Apple TV.
 
 mDNS discovery does not work from inside the bridged backend container, so we
 discover by TCP-probing port 8009 across the LAN and connecting by host (which
 does work). Casting hands the device a Jellyfin-transcoded HLS URL.
+
+Les Apple TV (`kind == "appletv"`) sont dans la même table et passent par
+services/appletv.py : mêmes fonctions `control` / `status`, autre protocole.
 """
 
 from __future__ import annotations
@@ -21,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.cast import CastDevice
 from app.models.service import Service
+from app.services import appletv
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -148,6 +152,9 @@ async def discover(db: AsyncSession) -> list[dict[str, Any]]:
                 results.append(info)
 
     await asyncio.gather(*(_resolve(ip) for ip in candidates))
+    for info in results:
+        info["kind"] = "chromecast"
+    results.extend(await _discover_apple_tvs(db))
 
     # Upsert
     for info in results:
@@ -162,6 +169,7 @@ async def discover(db: AsyncSession) -> list[dict[str, Any]]:
             existing.port = info["port"]
             existing.model = info["model"]
             existing.video_capable = info["video_capable"]
+            existing.kind = info["kind"]
             existing.last_seen = datetime.now(UTC)
         else:
             db.add(
@@ -172,10 +180,34 @@ async def discover(db: AsyncSession) -> list[dict[str, Any]]:
                     port=info["port"],
                     model=info["model"],
                     video_capable=info["video_capable"],
+                    kind=info["kind"],
                 )
             )
     await db.commit()
     return await list_devices(db)
+
+
+async def _discover_apple_tvs(db: AsyncSession) -> list[dict[str, Any]]:
+    """Apple TV du réseau : port AirPlay ouvert, puis fiche lue par pyatv.
+
+    Une panne ici (pyatv absent, réseau filtré) ne doit pas faire échouer
+    la recherche des Chromecast : on rend alors une liste vide.
+    """
+    candidates: list[str] = []
+    sem = asyncio.Semaphore(64)
+
+    async def _check(ip: str):
+        async with sem:
+            if await _port_open(ip, appletv.AIRPLAY_PORT):
+                candidates.append(ip)
+
+    try:
+        for net in await _subnets(db):
+            await asyncio.gather(*(_check(str(h)) for h in ipaddress.ip_network(net).hosts()))
+        return await appletv.identify(candidates)
+    except Exception as exc:
+        logger.warning("Recherche des Apple TV impossible : %s", type(exc).__name__)
+        return []
 
 
 async def list_devices(db: AsyncSession) -> list[dict[str, Any]]:
@@ -191,6 +223,9 @@ async def list_devices(db: AsyncSession) -> list[dict[str, Any]]:
             "port": d.port,
             "model": d.model,
             "video_capable": d.video_capable,
+            "kind": d.kind or "chromecast",
+            # Apple TV : inutilisable tant que les deux codes n'ont pas été saisis
+            "paired": d.kind != appletv.KIND or appletv.is_paired(d.credentials),
         }
         for d in res.scalars().all()
     ]
@@ -323,6 +358,11 @@ async def control(
     d = await _get(db, device_id)
     if not d:
         return {"status": "error", "detail": "Appareil introuvable"}
+    if d.kind == appletv.KIND:
+        result = await appletv.control(d.ip, appletv.load_credentials(d.credentials), action, value)
+        if action in ("stop", "quit") and result.get("status") == "ok":
+            await appletv.finish_tracking(d.id, result.get("current_time"), result.get("duration"))
+        return result
     try:
         return await asyncio.to_thread(_control_sync, _host_tuple(d), action, value)
     except Exception as exc:
@@ -334,6 +374,8 @@ async def status(db: AsyncSession, device_id: int) -> dict[str, Any]:
     d = await _get(db, device_id)
     if not d:
         return {"status": "error", "detail": "Appareil introuvable"}
+    if d.kind == appletv.KIND:
+        return await appletv.status(d.ip, appletv.load_credentials(d.credentials))
     try:
         return await asyncio.to_thread(_status_sync, _host_tuple(d))
     except Exception as exc:
@@ -343,6 +385,56 @@ async def status(db: AsyncSession, device_id: int) -> dict[str, Any]:
 async def delete_device(db: AsyncSession, device_id: int) -> dict[str, Any]:
     d = await _get(db, device_id)
     if d:
+        appletv.stop_tracking(d.id)
         await db.delete(d)
         await db.commit()
     return {"status": "deleted"}
+
+
+# ── Apple TV : appairage et lecture par VLC ──────────────────────────────────
+
+
+async def _apple_tv(db: AsyncSession, device_id: int) -> CastDevice | None:
+    d = await _get(db, device_id)
+    return d if d and d.kind == appletv.KIND else None
+
+
+async def pair_start(db: AsyncSession, device_id: int) -> dict[str, Any]:
+    d = await _apple_tv(db, device_id)
+    if not d:
+        return {"status": "error", "detail": "Apple TV introuvable"}
+    return await appletv.pair_start(d.id, d.ip)
+
+
+async def pair_pin(db: AsyncSession, device_id: int, pin: str) -> dict[str, Any]:
+    d = await _apple_tv(db, device_id)
+    if not d:
+        return {"status": "error", "detail": "Apple TV introuvable"}
+    result = await appletv.pair_pin(d.id, d.ip, pin)
+    if result.get("status") == "paired":
+        d.credentials = appletv.dump_credentials(result.pop("credentials"))
+        await db.commit()
+    return result
+
+
+async def play_on_apple_tv(
+    db: AsyncSession, device_id: int, url: str, media: dict[str, Any] | None
+) -> dict[str, Any]:
+    """Fait lire `url` (fichier d'origine, lien signé) par VLC sur l'Apple TV.
+
+    `media` : le titre au format du vu partagé ({media_type, id_type, id,
+    season, episode, title}) ; s'il est donné, la position est suivie.
+    """
+    d = await _apple_tv(db, device_id)
+    if not d:
+        return {"status": "error", "detail": "Apple TV introuvable"}
+    credentials = appletv.load_credentials(d.credentials)
+    if len(credentials) < len(appletv.PROTOCOLS):
+        return {
+            "status": "error",
+            "detail": f"{d.name} n'est pas appairée : Réglages › Cast & Jellyfin › Appairer.",
+        }
+    result = await appletv.play(d.ip, credentials, url)
+    if result.get("status") == "casting" and media:
+        appletv.start_tracking(d.id, d.ip, credentials, media, d.name)
+    return result

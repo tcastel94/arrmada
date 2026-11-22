@@ -8,7 +8,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
-from app.services import library_hints, tv_playback, watch_summary
+from app.services import appletv, jellyfin, library_hints, tv_playback, watch_summary
+from app.services import cast as cast_service
 from app.utils.event_bus import event_bus
 
 router = APIRouter(
@@ -105,24 +106,39 @@ async def play_targets(
     rows = (
         await db.execute(select(Device).where(Device.kind == "tv").order_by(Device.name))
     ).scalars()
-    return {
-        "items": [
-            {
-                "id": d.id,
-                "name": d.name,
-                "room": d.room,
-                "online": watch_summary.is_online(d.last_seen_at, now),
-            }
-            for d in rows
-            if d.id != user.get("device_id") and _is_tv_screen(d)
-        ]
-    }
+    items = [
+        {
+            "id": d.id,
+            "name": d.name,
+            "room": d.room,
+            "online": watch_summary.is_online(d.last_seen_at, now),
+            "kind": "tv",
+        }
+        for d in rows
+        if d.id != user.get("device_id") and _is_tv_screen(d)
+    ]
+    # Apple TV appairées (lecture par VLC) : numéro décalé pour ne pas se
+    # confondre avec une TV ; « online » vrai faute de pouvoir le savoir
+    # sans les interroger une à une.
+    for apple_tv in await cast_service.list_devices(db):
+        if apple_tv["kind"] == appletv.KIND and apple_tv["paired"]:
+            items.append(
+                {
+                    "id": appletv.target_id(apple_tv["id"]),
+                    "name": apple_tv["name"],
+                    "room": "",
+                    "online": True,
+                    "kind": appletv.KIND,
+                }
+            )
+    return {"items": items}
 
 
 @router.post("/targets/{device_id}/play")
 async def play_on_target(
     device_id: int,
     data: dict,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: dict = Depends(get_current_user),
 ) -> dict:
@@ -133,6 +149,9 @@ async def play_on_target(
     """
     from app.models.device import Device
 
+    apple_tv_id = appletv.from_target_id(device_id)
+    if apple_tv_id is not None:
+        return await _play_on_apple_tv(db, request, apple_tv_id, data or {})
     device = await db.get(Device, device_id)
     if device is None or not _is_tv_screen(device) or device.id == user.get("device_id"):
         raise HTTPException(status_code=404, detail="TV inconnue (appairée ?)")
@@ -151,6 +170,57 @@ async def play_on_target(
         "online": watch_summary.is_online(device.last_seen_at, now),
         "message": f"Envoyé sur {device.name}",
     }
+
+
+async def _play_on_apple_tv(db: AsyncSession, request: Request, device_id: int, data: dict) -> dict:
+    """« Sur la TV » vers une Apple TV : VLC y ouvre le fichier d'origine.
+
+    Même corps que pour une TV ({media_type, id, season, episode, title}) ;
+    `resume` est ignoré : le lien VLC ne sait pas démarrer en cours de film.
+    """
+    from app.api.cast import send_to_apple_tv
+    from app.services import watch_sync
+
+    media = watch_sync.normalize(
+        {
+            "media_type": data.get("media_type"),
+            "id_type": "tmdb" if data.get("media_type") == "movie" else "tvdb",
+            "id": data.get("id"),
+            "season": data.get("season"),
+            "episode": data.get("episode"),
+            "title": data.get("title"),
+        }
+    )
+    if media is None or media["media_type"] not in ("movie", "episode"):
+        raise HTTPException(status_code=422, detail="Titre à lire invalide")
+    try:
+        external_id = int(media["external_id"])
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Titre à lire invalide") from None
+    if media["media_type"] == "movie":
+        stream = await jellyfin.build_movie_stream(db, external_id)
+    else:
+        stream = await jellyfin.build_episode_stream(
+            db, external_id, media["season"], media["episode"]
+        )
+    if not stream:
+        raise HTTPException(status_code=404, detail="Titre introuvable dans Jellyfin")
+    state = {
+        "media_type": media["media_type"],
+        "id_type": media["id_type"],
+        "id": media["external_id"],
+        "season": media["season"],
+        "episode": media["episode"],
+        "title": stream.get("title") or media["title"],
+    }
+    result = await send_to_apple_tv(db, request, device_id, stream, state)
+    if result.get("status") != "casting":
+        raise HTTPException(status_code=502, detail=result.get("detail") or "Lecture impossible")
+    name = next(
+        (d["name"] for d in await cast_service.list_devices(db) if d["id"] == device_id),
+        "l'Apple TV",
+    )
+    return {"status": "ok", "online": True, "message": f"Lecture lancée sur {name} (VLC)"}
 
 
 @router.get("/series/{tvdb_id}/season/{season}")

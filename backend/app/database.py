@@ -98,6 +98,9 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("watch_states", "profile_id", "INTEGER"),
     ("tv_requests", "profile_id", "INTEGER"),
     ("tv_requests", "profile_name", "VARCHAR(40)"),
+    # Apple TV parmi les cibles d'envoi (lecture par VLC, appairage pyatv)
+    ("cast_devices", "kind", "VARCHAR(20) NOT NULL DEFAULT 'chromecast'"),
+    ("cast_devices", "credentials", "TEXT"),
 )
 
 

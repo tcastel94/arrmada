@@ -187,6 +187,7 @@ Ouvre **`http://<adresse-de-ta-machine>:3420`**. L'assistant t'accompagne jusqu'
 |--------|------------|------------------|
 | 📺 **Application TV** | TV Android / Google TV, Nvidia Shield ou box Kodi | Appli TV native ([android/](android/README.md)) ou add-on Kodi ([kodi-addon/](kodi-addon/README.md)) : accueil, reprise de lecture partagée, demandes depuis le canapé, page **Reprendre**, profils famille |
 | 📱 **Tablette d'appoint** | N'importe quelle tablette avec un navigateur | Page `/ecran` : ce qui passe, heure de fin, pistes, sorties du soir ; assombrie pendant le film |
+| 🍎 **Apple TV** | Apple TV avec l'appli VLC (gratuite) | **Sur la TV** depuis la web app ou le téléphone : VLC lit le fichier d'origine, reprise et « vu » partagés. Appairage par code dans *Réglages › Cast & Jellyfin* |
 | 🔊 **Ampli home cinéma** | Ampli Yamaha MusicCast | Profils audio par pièce appliqués au lancement d'un film, télécommande dans **Salon** |
 | 📷 **Caméras Eufy** | Caméras Eufy + pont `eufy-security-ws` | Alerte sur la TV quand quelqu'un est détecté pendant un film |
 

@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Envoyer un film sur une Apple TV
+
+#### Added
+- **Apple TV parmi les appareils d'envoi** : *Réglages › Cast & Jellyfin › Scanner le réseau* la détecte à côté des Chromecast. Le serveur lui fait ouvrir le film dans **VLC** (gratuit, à installer sur l'Apple TV), qui lit le fichier d'origine sans transcodage
+- **Appairage en deux codes** : bouton *Appairer* sur la ligne de l'Apple TV, puis les deux codes à 4 chiffres qu'elle affiche à la suite. À faire une fois
+- **Web app** : l'Apple TV apparaît dans le menu **Sur la TV** des fiches et de la page Reprendre, et dans la boîte **Caster** (avec pause, lecture, arrêt)
+- **Appli Android** (téléphone, tablette) : l'Apple TV apparaît dans **Lire sur une TV**, sans mise à jour de l'appli
+- **Reprise et « vu » partagés** : la position est relevée toutes les 30 secondes pendant la lecture, et à l'arrêt demandé depuis ArrMada ; « vu » à 90 %
+- Le lien donné à VLC est signé par le serveur et expire au bout de 18 heures : la clé Jellyfin ne quitte pas le serveur
+
+#### Limites
+- La lecture démarre toujours au début : le lien VLC ne sait pas reprendre en cours de film
+- Films et épisodes de la médiathèque seulement (pas les vidéos « maison »)
+- L'Apple TV doit pouvoir joindre le serveur ArrMada sur le réseau local. Depuis l'extérieur (VPN, nom de domaine), régler `PUBLIC_WEB_URL` sur l'adresse locale du serveur
+- L'envoi direct en AirPlay n'est pas utilisé : sous tvOS 27, l'Apple TV accepte la commande mais ne lit rien
+
 ### Remux à alléger
 
 #### Added
