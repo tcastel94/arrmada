@@ -425,15 +425,36 @@ def duration_seconds(item: dict[str, Any]) -> int:
         return 0
 
 
-async def file_suffix(db: AsyncSession, item_id: str) -> str:
-    """Extension du fichier d'origine (« .mkv ») ; « .mkv » si Jellyfin ne la donne pas."""
+async def vlc_source(db: AsyncSession, item_id: str) -> dict[str, Any]:
+    """Ce qu'il faut pour faire lire un titre par VLC (Apple TV) :
+    {suffix, subtitle}.
+
+    `suffix` : extension du fichier d'origine (« .mkv » si Jellyfin ne la
+    donne pas). `subtitle` : le sous-titre posé À CÔTÉ du fichier à joindre
+    au lien ({index, ext}), ou None. VLC ne reçoit que la vidéo : il voit
+    les pistes du MKV, jamais le .srt de Bazarr rangé dans le même dossier.
+    """
+    from app.services import appletv, subtitle_jobs
+
     cfg = await jellyfin.get_config(db)
     try:
         details = await _item_details(cfg[0], cfg[1], item_id) if cfg else None
     except httpx.HTTPError:
         details = None
-    suffix = PurePosixPath(str((details or {}).get("Path") or "").replace("\\", "/")).suffix
-    return suffix.lower() or ".mkv"
+    details = details or {}
+    suffix = PurePosixPath(str(details.get("Path") or "").replace("\\", "/")).suffix
+    tracks = audio_tracks(details)
+    heard = next((t for t in tracks if t["default"]), tracks[0] if tracks else None)
+    chosen = appletv.pick_subtitle(
+        external_subtitles(item_id, details),
+        subtitle_jobs.code2(heard["language"]) if heard else "",
+        subtitle_jobs.code2(settings.SUBTITLE_LANGUAGE),
+    )
+    subtitle = None
+    if chosen:
+        index, _, ext = chosen["url"].rsplit("/", 1)[-1].partition(".")
+        subtitle = {"index": int(index), "ext": ext}
+    return {"suffix": suffix.lower() or ".mkv", "subtitle": subtitle}
 
 
 async def _item_details(base: str, key: str, item_id: str) -> dict[str, Any] | None:

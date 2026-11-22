@@ -114,9 +114,39 @@ def check_link(item_id: str, expires: int, signature: str, now: float | None = N
     return hmac.compare_digest(sign(item_id, expires), signature or "")
 
 
-def vlc_link(url: str) -> str:
-    """Lien qui fait lire `url` par VLC (même schéma que sur iPhone)."""
-    return "vlc-x-callback://x-callback-url/stream?url=" + quote(url, safe="")
+def subtitle_path(item_id: str, index: int, ext: str, now: float | None = None) -> str:
+    """Chemin signé d'un sous-titre posé à côté du fichier (même signature que la vidéo)."""
+    expires = int(now if now is not None else time.time()) + LINK_TTL
+    return f"/api/cast/subtitle/{expires}/{sign(item_id, expires)}/{item_id}/{index}.{ext}"
+
+
+def pick_subtitle(
+    subtitles: list[dict[str, str]], audio_language: str, house_language: str
+) -> dict[str, str] | None:
+    """Sous-titre externe à joindre au lien VLC, parmi ceux de `external_subtitles`.
+
+    Même règle que l'appli Android : son étranger → sous-titres complets dans
+    la langue de la maison (les SDH à défaut) ; son déjà dans cette langue →
+    seulement les « forcés » (dialogues étrangers). VLC affiche d'office le
+    sous-titre joint : mieux vaut aucun qu'un mauvais.
+    """
+    ours = [s for s in subtitles if s.get("language") == house_language]
+    forced = [s for s in ours if "(forcés)" in s.get("label", "")]
+    if audio_language == house_language:
+        return forced[0] if forced else None
+    full = [s for s in ours if s not in forced]
+    full.sort(key=lambda s: "(SDH)" in s.get("label", ""))
+    return full[0] if full else None
+
+
+def vlc_link(url: str, subtitle_url: str | None = None) -> str:
+    """Lien qui fait lire `url` par VLC (même schéma que sur iPhone).
+
+    `subtitle_url` : sous-titre que VLC télécharge et affiche avec la vidéo
+    (vérifié sur tvOS 27 : il vient bien le chercher).
+    """
+    link = "vlc-x-callback://x-callback-url/stream?url=" + quote(url, safe="")
+    return link + ("&sub=" + quote(subtitle_url, safe="") if subtitle_url else "")
 
 
 def player_state(device_state: str) -> str:
@@ -340,7 +370,9 @@ async def _playing(atv) -> dict[str, Any]:
     }
 
 
-async def play(ip: str, credentials: dict[str, str], url: str) -> dict[str, Any]:
+async def play(
+    ip: str, credentials: dict[str, str], url: str, subtitle_url: str | None = None
+) -> dict[str, Any]:
     """Fait lire `url` par VLC sur l'Apple TV ; attend que la lecture démarre."""
     try:
         async with _session(ip, credentials) as atv:
@@ -350,7 +382,7 @@ async def play(ip: str, credentials: dict[str, str], url: str) -> dict[str, Any]
                     "status": "error",
                     "detail": "VLC n'est pas installé sur cette Apple TV (gratuit sur l'App Store).",
                 }
-            await atv.apps.launch_app(vlc_link(url))
+            await atv.apps.launch_app(vlc_link(url, subtitle_url))
             state: dict[str, Any] = {}
             for _ in range(START_TIMEOUT // 2):
                 await asyncio.sleep(2)

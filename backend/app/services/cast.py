@@ -420,7 +420,11 @@ async def pair_pin(db: AsyncSession, device_id: int, pin: str) -> dict[str, Any]
 
 
 async def play_on_apple_tv(
-    db: AsyncSession, device_id: int, url: str, media: dict[str, Any] | None
+    db: AsyncSession,
+    device_id: int,
+    url: str,
+    media: dict[str, Any] | None,
+    subtitle_url: str | None = None,
 ) -> dict[str, Any]:
     """Fait lire `url` (fichier d'origine, lien signé) par VLC sur l'Apple TV.
 
@@ -436,7 +440,7 @@ async def play_on_apple_tv(
             "status": "error",
             "detail": f"{d.name} n'est pas appairée : Réglages › Cast & Jellyfin › Appairer.",
         }
-    result = await appletv.play(d.ip, credentials, url)
+    result = await appletv.play(d.ip, credentials, url, subtitle_url)
     if result.get("status") == "casting" and media:
         appletv.start_tracking(d.id, d.ip, credentials, media, d.name)
     return result

@@ -3,7 +3,7 @@
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -51,6 +51,25 @@ async def signed_file(
     return StreamingResponse(body, status_code=status_code, headers=headers)
 
 
+@public_router.get("/subtitle/{expires}/{signature}/{item_id}/{index}.{ext}")
+async def signed_subtitle(
+    expires: int,
+    signature: str,
+    item_id: str,
+    index: int,
+    ext: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Sous-titre posé à côté du fichier (.srt de Bazarr), joint au lien VLC."""
+    if not appletv.check_link(item_id, expires, signature):
+        raise HTTPException(status_code=403, detail="Lien de lecture invalide ou expiré")
+    try:
+        content, media_type = await tv_playback.open_subtitle(db, item_id, index, ext)
+    except tv_playback.UpstreamError as exc:
+        raise HTTPException(exc.status_code, exc.detail) from exc
+    return Response(content, media_type=media_type)
+
+
 async def send_to_apple_tv(
     db: AsyncSession,
     request: Request,
@@ -63,11 +82,16 @@ async def send_to_apple_tv(
     Partagé par le bouton « Caster » de la web app et par « Sur la TV » du
     téléphone. L'adresse du lien est celle du serveur vue du réseau local.
     """
-    suffix = await tv_playback.file_suffix(db, stream["item_id"])
-    path = appletv.file_path(stream["item_id"], stream.get("title") or media.get("title"), suffix)
-    return await cast_service.play_on_apple_tv(
-        db, device_id, f"{web_base_url(request)}{path}", media
+    item_id, base = stream["item_id"], web_base_url(request)
+    source = await tv_playback.vlc_source(db, item_id)
+    path = appletv.file_path(item_id, stream.get("title") or media.get("title"), source["suffix"])
+    subtitle = source["subtitle"]
+    subtitle_url = (
+        base + appletv.subtitle_path(item_id, subtitle["index"], subtitle["ext"])
+        if subtitle
+        else None
     )
+    return await cast_service.play_on_apple_tv(db, device_id, f"{base}{path}", media, subtitle_url)
 
 
 @router.get("/devices")

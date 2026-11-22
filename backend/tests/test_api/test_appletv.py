@@ -67,11 +67,13 @@ def played(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         title = f"The Expanse · S{season:02d}E{number:02d} · Dulcinea"
         return {"url": "http://jf/y", "content_type": "video/mp4", "title": title, "item_id": ITEM}
 
-    async def suffix(_db: Any, _item_id: str) -> str:
-        return ".mkv"
+    async def source(_db: Any, _item_id: str) -> dict[str, Any]:
+        return {"suffix": ".mkv", "subtitle": seen.get("subtitle")}
 
-    async def play(ip: str, credentials: dict[str, str], url: str) -> dict[str, Any]:
-        seen.update(ip=ip, credentials=credentials, url=url)
+    async def play(
+        ip: str, credentials: dict[str, str], url: str, subtitle_url: str | None = None
+    ) -> dict[str, Any]:
+        seen.update(ip=ip, credentials=credentials, url=url, subtitle_url=subtitle_url)
         return seen["result"]
 
     def track(device_id: int, _ip: str, _creds: dict, media: dict, name: str) -> None:
@@ -79,7 +81,7 @@ def played(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
 
     monkeypatch.setattr(jellyfin, "build_movie_stream", movie)
     monkeypatch.setattr(jellyfin, "build_episode_stream", episode)
-    monkeypatch.setattr(tv_playback, "file_suffix", suffix)
+    monkeypatch.setattr(tv_playback, "vlc_source", source)
     monkeypatch.setattr(appletv, "play", play)
     monkeypatch.setattr(appletv, "start_tracking", track)
     return seen
@@ -406,3 +408,112 @@ async def test_rescan_updates_a_known_apple_tv_and_keeps_its_pairing(
         "192.168.2.240",
     )
     assert device["paired"] is True
+
+
+# ── Sous-titres posés à côté du fichier (.srt de Bazarr) ─────────────────────
+
+FR = {"url": f"/api/tv/subtitle/{ITEM}/0.srt", "label": "Français · fichier", "language": "fr"}
+FR_SDH = {
+    "url": f"/api/tv/subtitle/{ITEM}/3.srt",
+    "label": "Français (SDH) · fichier",
+    "language": "fr",
+}
+FR_FORCED = {
+    "url": f"/api/tv/subtitle/{ITEM}/4.srt",
+    "label": "Français (forcés) · fichier",
+    "language": "fr",
+}
+EN = {"url": f"/api/tv/subtitle/{ITEM}/5.srt", "label": "Anglais · fichier", "language": "en"}
+
+
+def test_pick_subtitle_follows_the_house_rule() -> None:
+    everything = [EN, FR_FORCED, FR_SDH, FR]
+    # Son étranger (polonais, anglais, inconnu) : sous-titres complets, les SDH à défaut
+    assert appletv.pick_subtitle(everything, "pl", "fr") is FR
+    assert appletv.pick_subtitle([EN, FR_SDH, FR_FORCED], "en", "fr") is FR_SDH
+    assert appletv.pick_subtitle([EN, FR_FORCED], "", "fr") is None  # pas de « forcés » seuls
+    # Son déjà en français : seulement les forcés
+    assert appletv.pick_subtitle(everything, "fr", "fr") is FR_FORCED
+    assert appletv.pick_subtitle([FR, EN], "fr", "fr") is None
+    assert appletv.pick_subtitle([], "en", "fr") is None
+
+
+def test_vlc_link_can_carry_a_subtitle() -> None:
+    link = appletv.vlc_link("http://nas:3420/v.mkv", "http://nas:3420/s/0.srt")
+    assert link.endswith("&sub=http%3A%2F%2Fnas%3A3420%2Fs%2F0.srt")
+    assert "&sub=" not in appletv.vlc_link("http://nas:3420/v.mkv")
+
+
+async def test_cast_play_joins_the_french_subtitle_file(
+    client: AsyncClient, auth_headers: dict[str, str], played: dict[str, Any]
+) -> None:
+    device_id = await _apple_tv()
+    body = {"device_id": device_id, "tmdb_id": 136400}
+    await client.post("/api/cast/play", json=body, headers=auth_headers)
+    assert played["subtitle_url"] is None  # aucun fichier à côté : rien à joindre
+
+    played["subtitle"] = {"index": 0, "ext": "srt"}
+    await client.post("/api/cast/play", json=body, headers=auth_headers)
+    url = urlsplit(played["subtitle_url"])
+    _, _, _, _, expires, signature, item_id, name = url.path.split("/")
+    assert url.netloc == "test:3420" and (item_id, name) == (ITEM, "0.srt")
+    assert appletv.check_link(item_id, int(expires), signature)
+
+
+async def test_signed_subtitle_is_served_without_a_session_but_only_if_signed(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def open_subtitle(_db: Any, item_id: str, index: int, ext: str, shift_ms: int = 0):
+        assert (item_id, index, ext) == (ITEM, 0, "srt")
+        return (
+            "1\n00:00:05,005 --> 00:00:07,758\nBon débarras.\n".encode(),
+            "application/x-subrip; charset=utf-8",
+        )
+
+    monkeypatch.setattr(tv_playback, "open_subtitle", open_subtitle)
+    path = appletv.subtitle_path(ITEM, 0, "srt")
+    served = await client.get(path)
+    assert served.status_code == 200 and "Bon débarras" in served.text
+    parts = path.split("/")
+    parts[5] = "0" * 32  # signature falsifiée
+    assert (await client.get("/".join(parts))).status_code == 403
+
+
+async def test_vlc_source_picks_the_file_next_to_the_video(monkeypatch: pytest.MonkeyPatch) -> None:
+    details = {
+        "Path": "/tv/Tulsa King/Tulsa King - S04E04.MKV",
+        "MediaSources": [
+            {
+                "MediaStreams": [
+                    {"Type": "Subtitle", "Index": 0, "Codec": "subrip", "IsExternal": True},
+                    {
+                        "Type": "Audio",
+                        "Index": 1,
+                        "Language": "pol",
+                        "Codec": "eac3",
+                        "IsDefault": True,
+                    },
+                    {"Type": "Audio", "Index": 2, "Language": "eng", "Codec": "eac3"},
+                    {"Type": "Subtitle", "Index": 3, "Codec": "subrip", "Language": "pol"},
+                ]
+            }
+        ],
+    }
+
+    async def config(_db: Any) -> tuple[str, str]:
+        return "http://jf", "key"
+
+    async def item(_base: str, _key: str, _item_id: str) -> dict[str, Any]:
+        return details
+
+    monkeypatch.setattr(jellyfin, "get_config", config)
+    monkeypatch.setattr(tv_playback, "_item_details", item)
+    # .srt sans langue dans son nom (rangement de Bazarr) : c'est la langue de la maison
+    assert await tv_playback.vlc_source(None, ITEM) == {
+        "suffix": ".mkv",
+        "subtitle": {"index": 0, "ext": "srt"},
+    }
+    details["MediaSources"][0]["MediaStreams"][1]["Language"] = (
+        "fre"  # VF : pas de sous-titres complets
+    )
+    assert (await tv_playback.vlc_source(None, ITEM))["subtitle"] is None
