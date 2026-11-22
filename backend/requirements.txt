@@ -26,7 +26,7 @@ python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 
 # Encryption
-cryptography==44.0.0
+cryptography==44.0.3
 
 # Scheduler
 apscheduler==3.10.4
@@ -55,3 +55,8 @@ httpx==0.28.1
 # mDNS Discovery
 zeroconf>=0.131.0
 PyChromecast==14.0.5
+# Apple TV : appairage, lancement de VLC, état de lecture. pyatv exige
+# cryptography >= 44.0.1. srptools 2.x a changé SRPClientSession : avec lui
+# l'appairage plante (« takes 2 positional arguments but 3 were given »).
+pyatv==0.18.0
+srptools==1.0.1

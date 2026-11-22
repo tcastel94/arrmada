@@ -50,6 +50,7 @@ import asyncio
 import re
 import time
 from collections.abc import AsyncIterator
+from pathlib import PurePosixPath
 from typing import Any
 from urllib.parse import parse_qs, urlencode
 
@@ -424,6 +425,17 @@ def duration_seconds(item: dict[str, Any]) -> int:
         return 0
 
 
+async def file_suffix(db: AsyncSession, item_id: str) -> str:
+    """Extension du fichier d'origine (« .mkv ») ; « .mkv » si Jellyfin ne la donne pas."""
+    cfg = await jellyfin.get_config(db)
+    try:
+        details = await _item_details(cfg[0], cfg[1], item_id) if cfg else None
+    except httpx.HTTPError:
+        details = None
+    suffix = PurePosixPath(str((details or {}).get("Path") or "").replace("\\", "/")).suffix
+    return suffix.lower() or ".mkv"
+
+
 async def _item_details(base: str, key: str, item_id: str) -> dict[str, Any] | None:
     params = {jellyfin.KEY_PARAM: key, "ids": item_id, "fields": _FIELDS}
     async with httpx.AsyncClient(timeout=15) as client:
@@ -769,9 +781,13 @@ async def _relay(
 
 
 async def open_stream(
-    db: AsyncSession, item_id: str, range_header: str | None
+    db: AsyncSession, item_id: str, range_header: str | None, warm: bool = True
 ) -> tuple[int, dict[str, str], AsyncIterator[bytes]]:
-    """Fichier d'origine (lecture directe), relayé depuis Jellyfin."""
+    """Fichier d'origine (lecture directe), relayé depuis Jellyfin.
+
+    `warm` faux : lecteur tiers (VLC de l'Apple TV), qui ne basculera jamais
+    sur le flux 1080p de l'appli Android : inutile de le préparer.
+    """
     if not ITEM_ID.match(item_id):
         raise UpstreamError(404, "Élément inconnu")
     cfg = await jellyfin.get_config(db)
@@ -780,7 +796,8 @@ async def open_stream(
     base, key = cfg
     # Le fichier est vraiment lu : c'est maintenant que préparer la bascule
     # 1080p a un sens (« Pistes texte intégrées », plus bas)
-    _warm_embedded_subtitles(base, key, item_id)
+    if warm:
+        _warm_embedded_subtitles(base, key, item_id)
     url = f"{base}/Videos/{item_id}/stream?{urlencode({jellyfin.KEY_PARAM: key, 'static': 'true'})}"
     return await _relay(url, range_header, item_id)
 

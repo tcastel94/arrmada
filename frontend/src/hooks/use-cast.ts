@@ -11,7 +11,13 @@ export interface CastDevice {
     port: number;
     model: string | null;
     video_capable: boolean;
+    /** « appletv » : le fichier d'origine est ouvert par VLC sur l'Apple TV (pas de transcodage). */
+    kind: "chromecast" | "appletv";
+    /** Apple TV : faux tant que les deux codes d'appairage n'ont pas été saisis. */
+    paired: boolean;
 }
+
+export const isAppleTv = (d: Pick<CastDevice, "kind">) => d.kind === "appletv";
 
 export function useCastDevices() {
     return useQuery<CastDevice[]>({
@@ -34,6 +40,37 @@ export function useDeleteCastDevice() {
     return useMutation<{ status: string }, Error, number>({
         mutationFn: (id) => apiFetch(`/api/cast/devices/${id}`, { method: "DELETE" }),
         onSuccess: () => qc.invalidateQueries({ queryKey: ["cast", "devices"] }),
+    });
+}
+
+/* ── Appairage d'une Apple TV ──────────────────────────────── */
+
+/**
+ * Réponse d'une étape d'appairage. L'Apple TV demande DEUX codes à la suite
+ * (un par protocole) : `pin` = un code est affiché sur la TV, à saisir ;
+ * `paired` = terminé ; `error` = code refusé ou TV injoignable.
+ */
+export interface AppleTvPairingStep {
+    status: "pin" | "paired" | "error";
+    step?: number;
+    steps?: number;
+    detail?: string;
+}
+
+export function usePairAppleTv() {
+    return useMutation<AppleTvPairingStep, Error, number>({
+        mutationFn: (id) => apiFetch(`/api/cast/appletv/${id}/pair`, { method: "POST" }),
+    });
+}
+
+export function usePinAppleTv() {
+    const qc = useQueryClient();
+    return useMutation<AppleTvPairingStep, Error, { id: number; pin: string }>({
+        mutationFn: ({ id, pin }) =>
+            apiFetch(`/api/cast/appletv/${id}/pin`, { method: "POST", body: JSON.stringify({ pin }) }),
+        onSuccess: (r) => {
+            if (r.status === "paired") qc.invalidateQueries({ queryKey: ["cast", "devices"] });
+        },
     });
 }
 

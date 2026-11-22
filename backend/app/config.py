@@ -46,6 +46,8 @@ class Settings(BaseSettings):
     # ── Web app vue depuis le réseau local ────────────────────
     # Sert aux QR codes affichés sur les TV (appairage). Vide = déduite de
     # l'adresse utilisée par Kodi, en remplaçant le port 8420 par 3420.
+    # Sert aussi aux liens de lecture donnés à VLC sur une Apple TV : elle
+    # doit pouvoir joindre cette adresse depuis le réseau local.
     PUBLIC_WEB_URL: str = ""
 
     # ── Dépôt Kodi (mises à jour de l'add-on) ─────────────────

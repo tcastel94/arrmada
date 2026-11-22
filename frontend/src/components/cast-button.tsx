@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * Cast (Chromecast / Google Cast) d'un film ou d'un épisode via Jellyfin.
+ * Envoi d'un film ou d'un épisode sur un appareil : Chromecast / Google Cast
+ * (flux transcodé par Jellyfin) ou Apple TV (fichier d'origine ouvert par VLC).
  * ----------------------------------------------------------------
  * - `CastDialog` : la boîte de choix d'appareil, contrôlable de l'extérieur
  *   (utilisée par le bouton « Lire » scindé de la fiche média).
@@ -33,6 +34,7 @@ import {
     useCastDiscover,
     useCastPlay,
     useCastControl,
+    isAppleTv,
     type CastDevice,
 } from "@/hooks/use-cast";
 
@@ -85,8 +87,10 @@ export function CastDialog({
                 onSuccess: (r) => {
                     if (r.status === "casting") {
                         setCastingOn(d);
-                        toast.success(`Cast lancé sur ${d.name}`, {
-                            description: "Jellyfin transcode le flux — quelques secondes avant l'image.",
+                        toast.success(isAppleTv(d) ? `Lecture lancée sur ${d.name}` : `Cast lancé sur ${d.name}`, {
+                            description: isAppleTv(d)
+                                ? "VLC lit le fichier d'origine sur l'Apple TV."
+                                : "Jellyfin transcode le flux — quelques secondes avant l'image.",
                         });
                     } else {
                         toast.error(`Cast impossible sur ${d.name}`, { description: r.detail });
@@ -136,7 +140,7 @@ export function CastDialog({
                     </DialogTitle>
                     <DialogDescription>
                         {title && <span className="block truncate font-medium text-foreground">{title}</span>}
-                        La lecture passe par Jellyfin (transcodage à la volée) pour rester compatible Chromecast.
+                        Chromecast : Jellyfin transcode à la volée. Apple TV : VLC y lit le fichier d&apos;origine.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -183,8 +187,8 @@ export function CastDialog({
                         <EmptyState
                             compact
                             icon={Radar}
-                            title="Aucun appareil Cast enregistré"
-                            description="Lance un scan : les Chromecast et TV compatibles de ton réseau seront détectés."
+                            title="Aucun appareil enregistré"
+                            description="Lance un scan : les Chromecast, Google TV et Apple TV de ton réseau seront détectés."
                             action={{ label: discover.isPending ? "Scan en cours…" : "Scanner le réseau", onClick: scan }}
                         />
                     ) : (
@@ -197,7 +201,8 @@ export function CastDialog({
                                         key={d.id}
                                         type="button"
                                         onClick={() => castTo(d)}
-                                        disabled={pendingId !== null}
+                                        disabled={pendingId !== null || !d.paired}
+                                        title={d.paired ? undefined : "À appairer dans Réglages › Cast & Jellyfin"}
                                         className={cn(
                                             "glass glass-hover flex w-full items-center gap-3 rounded-xl p-3 text-left transition-opacity disabled:opacity-60",
                                             active && "border-sky-400/40",
@@ -208,7 +213,13 @@ export function CastDialog({
                                         </span>
                                         <span className="min-w-0 flex-1">
                                             <span className="block truncate text-sm font-medium">{d.name}</span>
-                                            <span className="block truncate text-[11px] text-muted-foreground">{d.model ?? "Google Cast"}</span>
+                                            <span className="block truncate text-[11px] text-muted-foreground">
+                                                {isAppleTv(d)
+                                                    ? d.paired
+                                                        ? "Apple TV · lecture par VLC"
+                                                        : "Apple TV · à appairer dans Réglages › Cast"
+                                                    : (d.model ?? "Google Cast")}
+                                            </span>
                                         </span>
                                         {pending ? (
                                             <Loader2 className="h-4 w-4 animate-spin text-primary" aria-label="Lancement en cours" />
