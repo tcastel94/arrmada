@@ -160,3 +160,16 @@ def test_in_progress_keys_and_full_languages() -> None:
         {"Type": "Audio", "Language": "jpn"},
     ]}]}  # fmt: skip
     assert sg.full_languages(details) == {"en"}  # un forcé ne suffit pas
+
+
+def test_activity_bounds_are_naive_utc() -> None:
+    """`activity_events.ts` est sans fuseau : PostgreSQL refuse une borne avec
+    fuseau (le gardien échouait à chaque passage, SQLite ne le voit pas)."""
+    from datetime import UTC, datetime, timedelta, timezone
+
+    from app.models.activity import ts_bound
+
+    paris = datetime(2026, 11, 23, 22, 10, tzinfo=timezone(timedelta(hours=1)))
+    assert ts_bound(paris) == datetime(2026, 11, 23, 21, 10)
+    assert ts_bound(datetime(2026, 11, 23, 21, 10, tzinfo=UTC)).tzinfo is None
+    assert ts_bound(datetime(2026, 11, 23, 21, 10)) == datetime(2026, 11, 23, 21, 10)

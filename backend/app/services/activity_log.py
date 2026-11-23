@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import async_session_factory
-from app.models.activity import ActivityEvent
+from app.models.activity import ActivityEvent, ts_bound
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -112,7 +112,9 @@ async def query_events(
     if search:
         stmt = stmt.where(ActivityEvent.title.ilike(f"%{search}%"))
     if since_ts:
-        stmt = stmt.where(ActivityEvent.ts >= datetime.fromtimestamp(since_ts, tz=UTC))
+        stmt = stmt.where(
+            ActivityEvent.ts >= ts_bound(datetime.fromtimestamp(since_ts, tz=UTC))
+        )
     stmt = stmt.order_by(ActivityEvent.ts.desc()).limit(limit)
     res = await db.execute(stmt)
     return list(res.scalars().all())

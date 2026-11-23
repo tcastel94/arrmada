@@ -2,13 +2,26 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import JSON, Index, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models import Base
+
+
+def ts_bound(moment: datetime) -> datetime:
+    """Borne à comparer à `ActivityEvent.ts`.
+
+    `ts` est une colonne SANS fuseau, remplie par `now()` côté base (UTC).
+    PostgreSQL (asyncpg) refuse de la comparer à une date avec fuseau
+    (« can't subtract offset-naive and offset-aware datetimes ») ; SQLite, en
+    test, laisse passer. Toute borne passe donc par ici : UTC, sans fuseau.
+    """
+    if moment.tzinfo is None:
+        return moment
+    return moment.astimezone(UTC).replace(tzinfo=None)
 
 
 class ActivityEvent(Base):

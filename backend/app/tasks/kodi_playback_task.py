@@ -14,7 +14,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import select
 
 from app.database import async_session_factory
-from app.models.activity import ActivityEvent
+from app.models.activity import ActivityEvent, ts_bound
 from app.services import kodi as kodi_service
 from app.services.activity_log import log_event
 from app.utils.logger import get_logger
@@ -37,7 +37,7 @@ async def _recent_arrmada_play(db, tmdb_id: int | None) -> bool:
             ActivityEvent.action == "kodi_play",
             ActivityEvent.source == "arrmada",
             ActivityEvent.tmdb_id == tmdb_id,
-            ActivityEvent.ts >= cutoff,
+            ActivityEvent.ts >= ts_bound(cutoff),
         )
         .limit(1)
     )

@@ -291,7 +291,7 @@ async def _interest(series: list[dict]) -> tuple[set[int], set[int]]:
       - les films commencés (reprise en cours) ;
       (plus les séries en cours, toujours en tête : voir _in_progress_series).
     """
-    from app.models.activity import ActivityEvent
+    from app.models.activity import ActivityEvent, ts_bound
     from app.models.watch_state import WatchState
     from app.models.watchlist import WatchlistItem
 
@@ -306,7 +306,7 @@ async def _interest(series: list[dict]) -> tuple[set[int], set[int]]:
                 select(ActivityEvent.media_type, ActivityEvent.media_id).where(
                     ActivityEvent.category == "download",
                     ActivityEvent.action == "imported",
-                    ActivityEvent.ts >= since,
+                    ActivityEvent.ts >= ts_bound(since),
                 )
             )
         ).all()
