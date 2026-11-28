@@ -71,5 +71,5 @@ test("Trakt non configuré : la marche à suivre", async ({ page }) => {
     ]);
     await page.goto("/settings");
     await expect(page.getByText("TRAKT_CLIENT_ID=…")).toBeVisible();
-    await expect(page.getByRole("link", { name: "trakt.tv/oauth/applications/new" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "trakt.tv (My Apps)" })).toBeVisible();
 });

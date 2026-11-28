@@ -21,9 +21,15 @@ et que ces notes, comme ce qu'on regarde, arrivent sur son compte
    Paramètres › Trakt de la web app : ArrMada demande un code à Trakt, on le
    tape sur trakt.tv/activate, la page attend au rythme demandé par Trakt.
    Rien à exposer sur Internet, aucune adresse de retour. Analogie :
-   l'appairage d'une TV avec un code. Prérequis : une application Trakt
-   (`TRAKT_CLIENT_ID` / `TRAKT_CLIENT_SECRET`, redirect URI
-   `urn:ietf:wg:oauth:2.0:oob`).
+   l'appairage d'une TV avec un code. Prérequis : une application Trakt et
+   son `TRAKT_CLIENT_ID`. Depuis octobre 2026, les nouvelles applications
+   Trakt n'ont plus de « client secret » (PKCE) : la liaison par code n'en a
+   pas besoin, le code tapé sur trakt.tv/activate tient lieu de preuve.
+   `TRAKT_CLIENT_SECRET` reste accepté pour une ancienne application ; il
+   n'est envoyé que s'il est renseigné. Les échanges de connexion (`/oauth/…`)
+   passent par `auth.trakt.tv`, avec repli sur `api.trakt.tv` ; les données
+   (notes, scrobble) restent sur `api.trakt.tv`. Le jeton de renouvellement
+   ne sert qu'une fois : le nouveau est gardé à chaque renouvellement.
 
 3. **Notes à la fin, sur la TV** : quand on quitte un titre vu au-delà de
    90 % (fin du fichier, épisode suivant, Retour, « Quitter »), une carte

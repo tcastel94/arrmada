@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Les notes partent sur le compte Trakt du profil qui regarde (1 à 10 sur Trakt)
 - **Historique Trakt en direct** : lecture, pause et arrêt sont relayés à Trakt par le serveur. Passé 80 %, le titre est marqué vu
 - **Paramètres › Trakt** : chaque profil (Famille, Jeff, Morgane…) relie son propre compte avec un code à taper sur trakt.tv/activate ; bouton Délier. Un profil sans compte n'est jamais sollicité
-- `TRAKT_CLIENT_ID` / `TRAKT_CLIENT_SECRET` (application à créer sur trakt.tv/oauth/applications/new), transmises au conteneur par le `docker-compose.yml`
+- `TRAKT_CLIENT_ID` : le Client ID d'une application créée sur trakt.tv (« My Apps »), transmis au conteneur par le `docker-compose.yml`. Pas de secret à fournir : les nouvelles applications Trakt n'en ont plus (`TRAKT_CLIENT_SECRET` reste accepté pour une ancienne application)
 
 ### Envoyer un film sur une Apple TV
 

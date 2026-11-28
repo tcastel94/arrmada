@@ -61,14 +61,15 @@ function NotConfigured() {
             <ol className="list-decimal space-y-1 pl-4">
                 <li>
                     Crée une application sur{" "}
-                    <a href="https://trakt.tv/oauth/applications/new" target="_blank" rel="noreferrer noopener" className="text-primary hover:underline">
-                        trakt.tv/oauth/applications/new
+                    <a href="https://trakt.tv/oauth/applications" target="_blank" rel="noreferrer noopener" className="text-primary hover:underline">
+                        trakt.tv (My Apps)
                     </a>{" "}
-                    (nom : ArrMada ; redirect URI : <code className={code}>urn:ietf:wg:oauth:2.0:oob</code>).
+                    et copie son <span className="text-foreground">Client ID</span>. Pas de « client secret » : les nouvelles applications Trakt
+                    n&apos;en ont plus, la liaison par code n&apos;en a pas besoin.
                 </li>
                 <li>
-                    Ajoute <code className={code}>TRAKT_CLIENT_ID=…</code> et <code className={code}>TRAKT_CLIENT_SECRET=…</code> dans le{" "}
-                    <code className={code}>.env</code>, puis <code className={code}>docker compose up -d</code>.
+                    Ajoute <code className={code}>TRAKT_CLIENT_ID=…</code> dans le <code className={code}>.env</code>, puis{" "}
+                    <code className={code}>docker compose up -d</code>.
                 </li>
             </ol>
         </div>

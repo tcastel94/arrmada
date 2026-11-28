@@ -44,6 +44,9 @@ API = "https://api.trakt.tv"
 REFRESH_MARGIN = timedelta(hours=6)  # renouvelé un peu avant l'expiration
 TIMEOUT = 15
 OOB_REDIRECT = "urn:ietf:wg:oauth:2.0:oob"
+# Connexion (OAuth) : Trakt demande désormais l'hôte « auth » ; l'ancien hôte
+# (celui des données) sert de repli s'il ne répond pas ou ne connaît pas la route.
+AUTH = "https://auth.trakt.tv"
 
 # Libellés des notes (ceux de Trakt, traduits) : affichés sous les étoiles
 RATING_LABELS = {
@@ -65,7 +68,16 @@ class TraktError(RuntimeError):
 
 
 def configured() -> bool:
-    return bool(settings.TRAKT_CLIENT_ID and settings.TRAKT_CLIENT_SECRET)
+    """Le Client ID suffit : depuis octobre 2026, les applications Trakt n'ont
+    plus de « client secret » (la liaison par code d'appareil n'en a pas besoin)."""
+    return bool(settings.TRAKT_CLIENT_ID)
+
+
+def _with_secret(body: dict[str, Any]) -> dict[str, Any]:
+    """Ajoute le secret aux échanges de connexion, seulement pour une ancienne application qui en a un."""
+    if settings.TRAKT_CLIENT_SECRET:
+        return {**body, "client_secret": settings.TRAKT_CLIENT_SECRET}
+    return body
 
 
 def profile_key(profile_id: int | None) -> int:
@@ -88,6 +100,13 @@ def _headers(token: str | None = None) -> dict[str, str]:
 
 async def _post(path: str, payload: dict[str, Any], token: str | None = None) -> httpx.Response:
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        if path.startswith("/oauth/"):
+            try:
+                resp = await client.post(f"{AUTH}{path}", json=payload, headers=_headers(token))
+                if resp.status_code != 404:
+                    return resp
+            except httpx.HTTPError as exc:
+                logger.info("Trakt : %s injoignable (%s), repli sur %s", AUTH, exc, API)
         return await client.post(f"{API}{path}", json=payload, headers=_headers(token))
 
 
@@ -148,16 +167,22 @@ def _aware(value: datetime) -> datetime:
     return value if value.tzinfo else value.replace(tzinfo=UTC)
 
 
+def _refresh_body(refresh_token: str) -> dict[str, Any]:
+    """Renouvellement : le jeton de renouvellement ne sert qu'une fois (le nouveau est gardé)."""
+    body: dict[str, Any] = {
+        "refresh_token": refresh_token,
+        "client_id": settings.TRAKT_CLIENT_ID,
+        "grant_type": "refresh_token",
+    }
+    if settings.TRAKT_CLIENT_SECRET:  # ancienne application : secret + adresse de retour
+        body.update(client_secret=settings.TRAKT_CLIENT_SECRET, redirect_uri=OOB_REDIRECT)
+    return body
+
+
 async def _refresh(db: AsyncSession, row: TraktAccount) -> TraktAccount:
     resp = await _post(
         "/oauth/token",
-        {
-            "refresh_token": decrypt_api_key(row.refresh_token),
-            "client_id": settings.TRAKT_CLIENT_ID,
-            "client_secret": settings.TRAKT_CLIENT_SECRET,
-            "redirect_uri": OOB_REDIRECT,
-            "grant_type": "refresh_token",
-        },
+        _refresh_body(decrypt_api_key(row.refresh_token)),
     )
     if resp.status_code != 200:
         raise TraktError(
@@ -192,7 +217,7 @@ async def _call(
 async def start_link() -> dict[str, Any]:
     """Code à taper sur trakt.tv/activate : {device_code, user_code, verification_url, …}."""
     if not configured():
-        raise TraktError("Trakt n'est pas configuré : TRAKT_CLIENT_ID / TRAKT_CLIENT_SECRET")
+        raise TraktError("Trakt n'est pas configuré : TRAKT_CLIENT_ID manquant dans le .env")
     resp = await _post("/oauth/device/code", {"client_id": settings.TRAKT_CLIENT_ID})
     if resp.status_code != 200:
         raise TraktError(f"Trakt refuse de donner un code (HTTP {resp.status_code})")
@@ -221,11 +246,7 @@ async def poll_link(db: AsyncSession, profile_id: int | None, device_code: str) 
     """Le code a-t-il été tapé ? {status: pending|linked|expired|denied|…, username?}."""
     resp = await _post(
         "/oauth/device/token",
-        {
-            "code": device_code,
-            "client_id": settings.TRAKT_CLIENT_ID,
-            "client_secret": settings.TRAKT_CLIENT_SECRET,
-        },
+        _with_secret({"code": device_code, "client_id": settings.TRAKT_CLIENT_ID}),
     )
     if resp.status_code != 200:
         return {"status": _POLL_STATES.get(resp.status_code, "error")}
@@ -249,11 +270,9 @@ async def unlink(db: AsyncSession, profile_id: int | None) -> bool:
     try:  # révoque le jeton chez Trakt (au mieux : on délie de toute façon)
         await _post(
             "/oauth/revoke",
-            {
-                "token": decrypt_api_key(row.access_token),
-                "client_id": settings.TRAKT_CLIENT_ID,
-                "client_secret": settings.TRAKT_CLIENT_SECRET,
-            },
+            _with_secret(
+                {"token": decrypt_api_key(row.access_token), "client_id": settings.TRAKT_CLIENT_ID}
+            ),
         )
     except Exception as exc:  # noqa: BLE001
         logger.info("Trakt : révocation impossible (%s), compte délié quand même", exc)

@@ -157,6 +157,27 @@ async def test_not_configured(client: AsyncClient, auth_headers: dict) -> None:
     assert r.status_code == 502 and "TRAKT_CLIENT_ID" in r.json()["detail"]
 
 
+async def test_new_trakt_apps_need_no_secret(
+    client: AsyncClient, auth_headers: dict, fake_trakt: FakeTrakt, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Applications Trakt d'après octobre 2026 : Client ID seul, aucun secret envoyé."""
+    monkeypatch.setattr(settings, "TRAKT_CLIENT_SECRET", "")
+    assert trakt.configured()
+    await _link(client, auth_headers, 0, fake_trakt)
+    [poll] = [b for b in fake_trakt.bodies("/oauth/device/token") if "client_secret" not in b][:1]
+    assert poll["client_id"] == "client-id"
+    assert all("client_secret" not in b for b in fake_trakt.bodies("/oauth/device/token"))
+    assert trakt._refresh_body("r1") == {
+        "refresh_token": "r1",
+        "client_id": "client-id",
+        "grant_type": "refresh_token",
+    }
+    # Ancienne application avec secret : il part, avec l'adresse de retour
+    monkeypatch.setattr(settings, "TRAKT_CLIENT_SECRET", "s3cret")
+    assert trakt._refresh_body("r1")["client_secret"] == "s3cret"
+    assert trakt._with_secret({"a": 1}) == {"a": 1, "client_secret": "s3cret"}
+
+
 async def test_link_by_device_code_then_unlink(
     client: AsyncClient, auth_headers: dict, fake_trakt: FakeTrakt
 ) -> None:
@@ -308,3 +329,19 @@ async def test_tv_scrobble_is_relayed_to_trakt(
         {"movie": {"ids": {"tmdb": 27205}}, "progress": 93.4}
     ]
     assert json.dumps(fake_trakt.bodies("/scrobble/stop"))  # corps JSON valide
+
+
+async def test_oauth_goes_to_the_auth_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Connexion sur auth.trakt.tv ; données (notes, scrobble) sur api.trakt.tv."""
+    from tests import fake_arr
+
+    fake_arr.install(monkeypatch)
+    monkeypatch.setitem(fake_arr.ROUTES, "auth.trakt.tv", [])
+    monkeypatch.setitem(fake_arr.ROUTES, "api.trakt.tv", [])
+    monkeypatch.setattr(settings, "TRAKT_CLIENT_ID", "client-id")
+    await trakt._post("/oauth/device/code", {"client_id": "client-id"})
+    await trakt._post("/sync/ratings", {"movies": []}, token="t")
+    assert [(h, p) for h, p, _b in fake_arr.POSTS] == [
+        ("auth.trakt.tv", "/oauth/device/code"),
+        ("api.trakt.tv", "/sync/ratings"),
+    ]
