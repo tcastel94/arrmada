@@ -64,6 +64,23 @@ et que ces notes, comme ce qu'on regarde, arrivent sur son compte
 - Hors Trakt : vidéos maison et séries maison (pas d'identifiant connu de
   Trakt), lecture depuis un téléphone (il n'envoie pas le flux « lecture en
   cours »), add-on Kodi (pas de carte de note).
-- Une note existante n'est pas pré-remplie : revoir un film propose une carte
-  vide ; la nouvelle note remplace l'ancienne sur Trakt.
+- Revoir un titre : la carte est **pré-remplie** avec la note déjà donnée
+  (« Ta note actuelle : 3,5 ★ ») ; la nouvelle remplace l'ancienne sur Trakt.
 - Si Sonarr ne répond pas, seule la note de l'épisode est proposée.
+
+## Complément : notes déjà données, fiches et web app
+
+6. **Lecture des notes** (`GET /api/trakt/ratings`) : Trakt renvoie toutes
+   les notes d'un type (films, séries, saisons, épisodes) en un appel. Le
+   serveur en garde un index par profil 10 minutes (une note donnée sur le
+   site Trakt apparaît donc en 10 min au plus) et l'oublie dès qu'une note
+   part d'ArrMada. Trakt injoignable : la carte de fin de lecture s'ouvre
+   quand même, simplement vide.
+7. **Fiches** : la TV affiche « Ma note ★ 3,5 » à côté des notes IMDb / TMDB
+   (film) ou dans la ligne d'infos (série), relue au retour du lecteur. La
+   web app affiche une ligne « Ma note Trakt » sur la fiche, avec 5 étoiles
+   cliquables (moitié gauche = demi-étoile) et, si plusieurs profils sont
+   reliés, le choix du profil pour qui l'on note (`profile_key`).
+8. **Garde-fou** : `profile_key` n'est accepté que de la web app
+   (administrateur). Une TV lit et note toujours pour SON profil, quoi
+   qu'elle envoie.

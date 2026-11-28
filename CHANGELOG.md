@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Trakt : ma note partout
+
+#### Added
+- **Carte de fin de lecture pré-remplie** : quand tu revois un titre, la carte part de ta note Trakt actuelle (« Ta note actuelle : 3,5 ★ ») ([ADR-022](docs/adr/022-trakt-notes.md))
+- **Fiches de la TV** : « Ma note ★ 3,5 » s'affiche à côté des notes IMDb / TMDB d'un film, et dans la ligne d'infos d'une série. Elle est relue au retour du lecteur
+- **Fiches de la web app** : ligne « Ma note Trakt » avec 5 étoiles cliquables (moitié gauche = demi-étoile, aperçu au survol). Si plusieurs profils sont reliés, tu choisis pour qui tu notes
+- Serveur : `GET /api/trakt/ratings` (notes d'un film ou d'une série, ses saisons et ses épisodes). Elles sont gardées 10 minutes par profil et oubliées dès qu'une note part d'ArrMada
+
 ### Trakt : noter chaque film et épisode à la fin
 
 #### Added

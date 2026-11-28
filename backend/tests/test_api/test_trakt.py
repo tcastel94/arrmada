@@ -31,6 +31,10 @@ class FakeTrakt:
         self.device_token_status = 400  # « pas encore tapé »
         self.token_counter = 0
         self.ratings_added = 1
+        # Notes déjà sur le compte Trakt, par type (/sync/ratings/<type>)
+        self.my_ratings: dict[str, list[dict[str, Any]]] = {
+            "movies": [], "shows": [], "seasons": [], "episodes": [],
+        }  # fmt: skip
 
     def _resp(self, code: int, body: Any = None) -> httpx.Response:
         return httpx.Response(code, json=body if body is not None else {})
@@ -60,6 +64,8 @@ class FakeTrakt:
 
     async def get(self, path: str, token: str):
         self.calls.append((path, {}, token))
+        if path.startswith("/sync/ratings/"):
+            return self._resp(200, self.my_ratings[path.rsplit("/", 1)[-1]])
         return self._resp(200, {"user": {"username": "jeff_trakt"}})
 
     def paths(self) -> list[str]:
@@ -74,6 +80,7 @@ def fake_trakt(monkeypatch: pytest.MonkeyPatch) -> FakeTrakt:
     monkeypatch.setattr(settings, "TRAKT_CLIENT_ID", "client-id")
     monkeypatch.setattr(settings, "TRAKT_CLIENT_SECRET", "client-secret")
     fake = FakeTrakt()
+    trakt._RATINGS.clear()
     monkeypatch.setattr(trakt, "_post", fake.post)
     monkeypatch.setattr(trakt, "_get", fake.get)
     return fake
@@ -237,7 +244,10 @@ async def test_tv_rates_on_the_watching_profile_account(
     status = (await client.get("/api/trakt/status", headers=as_jeff)).json()
     assert status == {"configured": True, "linked": True, "username": "jeff_trakt"}
     prompt = (await client.get("/api/trakt/prompt?kind=movie", headers=as_jeff)).json()
-    assert prompt == {"linked": True, "steps": [{"kind": "movie", "label": "Ce film"}]}
+    assert prompt == {
+        "linked": True,
+        "steps": [{"kind": "movie", "label": "Ce film", "current": None}],
+    }
     r = await client.post(
         "/api/trakt/rate",
         json={"kind": "movie", "rating": 7, "tmdb_id": 27205, "title": "Inception"},
@@ -345,3 +355,123 @@ async def test_oauth_goes_to_the_auth_host(monkeypatch: pytest.MonkeyPatch) -> N
         ("auth.trakt.tv", "/oauth/device/code"),
         ("api.trakt.tv", "/sync/ratings"),
     ]
+
+
+# ── Notes déjà données : pré-remplir, afficher, noter depuis la web app ──
+
+
+EXPANSE_RATINGS = {
+    "shows": [{"rating": 9, "show": {"ids": {"tvdb": 280619, "tmdb": 63639}}}],
+    "seasons": [{"rating": 8, "season": {"number": 1}, "show": {"ids": {"tvdb": 280619}}}],
+    "episodes": [
+        {"rating": 7, "episode": {"season": 1, "number": 3}, "show": {"ids": {"tvdb": 280619}}},
+        {"rating": 4, "episode": {"season": 1, "number": 3}, "show": {"ids": {"tvdb": 1}}},
+    ],
+}
+
+
+def test_index_ratings() -> None:
+    movies = [{"rating": 8, "movie": {"ids": {"tmdb": 27205}}}, {"rating": "x"}]
+    assert trakt.index_ratings("movies", movies) == {27205: 8}
+    assert trakt.index_ratings("shows", EXPANSE_RATINGS["shows"]) == {280619: 9}
+    assert trakt.index_ratings("seasons", EXPANSE_RATINGS["seasons"]) == {(280619, 1): 8}
+    assert trakt.index_ratings("episodes", EXPANSE_RATINGS["episodes"]) == {
+        (280619, 1, 3): 7,
+        (1, 1, 3): 4,
+    }
+
+
+async def test_prompt_is_prefilled_with_the_current_rating(
+    client: AsyncClient,
+    arr_stack: dict,
+    fake_trakt: FakeTrakt,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from tests import fake_arr
+
+    await _link(client, arr_stack, 0, fake_trakt)
+    fake_trakt.my_ratings.update(EXPANSE_RATINGS)
+    fake_trakt.my_ratings["movies"] = [{"rating": 6, "movie": {"ids": {"tmdb": 27205}}}]
+    episodes = [{"seasonNumber": 1, "episodeNumber": n} for n in range(1, 4)]
+    routes = [(r"/api/v3/episode", lambda _p, _m: episodes), *fake_arr.ROUTES["sonarr.test"]]
+    monkeypatch.setitem(fake_arr.ROUTES, "sonarr.test", routes)
+
+    movie = (
+        await client.get("/api/trakt/prompt?kind=movie&tmdb_id=27205", headers=arr_stack)
+    ).json()
+    assert movie["steps"] == [{"kind": "movie", "label": "Ce film", "current": 6}]
+    ep = (
+        await client.get(
+            "/api/trakt/prompt?kind=episode&tvdb_id=280619&season=1&episode=3", headers=arr_stack
+        )
+    ).json()
+    assert [(s["kind"], s["current"]) for s in ep["steps"]] == [
+        ("episode", 7),
+        ("season", 8),
+        ("show", 9),
+    ]
+
+
+async def test_ratings_for_a_detail_page_and_cache(
+    client: AsyncClient, auth_headers: dict, fake_trakt: FakeTrakt
+) -> None:
+    await _link(client, auth_headers, 0, fake_trakt)
+    fake_trakt.my_ratings.update(EXPANSE_RATINGS)
+    show = (
+        await client.get("/api/trakt/ratings?kind=show&tvdb_id=280619", headers=auth_headers)
+    ).json()
+    assert show == {"linked": True, "show": 9, "seasons": {"1": 8}, "episodes": {"1x3": 7}}
+    # Deuxième lecture : depuis le cache, pas de nouvel appel à Trakt
+    before = len(fake_trakt.calls)
+    await client.get("/api/trakt/ratings?kind=show&tvdb_id=280619", headers=auth_headers)
+    assert len(fake_trakt.calls) == before
+    # Une note envoyée vide le cache : la fiche voit aussitôt la nouvelle note
+    await client.post(
+        "/api/trakt/rate",
+        json={"kind": "show", "rating": 10, "tvdb_id": 280619},
+        headers=auth_headers,
+    )
+    fake_trakt.my_ratings["shows"] = [{"rating": 10, "show": {"ids": {"tvdb": 280619}}}]
+    again = (
+        await client.get("/api/trakt/ratings?kind=show&tvdb_id=280619", headers=auth_headers)
+    ).json()
+    assert again["show"] == 10
+    movie = (
+        await client.get("/api/trakt/ratings?kind=movie&tmdb_id=27205", headers=auth_headers)
+    ).json()
+    assert movie == {"linked": True, "movie": None}
+
+
+async def test_web_rates_for_a_chosen_profile_tv_only_for_itself(
+    client: AsyncClient, auth_headers: dict, fake_trakt: FakeTrakt
+) -> None:
+    jeff = (await client.post("/api/profiles", json={"name": "Jeff"}, headers=auth_headers)).json()
+    await _link(client, auth_headers, jeff["id"], fake_trakt)
+
+    # Web app : note pour Jeff (profile_key), sur son compte
+    r = await client.post(
+        "/api/trakt/rate",
+        json={"kind": "movie", "rating": 8, "tmdb_id": 27205, "profile_key": jeff["id"]},
+        headers=auth_headers,
+    )
+    assert r.status_code == 200, r.text
+    mine = await client.get(
+        f"/api/trakt/ratings?kind=movie&tmdb_id=27205&profile_key={jeff['id']}",
+        headers=auth_headers,
+    )
+    assert mine.json()["linked"] is True
+    # « Famille » (sans compte) : rien à lire
+    famille = await client.get(
+        "/api/trakt/ratings?kind=movie&tmdb_id=27205&profile_key=0", headers=auth_headers
+    )
+    assert famille.json() == {"linked": False}
+
+    # TV du profil Famille : profile_key ignoré, pas de note sur le compte de Jeff
+    tv = await _tv(client, auth_headers)
+    r = await client.post(
+        "/api/trakt/rate",
+        json={"kind": "movie", "rating": 2, "tmdb_id": 1, "profile_key": jeff["id"]},
+        headers=tv,
+    )
+    assert r.status_code == 502 and "Aucun compte" in r.json()["detail"]
+    assert device_may_call("GET", "/api/trakt/ratings")

@@ -59,10 +59,23 @@ class TraktLogicTest {
 
     @Test
     fun `adresse de la demande`() {
-        assertEquals("/api/trakt/prompt?kind=movie", TraktLogic.promptPath("movie", 438631, 0, 0))
+        assertEquals("/api/trakt/prompt?kind=movie&tmdb_id=438631", TraktLogic.promptPath("movie", 438631, 0, 0))
         assertEquals(
             "/api/trakt/prompt?kind=episode&tvdb_id=280619&season=2&episode=3",
             TraktLogic.promptPath("episode", 280619, 2, 3),
         )
+    }
+
+    @Test
+    fun `carte pre-remplie et pastille de la fiche`() {
+        assertEquals(8, TraktLogic.initial(TraktStep("movie", "Ce film", current = 8)))
+        assertEquals(0, TraktLogic.initial(TraktStep("movie", "Ce film"))) // jamais notée
+        assertEquals(10, TraktLogic.initial(TraktStep("movie", "Ce film", current = 42))) // borné
+        assertEquals("Ma note ★ 3,5", TraktLogic.badge(7))
+        assertEquals("Ma note ★ 5", TraktLogic.badge(10))
+        assertNull(TraktLogic.badge(null))
+        assertNull(TraktLogic.badge(0))
+        assertEquals("/api/trakt/ratings?kind=movie&tmdb_id=438631", TraktLogic.ratingsPath(movie = true, id = 438631))
+        assertEquals("/api/trakt/ratings?kind=show&tvdb_id=280619", TraktLogic.ratingsPath(movie = false, id = 280619))
     }
 }

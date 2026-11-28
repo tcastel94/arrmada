@@ -37,6 +37,8 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -133,6 +135,19 @@ fun SeriesScreen(
         }
     }
 
+    // Ma note Trakt de la série : à l'ouverture et au retour du lecteur
+    var traktRating by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(series?.tvdbId) {
+        val tvdb = series?.tvdbId ?: return@LaunchedEffect
+        traktRating = runCatching { repository.traktRatings(movie = false, id = tvdb.toLong()).show }.getOrNull()
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        val tvdb = series?.tvdbId ?: return@LifecycleEventEffect
+        scope.launch {
+            runCatching { repository.traktRatings(movie = false, id = tvdb.toLong()).show }.onSuccess { traktRating = it }
+        }
+    }
+
     val s = series
     if (error != null) return MessageScreen("Série indisponible", error)
     if (s == null) return MessageScreen("Chargement…")
@@ -192,6 +207,7 @@ fun SeriesScreen(
         },
         onMark = ::mark,
         onDownload = { onDownload(s) },
+        traktRating = traktRating,
         onPerson = onPerson,
         onSendToTv = if (LocalScreen.current.isTouch && s.tvdbId != null) ({ row: EpisodeRow -> sendTo = row }) else null,
         // Liste « À voir » du profil qui regarde (repérée par l'id TVDB, comme Sonarr)
@@ -254,6 +270,7 @@ fun SeriesContent(
     // Boutons en plus, après « Télécharger » (« Ma liste » ; rien pour une série maison)
     extraActions: @Composable () -> Unit = {},
     onPerson: ((tmdbId: Long) -> Unit)? = null, // OK sur un acteur : sa filmographie
+    traktRating: Int? = null, // ma note Trakt de la série (1 à 10), null : pas notée
 ) {
     val mainFocus = remember { FocusRequester() }
     var focused by remember(season) { mutableStateOf<EpisodeRow?>(null) }
@@ -291,6 +308,7 @@ fun SeriesContent(
                         series.seasons.count { it.seasonNumber > 0 }.takeIf { it > 0 }?.let { if (it > 1) "$it saisons" else "1 saison" },
                         series.genres.take(2).joinToString(", ").ifBlank { null },
                         if (series.status == "ended") "Terminée" else null,
+                        fr.arrmada.app.data.TraktLogic.badge(traktRating),
                     ).joinToString("  ·  "),
                     style = MaterialTheme.typography.labelLarge,
                     color = ArrColors.TextSecondary,

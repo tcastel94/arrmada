@@ -34,8 +34,15 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api/trakt", tags=["trakt"])
 
 
-def _profile(user: dict) -> int | None:
-    return user.get("profile_id")
+def _profile(user: dict, profile_key: int | None = None) -> int | None:
+    """Profil dont on lit / écrit les notes.
+
+    TV : toujours le profil qui regarde (en-tête X-Profile-Id), jamais un autre.
+    Web app (administrateur) : le profil choisi sur la fiche (0 = « Famille »).
+    """
+    if user.get("role") == "device" or profile_key is None:
+        return user.get("profile_id")
+    return profile_key or None
 
 
 # ── TV ────────────────────────────────────────────────────────
@@ -78,17 +85,27 @@ async def _series_info(db: AsyncSession, tvdb_id: int) -> tuple[str, bool, list[
 @router.get("/prompt")
 async def trakt_prompt(
     kind: Literal["movie", "episode"],
+    tmdb_id: int | None = None,
     tvdb_id: int | None = None,
     season: int | None = None,
     episode: int | None = None,
     db: AsyncSession = Depends(get_db),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
-    """Notes à proposer à la fin : film → [film] ; épisode → [épisode, saison ?, série ?]."""
-    if not trakt.configured() or await trakt.account(db, _profile(user)) is None:
+    """Notes à proposer à la fin : film → [film] ; épisode → [épisode, saison ?, série ?].
+
+    Chaque étape porte la note déjà donnée (``current``, ou null) : la TV
+    pré-remplit la carte quand on revoit un titre.
+    """
+    profile = _profile(user)
+    if not trakt.configured() or await trakt.account(db, profile) is None:
         return {"linked": False, "steps": []}
     if kind == "movie":
-        return {"linked": True, "steps": [{"kind": "movie", "label": "Ce film"}]}
+        mine = await _current(db, profile, "movie", tmdb_id=tmdb_id)
+        return {
+            "linked": True,
+            "steps": [{"kind": "movie", "label": "Ce film", "current": mine.get("movie")}],
+        }
     if not tvdb_id or season is None or not episode:
         return {"linked": True, "steps": []}
     try:
@@ -102,7 +119,43 @@ async def trakt_prompt(
         "show": f"La série {title}".strip() if title else "La série",
     }
     steps = trakt.rating_steps(episodes, season, episode, ended)
-    return {"linked": True, "steps": [{"kind": k, "label": labels[k]} for k in steps]}
+    mine = await _current(db, profile, "show", tvdb_id=tvdb_id)
+    current = {
+        "episode": (mine.get("episodes") or {}).get(f"{season}x{episode}"),
+        "season": (mine.get("seasons") or {}).get(str(season)),
+        "show": mine.get("show"),
+    }
+    return {
+        "linked": True,
+        "steps": [{"kind": k, "label": labels[k], "current": current[k]} for k in steps],
+    }
+
+
+async def _current(db: AsyncSession, profile: int | None, kind: str, **ids: Any) -> dict:
+    """Notes déjà données ; Trakt injoignable → rien de pré-rempli (la carte reste utilisable)."""
+    try:
+        return await trakt.my_ratings(db, profile, kind, **ids)
+    except Exception as exc:  # noqa: BLE001
+        logger.info("Trakt : notes existantes illisibles (%s)", exc)
+        return {}
+
+
+@router.get("/ratings")
+async def trakt_ratings(
+    kind: Literal["movie", "show"],
+    tmdb_id: int | None = None,
+    tvdb_id: int | None = None,
+    profile_key: int | None = None,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Mes notes Trakt d'un film, ou d'une série (série, saisons, épisodes), pour une fiche."""
+    try:
+        return await trakt.my_ratings(
+            db, _profile(user, profile_key), kind, tmdb_id=tmdb_id, tvdb_id=tvdb_id
+        )
+    except trakt.TraktError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
 class RateBody(BaseModel):
@@ -113,6 +166,8 @@ class RateBody(BaseModel):
     season: int | None = Field(default=None, ge=0)
     episode: int | None = Field(default=None, ge=1)
     title: str = Field(default="", max_length=300)
+    # Web app : profil choisi sur la fiche (0 = « Famille ») ; ignoré pour une TV
+    profile_key: int | None = Field(default=None, ge=0)
 
 
 @router.post("/rate")
@@ -122,7 +177,7 @@ async def trakt_rate(
     try:
         message = await trakt.rate(
             db,
-            _profile(user),
+            _profile(user, body.profile_key),
             body.kind,
             body.rating,
             tmdb_id=body.tmdb_id,

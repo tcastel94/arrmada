@@ -18,9 +18,22 @@ data class TraktPrompt(
     val steps: List<TraktStep> = emptyList(),
 )
 
-/** Une note à proposer : « movie », « episode », « season » ou « show », et son libellé. */
+/**
+ * Une note à proposer : « movie », « episode », « season » ou « show », son
+ * libellé, et la note déjà donnée ([current], 1 à 10) pour pré-remplir la carte.
+ */
 @Serializable
-data class TraktStep(val kind: String = "", val label: String = "")
+data class TraktStep(val kind: String = "", val label: String = "", val current: Int? = null)
+
+/** GET /api/trakt/ratings : mes notes d'un film, ou d'une série (saisons « 2 », épisodes « 2x3 »). */
+@Serializable
+data class TraktMyRatings(
+    val linked: Boolean = false,
+    val movie: Int? = null,
+    val show: Int? = null,
+    val seasons: Map<String, Int> = emptyMap(),
+    val episodes: Map<String, Int> = emptyMap(),
+)
 
 /** POST /api/trakt/rate. */
 @Serializable
@@ -79,8 +92,18 @@ object TraktLogic {
             title = title,
         )
 
-    /** Requête GET /api/trakt/prompt pour le titre en cours. */
+    /** Requête GET /api/trakt/prompt pour le titre en cours (TMDB du film : sa note actuelle). */
     fun promptPath(kind: String, id: Long, season: Int, episode: Int): String =
-        if (kind == "movie") "/api/trakt/prompt?kind=movie"
+        if (kind == "movie") "/api/trakt/prompt?kind=movie&tmdb_id=$id"
         else "/api/trakt/prompt?kind=episode&tvdb_id=$id&season=$season&episode=$episode"
+
+    /** Note de départ de la carte : celle déjà donnée, sinon rien de choisi. */
+    fun initial(step: TraktStep): Int = (step.current ?: 0).coerceIn(0, MAX)
+
+    /** Pastille de la fiche : « Ma note ★ 3,5 » ; null sans note (ou profil sans Trakt). */
+    fun badge(rating: Int?): String? = rating?.takeIf { it in 1..MAX }?.let { "Ma note ★ ${stars(it)}" }
+
+    /** GET /api/trakt/ratings d'un film (TMDB) ou d'une série (TVDB). */
+    fun ratingsPath(movie: Boolean, id: Long): String =
+        if (movie) "/api/trakt/ratings?kind=movie&tmdb_id=$id" else "/api/trakt/ratings?kind=show&tvdb_id=$id"
 }

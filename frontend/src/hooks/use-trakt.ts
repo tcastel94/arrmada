@@ -71,3 +71,54 @@ export function useRefreshTrakt() {
     const qc = useQueryClient();
     return () => qc.invalidateQueries({ queryKey: KEY });
 }
+
+/* ── Notes : lire et noter depuis une fiche ─────────────────── */
+
+export interface TraktMyRatings {
+    linked: boolean;
+    movie?: number | null;
+    show?: number | null;
+    seasons?: Record<string, number>;
+    episodes?: Record<string, number>;
+}
+
+export interface TraktTarget {
+    kind: "movie" | "show";
+    tmdbId?: number | null;
+    tvdbId?: number | null;
+    title: string;
+}
+
+function ratingsPath(target: TraktTarget, profileKey: number) {
+    const ids = target.kind === "movie" ? `tmdb_id=${target.tmdbId ?? 0}` : `tvdb_id=${target.tvdbId ?? 0}`;
+    return `/api/trakt/ratings?kind=${target.kind}&${ids}&profile_key=${profileKey}`;
+}
+
+/** Mes notes Trakt d'un titre, pour un profil relié (0 = « Famille »). */
+export function useTraktRatings(target: TraktTarget, profileKey: number | null) {
+    return useQuery({
+        queryKey: ["trakt", "ratings", target.kind, target.tmdbId ?? target.tvdbId, profileKey],
+        queryFn: () => apiFetch<TraktMyRatings>(ratingsPath(target, profileKey ?? 0)),
+        enabled: profileKey !== null && Boolean(target.tmdbId || target.tvdbId),
+        staleTime: 60_000,
+    });
+}
+
+export function useTraktRate(target: TraktTarget, profileKey: number | null) {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (rating: number) =>
+            apiFetch<{ ok: boolean; message: string }>("/api/trakt/rate", {
+                method: "POST",
+                body: JSON.stringify({
+                    kind: target.kind,
+                    rating,
+                    tmdb_id: target.kind === "movie" ? target.tmdbId : null,
+                    tvdb_id: target.kind === "show" ? target.tvdbId : null,
+                    title: target.title,
+                    profile_key: profileKey ?? 0,
+                }),
+            }),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ["trakt", "ratings", target.kind, target.tmdbId ?? target.tvdbId] }),
+    });
+}

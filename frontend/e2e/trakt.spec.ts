@@ -73,3 +73,39 @@ test("Trakt non configuré : la marche à suivre", async ({ page }) => {
     await expect(page.getByText("TRAKT_CLIENT_ID=…")).toBeVisible();
     await expect(page.getByRole("link", { name: "trakt.tv (My Apps)" })).toBeVisible();
 });
+
+// Fiche film minimale (format de GET /api/media/movie/{id})
+const MOVIE = {
+    id: 20, type: "movie", title: "Inception", original_title: "Inception", year: 2010, overview: "Un voleur de rêves.",
+    genres: ["Science-fiction"], runtime: 148, status: "released", monitored: true, has_file: true, size_on_disk: 0,
+    added: null, path: "/movies/Inception (2010)", certification: "", tmdb_id: 27205, imdb_id: "tt1375666",
+    ratings: {}, images: { poster: null, fanart: null, banner: null },
+}; // prettier-ignore
+
+test("fiche film : ma note Trakt, puis noter pour un autre profil", async ({ page }) => {
+    const rated: { rating: number; profile_key: number; tmdb_id: number }[] = [];
+    await mockApi(page, [
+        [/^\/api\/media\/movie\/20$/, () => MOVIE],
+        [/^\/api\/kodi\/watch-summary$/, () => ({ movies: {}, series: {} })],
+        [
+            /^\/api\/trakt\/accounts$/,
+            () => ({ configured: true, profiles: [profile(1, "Famille", true, false), profile(2, "Jeff", false, true), profile(3, "Morgane", false, true)] }),
+        ],
+        // Jeff a déjà mis 4 étoiles (8/10), Morgane rien
+        [/^\/api\/trakt\/ratings$/, (url) => ({ linked: true, movie: url.searchParams.get("profile_key") === "2" ? 8 : null })],
+    ]);
+    await page.route(/\/api\/trakt\/rate$/, async (route) => {
+        rated.push(route.request().postDataJSON());
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, message: "Noté 3,5 ★ sur Trakt (Bien)" }) });
+    });
+    await page.goto("/media/movie/20");
+
+    const row = page.getByLabel("Ma note Trakt");
+    await expect(row.getByText("4 ★ · Très bien")).toBeVisible(); // Jeff, premier profil relié
+    await row.getByRole("radio", { name: "Morgane" }).click();
+    await expect(row.getByText("Pas encore notée")).toBeVisible();
+
+    await row.getByRole("button", { name: "Noter 3,5 étoiles" }).click();
+    await expect(page.getByText("Noté 3,5 ★ sur Trakt (Bien)")).toBeVisible();
+    expect(rated).toEqual([expect.objectContaining({ kind: "movie", rating: 7, tmdb_id: 27205, profile_key: 3 })]);
+});

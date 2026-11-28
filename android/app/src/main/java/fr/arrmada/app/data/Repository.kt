@@ -257,6 +257,9 @@ class Repository(private val api: Api) {
     suspend fun traktPrompt(kind: String, id: Long, season: Int, episode: Int): TraktPrompt =
         api.get(TraktLogic.promptPath(kind, id, season, episode))
 
+    /** Trakt : mes notes d'un film (TMDB) ou d'une série (TVDB), pour la fiche. */
+    suspend fun traktRatings(movie: Boolean, id: Long): TraktMyRatings = api.get(TraktLogic.ratingsPath(movie, id))
+
     /** Trakt : envoie une note (1 à 10) ; renvoie la phrase à afficher (« Noté 4 ★ sur Trakt »). */
     suspend fun traktRate(body: TraktRateBody): TraktRateResult = api.post("/api/trakt/rate", body)
 

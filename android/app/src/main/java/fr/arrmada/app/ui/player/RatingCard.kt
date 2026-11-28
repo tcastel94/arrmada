@@ -65,8 +65,8 @@ fun RatingCard(
     onRate: (Int) -> Unit,
     onSkip: () -> Unit,
 ) {
-    // Une carte neuve à chaque étape : on repart de « rien choisi »
-    var rating by remember(step) { mutableIntStateOf(0) }
+    // Une carte neuve à chaque étape : la note déjà donnée (revisionnage), sinon rien
+    var rating by remember(step) { mutableIntStateOf(TraktLogic.initial(step)) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(step) { runCatching { focus.requestFocus() } }
 
@@ -111,6 +111,13 @@ fun RatingCard(
                     for (index in 0 until 5) {
                         StarCell(TraktLogic.star(index, rating), onHalf = { rating = index * 2 + 1 }, onFull = { rating = index * 2 + 2 })
                     }
+                }
+                step.current?.takeIf { it in 1..TraktLogic.MAX }?.let { previous ->
+                    Text(
+                        "Ta note actuelle : ${TraktLogic.stars(previous)} ★",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = Dim,
+                    )
                 }
                 Text(
                     if (rating == 0) "Choisis avec ← →" else "${TraktLogic.stars(rating)} ★ · ${TraktLogic.label(rating)}",

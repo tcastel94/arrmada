@@ -42,6 +42,7 @@ import { EASE_OUT, fadeUp, scaleIn, stagger } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { hdrLabel, resolutionLabel, seriesStats, statusInfo, type StatusTone } from "./labels";
 import { translateGenre } from "@/lib/genres";
+import { TraktRating } from "./trakt-rating";
 
 /* ════════════════════════════════════════════════════════════════
    Fond plein cadre avec parallaxe
@@ -390,6 +391,18 @@ export function MediaHero({ media, actions }: { media: MediaDetail; actions?: Re
                         <Overview text={media.overview} />
                     </motion.div>
                 )}
+
+                {/* Ma note Trakt (profil relié), modifiable d'un clic */}
+                <motion.div variants={fadeUp}>
+                    <TraktRating
+                        target={{
+                            kind: isMovie ? "movie" : "show",
+                            tmdbId: isMovie ? media.tmdb_id : null,
+                            tvdbId: isMovie ? null : media.tvdb_id,
+                            title: media.title,
+                        }}
+                    />
+                </motion.div>
 
                 {/* Notes + complétude (série) */}
                 {(hasRatings || (stats && stats.total > 0)) && (

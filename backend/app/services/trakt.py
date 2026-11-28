@@ -209,6 +209,15 @@ async def _call(
     return resp
 
 
+async def _call_get(db: AsyncSession, row: TraktAccount, path: str) -> httpx.Response:
+    """GET authentifié, même règle que ``_call`` pour un jeton révoqué."""
+    resp = await _get(path, await _token(db, row))
+    if resp.status_code == 401:
+        row = await _refresh(db, row)
+        resp = await _get(path, decrypt_api_key(row.access_token))
+    return resp
+
+
 # ══════════════════════════════════════════════════════════════
 # Liaison par code d'appareil
 # ══════════════════════════════════════════════════════════════
@@ -358,9 +367,105 @@ async def rate(db: AsyncSession, profile_id: int | None, kind: str, rating: int,
     added = resp.json().get("added") or {}
     if not any(added.values()):
         raise TraktError("Trakt ne connaît pas ce titre : note non enregistrée")
+    forget_ratings(profile_id)  # la prochaine lecture voit la nouvelle note
     stars = rating / 2
     shown = f"{stars:g}".replace(".", ",")
     return f"Noté {shown} ★ sur Trakt ({RATING_LABELS[int(rating)]})"
+
+
+# ══════════════════════════════════════════════════════════════
+# Notes déjà données (pré-remplir la carte, afficher sur les fiches)
+# ══════════════════════════════════════════════════════════════
+
+RATINGS_TTL = 10 * 60  # s : une note donnée ailleurs (site Trakt) apparaît en 10 min au plus
+RATING_TYPES = ("movies", "shows", "seasons", "episodes")
+
+# Cache en mémoire : (profil, type) → (heure, index). Trakt renvoie TOUTES les
+# notes d'un type en un appel : on garde l'index, comme un cache disque pour
+# éviter de relire la liste entière à chaque fiche ouverte.
+_RATINGS: dict[tuple[int, str], tuple[float, dict[Any, int]]] = {}
+
+
+def forget_ratings(profile_id: int | None) -> None:
+    key = profile_key(profile_id)
+    for cached in [k for k in _RATINGS if k[0] == key]:
+        _RATINGS.pop(cached, None)
+
+
+def index_ratings(kind: str, items: list[dict[str, Any]]) -> dict[Any, int]:
+    """Réponse de /sync/ratings/<type> → index par identifiant (pur, testé).
+
+    movies : tmdb → note ; shows : tvdb → note ; seasons : (tvdb, saison) → note ;
+    episodes : (tvdb, saison, épisode) → note.
+    """
+    index: dict[Any, int] = {}
+    for item in items or []:
+        rating = item.get("rating")
+        if not isinstance(rating, int):
+            continue
+        if kind == "movies":
+            tmdb = ((item.get("movie") or {}).get("ids") or {}).get("tmdb")
+            if tmdb:
+                index[int(tmdb)] = rating
+            continue
+        tvdb = ((item.get("show") or {}).get("ids") or {}).get("tvdb")
+        if not tvdb:
+            continue
+        if kind == "shows":
+            index[int(tvdb)] = rating
+        elif kind == "seasons":
+            index[(int(tvdb), int((item.get("season") or {}).get("number") or 0))] = rating
+        elif kind == "episodes":
+            ep = item.get("episode") or {}
+            index[(int(tvdb), int(ep.get("season") or 0), int(ep.get("number") or 0))] = rating
+    return index
+
+
+async def _ratings(db: AsyncSession, row: TraktAccount, kind: str) -> dict[Any, int]:
+    import time
+
+    cached = _RATINGS.get((row.profile_key, kind))
+    if cached and time.monotonic() - cached[0] < RATINGS_TTL:
+        return cached[1]
+    resp = await _call_get(db, row, f"/sync/ratings/{kind}")
+    if resp.status_code != 200:
+        raise TraktError(f"Trakt ne donne pas les notes (HTTP {resp.status_code})")
+    index = index_ratings(kind, resp.json())
+    _RATINGS[(row.profile_key, kind)] = (time.monotonic(), index)
+    return index
+
+
+async def my_ratings(
+    db: AsyncSession,
+    profile_id: int | None,
+    kind: str,
+    *,
+    tmdb_id: int | None = None,
+    tvdb_id: int | None = None,
+) -> dict[str, Any]:
+    """Notes du profil pour un film {movie} ou une série {show, seasons, episodes}.
+
+    Profil sans compte Trakt : {"linked": False}. Les clés des saisons sont
+    « 2 », celles des épisodes « 2x3 » (JSON : des chaînes).
+    """
+    row = await account(db, profile_id) if configured() else None
+    if row is None:
+        return {"linked": False}
+    if kind == "movie":
+        movies = await _ratings(db, row, "movies")
+        return {"linked": True, "movie": movies.get(int(tmdb_id or 0))}
+    tvdb = int(tvdb_id or 0)
+    shows, seasons, episodes = (
+        await _ratings(db, row, "shows"),
+        await _ratings(db, row, "seasons"),
+        await _ratings(db, row, "episodes"),
+    )
+    return {
+        "linked": True,
+        "show": shows.get(tvdb),
+        "seasons": {str(k[1]): v for k, v in seasons.items() if k[0] == tvdb},
+        "episodes": {f"{k[1]}x{k[2]}": v for k, v in episodes.items() if k[0] == tvdb},
+    }
 
 
 # Événements de la TV (même flux que la tablette du salon) → action Trakt

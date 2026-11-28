@@ -116,10 +116,18 @@ fun MovieScreen(
         }
     }
 
-    // Retour du lecteur : la position de reprise a changé, on la relit
+    // Ma note Trakt (profil qui regarde) : lue à l'ouverture et au retour du lecteur
+    var traktRating by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(movie?.tmdbId) {
+        val id = movie?.tmdbId ?: return@LaunchedEffect
+        traktRating = runCatching { repository.traktRatings(movie = true, id = id).movie }.getOrNull()
+    }
+
+    // Retour du lecteur : la position de reprise a changé, on la relit (et la note, si elle vient d'être donnée)
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         val id = movie?.tmdbId ?: return@LifecycleEventEffect
         scope.launch { runCatching { repository.playMovie(id) }.getOrNull()?.let { play = it } }
+        scope.launch { runCatching { repository.traktRatings(movie = true, id = id).movie }.onSuccess { traktRating = it } }
     }
 
     // Bande-annonce du NAS en fond, après 2,5 s sur la fiche (muette, une fois).
@@ -146,6 +154,7 @@ fun MovieScreen(
     var sending by remember { mutableStateOf(false) }
     MovieContent(
         m, play, api::absolute, onPlay, onDownload,
+        traktRating = traktRating,
         backdropVideo = video?.let { url -> @Composable { TrailerVideo(url, api.http) { trailerDone = true } } },
         // Téléphone / tablette : « Sur la TV »
         onSendToTv = if (LocalScreen.current.isTouch && m.tmdbId != null) { { sending = true } } else null,
@@ -236,6 +245,7 @@ fun MovieContent(
     onPerson: ((tmdbId: Long) -> Unit)? = null,
     // Boutons en plus, après « Sur la TV » (« Ma liste »)
     extraActions: @Composable () -> Unit = {},
+    traktRating: Int? = null, // ma note Trakt (1 à 10), null : pas notée ou profil sans Trakt
 ) {
     val context = LocalContext.current
     val playFocus = remember { FocusRequester() }
@@ -288,6 +298,7 @@ fun MovieContent(
                 // IMDb d'abord (la plus fiable), TMDB seulement sans IMDb, puis la critique.
                 // La technique (4K, Atmos…) est dans la carte sous les boutons.
                 fr.arrmada.app.data.RatingLogic.detailBadges(m.ratings).forEach { Badge(it) }
+                fr.arrmada.app.data.TraktLogic.badge(traktRating)?.let { Badge(it, highlight = true) }
             }
 
             Text(
