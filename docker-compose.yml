@@ -66,6 +66,9 @@ services:
       - TMDB_API_KEY=${TMDB_API_KEY:-}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+      # Trakt : notes et lecture en direct (ADR-022), application sur trakt.tv/oauth/applications
+      - TRAKT_CLIENT_ID=${TRAKT_CLIENT_ID:-}
+      - TRAKT_CLIENT_SECRET=${TRAKT_CLIENT_SECRET:-}
       # TV Kodi : adresse de la web app pour le QR code d'appairage
       - PUBLIC_WEB_URL=${PUBLIC_WEB_URL:-}
       # TV et téléphones appairés hors de la maison (VPN hors 10.x/192.168.x,

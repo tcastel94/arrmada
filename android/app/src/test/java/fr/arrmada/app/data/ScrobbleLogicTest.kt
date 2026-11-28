@@ -18,6 +18,8 @@ class ScrobbleLogicTest {
         assertNull(dune.season)
         assertEquals("episode", expanse.mediaType)
         assertNull(expanse.tmdbId) // TVDB : pas un identifiant TMDB
+        assertEquals(280619L, expanse.tvdbId) // la série, pour Trakt (ADR-022)
+        assertNull(dune.tvdbId)
         assertEquals(2, expanse.season)
         assertEquals(3, expanse.episode)
         assertEquals("Static", expanse.episodeTitle)
@@ -25,6 +27,14 @@ class ScrobbleLogicTest {
         val kai = ScrobbleLogic.identity("file", 0, 2, 15, "Naruto Kai", "S02E15", localSeries = true)
         assertEquals("episode", kai.mediaType)
         assertEquals(15, kai.episode)
+        assertNull(kai.tvdbId) // série maison : Trakt ne la connaît pas
+    }
+
+    @Test
+    fun `fin de seance garde la serie pour Trakt`() {
+        val stop = ScrobbleLogic.payload("stop", expanse, 2700.0, 2800.0, ended = true)
+        assertEquals(280619L, stop.tvdbId)
+        assertEquals(100.0, stop.percentage, 0.0)
     }
 
     @Test

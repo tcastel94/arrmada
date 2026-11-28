@@ -77,6 +77,12 @@ class Settings(BaseSettings):
     # ── TMDB ──────────────────────────────────────────────────
     TMDB_API_KEY: str = ""
 
+    # ── Trakt (notes et historique de lecture, ADR-022) ───────
+    # Application à créer sur https://trakt.tv/oauth/applications/new
+    # (redirect URI : urn:ietf:wg:oauth:2.0:oob). Vide = Trakt désactivé.
+    TRAKT_CLIENT_ID: str = ""
+    TRAKT_CLIENT_SECRET: str = ""
+
     # ── Artworks (logos, disques, clearart, bannières, fonds…) ─
     # Trois sources, combinables :
     #  - fanart.tv : logos HD, disques Blu-ray/DVD, clearart, bannières,

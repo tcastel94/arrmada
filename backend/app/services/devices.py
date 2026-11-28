@@ -232,6 +232,9 @@ _DEVICE_ALLOWED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         ("GET", r"/api/sagas"),
         ("GET", r"/api/sagas/(\d+|movie/\d+|in-progress)"),
         ("POST", r"/api/sagas/\d+/(complete|follow)"),
+        # Trakt (ADR-022) : note de fin de lecture (la liaison des comptes reste à la web app)
+        ("GET", r"/api/trakt/(status|prompt)"),
+        ("POST", r"/api/trakt/rate"),
     )
 )
 
