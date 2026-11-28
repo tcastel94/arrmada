@@ -52,6 +52,7 @@ import { StatusDot } from "@/components/fx/status-dot";
 import { APP_VERSION } from "@/components/settings/app-version";
 import { PasswordPanel } from "@/components/settings/password-panel";
 import { AssistantPanel } from "@/components/settings/assistant-panel";
+import { TraktPanel } from "@/components/settings/trakt-panel";
 import { useBackendVersion, useSettings, useTestTelegram } from "@/hooks/use-settings";
 import { useServices } from "@/hooks/use-services";
 import { useKodiSettings } from "@/hooks/use-kodi";
@@ -394,6 +395,11 @@ export default function SettingsGeneralPage() {
                     {/* ── Agent IA : confirmer ou agir seul ── */}
                     <motion.div variants={fadeUp}>
                         <AssistantPanel />
+                    </motion.div>
+
+                    {/* ── Trakt : un compte par profil, notes en fin de lecture (ADR-022) ── */}
+                    <motion.div variants={fadeUp}>
+                        <TraktPanel />
                     </motion.div>
 
                     {/* ── Application ──────────────────────────── */}

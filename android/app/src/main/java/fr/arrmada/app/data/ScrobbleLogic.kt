@@ -29,6 +29,7 @@ data class Scrobble(
     val title: String = "",
     @SerialName("media_type") val mediaType: String = "movie", // « movie » ou « episode »
     @SerialName("tmdb_id") val tmdbId: Long? = null, // film : l'écran retrouve l'affiche
+    @SerialName("tvdb_id") val tvdbId: Long? = null, // épisode : la série, pour Trakt (ADR-022)
     val season: Int? = null,
     val episode: Int? = null,
     @SerialName("episode_title") val episodeTitle: String = "",
@@ -109,7 +110,7 @@ object ScrobbleLogic {
         if (event == "stop") {
             // Fin de séance : l'identité suffit, pas la fiche ni les pistes
             return Scrobble(
-                event = event, title = what.title, mediaType = what.mediaType, tmdbId = what.tmdbId,
+                event = event, title = what.title, mediaType = what.mediaType, tmdbId = what.tmdbId, tvdbId = what.tvdbId,
                 season = what.season, episode = what.episode, episodeTitle = what.episodeTitle, year = what.year,
                 percentage = if (ended) 100.0 else percent,
             )
@@ -166,6 +167,7 @@ object ScrobbleLogic {
             title = title,
             mediaType = if (isEpisode) "episode" else "movie",
             tmdbId = id.takeIf { kind == "movie" && it > 0 },
+            tvdbId = id.takeIf { kind == "episode" && !localSeries && it > 0 },
             season = season.takeIf { isEpisode && (season > 0 || episode > 0) },
             episode = episode.takeIf { isEpisode && episode > 0 },
             episodeTitle = subtitle?.substringAfter(" · ", "").orEmpty(),

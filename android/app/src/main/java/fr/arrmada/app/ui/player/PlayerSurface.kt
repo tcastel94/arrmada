@@ -6,6 +6,8 @@ import fr.arrmada.app.ui.components.LocalScreen
 import fr.arrmada.app.data.TrackLanguageLogic
 import fr.arrmada.app.data.TrackPreference
 import fr.arrmada.app.data.TrickplayLogic
+import fr.arrmada.app.data.TraktLogic
+import fr.arrmada.app.data.TraktStep
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
@@ -60,7 +62,9 @@ import fr.arrmada.app.data.PlayerKeyLogic
 import fr.arrmada.app.ui.components.MessageScreen
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonPrimitive
 
 // Lecteur en cours : ExoPlayer, pistes, sous-titres, qualité, ampli, télécommande
@@ -166,6 +170,9 @@ internal fun PlayerSurface(
     // (sinon il « clique » sur « Reprendre », qui a le focus, et relance aussitôt)
     var swallowOkUp by remember { mutableStateOf(false) }
     var finished by remember { mutableStateOf(false) } // fin enregistrée (vu)
+    // Trakt (ADR-022) : notes à proposer en fin de lecture (vide : profil sans compte Trakt)
+    var traktSteps by remember { mutableStateOf<List<TraktStep>>(emptyList()) }
+    var rating by remember { mutableStateOf<RatingSession?>(null) }
     var upNextDismissed by remember { mutableStateOf(false) }
     var countdown by remember { mutableIntStateOf(PlaybackLogic.UP_NEXT_SECONDS) }
     val keyFocus = remember { FocusRequester() }
@@ -215,10 +222,26 @@ internal fun PlayerSurface(
         app.appScope.launch { runCatching { repository.saveWatchState(update) } }
     }
 
+    /**
+     * Quitte le titre (épisode suivant, fin, retour) : s'il a été vu jusqu'au
+     * bout et que le profil a un compte Trakt, la carte de note passe d'abord.
+     */
+    fun leave(after: () -> Unit) {
+        if (rating != null) return // carte déjà ouverte : elle enchaînera elle-même
+        saveProgress() // « vu » si l'on a dépassé 90 %
+        if (finished && traktSteps.isNotEmpty()) {
+            player.pause()
+            showMenu = false // depuis « Quitter » du menu pause : la carte prend toute la place
+            rating = RatingSession(traktSteps, 0, after)
+        } else {
+            after()
+        }
+    }
+
     fun playNext() {
         val next = upNext ?: return
         saveProgress(done = true)
-        onPlayNext(next.request)
+        leave { onPlayNext(next.request) }
     }
 
     // Le lecteur et ses écouteurs sont créés une seule fois : ils appellent
@@ -228,7 +251,36 @@ internal fun PlayerSurface(
     val onEnded by rememberUpdatedState {
         saveProgress(done = true)
         val next = upNext
-        if (next != null && !upNextDismissed) onPlayNext(next.request) else onExit()
+        leave { if (next != null && !upNextDismissed) onPlayNext(next.request) else onExit() }
+    }
+
+    // Trakt : ce qu'il faudra proposer de noter, demandé dès le début (rien d'affiché pendant la lecture)
+    LaunchedEffect(Unit) {
+        if (!TraktLogic.eligible(request.kind, request.id, request.localSeries > 0)) return@LaunchedEffect
+        runCatching { repository.traktPrompt(request.kind, request.id, request.season, request.episode) }
+            .onSuccess { prompt -> if (prompt.linked) traktSteps = prompt.steps }
+    }
+
+    /** Envoie la note de l'étape en cours, puis passe à la suivante (ou quitte). */
+    fun rate(value: Int?) {
+        val session = rating ?: return
+        val step = session.steps[session.index]
+        if (value != null) {
+            val title = currentMeta?.title ?: info.title.orEmpty()
+            val body = TraktLogic.body(step, value, request.kind, request.id, request.season, request.episode, title)
+            app.appScope.launch {
+                val message = runCatching { repository.traktRate(body).message }
+                    .getOrElse { it.message ?: "Note non envoyée à Trakt" }
+                // appScope travaille hors du fil de l'écran : le message s'affiche sur ce dernier
+                withContext(Dispatchers.Main) { Toast.makeText(context, message, Toast.LENGTH_SHORT).show() }
+            }
+        }
+        if (session.index + 1 < session.steps.size) {
+            rating = session.copy(index = session.index + 1)
+        } else {
+            rating = null
+            session.after()
+        }
     }
 
     // Premier flux, par load() : une lecture convertie dès le départ (réglage
@@ -425,9 +477,10 @@ internal fun PlayerSurface(
     // pause et menu ; dans le menu → quitter
     BackHandler {
         when {
+            rating != null -> rate(null) // passer cette note
             showUpNext -> upNextDismissed = true
             streams.qualityCard != null && !showMenu -> streams.declineQualityCard()
-            showMenu -> onExit()
+            showMenu -> leave(onExit)
             else -> pause()
         }
     }
@@ -463,6 +516,7 @@ internal fun PlayerSurface(
                     swallowOkUp = false
                     return@onPreviewKeyEvent true
                 }
+                if (rating != null) return@onPreviewKeyEvent false // la carte de note a la main
                 if (showMenu || streams.playbackError != null || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 // Quelle action pour cette touche (règle dans PlayerKeyLogic, testée), puis on l'exécute
                 val screen = PlayerKeyLogic.Screen(
@@ -483,7 +537,7 @@ internal fun PlayerSurface(
                     PlayerKeyLogic.Action.SEEK_BACK -> { seekBy(forward = false, repeat = event.nativeKeyEvent.repeatCount); true }
                     PlayerKeyLogic.Action.SEEK_FORWARD -> { seekBy(forward = true, repeat = event.nativeKeyEvent.repeatCount); true }
                     PlayerKeyLogic.Action.SHOW_BAR -> { osdUntil = System.currentTimeMillis() + 3000; true }
-                    PlayerKeyLogic.Action.EXIT -> { onExit(); true }
+                    PlayerKeyLogic.Action.EXIT -> { leave(onExit); true }
                     PlayerKeyLogic.Action.NONE -> false
                 }
             },
@@ -535,7 +589,7 @@ internal fun PlayerSurface(
                     resume()
                 },
                 onSelectTrack = { type, choice -> trackChooser.select(type, choice) },
-                onQuit = onExit,
+                onQuit = { leave(onExit) },
                 onSkip = { seconds -> player.seekTo((player.currentPosition + seconds * 1000L).coerceAtLeast(0)) },
                 audio = AudioContext(roomSound.room, roomSound.hasAmp, advice, roomSound.autoSound),
                 amp = roomSound.amp,
@@ -575,6 +629,17 @@ internal fun PlayerSurface(
 
         streams.playbackError?.let { message ->
             MessageScreen("Lecture interrompue", message, "Retour", onExit)
+        }
+
+        // Note Trakt de fin de lecture : épisode, puis saison / série au dernier épisode
+        rating?.let { session ->
+            RatingCard(
+                step = session.steps[session.index],
+                position = session.index,
+                count = session.steps.size,
+                onRate = { rate(it) },
+                onSkip = { rate(null) },
+            )
         }
     }
 

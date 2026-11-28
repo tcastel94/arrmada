@@ -77,6 +77,13 @@ class Settings(BaseSettings):
     # ── TMDB ──────────────────────────────────────────────────
     TMDB_API_KEY: str = ""
 
+    # ── Trakt (notes et historique de lecture, ADR-022) ───────
+    # Client ID d'une application créée sur trakt.tv (« My Apps »). Vide = Trakt
+    # désactivé. Le secret ne sert qu'aux anciennes applications (avant octobre
+    # 2026) : les nouvelles n'en ont plus, la liaison par code n'en a pas besoin.
+    TRAKT_CLIENT_ID: str = ""
+    TRAKT_CLIENT_SECRET: str = ""
+
     # ── Artworks (logos, disques, clearart, bannières, fonds…) ─
     # Trois sources, combinables :
     #  - fanart.tv : logos HD, disques Blu-ray/DVD, clearart, bannières,

@@ -53,6 +53,7 @@ from app.api.setup import router as setup_router
 from app.api.stack import router as stack_router
 from app.api.subtitles import router as subtitles_router
 from app.api.system import router as system_router
+from app.api.trakt import router as trakt_router
 from app.api.trash_guides import router as trash_guides_router
 from app.api.tv import router as tv_router
 from app.api.videos import router as videos_router
@@ -124,3 +125,4 @@ api_router.include_router(
 )  # Musique : Lidarr (bibliothèque, demandes), Jellyfin (écoute)
 api_router.include_router(sagas_router)  # Sagas de films : collections Radarr (TMDB)
 api_router.include_router(ai_actions_router)  # Assistant IA qui agit (ADR-018)
+api_router.include_router(trakt_router)  # Trakt : notes et lecture en direct (ADR-022)

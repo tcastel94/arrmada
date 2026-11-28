@@ -28,6 +28,7 @@ from app.services import (
     subtitle_guardian,
     subtitle_jobs,
     telegram_alerts,
+    trakt,
     translations,
     tv_priority,
 )
@@ -139,6 +140,8 @@ subtitle_guardian.session_factory = TestSessionFactory
 copilot_tools.session_factory = TestSessionFactory
 # Alertes Telegram des téléchargements bloqués (services/telegram_alerts.py) : idem
 telegram_alerts.session_factory = TestSessionFactory
+# Trakt : relais du scrobble en arrière-plan (services/trakt.py) : idem
+trakt.session_factory = TestSessionFactory
 
 # Le login est limité à 5 essais/minute (anti brute-force). Chaque test qui
 # utilise `auth_headers` se reconnecte : sans ça, le 6e test prend un 429

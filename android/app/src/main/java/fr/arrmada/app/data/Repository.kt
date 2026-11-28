@@ -253,6 +253,13 @@ class Repository(private val api: Api) {
         api.post("/api/kodi/actions/subtitles", body, slow = true)
 
     /** Lecture en cours → écran d'appoint de la pièce (tablette sous la TV). */
+    /** Trakt (ADR-022) : notes à proposer en fin de lecture pour le profil qui regarde. */
+    suspend fun traktPrompt(kind: String, id: Long, season: Int, episode: Int): TraktPrompt =
+        api.get(TraktLogic.promptPath(kind, id, season, episode))
+
+    /** Trakt : envoie une note (1 à 10) ; renvoie la phrase à afficher (« Noté 4 ★ sur Trakt »). */
+    suspend fun traktRate(body: TraktRateBody): TraktRateResult = api.post("/api/trakt/rate", body)
+
     suspend fun scrobble(payload: Scrobble) {
         api.post<kotlinx.serialization.json.JsonObject, Scrobble>("/api/kodi/scrobble", payload)
     }

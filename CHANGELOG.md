@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Trakt : noter chaque film et épisode à la fin
+
+#### Added
+- **Notes de fin de lecture sur la TV** ([ADR-022](docs/adr/022-trakt-notes.md)) : à la fin d'un film ou d'un épisode vu au-delà de 90 %, une carte de 5 étoiles apparaît.
+  - Télécommande : ← / → par demi-étoile, chiffres 1 à 5 pour des étoiles pleines, OK pour noter, Retour pour passer.
+  - Au dernier épisode d'une saison, la carte propose aussi de noter la saison ; au dernier épisode d'une série terminée, la série.
+  - Les notes partent sur le compte Trakt du profil qui regarde (1 à 10 sur Trakt)
+- **Historique Trakt en direct** : lecture, pause et arrêt sont relayés à Trakt par le serveur. Passé 80 %, le titre est marqué vu
+- **Paramètres › Trakt** : chaque profil (Famille, Jeff, Morgane…) relie son propre compte avec un code à taper sur trakt.tv/activate ; bouton Délier. Un profil sans compte n'est jamais sollicité
+- `TRAKT_CLIENT_ID` : le Client ID d'une application créée sur trakt.tv (« My Apps »), transmis au conteneur par le `docker-compose.yml`. Pas de secret à fournir : les nouvelles applications Trakt n'en ont plus (`TRAKT_CLIENT_SECRET` reste accepté pour une ancienne application)
+
 ### Envoyer un film sur une Apple TV
 
 #### Added

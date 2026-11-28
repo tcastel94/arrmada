@@ -16,6 +16,7 @@ from app.services import kodi as kodi_service
 from app.services import (
     kodi_crash,
     library_hints,
+    trakt,
     tv_board,
     tv_download,
     tv_priority,
@@ -333,6 +334,8 @@ async def addon_scrobble(
     # Tablette de la pièce en mode kiosk pendant le média (Fully Kiosk) :
     # lancé à part, la réponse à la TV n'attend jamais la tablette.
     _background(kiosk.on_playback(room, str((data or {}).get("event") or "progress")))
+    # Trakt (ADR-022) : lecture / pause / arrêt relayés au compte du profil qui regarde
+    _background(trakt.scrobble_in_background(user.get("profile_id"), data or {}))
     return await kodi_service.handle_addon_scrobble(db, data)
 
 
